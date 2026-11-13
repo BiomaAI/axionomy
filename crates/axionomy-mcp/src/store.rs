@@ -1,5 +1,5 @@
 //! What the server keeps beside the engine's runs: handles for economies,
-//! assessments and studies.
+//! assessments, studies and refs.
 //!
 //! Every economy is a point the engine recorded. Authoring records a run that
 //! starts from the authored state; applying exchanges records a run that forks
@@ -9,15 +9,21 @@
 //! names, so a handle never names something missing. Handles are keyed with a
 //! secret the store keeps, so they stay valid across restarts of a server that
 //! keeps its store on disk, and stay infeasible to guess.
+//!
+//! Every point a handle names is indexed, by its earliest name, under the
+//! first handle that named it: a ref, which names a point, reads back as that
+//! handle, and a step the ref was moved over as the handle of the economy the
+//! step made. A step no handle names yet gets one minted from its point: the
+//! economy its exchange made from the step before.
 
 use crate::{
-    handles::{AssessmentId, EconomyId, StudyId},
+    handles::{AssessmentId, EconomyId, RefId, StudyId},
     messages::DocumentSummary,
     studies::Trajectory,
 };
 use axionomy::paths;
-use axionomy_engine::{Engine, EngineError, Reached};
-use axionomy_store::{Durability, Point, Reader, StoreError};
+use axionomy_engine::{Engine, EngineError, Following, Frame, GoalPath, Reached};
+use axionomy_store::{Durability, Point, Reader, RefPath, StoreError};
 use axionomy_study::{Study, StudyKey};
 use axionomy_view::DocumentPath;
 
@@ -29,12 +35,15 @@ use std::{
     collections::HashMap,
     hash::Hash,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 const ECONOMIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-economies");
 const ASSESSMENTS: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-assessments");
 const STUDIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-studies");
 const SECRETS: TableDefinition<&str, &[u8; 32]> = TableDefinition::new("mcp-secrets");
+/// The handle that first named each point, by the point's encoding.
+const POINTS: TableDefinition<&[u8], &str> = TableDefinition::new("mcp-points");
 const HANDLE_SECRET: &str = "handles";
 
 /// Assessments and studies kept in memory.
@@ -101,9 +110,16 @@ impl Loaded {
         &self.reached.state
     }
 
-    /// The receipts of the exchanges that made it from its parent.
+    /// The receipts of the exchanges that made it from its parent: the last
+    /// steps its point's run took to reach it.
     pub fn receipts(&self) -> &[paths::Receipt] {
-        &self.reached.receipts
+        let receipts = &self.reached.receipts;
+        match self.record.origin {
+            Origin::Exchanged { exchanges } => {
+                &receipts[receipts.len().saturating_sub(exchanges)..]
+            }
+            Origin::Authored { .. } => receipts,
+        }
     }
 }
 
@@ -145,6 +161,7 @@ impl Archive {
                 txn.open_table(ECONOMIES)?;
                 txn.open_table(ASSESSMENTS)?;
                 txn.open_table(STUDIES)?;
+                txn.open_table(POINTS)?;
                 let mut secrets = txn.open_table(SECRETS)?;
                 let kept = secrets.get(HANDLE_SECRET)?.map(|secret| *secret.value());
                 Ok(match kept {
@@ -314,22 +331,171 @@ impl Archive {
         economy_id: EconomyId,
         record: EconomyRecord,
     ) -> Result<Stored, EngineError> {
+        let point = self.earliest(record.point)?;
         let handle = economy_id.clone();
         let stored = self
             .engine
             .store()
             .transact(Durability::Immediate, move |txn| {
-                if exists(txn.redb(), &handle)? {
-                    return Ok(false);
-                }
-                put(txn.redb(), ECONOMIES, handle.as_str(), &record)?;
-                Ok(true)
+                write(txn.redb(), &handle, &record, point)
             })
             .await?;
         Ok(Stored {
             economy_id,
             deduplicated: !stored,
         })
+    }
+
+    /// Writes every record of `records`, each at its point's earliest name,
+    /// that a concurrent call did not write first, in one transaction: a
+    /// record may name an earlier one as its parent.
+    async fn keep_all(&self, records: Vec<(EconomyId, EconomyRecord)>) -> Result<(), StoreError> {
+        if records.is_empty() {
+            return Ok(());
+        }
+        self.engine
+            .store()
+            .transact(Durability::Immediate, move |txn| {
+                for (economy_id, record) in &records {
+                    write(txn.redb(), economy_id, record, record.point)?;
+                }
+                Ok(())
+            })
+            .await
+    }
+
+    /// `point` by its earliest name, which every name of it shares.
+    fn earliest(&self, point: Point) -> Result<Point, StoreError> {
+        earliest(&self.engine.store().read()?, point)
+    }
+
+    /// The handle that first named `point`, by whatever name: every point a
+    /// ref of this server is at has one, indexed before the ref moved there.
+    pub fn handle_of(&self, point: Point) -> Result<EconomyId, StoreError> {
+        let reader = self.engine.store().read()?;
+        named(&reader, earliest(&reader, point)?)?
+            .ok_or(StoreError::Malformed("a ref at a point no handle names"))
+    }
+
+    /// Makes a new ref naming `economy`'s point, under a handle minted from
+    /// fresh randomness, so every call makes a ref of its own; and the
+    /// handle the ref names the point by.
+    pub async fn refer(
+        &self,
+        economy_id: &EconomyId,
+        economy: &Loaded,
+    ) -> Result<(RefId, EconomyId), EngineError> {
+        let mut nonce = [0; 32];
+        getrandom::fill(&mut nonce).expect("operating system randomness is unavailable");
+        let ref_id = RefId::from_digest(&self.keyed(&[b"ref", &nonce]));
+        let at = self.earliest(economy.record.point)?;
+        let named = self.index(economy_id, at).await?;
+        let (engine, name) = (self.engine.clone(), ref_path(&ref_id));
+        blocking(move || engine.refer(&name, at)).await?;
+        Ok((ref_id, named))
+    }
+
+    /// Moves the ref from `expected` forward to `to`, the point of
+    /// `economy_id`, and gives the handle the ref names it by.
+    pub async fn advance(
+        &self,
+        ref_id: &RefId,
+        expected: Point,
+        economy_id: &EconomyId,
+        to: Point,
+    ) -> Result<EconomyId, EngineError> {
+        let (expected, to) = (self.earliest(expected)?, self.earliest(to)?);
+        let named = self.index(economy_id, to).await?;
+        let (engine, name) = (self.engine.clone(), ref_path(ref_id));
+        blocking(move || engine.advance(&name, expected, to)).await?;
+        Ok(named)
+    }
+
+    /// The economy the ref is at, `None` for a ref this store does not hold.
+    pub fn referred(&self, ref_id: &RefId) -> Result<Option<EconomyId>, EngineError> {
+        match self.engine.referred(&ref_path(ref_id)) {
+            Ok(point) => Ok(Some(self.handle_of(point)?)),
+            Err(EngineError::UnknownRef(_)) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The steps the ref was moved over after `after`, the point of
+    /// `after_id`, at most `limit` of them, each with the handle of the
+    /// economy it made and whether that economy holds `goal`; and where the
+    /// ref is. When the ref is still at `after`, waits up to `wait` for it to
+    /// move first.
+    pub async fn frames(
+        &self,
+        ref_id: &RefId,
+        after_id: &EconomyId,
+        after: Point,
+        goal: Option<paths::Goal>,
+        limit: usize,
+        wait: Duration,
+    ) -> Result<(Vec<(EconomyId, Frame)>, EconomyId), EngineError> {
+        let after = self.earliest(after)?;
+        let (engine, name) = (self.engine.clone(), ref_path(ref_id));
+        let (frames, current) = blocking(move || {
+            engine.wait(&name, after, wait)?;
+            let goal = goal.map(|goal| kept_goal(&engine, &goal)).transpose()?;
+            let following = Following {
+                objectives: Vec::new(),
+                goal,
+            };
+            let frames = engine.frames(&name, after, &following, limit)?;
+            Ok((frames, engine.referred(&name)?))
+        })
+        .await?;
+        let reader = self.engine.store().read()?;
+        let mut previous = named(&reader, after)?.unwrap_or_else(|| after_id.clone());
+        let mut minted = Vec::new();
+        let mut named_frames = Vec::with_capacity(frames.len());
+        for frame in frames {
+            let point = earliest(&reader, frame.point)?;
+            let economy_id = match named(&reader, point)? {
+                Some(economy_id) => economy_id,
+                None => {
+                    // The earliest name of a step is a step of its run, so
+                    // its receipt is the run's last up to it.
+                    if reader
+                        .run(point.run)?
+                        .is_none_or(|run| point.step == run.first)
+                    {
+                        return Err(StoreError::Malformed("a frame that is no step").into());
+                    }
+                    let economy_id =
+                        EconomyId::from_digest(&self.keyed(&[b"point", &encode(&point)]));
+                    let record = EconomyRecord {
+                        point,
+                        parent: Some(previous),
+                        origin: Origin::Exchanged { exchanges: 1 },
+                    };
+                    minted.push((economy_id.clone(), record));
+                    economy_id
+                }
+            };
+            previous = economy_id.clone();
+            named_frames.push((economy_id, frame));
+        }
+        drop(reader);
+        self.keep_all(minted).await?;
+        Ok((named_frames, self.handle_of(current)?))
+    }
+
+    /// Indexes `point`, an earliest name, by `economy_id` unless a handle
+    /// names it already, and gives the handle that names it.
+    async fn index(&self, economy_id: &EconomyId, point: Point) -> Result<EconomyId, StoreError> {
+        if let Some(named) = named(&self.engine.store().read()?, point)? {
+            return Ok(named);
+        }
+        let handle = economy_id.clone();
+        self.engine
+            .store()
+            .transact(Durability::Immediate, move |txn| {
+                index(txn.redb(), point, &handle)
+            })
+            .await
     }
 
     fn record(&self, economy_id: &EconomyId) -> Result<Option<EconomyRecord>, StoreError> {
@@ -594,6 +760,46 @@ fn encode(value: &impl Serialize) -> Vec<u8> {
     postcard::to_allocvec(value).expect("records encode")
 }
 
+/// The name of a definition MCP keeps, from what it is: `mcp/` and the
+/// digest of its encoding, so the same goal or candidates share one.
+pub(crate) fn content_name<K>(value: &impl Serialize) -> axionomy::path::Path<K> {
+    format!("mcp/{}", blake3::hash(&encode(value)).to_hex())
+        .parse()
+        .expect("a digest is a path")
+}
+
+/// `goal`, kept under its content name unless it is already.
+fn kept_goal(engine: &Engine, goal: &paths::Goal) -> Result<GoalPath, EngineError> {
+    let path = content_name(goal);
+    if let Err(EngineError::Undefined(_)) = engine.goal(&path) {
+        engine.keep_goal(&path, goal)?;
+    }
+    Ok(path)
+}
+
+/// The engine's name for a ref this server made: `mcp/` and its handle.
+fn ref_path(ref_id: &RefId) -> RefPath {
+    format!("mcp/{ref_id}")
+        .parse()
+        .expect("a handle is a path segment")
+}
+
+/// `point` by its earliest name: a fork's first point is the point it forked
+/// from. A point a later run holds again, by the same steps, has the name it
+/// had where its step was taken, so every name of a point has one earliest.
+fn earliest(reader: &Reader, point: Point) -> Result<Point, StoreError> {
+    let mut on = point;
+    loop {
+        let run = reader
+            .run(on.run)?
+            .ok_or(StoreError::Malformed("a point of a run the store lacks"))?;
+        match run.from {
+            Some(from) if on.step == run.first => on = from,
+            _ => return Ok(on),
+        }
+    }
+}
+
 /// The operations a trajectory's economies are stored by: its initial state,
 /// and its exchanges applied to that state, which is the operation of
 /// replaying them with `axionomy_trace_replay`. No exchanges, no second
@@ -619,6 +825,59 @@ async fn blocking<T: Send + 'static>(
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|_| EngineError::Store(StoreError::Closed))?
+}
+
+/// Writes `record` under `economy_id` and indexes `earliest`, its point's
+/// earliest name, unless a concurrent call wrote it first; whether this call
+/// did.
+fn write(
+    txn: &redb::WriteTransaction,
+    economy_id: &EconomyId,
+    record: &EconomyRecord,
+    earliest: Point,
+) -> Result<bool, StoreError> {
+    if exists(txn, economy_id)? {
+        return Ok(false);
+    }
+    put(txn, ECONOMIES, economy_id.as_str(), record)?;
+    index(txn, earliest, economy_id)?;
+    Ok(true)
+}
+
+/// Names `point` by `economy_id`, unless a handle names it already, and
+/// gives the handle that names it.
+fn index(
+    txn: &redb::WriteTransaction,
+    point: Point,
+    economy_id: &EconomyId,
+) -> Result<EconomyId, StoreError> {
+    let key = encode(&point);
+    let mut points = txn.open_table(POINTS).map_err(StoreError::from)?;
+    if let Some(named) = points.get(key.as_slice()).map_err(StoreError::from)? {
+        return named
+            .value()
+            .parse()
+            .map_err(|_| StoreError::Malformed("server record"));
+    }
+    points
+        .insert(key.as_slice(), economy_id.as_str())
+        .map_err(StoreError::from)?;
+    Ok(economy_id.clone())
+}
+
+fn named(reader: &Reader, point: Point) -> Result<Option<EconomyId>, StoreError> {
+    let points = reader.redb().open_table(POINTS).map_err(StoreError::from)?;
+    let Some(handle) = points
+        .get(encode(&point).as_slice())
+        .map_err(StoreError::from)?
+    else {
+        return Ok(None);
+    };
+    handle
+        .value()
+        .parse()
+        .map(Some)
+        .map_err(|_| StoreError::Malformed("server record"))
 }
 
 fn exists(txn: &redb::WriteTransaction, economy_id: &EconomyId) -> Result<bool, StoreError> {

@@ -1,19 +1,21 @@
 use crate::{
     authoring::{self, AuthoringError},
-    handles::{AssessmentId, EconomyId, Handle},
+    handles::{AssessmentId, EconomyId, Handle, RefId},
     issues,
     messages::{
-        AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries, EconomyExtendRequest,
-        EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode, Issue, LineKind,
-        ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest, SearchOutcome,
-        SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary, ToolFailure,
-        TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse,
+        Amounts, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
+        EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
+        FrameReceipt, Issue, LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine,
+        RefAdvanceRequest, RefCreateRequest, RefFrame, RefFramesRequest, RefFramesResponse,
+        RefPosition, RefReadRequest, ReplayRequest, SearchOutcome, SearchRequest, SearchResponse,
+        SearchSolved, StateRoot, StudySummary, ToolFailure, TraceFindRequest, TraceFindResponse,
+        TraceStepRequest, TraceStepResponse,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
-    store::{self, Archive, Assessed, Loaded, Origin},
+    store::{self, Archive, Assessed, Loaded, Origin, content_name},
     studies,
 };
-use axionomy::{AssessmentStatus, Quantity, QuantityComparison, paths};
+use axionomy::{AccountPath, AssessmentStatus, Quantity, QuantityComparison, paths};
 use axionomy_engine::{CandidateSet, Effort, Engine, EngineError, Outcome, Strategy};
 use axionomy_search::GraphSearchProgress;
 use axionomy_store::StoreError;
@@ -39,7 +41,7 @@ use rmcp::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_path_to_error::Segment;
-use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
+use std::{borrow::Cow, collections::BTreeMap, ops::ControlFlow, sync::Arc, time::Duration};
 
 #[cfg(test)]
 mod tests;
@@ -51,6 +53,10 @@ pub(crate) const MAX_EXCHANGES: usize = 1_000;
 const PREVIEW_LINES: usize = 10;
 /// The most state expansions a search runs between cancellation checks.
 const MAX_CHUNK_SIZE: usize = 10_000;
+/// Frames one call to `axionomy_ref_frames` returns at most.
+const MAX_FRAMES: usize = 100;
+/// The longest `axionomy_ref_frames` waits for a ref to move.
+const MAX_WAIT_SECONDS: u64 = 30;
 const SEARCH: &str = "axionomy_search";
 const PROBLEM_STUDY: &str = "axionomy_problem_study";
 
@@ -93,6 +99,15 @@ reach goal balances with axionomy_search. Read what an economy holds through axi
 resources: tool results link to them, paths appear in their URIs as is \
 (.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
 Economies with equal roots have equal contents, however they were made.
+
+An application that moves through economies, such as a game or a simulation, keeps a ref on the \
+economy it is at. axionomy_ref_create makes one and axionomy_ref_read says where it is. \
+axionomy_ref_advance moves it forward from the economy the mover saw it at to one made from \
+there, such as axionomy_exchange_apply's result; when another move came first it fails with \
+`moved` and details.current_economy_id, where the ref is, so look again from there. \
+axionomy_ref_frames gives a follower the steps the ref was moved over after the last economy it \
+handled, waiting up to wait_seconds for the next: an exchange that was only tried out is never \
+delivered. Every economy a ref or a frame names is an economy_id like any other.
 
 axionomy_problem_study and axionomy_search run as MCP tasks: declare the \
 io.modelcontextprotocol/tasks extension and poll tasks/get for the result. Without it they fail \
@@ -415,6 +430,170 @@ impl AxionomyMcp {
     ) -> Result<Linked<StudySummary>, ToolError> {
         Err(tasks_required(PROBLEM_STUDY))
     }
+
+    #[tool(
+        name = "axionomy_ref_create",
+        title = "Create a ref",
+        description = "Make a new ref naming an economy: the economy an application, such as a game or a simulation, is at. Moving the ref forward with axionomy_ref_advance is what makes a step count, and axionomy_ref_frames delivers the steps it is moved over to whoever follows it. Every call makes a ref of its own, named by the `ref_id` it returns.",
+        output_schema = schema_for_output::<RefPosition>(),
+        annotations(destructive_hint = false, idempotent_hint = false, open_world_hint = false)
+    )]
+    async fn ref_create(
+        &self,
+        Parameters(request): Parameters<RefCreateRequest>,
+    ) -> Result<Linked<RefPosition>, ToolError> {
+        let economy = self.economy(&request.economy_id).await?;
+        let (ref_id, economy_id) = self
+            .archive
+            .refer(&request.economy_id, &economy)
+            .await
+            .map_err(ToolError::internal)?;
+        Ok(positioned(ref_id, economy_id))
+    }
+
+    #[tool(
+        name = "axionomy_ref_read",
+        title = "Read a ref",
+        description = "Name the economy a ref is at. Apply exchanges to it and move the ref to the result with axionomy_ref_advance, or follow the steps the ref is moved over from it with axionomy_ref_frames.",
+        output_schema = schema_for_output::<RefPosition>(),
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn ref_read(
+        &self,
+        Parameters(request): Parameters<RefReadRequest>,
+    ) -> Result<Linked<RefPosition>, ToolError> {
+        let economy_id = self.referred(&request.ref_id)?;
+        Ok(positioned(request.ref_id, economy_id))
+    }
+
+    #[tool(
+        name = "axionomy_ref_advance",
+        title = "Advance a ref",
+        description = "Move a ref forward from `expected_economy_id`, where the mover saw it, to `economy_id`, an economy made by exchanges from it, such as axionomy_exchange_apply's or axionomy_trace_replay's result: the steps between are what followers receive. When another move came first, the call fails with `moved` and `details.current_economy_id`, where the ref is; look again from there. A ref never moves back, or to an economy that was not made from where it is.",
+        output_schema = schema_for_output::<RefPosition>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn ref_advance(
+        &self,
+        Parameters(request): Parameters<RefAdvanceRequest>,
+    ) -> Result<Linked<RefPosition>, ToolError> {
+        let RefAdvanceRequest {
+            ref_id,
+            expected_economy_id,
+            economy_id,
+        } = request;
+        let expected = self.economy(&expected_economy_id).await?;
+        let to = self.economy(&economy_id).await?;
+        let advanced = self
+            .archive
+            .advance(&ref_id, expected.record.point, &economy_id, to.record.point)
+            .await;
+        match advanced {
+            Ok(named) => Ok(positioned(ref_id, named)),
+            // A ref that names nothing is one this store does not hold.
+            Err(EngineError::Moved { current: None, .. }) => Err(ToolError::new(
+                FailureCode::NotFound,
+                self.not_stored(&ref_id),
+            )),
+            Err(EngineError::Moved {
+                current: Some(current),
+                ..
+            }) => {
+                let current = self
+                    .archive
+                    .handle_of(current)
+                    .map_err(ToolError::internal)?;
+                Err(moved(&ref_id, &expected_economy_id, &current))
+            }
+            Err(EngineError::Backward { .. }) => Err(ToolError::argument(
+                "/economy_id",
+                format!(
+                    "`{economy_id}` was not made by exchanges from `{expected_economy_id}`, so ref `{ref_id}` cannot move there: a ref moves only forward, to an economy made from where it is"
+                ),
+            )),
+            Err(error) => Err(self.ref_failure(&ref_id, error)),
+        }
+    }
+
+    #[tool(
+        name = "axionomy_ref_frames",
+        title = "Follow a ref",
+        description = "Deliver the steps a ref was moved over after `after_economy_id`, the last economy the follower handled, earliest first: each frame is a step's exchange, its receipt and the `economy_id` it made, which every other tool takes. Only the steps a ref is moved over are delivered, never an exchange that was only tried out. At most `limit` frames, up to 100, per call; while the ref's `economy_id` is past the last frame, call again from that frame. With `wait_seconds`, up to 30, the call waits for the ref to move when it is still at `after_economy_id`. With a `goal`, as axionomy_search takes it, each frame says whether its economy `holds` it.",
+        output_schema = schema_for_output::<RefFramesResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn ref_frames(
+        &self,
+        Parameters(request): Parameters<RefFramesRequest>,
+    ) -> Result<Linked<RefFramesResponse>, ToolError> {
+        if !(1..=MAX_FRAMES).contains(&request.limit) {
+            return Err(ToolError::argument(
+                "/limit",
+                format!(
+                    "limit must be from 1 to {MAX_FRAMES}; follow from the last frame for more"
+                ),
+            ));
+        }
+        if request.wait_seconds > MAX_WAIT_SECONDS {
+            return Err(ToolError::argument(
+                "/wait_seconds",
+                format!(
+                    "wait_seconds must be at most {MAX_WAIT_SECONDS}; call again to wait longer"
+                ),
+            ));
+        }
+        let goal = request.goal.as_ref().map(goal_of).transpose()?;
+        let after = self.economy(&request.after_economy_id).await?;
+        let followed = self
+            .archive
+            .frames(
+                &request.ref_id,
+                &request.after_economy_id,
+                after.record.point,
+                goal,
+                request.limit,
+                Duration::from_secs(request.wait_seconds),
+            )
+            .await;
+        let (frames, economy_id) = match followed {
+            Ok(followed) => followed,
+            Err(EngineError::NotOnHistory { .. }) => {
+                let current = self.referred(&request.ref_id)?;
+                return Err(ToolError::argument(
+                    "/after_economy_id",
+                    format!(
+                        "`{}` is not an economy ref `{}` was at or moved over, so it has no steps after it; follow from where the ref is, `{current}`, or from a frame it delivered",
+                        request.after_economy_id, request.ref_id
+                    ),
+                ));
+            }
+            Err(error) => return Err(self.ref_failure(&request.ref_id, error)),
+        };
+        let link = Target::Economy {
+            economy_id: economy_id.clone(),
+        }
+        .link("economy", "The economy the ref is at");
+        Ok(Linked::new(
+            RefFramesResponse {
+                ref_id: request.ref_id,
+                economy_id,
+                frames: frames
+                    .into_iter()
+                    .map(|(economy_id, frame)| RefFrame {
+                        economy_id,
+                        receipt: FrameReceipt {
+                            changes: delta_lines(None, frame.receipt.deltas()).collect(),
+                            opened: frame.receipt.opened().to_vec(),
+                            closed: frame.receipt.closed().to_vec(),
+                        },
+                        exchange: frame.exchange,
+                        holds: frame.holds,
+                    })
+                    .collect(),
+            },
+            vec![link],
+        ))
+    }
 }
 
 impl AxionomyMcp {
@@ -424,6 +603,24 @@ impl AxionomyMcp {
             .await
             .map_err(ToolError::internal)?
             .ok_or_else(|| ToolError::new(FailureCode::NotFound, self.not_stored(economy_id)))
+    }
+
+    /// The economy a ref is at.
+    fn referred(&self, ref_id: &RefId) -> Result<EconomyId, ToolError> {
+        self.archive
+            .referred(ref_id)
+            .map_err(ToolError::internal)?
+            .ok_or_else(|| ToolError::new(FailureCode::NotFound, self.not_stored(ref_id)))
+    }
+
+    /// A ref tool's failure: a ref the store lacks, or an internal one.
+    fn ref_failure(&self, ref_id: &RefId, error: EngineError) -> ToolError {
+        match error {
+            EngineError::UnknownRef(_) => {
+                ToolError::new(FailureCode::NotFound, self.not_stored(ref_id))
+            }
+            error => ToolError::internal(error),
+        }
     }
 
     /// Why the store has no `handle`, and how to get what it named again.
@@ -549,23 +746,7 @@ impl AxionomyMcp {
         if request.candidates.len() > MAX_EXCHANGES {
             return Err(too_many_exchanges(request.candidates.len()).at("/candidates"));
         }
-        let goal =
-            request
-                .goal
-                .iter()
-                .try_fold(paths::Goal::new(), |goal, (account, amounts)| {
-                    let basket = paths::Basket::try_from_entries(
-                        amounts
-                            .iter()
-                            .map(|(asset, quantity)| (asset.clone(), *quantity)),
-                    )
-                    .map_err(|error| {
-                        let mut pointer = "/goal".to_owned();
-                        push_token(&mut pointer, account.as_str());
-                        ToolError::argument(&pointer, error.to_string())
-                    })?;
-                    Ok::<_, ToolError>(goal.require(account.clone(), basket))
-                })?;
+        let goal = goal_of(&request.goal)?;
         let source = self.economy(&request.economy_id).await?;
         let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
@@ -833,6 +1014,54 @@ impl IntoCallToolResult for ToolError {
     }
 }
 
+/// A ref and the economy it is at, linked.
+fn positioned(ref_id: RefId, economy_id: EconomyId) -> Linked<RefPosition> {
+    let link = Target::Economy {
+        economy_id: economy_id.clone(),
+    }
+    .link("economy", "The economy the ref is at");
+    Linked::new(RefPosition { ref_id, economy_id }, vec![link])
+}
+
+/// A move refused because the ref is no longer at `expected`: it says where
+/// the ref is, so the mover looks again from there.
+fn moved(ref_id: &RefId, expected: &EconomyId, current: &EconomyId) -> ToolError {
+    ToolError::new(
+        FailureCode::Moved,
+        format!(
+            "ref `{ref_id}` is no longer at `{expected}`: another move came first, and it is at `{current}`; look again from there"
+        ),
+    )
+    .with_details(MovedDetails {
+        current_economy_id: current,
+    })
+}
+
+/// The details of a `moved` failure: where the ref is.
+#[derive(Serialize)]
+struct MovedDetails<'a> {
+    current_economy_id: &'a EconomyId,
+}
+
+/// The goal a request names: balances each account must reach. Amounts that
+/// are not a basket are refused at the argument at fault.
+fn goal_of(goal: &BTreeMap<AccountPath, Amounts>) -> Result<paths::Goal, ToolError> {
+    goal.iter()
+        .try_fold(paths::Goal::new(), |goal, (account, amounts)| {
+            let basket = paths::Basket::try_from_entries(
+                amounts
+                    .iter()
+                    .map(|(asset, quantity)| (asset.clone(), *quantity)),
+            )
+            .map_err(|error| {
+                let mut pointer = "/goal".to_owned();
+                push_token(&mut pointer, account.as_str());
+                ToolError::argument(&pointer, error.to_string())
+            })?;
+            Ok(goal.require(account.clone(), basket))
+        })
+}
+
 fn tasks_required(tool: &str) -> ToolError {
     ToolError::new(
         FailureCode::TasksRequired,
@@ -915,6 +1144,10 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         SEARCH => check::<SearchRequest>(arguments),
         "axionomy_problem_catalog" => check::<ProblemCatalogRequest>(arguments),
         PROBLEM_STUDY => check::<StudyRequest>(arguments),
+        "axionomy_ref_create" => check::<RefCreateRequest>(arguments),
+        "axionomy_ref_read" => check::<RefReadRequest>(arguments),
+        "axionomy_ref_advance" => check::<RefAdvanceRequest>(arguments),
+        "axionomy_ref_frames" => check::<RefFramesRequest>(arguments),
         _ => Ok(()),
     }
 }
@@ -1353,15 +1586,6 @@ async fn run_search(
     )
     .into_result()
     .map_err(TaskExit::Error)
-}
-
-/// The name of a definition MCP keeps, from what it is: `mcp/` and the
-/// digest of its encoding, so the same goal or candidates share one.
-fn content_name<K>(value: &impl Serialize) -> axionomy::path::Path<K> {
-    let digest = blake3::hash(&postcard::to_allocvec(value).expect("values encode"));
-    format!("mcp/{}", digest.to_hex())
-        .parse()
-        .expect("a digest is a path")
 }
 
 fn describe(progress: GraphSearchProgress) -> String {

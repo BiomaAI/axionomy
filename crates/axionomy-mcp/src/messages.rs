@@ -4,7 +4,7 @@
 //! Maps are ordered by ID, so the same entries produce the same economy handle
 //! however a client orders its JSON keys.
 
-use crate::handles::{AssessmentId, EconomyId, StudyId};
+use crate::handles::{AssessmentId, EconomyId, RefId, StudyId};
 use axionomy::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Quantity,
     RatePath, RolePath, paths,
@@ -478,6 +478,122 @@ pub struct DocumentSummary {
     pub final_economy_id: EconomyId,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RefCreateRequest {
+    /// The economy the ref names first: where the application starts.
+    pub economy_id: EconomyId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RefReadRequest {
+    pub ref_id: RefId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RefAdvanceRequest {
+    pub ref_id: RefId,
+    /// Where the mover expects the ref to be: the economy it made
+    /// `economy_id` from. The move is refused, with where the ref is, when it
+    /// is anywhere else.
+    pub expected_economy_id: EconomyId,
+    /// Where to move the ref: an economy made by exchanges from
+    /// `expected_economy_id`, whose steps the move delivers to followers.
+    pub economy_id: EconomyId,
+}
+
+/// Where a ref is: the economy an application following it is at.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RefPosition {
+    pub ref_id: RefId,
+    /// The economy the ref names.
+    pub economy_id: EconomyId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RefFramesRequest {
+    pub ref_id: RefId,
+    /// The last economy the follower handled: the ref's economy when it last
+    /// looked, or the last frame's. Frames are the steps after it.
+    pub after_economy_id: EconomyId,
+    /// The most frames to return, from 1 to 100; the next call follows from
+    /// the last one returned.
+    #[serde(default = "default_frame_limit")]
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: usize,
+    /// How long to wait, up to 30 seconds, for the ref to move when it is
+    /// still at `after_economy_id`. Zero, the default, returns at once.
+    #[serde(default)]
+    #[schemars(range(max = 30))]
+    pub wait_seconds: u64,
+    /// Balances each named account must reach, as `axionomy_search` takes
+    /// them; each frame then says whether its economy holds them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<BTreeMap<AccountPath, Amounts>>,
+}
+
+const fn default_frame_limit() -> usize {
+    100
+}
+
+/// The steps a ref was moved over after the economy a follower last handled.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RefFramesResponse {
+    pub ref_id: RefId,
+    /// Where the ref is now. While it is past the last frame, more frames
+    /// follow it.
+    pub economy_id: EconomyId,
+    /// The steps, earliest first; empty when the ref has not moved.
+    pub frames: Vec<RefFrame>,
+}
+
+/// One step a ref was moved over: the exchange, its receipt, and the economy
+/// it made.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RefFrame {
+    /// The economy the step made, made by `exchange` from the frame before
+    /// it, or from `after_economy_id` for the first frame.
+    pub economy_id: EconomyId,
+    /// The step's exchange, as `axionomy_exchange_apply` takes it.
+    #[schemars(schema_with = "exchange_as_written")]
+    pub exchange: paths::Exchange,
+    /// What the exchange moved.
+    pub receipt: FrameReceipt,
+    /// Whether the economy holds the goal, when one was given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub holds: Option<bool>,
+}
+
+/// An exchange's schema as JSON writes it, which leaves out `parameters`
+/// when it has none.
+fn exchange_as_written(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut schema = <paths::Exchange as JsonSchema>::json_schema(generator);
+    if let Some(required) = schema
+        .get_mut("required")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        required.retain(|field| field != "parameters");
+    }
+    schema
+}
+
+/// What a step's exchange did: the quantities it moved, flattened from its
+/// accounts as an economy's `changes` resource lists them, and the accounts it
+/// opened and closed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct FrameReceipt {
+    pub changes: Vec<QuantityLine>,
+    /// Accounts the exchange created, in role order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opened: Vec<AccountPath>,
+    /// Accounts the exchange removed, in role order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closed: Vec<AccountPath>,
+}
+
 /// A failed tool call: a stable code, a message, and what the caller needs to
 /// correct it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -494,12 +610,15 @@ pub enum FailureCode {
     /// The arguments are malformed or out of range; `details.pointer` is the
     /// JSON pointer of the argument at fault.
     InvalidRequest,
-    /// What a handle or path names does not exist: an economy, assessment or
-    /// study this server's store does not hold, or an account no economy of
-    /// the trace has.
+    /// What a handle or path names does not exist: an economy, assessment,
+    /// study or ref this server's store does not hold, or an account no
+    /// economy of the trace has.
     NotFound,
     /// An entry would replace one the economy already has.
     Conflict,
+    /// A ref is not where a move expected it: another move came first.
+    /// `details.current_economy_id` names where it is, to look again from.
+    Moved,
     /// The request exceeds a per-call limit; split it.
     TooLarge,
     /// The exchange is well formed but accounts lack assets.

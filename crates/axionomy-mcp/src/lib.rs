@@ -11,14 +11,16 @@ mod server;
 mod store;
 mod studies;
 
-pub use handles::{AssessmentId, EconomyId, HandleError};
+pub use handles::{AssessmentId, EconomyId, HandleError, RefId};
 pub use http::{StatelessHttpService, stateless_http_config, stateless_http_service};
 pub use messages::{
     Amounts, AssessResponse, AssessmentStatus, ComputedEntry, Direction, DocumentSummary,
     EconomyCounts, EconomyCreateRequest, EconomyEntries, EconomyExtendRequest, EconomyStored,
-    ExchangeRequest, ExchangedResponse, FailureCode, Issue, IssueKind, LineKind,
-    ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, RateEntries, ReplayRequest,
-    SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary,
-    ToolFailure, TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse,
+    ExchangeRequest, ExchangedResponse, FailureCode, FrameReceipt, Issue, IssueKind, LineKind,
+    ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, RateEntries, RefAdvanceRequest,
+    RefCreateRequest, RefFrame, RefFramesRequest, RefFramesResponse, RefPosition, RefReadRequest,
+    ReplayRequest, SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot,
+    StudySummary, ToolFailure, TraceFindRequest, TraceFindResponse, TraceStepRequest,
+    TraceStepResponse,
 };
 pub use server::AxionomyMcp;

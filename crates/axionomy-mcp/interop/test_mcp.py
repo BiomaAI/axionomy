@@ -123,13 +123,13 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert client.instructions and "axionomy_economy_create" in client.instructions
         # A first-time client learns where to start, what an exchange looks
         # like, and which tools need the tasks extension.
-        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"'):
+        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"', "axionomy_ref_advance"):
             assert words in client.instructions, words
         capabilities = client.server_capabilities
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 10
+        assert len(tools) == 14
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
@@ -563,6 +563,113 @@ async def test_a_frames_exchange_is_tried_in_the_studys_economy(url: str) -> Non
             diff = await page(client, f"axionomy://economy/{tried.structured_content['economy_id']}/diff/{after['economy_id']}")
             assert diff["items"] == []
             assert tried.structured_content["root"] == after["root"]
+
+
+async def applied(client: Client, economy_id: str, exchange: dict[str, Any]) -> str:
+    applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": exchange})
+    assert not applied.is_error, applied.structured_content
+    return applied.structured_content["economy_id"]
+
+
+async def advance(client: Client, ref_id: str, expected: str, economy_id: str) -> CallToolResult:
+    return await client.call_tool(
+        "axionomy_ref_advance",
+        {"ref_id": ref_id, "expected_economy_id": expected, "economy_id": economy_id},
+    )
+
+
+async def refer(client: Client, economy_id: str) -> str:
+    created = await client.call_tool("axionomy_ref_create", {"economy_id": economy_id})
+    assert not created.is_error, created.structured_content
+    assert created.structured_content["economy_id"] == economy_id
+    assert links(created) == [f"axionomy://economy/{economy_id}"]
+    return created.structured_content["ref_id"]
+
+
+def delivered(followed: CallToolResult) -> list[str]:
+    assert not followed.is_error, followed.structured_content
+    return [frame["economy_id"] for frame in followed.structured_content["frames"]]
+
+
+async def test_two_clients_advance_one_ref_and_the_second_looks_again(url: str) -> None:
+    async with Client(url) as first, Client(url) as second:
+        start = await create(first, ECONOMY)
+        ref_id = await refer(first, start)
+
+        # Both propose a step from the same economy; the first move counts.
+        mine = await applied(first, start, transfer(1))
+        theirs = await applied(second, start, transfer(2))
+        moved = await advance(first, ref_id, start, mine)
+        assert moved.structured_content == {"ref_id": ref_id, "economy_id": mine}
+        refused = await advance(second, ref_id, start, theirs)
+        assert refused.is_error
+        assert refused.structured_content["error"] == "moved"
+        assert refused.structured_content["details"] == {"current_economy_id": mine}
+
+        # The second looks again from where the ref is, and moves it from there.
+        seen = await second.call_tool("axionomy_ref_read", {"ref_id": ref_id})
+        assert seen.structured_content == {"ref_id": ref_id, "economy_id": mine}
+        retried = await applied(second, mine, transfer(2))
+        assert not (await advance(second, ref_id, mine, retried)).is_error
+
+        # A ref never moves back.
+        back = await advance(first, ref_id, retried, start)
+        assert back.is_error and back.structured_content["error"] == "invalid_request"
+        assert back.structured_content["details"] == {"pointer": "/economy_id"}
+        assert "moves only forward" in back.structured_content["message"]
+
+
+async def test_a_follower_receives_only_the_steps_a_ref_moves_over(url: str) -> None:
+    async with Client(url) as leader, Client(url) as follower:
+        start = await create(leader, ECONOMY)
+        ref_id = await refer(leader, start)
+        first = await applied(leader, start, transfer(1))
+        # Only tried out: applied, but the ref never moves over it.
+        tried = await applied(leader, first, transfer(4))
+        assert not (await advance(leader, ref_id, start, first)).is_error
+        second = await applied(leader, first, transfer(2))
+        assert not (await advance(leader, ref_id, first, second)).is_error
+
+        followed = await follower.call_tool(
+            "axionomy_ref_frames",
+            {"ref_id": ref_id, "after_economy_id": start, "goal": {"sink": {"token": "3"}}},
+        )
+        assert delivered(followed) == [first, second]
+        assert tried not in delivered(followed)
+        assert followed.structured_content["economy_id"] == second
+        frames = followed.structured_content["frames"]
+        assert [(frame["exchange"]["units"], frame["holds"]) for frame in frames] == [("1", False), ("2", True)]
+        assert {(line["account"], line["kind"], line["quantity"]) for line in frames[1]["receipt"]["changes"]} == {
+            ("source", "consumed", "2"),
+            ("sink", "produced", "2"),
+        }
+        # A frame's economy is an economy like any other.
+        assert (await step(follower, frames[1]["economy_id"], 0))["source_economy_id"] == first
+
+        # A follower pulls from the last economy it handled.
+        page = await follower.call_tool("axionomy_ref_frames", {"ref_id": ref_id, "after_economy_id": start, "limit": 1})
+        assert delivered(page) == [first]
+        rest = await follower.call_tool("axionomy_ref_frames", {"ref_id": ref_id, "after_economy_id": first})
+        assert delivered(rest) == [second]
+
+        # A long poll returns as soon as another client moves the ref.
+        waited: dict[str, CallToolResult] = {}
+
+        async def wait() -> None:
+            waited["result"] = await follower.call_tool(
+                "axionomy_ref_frames",
+                {"ref_id": ref_id, "after_economy_id": second, "wait_seconds": 20},
+            )
+
+        started = anyio.current_time()
+        async with anyio.create_task_group() as group:
+            group.start_soon(wait)
+            await anyio.sleep(0.5)
+            third = await applied(leader, second, transfer(1))
+            assert not (await advance(leader, ref_id, second, third)).is_error
+        assert anyio.current_time() - started < 20
+        assert delivered(waited["result"]) == [third]
+        assert waited["result"].structured_content["economy_id"] == third
 
 
 async def test_malformed_arguments_are_structured_errors_naming_the_argument(url: str) -> None:

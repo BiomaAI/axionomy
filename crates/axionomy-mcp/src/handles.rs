@@ -98,6 +98,12 @@ handle!(
     StudyId,
     "stu-"
 );
+handle!(
+    /// A ref the server made: a name for the economy an application is at,
+    /// which moves only forward.
+    RefId,
+    "ref-"
+);
 
 /// What a kind of handle names, and how a client makes it again.
 pub(crate) trait Handle: fmt::Display {
@@ -109,7 +115,7 @@ pub(crate) trait Handle: fmt::Display {
 
 impl Handle for EconomyId {
     const NAMES: &'static str = "economy";
-    const MADE_AGAIN: &'static str = "make the economy again with the call that made it (axionomy_economy_create, axionomy_economy_extend, axionomy_exchange_apply, axionomy_trace_replay, axionomy_trace_step, axionomy_search or axionomy_problem_study)";
+    const MADE_AGAIN: &'static str = "make the economy again with the call that made it (axionomy_economy_create, axionomy_economy_extend, axionomy_exchange_apply, axionomy_trace_replay, axionomy_trace_step, axionomy_search, axionomy_problem_study, axionomy_ref_read or axionomy_ref_frames)";
 }
 
 impl Handle for AssessmentId {
@@ -120,6 +126,11 @@ impl Handle for AssessmentId {
 impl Handle for StudyId {
     const NAMES: &'static str = "study";
     const MADE_AGAIN: &'static str = "study the problem again with axionomy_problem_study";
+}
+
+impl Handle for RefId {
+    const NAMES: &'static str = "ref";
+    const MADE_AGAIN: &'static str = "create a ref again with axionomy_ref_create";
 }
 
 #[cfg(test)]

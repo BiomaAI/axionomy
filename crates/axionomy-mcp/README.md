@@ -30,6 +30,13 @@ economy_id + goal ───── search (task) ───> economy_id the soluti
 problem + strategy ──── problem_study ───> study_id, and two economy_ids for
                         (task)             each document: where it starts and
                                            where its exchanges reach
+economy_id ──────────── ref_create ──────> ref_id, a name for where an
+                                           application is
+ref_id + economy_ids ── ref_advance ─────> the ref moved forward from one to
+                                           the other, or `moved` and where
+                                           it is
+ref_id + economy_id ─── ref_frames ──────> the steps it was moved over after
+                                           that economy
 ```
 
 The economy an operation reads never changes. A failed operation stores
@@ -70,6 +77,8 @@ to apply:
 A role the rate opens binds the path of the account the exchange creates,
 which must not exist yet. `axionomy_problem_study` and `axionomy_search` run
 only as MCP tasks; every other tool works without the tasks extension.
+An application that moves through economies, such as a game, keeps a ref on
+the economy it is at; see [Refs](#refs).
 
 ## Authoring
 
@@ -167,6 +176,10 @@ the reason it is malformed.
 | `axionomy_search` | MCP task: outcome and the economy a solution reaches | additive, idempotent |
 | `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
 | `axionomy_problem_study` | MCP task: study summary | additive, idempotent |
+| `axionomy_ref_create` | A new `ref_id` and the `economy_id` it names | additive |
+| `axionomy_ref_read` | The `economy_id` a ref is at | read-only |
+| `axionomy_ref_advance` | The `economy_id` a ref moved to, or `moved` with where it is | additive, idempotent |
+| `axionomy_ref_frames` | The steps a ref was moved over after an economy, waiting up to 30 s for the next, and where it is | additive, idempotent |
 
 Every tool declares input and output schemas and `openWorldHint: false`.
 Results link to the resources that page through what they summarize. Applying
@@ -175,7 +188,7 @@ handle.
 
 A failure is a result with `isError` and structured content
 `{error, message, details}`, whose `error` is a stable code: `invalid_request`,
-`not_found`, `conflict`, `too_large`, `infeasible`, `invalid`,
+`not_found`, `conflict`, `moved`, `too_large`, `infeasible`, `invalid`,
 `tasks_required` or `internal`. Arguments are read before anything runs, so a
 malformed path, quantity or handle, or a missing field, is an
 `invalid_request` whose `details.pointer` is the JSON pointer (RFC 6901) of the
@@ -262,6 +275,56 @@ its final economy, so `axionomy_trace_replay` returns the same handle. A
 study's documents usually start from equal economies under different handles;
 their equal roots say so.
 
+## Refs
+
+An economy never changes, so trying out an exchange, a counterfactual, a
+branch and the step that counts are one operation: applying it. A ref says
+which steps count. It names the economy an application, such as a game or a
+simulation, is at, and moving it forward is what makes a step count
+(D-046). The engine does not know who proposes: a person, an agent, a policy
+or a loop applying responses are alike.
+
+- `axionomy_ref_create` makes a new ref naming an economy and returns its
+  `ref_id`; every call makes a ref of its own.
+- `axionomy_ref_read` names the economy the ref is at.
+- `axionomy_ref_advance` moves it from `expected_economy_id`, where the mover
+  saw it, forward to `economy_id`, an economy made by exchanges from there,
+  such as `axionomy_exchange_apply`'s result. A ref moves only from where its
+  mover expects it, so of two movers from one economy the second fails with
+  `moved` and `details.current_economy_id`, where the ref is, and looks again
+  from there. It never moves back, or to an economy not made from where it is:
+  that is an `invalid_request` at `/economy_id`.
+- `axionomy_ref_frames` gives a follower the steps the ref was moved over
+  after `after_economy_id`, the last economy it handled, earliest first: each
+  frame is the step's `exchange`, as `axionomy_exchange_apply` takes it, its
+  `receipt` (the quantities it moved, as `changes` lines, and the accounts it
+  opened and closed), and the `economy_id` it made, with `holds` when the call
+  names a `goal` as `axionomy_search` takes it. Only steps a ref is moved
+  over are delivered, never an exchange that was only tried out. A call
+  returns at most `limit` frames, up to 100, and the ref's `economy_id`: while
+  it is past the last frame, follow on from that frame. With `wait_seconds`,
+  up to 30, a call made while the ref is still at `after_economy_id` waits for
+  it to move, on a thread where blocking is allowed, and returns as soon as it
+  does.
+
+```text
+ref_create(start) ────────────────────────> ref_id
+exchange_apply(start, x) ─────────────────> mine
+ref_advance(ref_id, start, mine) ─────────> economy_id: mine
+ref_advance(ref_id, start, theirs) ───────> moved, current_economy_id: mine
+ref_frames(ref_id, start, wait_seconds) ──> [{economy_id: mine, exchange: x, receipt}]
+```
+
+Every economy a ref or a frame names is an `economy_id` every other tool
+takes: assess, apply, step through, find in, diff. The server names a point
+by the first handle that named it, whatever run holds it, so a ref reads back,
+and its steps are delivered, as the handles their movers made; a step inside
+a replay that no handle names yet gets one minted from its point and stored
+like any economy, made by the frame's exchange from the frame before it.
+Refs are store-wide names, so the server exposes only refs it made: each is
+an engine ref named `mcp/` and its handle, and a store on disk keeps it
+across restarts.
+
 ## Handles and storage
 
 An economy handle, `EconomyId`, is written `eco-` and 64 hexadecimal digits: a
@@ -273,8 +336,9 @@ server can derive a handle from an economy's content. Two different histories
 that reach the same balances get different handles, so a handle also names how
 its economy was reached; their equal `root`s say they reached equal contents.
 Assessment handles, `AssessmentId`, are written `asm-` and keyed the same way.
-Study handles, `StudyId`, are written `stu-` and keyed by what the study was
-computed from, so the same problem, instance, strategy, seed and budget always
+Ref handles, `RefId`, are written `ref-` and keyed from fresh randomness,
+since a ref is a name to move rather than a result. Study handles, `StudyId`,
+are written `stu-` and keyed by what the study was computed from, so the same problem, instance, strategy, seed and budget always
 get the same handle. A study takes the problem, instance and strategy as kebab-case paths
 (`work-league`, `micro`, `a-star`), the instance one its problem declares;
 its summary carries the study handle, that key, the selected document and, for
@@ -361,15 +425,21 @@ The Rust unit tests hold the economic behavior: authoring conflicts and limits,
 paging a 100,000-asset economy, failures and the arguments they name, tasks,
 stepping and diffs, a store on disk across restarts, a study's documents as
 economies that replay its trajectories, frames whose exchanges apply to the
-step before them, and studies computed again from their keys. `interop/`
+step before them, studies computed again from their keys, and refs that move
+only forward from where their movers expect them, deliver only the steps
+they move over, under the same handles every call, and wake a waiting
+follower. `interop/`
 checks that a standard client reaches all of it: the official MCP Python SDK
 drives `axionomy mcp` over Streamable HTTP through discovery, tools,
 resource links and pages, completion, stepping and diffs, task-backed search
 and cancellation, a problem study, stepping into a study and branching from
 it, applying a frame's exchange to its study's economy, structured errors with
 argument pointers, the routing-header rule, and economies and studies that
-outlive a restart. The SDK does not ship the tasks extension, so the suite
-declares it, as SEP-2663 describes. Python is managed with uv:
+outlive a restart, and refs: two clients advancing one ref from the same
+economy, the second told where it is; a step only tried out never delivered;
+a follower pulling frames after the last economy it handled, and a long poll
+that returns when another client advances. The SDK does not ship the tasks
+extension, so the suite declares it, as SEP-2663 describes. Python is managed with uv:
 
 ```console
 cargo build -p axionomy-cli --bin axionomy
@@ -379,8 +449,9 @@ cd crates/axionomy-mcp/interop && uv run --locked pytest
 ## Deployment boundary
 
 This crate is a local reference implementation, not a production control
-plane. Economies, assessments and studies persist in its store; tasks live in
-the process. It has no authentication, tenant isolation, quotas, retention
+plane. Economies, assessments, studies and refs persist in its store; tasks
+and followers waiting on a ref live in the process. Anyone holding a ref's
+handle may move it. It has no authentication, tenant isolation, quotas, retention
 limits, persisted search checkpoints or distributed workers. Public
 deployments must also configure allowed hosts and origins rather than
 loosening `rmcp`'s DNS-rebinding protection.

@@ -7,7 +7,11 @@ fn server() -> AxionomyMcp {
     let engine = Engine::new(Store::memory().unwrap()).unwrap();
     AxionomyMcp::new(engine, axionomy_problems::registry()).unwrap()
 }
-use crate::{handles::StudyId, resources::Address, store::State};
+use crate::{
+    handles::{RefId, StudyId},
+    resources::Address,
+    store::State,
+};
 
 use axionomy_view::DocumentPath;
 use rmcp::model::{
@@ -158,7 +162,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = server().tool_router.list_all();
-    assert_eq!(tools.len(), 10);
+    assert_eq!(tools.len(), 14);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -168,7 +172,7 @@ fn tools_declare_schemas_and_behavior_hints() {
         assert_eq!(hints.open_world_hint, Some(false), "{}", tool.name);
         let read_only = matches!(
             tool.name.as_ref(),
-            "axionomy_exchange_assess" | "axionomy_problem_catalog"
+            "axionomy_exchange_assess" | "axionomy_problem_catalog" | "axionomy_ref_read"
         );
         assert_eq!(
             hints.read_only_hint.unwrap_or(false),
@@ -178,7 +182,9 @@ fn tools_declare_schemas_and_behavior_hints() {
         );
         if !read_only {
             assert_eq!(hints.destructive_hint, Some(false), "{}", tool.name);
-            assert_eq!(hints.idempotent_hint, Some(true), "{}", tool.name);
+            // Every call makes a ref of its own.
+            let idempotent = tool.name != "axionomy_ref_create";
+            assert_eq!(hints.idempotent_hint, Some(idempotent), "{}", tool.name);
         }
     }
 }
@@ -1315,7 +1321,7 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
     std::fs::create_dir_all(&directory).unwrap();
     let file = directory.join("snapshots.redb");
     let _ = std::fs::remove_file(&file);
-    let (parent_id, applied) = {
+    let (parent_id, applied, ref_id) = {
         let server = AxionomyMcp::new(
             Engine::new(axionomy_store::Store::open(&file).unwrap()).unwrap(),
             axionomy_problems::registry(),
@@ -1323,7 +1329,13 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
         .unwrap();
         let parent_id = id(&create(&server, fixture()).await);
         let applied = apply(&server, &parent_id, transfer(2)).await;
-        (parent_id, applied)
+        let ref_id = refer(&server, &parent_id).await;
+        assert!(
+            !advance(&server, &ref_id, &parent_id, &id(&applied))
+                .await
+                .is_error
+        );
+        (parent_id, applied, ref_id)
     };
     let server = AxionomyMcp::new(
         Engine::new(axionomy_store::Store::open(&file).unwrap()).unwrap(),
@@ -1351,6 +1363,283 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
     let again = apply(&server, &parent_id, transfer(2)).await;
     assert_eq!(id(&again), id(&applied));
     assert_eq!(again.value["deduplicated"], true);
+    // So does a ref, at the economy it was moved to.
+    assert_eq!(id(&read_ref(&server, &ref_id).await), id(&applied));
     drop(server);
     std::fs::remove_dir_all(&directory).unwrap();
+}
+
+async fn refer(server: &AxionomyMcp, economy_id: &EconomyId) -> RefId {
+    let created = outcome(
+        server
+            .ref_create(Parameters(RefCreateRequest {
+                economy_id: economy_id.clone(),
+            }))
+            .await,
+    );
+    assert_eq!(id(&created), *economy_id);
+    handle(&created.value["ref_id"])
+}
+
+async fn read_ref(server: &AxionomyMcp, ref_id: &RefId) -> Outcome {
+    outcome(
+        server
+            .ref_read(Parameters(RefReadRequest {
+                ref_id: ref_id.clone(),
+            }))
+            .await,
+    )
+}
+
+async fn advance(
+    server: &AxionomyMcp,
+    ref_id: &RefId,
+    expected: &EconomyId,
+    to: &EconomyId,
+) -> Outcome {
+    outcome(
+        server
+            .ref_advance(Parameters(RefAdvanceRequest {
+                ref_id: ref_id.clone(),
+                expected_economy_id: expected.clone(),
+                economy_id: to.clone(),
+            }))
+            .await,
+    )
+}
+
+async fn follow(
+    server: &AxionomyMcp,
+    ref_id: &RefId,
+    after: &EconomyId,
+    limit: usize,
+    wait_seconds: u64,
+    goal: Option<Value>,
+) -> Outcome {
+    outcome(
+        server
+            .ref_frames(Parameters(RefFramesRequest {
+                ref_id: ref_id.clone(),
+                after_economy_id: after.clone(),
+                limit,
+                wait_seconds,
+                goal: goal.map(|goal| serde_json::from_value(goal).unwrap()),
+            }))
+            .await,
+    )
+}
+
+/// The economies a follower's frames made, in order.
+fn delivered(followed: &Outcome) -> Vec<EconomyId> {
+    assert!(!followed.is_error, "{}", followed.value);
+    followed.value["frames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|frame| handle(&frame["economy_id"]))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_ref_moves_only_forward_from_where_its_mover_expects_it() {
+    let server = server();
+    let start = id(&create(&server, fixture()).await);
+    let live = refer(&server, &start).await;
+    assert_eq!(id(&read_ref(&server, &live).await), start);
+    // Every call makes a ref of its own.
+    assert_ne!(refer(&server, &start).await, live);
+
+    // Two proposers from the same economy: the first moves the ref, the
+    // second is told where it went and looks again from there.
+    let mine = id(&apply(&server, &start, transfer(1)).await);
+    let theirs = id(&apply(&server, &start, transfer(2)).await);
+    let moved = advance(&server, &live, &start, &mine).await;
+    assert_eq!(id(&moved), mine);
+    assert_eq!(moved.value["ref_id"], live.as_str());
+    let refused = advance(&server, &live, &start, &theirs).await;
+    assert!(refused.is_error);
+    assert_eq!(refused.value["error"], "moved");
+    assert_eq!(
+        refused.value["details"],
+        json!({ "current_economy_id": mine })
+    );
+    assert_eq!(id(&read_ref(&server, &live).await), mine);
+    let again = id(&apply(&server, &mine, transfer(2)).await);
+    assert_eq!(id(&advance(&server, &live, &mine, &again).await), again);
+
+    // Nor does it move back, or onto an economy not made from where it is.
+    for to in [&start, &theirs] {
+        let refused = advance(&server, &live, &again, to).await;
+        assert_eq!(refused.value["error"], "invalid_request");
+        assert_eq!(refused.value["details"]["pointer"], "/economy_id");
+        let message = refused.value["message"].as_str().unwrap();
+        assert!(message.contains("moves only forward"), "{message}");
+    }
+
+    // A follower follows from an economy the ref was at or moved over.
+    let elsewhere = follow(&server, &live, &theirs, 10, 0, None).await;
+    assert_eq!(elsewhere.value["error"], "invalid_request");
+    assert_eq!(elsewhere.value["details"]["pointer"], "/after_economy_id");
+    for (limit, wait_seconds, pointer) in [
+        (0, 0, "/limit"),
+        (101, 0, "/limit"),
+        (1, 31, "/wait_seconds"),
+    ] {
+        let refused = follow(&server, &live, &start, limit, wait_seconds, None).await;
+        assert_eq!(refused.value["error"], "invalid_request");
+        assert_eq!(refused.value["details"]["pointer"], pointer);
+    }
+
+    // A ref this store does not hold says how to make one.
+    let unknown = RefId::from_digest(&blake3::hash(b"never made"));
+    let missing = read_ref(&server, &unknown).await;
+    assert_eq!(missing.value["error"], "not_found");
+    let message = missing.value["message"].as_str().unwrap();
+    assert!(message.contains("axionomy_ref_create"), "{message}");
+    for refused in [
+        advance(&server, &unknown, &start, &mine).await,
+        follow(&server, &unknown, &start, 10, 0, None).await,
+    ] {
+        assert_eq!(refused.value["error"], "not_found");
+    }
+}
+
+#[tokio::test]
+async fn only_the_steps_a_ref_moves_over_are_delivered() {
+    let server = server();
+    let start = id(&create(&server, fixture()).await);
+    let live = refer(&server, &start).await;
+    let first = id(&apply(&server, &start, transfer(1)).await);
+    // Tried out, never moved over: never delivered.
+    let tried = id(&apply(&server, &first, transfer(4)).await);
+    assert!(!advance(&server, &live, &start, &first).await.is_error);
+    let replayed = id(&replay(&server, &first, vec![transfer(1), transfer(2)]).await);
+    assert!(!advance(&server, &live, &first, &replayed).await.is_error);
+
+    let goal = json!({ "sink": { "token": "4" } });
+    let followed = follow(&server, &live, &start, 10, 0, Some(goal.clone())).await;
+    let economies = delivered(&followed);
+    assert_eq!(id(&followed), replayed);
+    assert_eq!(economies.len(), 3);
+    assert!(!economies.contains(&tried));
+    // A step the ref moved over to an economy a call made is named by that
+    // economy's handle; one inside a replay gets a handle of its own.
+    assert_eq!((&economies[0], &economies[2]), (&first, &replayed));
+    let frames = followed.value["frames"].as_array().unwrap();
+    assert_eq!(
+        frames
+            .iter()
+            .map(|frame| (frame["exchange"]["units"].clone(), frame["holds"].clone()))
+            .collect::<Vec<_>>(),
+        [
+            (json!("1"), json!(false)),
+            (json!("1"), json!(false)),
+            (json!("2"), json!(true)),
+        ]
+    );
+    assert_eq!(
+        frames[2]["receipt"],
+        json!({ "changes": [
+            { "account": "sink", "asset": "token", "kind": "produced", "quantity": "2" },
+            { "account": "source", "asset": "token", "kind": "consumed", "quantity": "2" },
+        ] })
+    );
+    // Without a goal, no frame says whether one holds.
+    let plain = follow(&server, &live, &start, 10, 0, None).await;
+    assert!(plain.value["frames"][0].get("holds").is_none());
+    assert_eq!(delivered(&plain), economies);
+
+    // The economy a step made inside the replay is an economy like any other:
+    // made by the frame's exchange from the frame before it.
+    let middle = &economies[1];
+    let economy = read(
+        &server,
+        &uri(Target::Economy {
+            economy_id: middle.clone(),
+        }),
+    )
+    .await;
+    assert_eq!(economy["parent_id"], first.as_str());
+    assert_eq!(
+        economy["origin"],
+        json!({ "kind": "exchanged", "exchanges": 1 })
+    );
+    let exchanges = read(
+        &server,
+        &uri(Target::Exchanges {
+            economy_id: middle.clone(),
+        }),
+    )
+    .await;
+    assert_eq!(exchanges["items"].as_array().unwrap().len(), 1);
+    assert_eq!(exchanges["items"][0]["units"], "1");
+    let source = step(&server, middle, 0).await;
+    assert_eq!(source.value["source_economy_id"], first.as_str());
+    let first_root = read(
+        &server,
+        &uri(Target::Economy {
+            economy_id: first.clone(),
+        }),
+    )
+    .await["root"]
+        .clone();
+    assert_eq!(source.value["root"], first_root);
+    let onward = apply(&server, middle, transfer(2)).await;
+    let replayed_root = read(
+        &server,
+        &uri(Target::Economy {
+            economy_id: replayed.clone(),
+        }),
+    )
+    .await["root"]
+        .clone();
+    assert_eq!(onward.value["root"], replayed_root);
+    let diff = read(
+        &server,
+        &uri(Target::Diff {
+            economy_id: middle.clone(),
+            other_id: replayed.clone(),
+        }),
+    )
+    .await;
+    assert_eq!(diff["items"].as_array().unwrap().len(), 2);
+
+    // A follower pulls from the last economy it handled, a page at a time,
+    // and every call names the same steps the same way.
+    let page = delivered(&follow(&server, &live, &start, 2, 0, None).await);
+    assert_eq!(page, economies[..2]);
+    let rest = delivered(&follow(&server, &live, &page[1], 2, 0, None).await);
+    assert_eq!(rest, economies[2..]);
+    let caught_up = follow(&server, &live, &replayed, 2, 0, None).await;
+    assert!(delivered(&caught_up).is_empty());
+    assert_eq!(id(&caught_up), replayed);
+}
+
+#[tokio::test]
+async fn a_follower_waits_for_the_ref_to_move() {
+    let server = server();
+    let start = id(&create(&server, fixture()).await);
+    let live = refer(&server, &start).await;
+    // Nothing moves: the wait ends with the time, where the ref is.
+    let waited = std::time::Instant::now();
+    let idle = follow(&server, &live, &start, 10, 1, None).await;
+    assert!(waited.elapsed() >= std::time::Duration::from_secs(1));
+    assert!(delivered(&idle).is_empty());
+    assert_eq!(id(&idle), start);
+
+    let mover = {
+        let (server, live, start) = (server.clone(), live.clone(), start.clone());
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let next = id(&apply(&server, &start, transfer(1)).await);
+            assert!(!advance(&server, &live, &start, &next).await.is_error);
+            next
+        })
+    };
+    let waited = std::time::Instant::now();
+    let moved = follow(&server, &live, &start, 10, 30, None).await;
+    assert!(waited.elapsed() < std::time::Duration::from_secs(30));
+    let next = mover.await.unwrap();
+    assert_eq!(id(&moved), next);
+    assert_eq!(delivered(&moved), [next]);
 }
