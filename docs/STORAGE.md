@@ -132,9 +132,12 @@ A stored economy is one tree, whose keys say what each entry holds:
 Every identifier in a key is written as its path (D-044), so a sample's own
 Rust types and paths are stored the same way: an economy of any
 `axionomy::Ontology` whose identifiers are written as paths can be recorded,
-and a run records its ontology's name and is read back only as that
-ontology. A path never contains `\0`, which sorts before every other byte, so
-an account's balances are contiguous and in account order, and a prefix range
+and a run records its ontology's name and is read back as that ontology or
+as `paths`, which any run reads as. A fork written as `paths`, as the engine
+writes every fork, keeps the ontology of the run it forked from, so a maze
+run and every branch from it stay maze's and are drawn with maze's view. A
+path never contains `\0`, which sorts before every other byte, so an
+account's balances are contiguous and in account order, and a prefix range
 reads one account; a path prefix is a key prefix. Invariants are keyed by name
 and then their encoding, since two may share a name. Values and the store's
 records (runs, steps, groups, members, refs) are postcard, the kernel's

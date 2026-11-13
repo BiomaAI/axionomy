@@ -123,6 +123,7 @@ pub(crate) fn host() -> rhai::Engine {
     quantities(&mut rhai);
     states(&mut rhai);
     exchanges(&mut rhai);
+    crate::view::register(&mut rhai);
     rhai.register_type_with_name::<Random>("Random")
         .register_fn("next", |random: &mut Random, bound: i64| {
             let bound = u64::try_from(bound)

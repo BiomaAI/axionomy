@@ -63,7 +63,7 @@ quote = "1.0.47"
 rand = { version = "0.10.3", default-features = false, features = ["std"] }
 rand_chacha = "0.10.0"
 redb = "4.5.0"
-rhai = { version = "1.27.0", default-features = false, features = ["std", "sync", "no_time"] }
+rhai = { version = "1.27.0", default-features = false, features = ["std", "sync", "no_time", "serde"] }
 ruint = { version = "1.21.1", default-features = false, features = ["std"] }
 rmcp = { version = "3.9.0", default-features = false, features = [
     "macros",

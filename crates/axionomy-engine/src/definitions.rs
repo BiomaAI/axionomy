@@ -25,6 +25,8 @@ pub mod kind {
     pub enum Experiment {}
     /// The results an experiment last recorded.
     pub enum Results {}
+    /// A view: how people read an ontology's runs, named by the ontology.
+    pub enum View {}
 
     impl PathKind for Goal {
         const SCHEMA: &'static str = "GoalPath";
@@ -49,6 +51,10 @@ pub mod kind {
     impl PathKind for Results {
         const SCHEMA: &'static str = "ResultsPath";
         const EXAMPLE: &'static str = "maze/routes";
+    }
+    impl PathKind for View {
+        const SCHEMA: &'static str = "ViewPath";
+        const EXAMPLE: &'static str = "maze";
     }
 }
 

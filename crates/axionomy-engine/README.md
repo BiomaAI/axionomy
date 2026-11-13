@@ -38,6 +38,11 @@ goes.
   `experiment` and keeps the results, which `results` reads back.
 - `compare` gives points' objective vectors and the front no other point
   dominates; `pick` the best point by objectives in order.
+- `keep_view` keeps how people read an ontology's runs: script functions that
+  label its identifiers, format its quantities, carry what the view needs
+  from frame to frame, draw a scene and give leaderboard scores. `draw`
+  draws a point's history as a document with the view of its run's
+  ontology, or with its paths when there is none.
 
 Scripts are how a package says what a generic algorithm cannot know. They
 read a `ScriptState`, the whole economy or a view of the accounts an actor may
@@ -54,7 +59,11 @@ the same name: a script that defines `view(state)` makes `state.view(...)`
 call it, with `state` as `this`. Name script functions apart from the host's
 (`balance`, `balances`, `accounts`, `rates`, `roles`, `view`, `applicable`,
 `assess`, `has_account`, `parameter`, `rate`, `next`). A loop variable
-needs a name: Rhai refuses `for _ in ...`.
+needs a name: Rhai refuses `for _ in ...`. A view's script builds its scene on
+the `scene` module (`scene::graph(title, nodes, edges, focus)`, `grid`,
+`matrix`, `timeline`), which infers entities, paths and legend from the
+surface; Rhai functions do not see a script's top-level constants, so a
+table a function needs is itself a function.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so will the Studio server, the CLI and Studio's browser Worker

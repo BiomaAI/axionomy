@@ -5,6 +5,7 @@ pub mod definitions;
 mod experiment;
 pub mod script;
 mod strategy;
+mod view;
 
 pub use definitions::{
     CandidateSet, CandidatesPath, ExperimentPath, GoalPath, Measure, Objective, ObjectivePath,
@@ -14,6 +15,7 @@ pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Tri
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
+pub use view::{View, ViewPath};
 
 use axionomy::{
     PathKind, Quantity,

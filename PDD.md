@@ -2028,9 +2028,9 @@ so equal states have equal roots whatever their history, and stores written
 apart merge by union. Every identifier in a key is written as its path, and
 every value and record as postcard (D-048), so a sample's
 own Rust types and paths are stored alike; an `Ontology` names a problem's
-identifier types, and a run is read back only as the ontology that recorded
-it. A run records each exchange with its receipt digest and stores states by
-an explicit checkpoint rule; any other state is the nearest stored one plus
+identifier types, and a run is read back as the ontology that recorded it or
+as paths, which any run reads as. A run records each exchange with its
+receipt digest and stores states by an explicit checkpoint rule; any other state is the nearest stored one plus
 replay, and replay checks every receipt, so storage can never make a state the
 kernel did not. Writes state their durability, and one writer commits many
 callers' batches per transaction. Tags, metrics, groups and refs organize runs

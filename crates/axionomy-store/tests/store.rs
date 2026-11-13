@@ -498,6 +498,18 @@ mod ledger {
         type Rate = Rate;
         type Role = Role;
     }
+
+    /// The ledger's identifiers under another name.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum Other {}
+
+    impl Ontology for Other {
+        const NAME: &'static str = "other";
+        type Account = Account;
+        type Asset = Asset;
+        type Rate = Rate;
+        type Role = Role;
+    }
 }
 
 #[test]
@@ -546,14 +558,49 @@ fn typed_economies_are_recorded_and_read_back_only_as_their_ontology() {
         reader.run(end.run).unwrap().unwrap().ontology.as_str(),
         "ledger"
     );
+    // Any run reads as paths, its identifiers written as their paths.
+    let written = reader.state::<Paths>(end).unwrap().unwrap();
+    assert_eq!(
+        written
+            .economy
+            .balance(&"agent/1".parse().unwrap(), &"cash".parse().unwrap()),
+        Quantity::new(6)
+    );
+    // A fork written as paths keeps the ontology it forked from, and reads
+    // back as it.
+    let mut paths_fork = store.fork::<Paths>(end, Checkpoints::Ends).unwrap();
+    paths_fork
+        .apply(
+            axionomy::paths::Exchange::new("pay".parse().unwrap(), Quantity::new(1))
+                .bind("from".parse().unwrap(), "bank".parse().unwrap())
+                .bind("to".parse().unwrap(), "agent/1".parse().unwrap()),
+        )
+        .unwrap();
+    let paths_forked = paths_fork.finish().unwrap();
+    let reader = store.read().unwrap();
+    assert_eq!(
+        reader
+            .run(paths_forked.run)
+            .unwrap()
+            .unwrap()
+            .ontology
+            .as_str(),
+        "ledger"
+    );
+    reader.verify::<Ledger>(paths_forked.run).unwrap();
+    assert_eq!(
+        reader
+            .state::<Ledger>(paths_forked)
+            .unwrap()
+            .unwrap()
+            .economy
+            .balance(&Account::Agent(1), &Asset::Cash),
+        Quantity::new(7)
+    );
+    // Another ontology's run is refused to a typed reading.
     assert!(matches!(
-        reader.state::<Paths>(end),
-        Err(StoreError::OtherOntology { run, read, .. })
-            if run == end.run && read == axionomy::OntologyPath::of::<Paths>()
-    ));
-    assert!(matches!(
-        store.fork::<Paths>(end, Checkpoints::Ends),
-        Err(StoreError::OtherOntology { .. })
+        reader.state::<ledger::Other>(end),
+        Err(StoreError::OtherOntology { run, .. }) if run == end.run
     ));
     let mut fork = store.fork::<Ledger>(end, Checkpoints::Ends).unwrap();
     fork.apply(

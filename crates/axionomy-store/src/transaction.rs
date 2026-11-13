@@ -10,7 +10,7 @@ use crate::{
         RUN_METRICS, RUNS, Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
     },
 };
-use axionomy::{OntologyPath, Receipt};
+use axionomy::{OntologyPath, Receipt, paths::Paths};
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadableTable, TableDefinition};
 use std::collections::HashSet;
@@ -18,7 +18,8 @@ use std::collections::HashSet;
 impl Transaction<'_> {
     /// Records a new run of `O`'s economies whose first state, at step
     /// `first`, is `state`. A run forked from another records the same
-    /// ontology.
+    /// ontology: a fork written as [`Paths`] keeps the ontology of the run it
+    /// forked from, and any other ontology's fork must be of its own runs.
     pub fn create_run<O: Recordable>(
         &mut self,
         run: RunId,
@@ -27,7 +28,7 @@ impl Transaction<'_> {
         state: &Tree,
         checkpoints: Checkpoints,
     ) -> Result<(), StoreError> {
-        let ontology = OntologyPath::of::<O>();
+        let mut ontology = OntologyPath::of::<O>();
         if let Some(from) = from {
             let source: Run = decode(
                 self.redb()
@@ -36,11 +37,13 @@ impl Transaction<'_> {
                     .ok_or(StoreError::UnknownRun(from.run))?
                     .value(),
             )?;
-            if source.ontology != ontology {
+            if ontology == OntologyPath::of::<Paths>() {
+                ontology = source.ontology;
+            } else if source.ontology != ontology {
                 return Err(StoreError::OtherOntology {
                     run: from.run,
                     recorded: source.ontology,
-                    read: OntologyPath::of::<O>(),
+                    read: ontology,
                 });
             }
         }

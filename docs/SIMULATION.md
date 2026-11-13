@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P6 are done and
-P7 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P7 are done and
+P8 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -401,12 +401,36 @@ gives any points' objective vectors and the front no point dominates, and
 `pick` the best by objectives in order. The same seed re-runs the same
 trials; transports run experiments once packages carry them (P9).
 
-**P7. Views.** A view per ontology: labels, formats, scene structure (surface
+**P7. Views (done).** A view per ontology: labels, formats, scene structure (surface
 kind, node or cell source, layout, edges) and script logic (anchors, status
 and tone ladders, metrics, classes that depend on the trace); leaderboards
 are ranked expressions. Any run is drawn with its ontology's view, or with
 its paths when there is none. Runs keep the ontology they were written from,
 and any run reads as `Paths` (D-044).
+
+Built: a view is a definition kept per ontology (`view/<ontology>`) naming
+script functions, each optional: `label(item)` for an account, asset, rate
+or role written `account/<path>` and so on; `format(asset)`;
+`carry(carried, before, exchange, after)` for what a view carries from frame
+to frame, such as each actor's running contribution; `scene(state, frame)`,
+where `frame` is `#{ index, exchanges, carried }`, so classes may depend on
+the whole trace; and `leaderboards(state, frame)`, each entry with an integer
+score the engine ranks, ties sharing a rank. A scene is a map shaped like the
+view crate's `Scene`, built on the `scene` module's constructors
+(`scene::graph`, `grid`, `matrix`, `timeline`), which infer entities, paths
+and legend as every view does. A view's functions live in a script of their
+own, so a policy or search never compiles them. `draw(point)` draws a
+point's history as a document with the view of its run's ontology, or with
+its paths. The store reads any run as `Paths`, and a fork written as paths
+keeps the ontology of the run it forked from. Maze's view, written as a
+script, draws every document of every maze study exactly as its Rust view
+does.
+
+Drawing maze from the store found that an economy iterated its accounts and
+rates in creation order while the store reads them back in identifier order,
+so a strategy could decide differently from the same point depending on
+whether it was in memory. An economy now keeps both in identifier order,
+specified and proved in Lean (D-051).
 
 **P8. Packages.** A manifest (name, version, format version, host API
 version, contents). Export copies what is reachable from chosen refs (the

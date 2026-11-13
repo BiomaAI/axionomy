@@ -10,7 +10,7 @@ use crate::{
     state,
     transaction::{decode, receipt_digest},
 };
-use axionomy::{ApplyError, Economy, Exchange, OntologyPath, Receipt};
+use axionomy::{ApplyError, Economy, Exchange, OntologyPath, Receipt, paths::Paths};
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadTransaction, ReadableTableMetadata};
 use std::collections::BTreeMap;
@@ -144,13 +144,15 @@ impl Reader {
         Ok(Some(last))
     }
 
-    /// A run of `O`'s economies; another ontology's run is refused.
+    /// A run of `O`'s economies; another ontology's run is refused, except
+    /// that any run reads as [`Paths`], since every identifier is written as
+    /// its path (D-044).
     pub fn run_of<O: Recordable>(&self, run: RunId) -> Result<Option<Run>, StoreError> {
         let Some(record) = self.run(run)? else {
             return Ok(None);
         };
         let read = OntologyPath::of::<O>();
-        if record.ontology != read {
+        if record.ontology != read && read != OntologyPath::of::<Paths>() {
             return Err(StoreError::OtherOntology {
                 run,
                 recorded: record.ontology,
