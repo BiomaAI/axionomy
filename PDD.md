@@ -1681,9 +1681,9 @@ factor.
    second domain confirms the perishables shapes.
 5. Build [interactive execution](docs/SIMULATION.md#interactive-execution):
    `axionomy-engine` for every front end (D-045), live refs with
-   compare-and-set and delivery (D-046), `view` and `actions` hooks on
-   `Problem`, the store in the browser (D-047), and Studio controls that act
-   on a selected point and ref.
+   compare-and-set and delivery (D-046), a view per ontology that draws any
+   run and offers its exchanges, the store in the browser (D-047), and Studio
+   controls that act on a selected point and ref.
 6. Extend invariants with carefully constrained local and inequality forms.
 7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.

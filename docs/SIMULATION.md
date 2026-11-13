@@ -246,9 +246,8 @@ exchange for the move.
    `advance(ref, expected, to)` moves a ref only while it is still on
    `expected`. `watch` pushes, and `frames(after)` pulls, each step a ref is
    moved over.
-3. Two `Problem` hooks, `view` and `actions`, so any point of any recorded
-   run is drawn as frames and offers the exchanges the problem's policies
-   would consider, not only a study's documents.
+3. A view per ontology, so any point of any recorded run is drawn as frames
+   and offers exchanges, whether or not a problem or a study produced it.
 4. The store in a browser Worker: its writer runs without a thread, and a
    redb backend over the origin private file system (OPFS) keeps it across
    page reloads.
@@ -382,21 +381,28 @@ run there is the store's own writer, a thread with a timer
 Done when a wasm test records a run in a Worker, reloads and reads it back,
 and CI builds `axionomy-engine` for `wasm32-unknown-unknown`.
 
-### Step 9: problems show and offer any point
+### Step 9: any run is shown, and offers exchanges, by its ontology
 
-`Problem` gains, for each ontology it owns, two hooks over paths:
+How an ontology's states look and which exchanges it offers belong to the
+ontology, not to a problem. Problems and studies stay an optional layer for
+comparing strategies; nothing interactive needs them.
 
-- `view`: a history's frames, labels, scene, objectives and goal, from the
-  derivation its studies already use, so a study document and a run of the
-  same ontology show the same;
-- `actions`: the applicable exchanges at a state, from the candidates its
-  policies already search.
-
-An ontology no problem owns is shown with its paths as labels and offers no
-candidates; an exchange can still be written and assessed.
+- Runs keep their ontology. Every identifier is written as its path (D-044),
+  so the store reads any run as `Paths`; the engine records each run under
+  the ontology it was written from: a study document under its problem's
+  ontology (the study runtime reports it with the trajectory), an authored
+  economy as `paths`.
+- `axionomy-view` gains a view per ontology, which the application registers
+  as it registers problems: a history's frames with the ontology's labels and
+  scene, from the derivation studies already use, and the exchanges to offer
+  at a state. A problem reuses its ontology's view.
+- The engine draws a run with the view of its ontology, and a run of an
+  ontology without one with its paths as labels and no candidates; an
+  exchange can still be written and assessed.
 
 Done when every study document's frames equal `Engine::frames` of the run
-that recorded it.
+that recorded it, and a run of an economy authored outside any problem is
+drawn with the view of its ontology.
 
 ### Step 10: live refs
 
