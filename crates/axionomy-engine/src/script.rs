@@ -26,7 +26,9 @@ use std::{
 };
 
 /// The version of the host API this engine gives scripts. A package records
-/// the version its scripts were written against.
+/// the version its scripts were written against. It stays 1 while Axionomy is
+/// in development, whatever the API gains or changes; it counts from the
+/// first release that packages are published against.
 pub const HOST_API: u64 = 1;
 
 /// The most operations one call of a script may run before it is stopped.

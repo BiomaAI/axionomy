@@ -112,6 +112,11 @@ treats a comparer that fails as finding its two items equal, so a broken
 comparer sorts wrongly rather than failing. `shared` is a keyword, not a name
 a variable may have.
 
+The host API's version, `HOST_API`, stays 1 while Axionomy is in
+development: scripts are written against the API as it stands, and the
+version starts counting with the first release packages are published
+against.
+
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so do the Studio server and the CLI (D-045). It builds for
 `wasm32-unknown-unknown` too, Rhai included, and runs in Studio's browser
