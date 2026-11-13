@@ -2,6 +2,7 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{CandidateSet, Effort, Engine, Outcome, ScriptCall, Strategy};
+use axionomy_search::bounded::Tie;
 use axionomy_store::{Point, Store};
 use std::ops::ControlFlow;
 
@@ -209,6 +210,7 @@ fn workshop() -> (Engine, Point) {
             r#"
             fn cost(state) { state.balance("worker", "cost") }
             fn score(state) { -state.balance("worker", "cost").to_int() }
+            fn progress(state) { state.balance("worker", "progress").to_int() }
             "#,
         )
         .unwrap();
@@ -258,6 +260,7 @@ fn branch_and_bound_and_beam_find_the_cheapest_progress() {
         score: workshop_call("score"),
         width: 1,
         depth: 10,
+        tie: Tie::First,
     };
     let ran = run(&engine, start, &narrow, EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
@@ -375,6 +378,32 @@ fn the_cheapest_search_without_a_heuristic_is_the_samples_dijkstra() {
     let ran = run(&engine, start, &dijkstra("impossible"), EFFORT);
     assert!(matches!(ran.outcome, Outcome::Exhausted));
     assert_eq!(ran.end, start);
+}
+
+#[test]
+fn beam_keeps_the_first_or_the_last_of_goals_scoring_alike() {
+    let (engine, start) = workshop();
+    // Scored by progress alone, five progress is best: big, small and big
+    // reach it at the third depth, three smalls and a big at the fourth.
+    let beam = |tie| Strategy::Beam {
+        candidates: path("steps"),
+        goal: path("done"),
+        score: workshop_call("progress"),
+        width: 4,
+        depth: 10,
+        tie,
+    };
+    let rates = |tie| {
+        let ran = run(&engine, start, &beam(tie), EFFORT);
+        assert!(matches!(ran.outcome, Outcome::Reached));
+        let (_, exchanges) = engine.history(ran.end).unwrap();
+        exchanges
+            .iter()
+            .map(|exchange| exchange.rate().to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rates(Tie::First), ["big", "small", "big"]);
+    assert_eq!(rates(Tie::Last), ["small", "small", "small", "big"]);
 }
 
 /// Take one or two of four tokens in turn; whoever takes the last wins.

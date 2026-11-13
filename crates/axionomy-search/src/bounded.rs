@@ -6,6 +6,7 @@
 
 use crate::SearchSolution;
 use axionomy::{Economy, Exchange, Goal, Ontology, StateKey, Trace};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// What a bounded search found, how much it expanded, and whether it ran to
@@ -101,15 +102,27 @@ pub struct Scored<O: Ontology> {
 /// What a beam search found and how much it expanded.
 #[derive(Debug, Clone)]
 pub struct Beamed<O: Ontology> {
-    /// The best-scoring state meeting the goal, the first found on a tie.
+    /// The best-scoring state meeting the goal, the first or the last found
+    /// on a tie, as the search was asked.
     pub best: Option<Scored<O>>,
     pub expanded: usize,
+}
+
+/// Which of the goal states scoring best alike a beam search answers with:
+/// the first it reaches, or the last. It reaches them depth by depth, and
+/// within a depth in the order it keeps them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Tie {
+    First,
+    Last,
 }
 
 /// Beam search: from `initial`, each depth expands every state kept, and
 /// keeps the `width` best-scoring new states, by `score`, higher better, in
 /// candidate order on a tie, for at most `depth` depths. Returns the
-/// best-scoring state that meets `goal` among those it reached.
+/// best-scoring state that meets `goal` among those it reached, the first or
+/// the last of those scoring alike as `tie` says.
 pub fn beam<O, Candidates, Score>(
     initial: &Economy<O>,
     goal: &Goal<O>,
@@ -117,6 +130,7 @@ pub fn beam<O, Candidates, Score>(
     mut score: Score,
     width: usize,
     depth: usize,
+    tie: Tie,
 ) -> Beamed<O>
 where
     O: Ontology,
@@ -125,7 +139,11 @@ where
 {
     let mut best: Option<Scored<O>> = None;
     let mut consider = |state: &Economy<O>, trace: &[Exchange<O>], value: i64| {
-        if state.matches(goal) && best.as_ref().is_none_or(|found| value > found.score) {
+        let better = |found: &Scored<O>| match tie {
+            Tie::First => value > found.score,
+            Tie::Last => value >= found.score,
+        };
+        if state.matches(goal) && best.as_ref().is_none_or(better) {
             best = Some(Scored {
                 trace: trace.iter().cloned().collect(),
                 score: value,

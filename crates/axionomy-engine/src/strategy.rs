@@ -9,7 +9,7 @@ use crate::{
 use axionomy::{Quantity, paths};
 use axionomy_search::{
     AStarSession, BfsSession, GraphSearchProgress, best_first,
-    bounded::{beam, branch_and_bound, minimax},
+    bounded::{Tie, beam, branch_and_bound, minimax},
     dijkstra,
     mcts::{MctsConfig, search as mcts},
     pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
@@ -70,13 +70,15 @@ pub enum Strategy {
     },
     /// Beam search: each depth keeps the `width` states that score best,
     /// `fn(state)` returning an integer, higher better, for at most `depth`
-    /// depths; the best-scoring goal state found.
+    /// depths; the best-scoring goal state found, the first or the last
+    /// found of those scoring alike, as `tie` says.
     Beam {
         candidates: CandidatesPath,
         goal: GoalPath,
         score: ScriptCall,
         width: u64,
         depth: u64,
+        tie: Tie,
     },
     /// The goal state the candidate set reaches that ranks best by `cost`,
     /// `fn(state)`, a state's whole cost so far, plus `heuristic`'s estimate,
@@ -320,6 +322,7 @@ impl Engine {
                 score,
                 width,
                 depth,
+                tie,
             } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
@@ -330,6 +333,7 @@ impl Engine {
                     |economy: &paths::Economy| self.signed(score, economy, &failure),
                     usize::try_from(*width).unwrap_or(usize::MAX),
                     usize::try_from(*depth).unwrap_or(usize::MAX),
+                    *tie,
                 );
                 failed(failure)?;
                 let (end, outcome) = match found.best {

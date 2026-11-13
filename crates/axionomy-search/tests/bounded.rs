@@ -2,7 +2,7 @@
 //! answers are known.
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
-use axionomy_search::bounded::{beam, branch_and_bound, minimax};
+use axionomy_search::bounded::{Tie, beam, branch_and_bound, minimax};
 
 fn path<K>(text: &str) -> Path<K> {
     text.parse().unwrap()
@@ -72,13 +72,37 @@ fn branch_and_bound_finds_the_cheapest_goal_and_says_when_it_is_sure() {
 fn beam_search_keeps_the_best_states_of_each_depth() {
     let economy = workshop();
     let score = |economy: &paths::Economy| -i64::try_from(spent(economy)).unwrap();
-    let found = beam(&economy, &done(), steps, score, 1, 10);
+    let found = beam(&economy, &done(), steps, score, 1, 10, Tie::First);
     let best = found.best.unwrap();
     assert_eq!(best.score, -4);
     assert_eq!(best.trace.exchanges().len(), 4);
 
     // Too shallow to reach the goal.
-    assert!(beam(&economy, &done(), steps, score, 4, 1).best.is_none());
+    assert!(
+        beam(&economy, &done(), steps, score, 4, 1, Tie::First)
+            .best
+            .is_none()
+    );
+
+    // Scored by progress alone, five progress is best: big, small and big
+    // reach it first, at the third depth; three smalls and a big last, at
+    // the fourth.
+    let progress = |economy: &paths::Economy| {
+        i64::try_from(economy.balance(&path("worker"), &path("progress")).to_u64()).unwrap()
+    };
+    let rates = |tie| {
+        let best = beam(&economy, &done(), steps, progress, 4, 10, tie)
+            .best
+            .unwrap();
+        assert_eq!(best.score, 5);
+        best.trace
+            .exchanges()
+            .iter()
+            .map(|exchange| exchange.rate().to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rates(Tie::First), ["big", "small", "big"]);
+    assert_eq!(rates(Tie::Last), ["small", "small", "small", "big"]);
 }
 
 /// Take one or two tokens from a pile in turn; whoever takes the last wins.

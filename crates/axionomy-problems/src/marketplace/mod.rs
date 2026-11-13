@@ -9,6 +9,8 @@ use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, Par
 use std::collections::HashSet;
 
 pub mod fulfillment;
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

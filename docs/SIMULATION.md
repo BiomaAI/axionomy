@@ -516,7 +516,13 @@ keeper liquidates, and the first-depositor attack as a plan from an arm
 starting at the instance's fresh market) reproduces every document; the
 cheapest search without a heuristic runs `axionomy_search::dijkstra`, as
 the samples do, since of equally cheap plans Showcase's study keeps the
-one that search's heap yields. The
+one that search's heap yields. Marketplace's (each instance's goal settling its own orders; Micro's
+clearing as branch-and-bound over the gross value it forgoes, and its exact
+Pareto picks for buyers and for sellers; the funded markets' fulfillment
+planned by beam search, for volume, buyers or sellers, over a script
+proposing contracts, dispatches, deliveries, cancellations and clock advances
+in the study's order) needed the beam strategy to answer with the last of the
+plans scoring best alike, as the study's planner does. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package

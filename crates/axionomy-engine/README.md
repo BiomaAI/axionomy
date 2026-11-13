@@ -29,8 +29,9 @@ goes.
   specialised solver's answer), applied all or none, breadth-first search,
   the cheapest search (Dijkstra's as `axionomy_search::dijkstra` runs it,
   breaking ties between equally cheap plans as the samples' Rust solvers do,
-  or A* given a heuristic), best-first search over a
-  state's cost, branch-and-bound, beam search, an exact Pareto search that
+  or A* given a heuristic), best-first search over a state's cost,
+  branch-and-bound, beam search (answering with the first or the last of the
+  goal states scoring best alike), an exact Pareto search that
   reaches the front's best point by some of its objectives in order, or a
   game whose players choose by policy, minimax or Monte Carlo tree search.
   What it reaches is recorded as a run forked from its start, with how it

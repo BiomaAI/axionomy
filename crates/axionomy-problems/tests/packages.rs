@@ -526,6 +526,18 @@ fn amm(engine: &Engine, instance: &str) {
     );
 }
 
+fn marketplace(engine: &Engine, instance: &str) {
+    // Micro clears and ranks its exact front; the funded markets plan
+    // fulfillment by the study's beam, for volume, buyers or sellers.
+    let compared = reproduces(
+        engine,
+        "marketplace",
+        instance,
+        &["market-clearing", "pareto-buyers", "pareto-sellers"],
+    );
+    assert_eq!(compared, 3, "{instance}");
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -533,7 +545,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 9] = [
+const SAMPLES: [Sample; 10] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -562,6 +574,11 @@ const SAMPLES: [Sample; 9] = [
         "lending",
         axionomy_problems::lending::package::write,
         lending,
+    ),
+    (
+        "marketplace",
+        axionomy_problems::marketplace::package::write,
+        marketplace,
     ),
 ];
 

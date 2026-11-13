@@ -18,7 +18,8 @@ ordinary exchanges validated by the `axionomy` kernel.
 - `sampling` selects among weighted, encoded Nature exchanges through `rand`,
   including reproducible ChaCha8 and caller-owned generators.
 - `bounded` holds depth-first branch-and-bound for the cheapest goal state under
-  a lower bound, beam search keeping the best-scoring states of each depth, and
+  a lower bound, beam search keeping the best-scoring states of each depth and
+  answering with the first or the last of the best goal states it reaches, and
   minimax with alpha-beta pruning for a two-player choice.
 - `monte_carlo` evaluates arbitrary trials with Bernoulli, scalar, vector,
   quantile, credible-interval, and tail-risk statistics backed by `statrs`.
