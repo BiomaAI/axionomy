@@ -501,6 +501,9 @@ fn players_choose_by_minimax_and_by_tree_search() {
         estimate: nim_call("even"),
         iterations: 400,
         depth: 10,
+        chance: None,
+        rollout: None,
+        salt: 0,
     });
     engine.keep_strategy(&path("nim/mcts"), &searched).unwrap();
     let ran = run(&engine, start, &searched, EFFORT);
@@ -511,4 +514,136 @@ fn players_choose_by_minimax_and_by_tree_search() {
         engine.history(ran.end).unwrap().1,
         engine.history(again.end).unwrap().1
     );
+}
+
+/// Begin, then play safe for 0.6 or gamble on Nature's draw: good for 1 one
+/// time in four, bad for nothing otherwise.
+fn gamble() -> (Engine, Point) {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let rate = |from: &str, to: &str| {
+        Rate::new()
+            .consume(path("game"), basket([(path(from), 1)]))
+            .produce(path("game"), basket([(path(to), 1)]))
+    };
+    let weighed = |to: &str, weight: &str| {
+        rate("pending", to)
+            .preserve(path("nature"), basket([(path(weight), 1)]))
+            .distinct(path("game"), path("nature"))
+    };
+    let economy = paths::EconomyBuilder::new()
+        .account(path("game"), basket([(path("idle"), 1)]).into())
+        .account(
+            path("nature"),
+            basket([(path("good-weight"), 1), (path("bad-weight"), 3)]).into(),
+        )
+        .rate(path("begin"), rate("idle", "ready"))
+        .rate(path("safe"), rate("ready", "safe-result"))
+        .rate(path("gamble"), rate("ready", "pending"))
+        .rate(path("good"), weighed("good-result", "good-weight"))
+        .rate(path("bad"), weighed("bad-result", "bad-weight"))
+        .build()
+        .unwrap();
+    engine
+        .keep_script(
+            &path("gamble"),
+            r#"
+            fn play(rate) {
+                let bindings = #{ game: "game" };
+                if rate == "good" || rate == "bad" { bindings.nature = "nature"; }
+                exchange(rate, bindings, 1)
+            }
+            fn moves(state) { ["begin", "safe", "gamble", "good", "bad"].map(play) }
+            fn draws(state) {
+                if state.balance("game", "pending").is_zero() { return (); }
+                [[play("good"), state.balance("nature", "good-weight")],
+                 [play("bad"), state.balance("nature", "bad-weight")]]
+            }
+            fn nature(state, random) {
+                let outcomes = draws(state);
+                if outcomes == () { return (); }
+                outcomes[random.sample(outcomes.map(|outcome| outcome[1]))][0]
+            }
+            fn player(state) { 0 }
+            fn payoffs(state) {
+                if state.balance("game", "safe-result") > 0 { return [0.6]; }
+                if state.balance("game", "good-result") > 0 { return [1.0]; }
+                if state.balance("game", "bad-result") > 0 { return [0.0]; }
+                ()
+            }
+            fn nothing(state) { [0.0] }
+            fn first(state, candidates) { candidates[0] }
+            fn wrong(state, candidates) { play("begin") }
+            "#,
+        )
+        .unwrap();
+    engine
+        .keep_goal(
+            &path("over"),
+            &paths::Goal::new().require(path("game"), basket([(path("good-result"), 1)])),
+        )
+        .unwrap();
+    engine
+        .keep_candidates(
+            &path("moves"),
+            &CandidateSet::Script(ScriptCall::new(path("gamble"), "moves".parse().unwrap())),
+        )
+        .unwrap();
+    let start = engine.author(economy).unwrap();
+    (engine, start)
+}
+
+#[test]
+fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
+    let (engine, start) = gamble();
+    let call = |function: &str| ScriptCall::new(path("gamble"), function.parse().unwrap());
+    let searching = |chance: Option<&str>, rollout: Option<&str>| Strategy::Game {
+        goal: path("over"),
+        horizon: 3,
+        nature: Some(call("nature")),
+        actor: call("player"),
+        players: vec![axionomy_engine::Chooser::Mcts {
+            candidates: path("moves"),
+            payoffs: call("payoffs"),
+            estimate: call("nothing"),
+            iterations: 256,
+            depth: 4,
+            chance: chance.map(call),
+            rollout: rollout.map(call),
+            salt: 5,
+        }],
+    };
+    let rates = |ran: &axionomy_engine::Ran| -> Vec<String> {
+        let (_, exchanges) = engine.history(ran.end).unwrap();
+        exchanges
+            .iter()
+            .map(|exchange| exchange.rate().as_str().to_owned())
+            .collect()
+    };
+
+    // Knowing Nature draws, the player plays safe, and then has nothing
+    // left to choose: the game stops short of a good result.
+    let knowing = searching(Some("draws"), Some("first"));
+    engine.keep_strategy(&path("knowing"), &knowing).unwrap();
+    let ran = run(&engine, start, &knowing, EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Stopped));
+    assert_eq!(rates(&ran), ["begin", "safe"]);
+
+    // A tree without Nature thinks the player picks the good result.
+    let ran = run(&engine, start, &searching(None, None), EFFORT);
+    assert_eq!(rates(&ran)[..2], ["begin", "gamble"]);
+
+    // A rollout must pick one of the candidates.
+    let refused = engine.run_strategy(
+        start,
+        &searching(Some("draws"), Some("wrong")),
+        EFFORT,
+        &mut |_| ControlFlow::Continue(()),
+    );
+    assert!(matches!(
+        refused,
+        Err(axionomy_engine::EngineError::Returned {
+            expected: "one of the candidates or nothing",
+            ..
+        })
+    ));
 }

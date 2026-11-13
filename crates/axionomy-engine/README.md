@@ -33,8 +33,9 @@ goes.
   branch-and-bound, beam search (answering with the first or the last of the
   goal states scoring best alike), an exact Pareto search that
   reaches the front's best point by some of its objectives in order, or a
-  game whose players choose by policy, minimax or Monte Carlo tree search.
-  What it reaches is recorded as a run forked from its start, with how it
+  game whose players choose by policy, minimax or Monte Carlo tree search,
+  which may draw Nature's weighted outcomes as chance in its tree and
+  simulate by a rollout script. What it reaches is recorded as a run forked from its start, with how it
   ended and what the search explored.
 - `refer` names a point with a new ref and `referred` reads it. `advance`
   moves a ref forward from the point its mover expects to a point whose

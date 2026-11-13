@@ -534,12 +534,15 @@ fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<S
                         candidates,
                         payoffs,
                         estimate,
+                        chance,
+                        rollout,
                         ..
                     } => {
                         closure
                             .queue
                             .push(crate::definitions::definition(&candidates));
                         calls.extend([payoffs, estimate]);
+                        calls.extend(chance.into_iter().chain(rollout));
                     }
                 }
             }

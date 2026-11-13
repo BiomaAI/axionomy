@@ -13,7 +13,7 @@ use axionomy_search::{
     dijkstra,
     mcts::{MctsConfig, search as mcts},
     pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
-    sampling::{SeededSampler, TicketSource, sample_seed},
+    sampling::{SeededSampler, TicketSource, WeightedExchange, sample_seed},
     session::{SearchStatus, WorkBudget},
 };
 use axionomy_store::Point;
@@ -135,13 +135,23 @@ pub enum Chooser {
     /// candidate set: `payoffs`, `fn(state)`, gives every player's payoff at
     /// a state the game ends in, an array of numbers, or nothing at any
     /// other; `estimate`, `fn(state)`, every player's expected payoff where
-    /// a simulation stops at `depth`. Simulations choose uniformly.
+    /// a simulation stops at `depth`. Where `chance`, `fn(state)`, gives
+    /// Nature's weighted outcomes, `[exchange, weight]` pairs, the tree
+    /// draws one by its weight instead of a player choosing. Simulations
+    /// choose as `rollout`, `fn(state, candidates)`, does, one of the
+    /// candidates or nothing to stop there, and uniformly without one. The
+    /// search of the game's `k`th choice, counting from zero the turns Nature
+    /// did not respond on, is seeded with the game's seed XOR `salt`, plus
+    /// `k`. A player with no candidates chooses nothing.
     Mcts {
         candidates: CandidatesPath,
         payoffs: ScriptCall,
         estimate: ScriptCall,
         iterations: u64,
         depth: u64,
+        chance: Option<ScriptCall>,
+        rollout: Option<ScriptCall>,
+        salt: u64,
     },
 }
 
@@ -631,6 +641,73 @@ impl Engine {
         })
     }
 
+    /// Nature's weighted outcomes `call` gives for `economy`: none where it
+    /// returns nothing.
+    fn weighted(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+        failure: &RefCell<Option<EngineError>>,
+    ) -> Vec<WeightedExchange<paths::Exchange>> {
+        if failure.borrow().is_some() {
+            return Vec::new();
+        }
+        let returned: Result<rhai::Dynamic, _> = self.call(
+            &call.script,
+            call.function.as_str(),
+            (ScriptState::new(economy.clone()),),
+        );
+        let outcomes = returned.and_then(|returned| {
+            if returned.is_unit() {
+                return Ok(Vec::new());
+            }
+            let found = returned.type_name();
+            crate::script::weighted_of(returned.try_cast().ok_or_else(|| {
+                EngineError::Returned {
+                    expected: "weighted outcomes or nothing",
+                    found: found.to_owned(),
+                }
+            })?)
+        });
+        outcomes.unwrap_or_else(|error| {
+            failure.borrow_mut().get_or_insert(error);
+            Vec::new()
+        })
+    }
+
+    /// The one of `actions` that `call`, `fn(state, candidates)`, picks at
+    /// `economy`, or none.
+    fn rolled(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+        actions: &[paths::Exchange],
+        failure: &RefCell<Option<EngineError>>,
+    ) -> Option<paths::Exchange> {
+        if failure.borrow().is_some() {
+            return None;
+        }
+        let candidates: rhai::Array = actions.iter().cloned().map(rhai::Dynamic::from).collect();
+        let picked = self
+            .call(
+                &call.script,
+                call.function.as_str(),
+                (ScriptState::new(economy.clone()), candidates),
+            )
+            .and_then(proposal)
+            .and_then(|picked| match picked {
+                Some(exchange) if !actions.contains(&exchange) => Err(EngineError::Returned {
+                    expected: "one of the candidates or nothing",
+                    found: exchange.rate().to_string(),
+                }),
+                picked => Ok(picked),
+            });
+        picked.unwrap_or_else(|error| {
+            failure.borrow_mut().get_or_insert(error);
+            None
+        })
+    }
+
     #[expect(clippy::too_many_arguments, reason = "a game's parts, each read once")]
     fn play(
         &self,
@@ -646,6 +723,8 @@ impl Engine {
         let chance = Random::new(seed);
         let random = Random::new(sample_seed(seed, 1));
         let mut exchanges = Vec::new();
+        // The turns a player chose on so far.
+        let mut choices = 0;
         let outcome = loop {
             if economy.matches(goal) {
                 break Outcome::Reached;
@@ -680,14 +759,16 @@ impl Engine {
                             expected: "the index of a player",
                             found: index.to_string(),
                         })?;
-                    self.choose(
+                    let chosen = self.choose(
                         chooser,
                         &economy,
                         &random,
                         players.len(),
                         actor,
-                        seed ^ turn,
-                    )?
+                        (seed, choices),
+                    )?;
+                    choices += 1;
+                    chosen
                 }
             };
             let Some(exchange) = chosen else {
@@ -710,6 +791,8 @@ impl Engine {
         })
     }
 
+    /// What `chooser` chooses at `economy` on the game's choice `choice`, in
+    /// a game seeded `seed`.
     fn choose(
         &self,
         chooser: &Chooser,
@@ -717,7 +800,7 @@ impl Engine {
         random: &Random,
         players: usize,
         actor: &ScriptCall,
-        seed: u64,
+        (seed, choice): (u64, u64),
     ) -> Result<Option<paths::Exchange>, EngineError> {
         let failure = RefCell::new(None);
         let player = |economy: &paths::Economy| {
@@ -765,30 +848,45 @@ impl Engine {
                 estimate,
                 iterations,
                 depth,
+                chance,
+                rollout,
+                salt,
             } => {
                 let candidates = self.candidate_set(candidates)?;
+                if self.offered(&candidates, economy, &failure).is_empty() {
+                    return match failure.borrow_mut().take() {
+                        Some(error) => Err(error),
+                        None => Ok(None),
+                    };
+                }
                 let config = MctsConfig::new(
                     usize::try_from(*iterations).unwrap_or(usize::MAX),
                     usize::try_from(*depth).unwrap_or(usize::MAX),
                 )
-                .with_seed(seed);
+                .with_seed((seed ^ salt).wrapping_add(choice));
                 let decided = mcts(
                     economy,
                     config,
                     players,
                     |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
-                    |_: &paths::Economy| Vec::new(),
+                    |economy: &paths::Economy| match chance {
+                        Some(chance) => self.weighted(chance, economy, &failure),
+                        None => Vec::new(),
+                    },
                     player,
                     |economy: &paths::Economy| self.payoffs(payoffs, economy, &failure),
                     |economy: &paths::Economy| {
                         self.payoffs(estimate, economy, &failure)
                             .unwrap_or_else(|| vec![0.0; players])
                     },
-                    |_: &paths::Economy,
+                    |economy: &paths::Economy,
                      actions: &[paths::Exchange],
-                     sampler: &mut SeededSampler| {
-                        let ticket = sampler.ticket(actions.len() as u64);
-                        actions.get(usize::try_from(ticket).ok()?).cloned()
+                     sampler: &mut SeededSampler| match rollout {
+                        Some(rollout) => self.rolled(rollout, economy, actions, &failure),
+                        None => {
+                            let ticket = sampler.ticket(actions.len() as u64);
+                            actions.get(usize::try_from(ticket).ok()?).cloned()
+                        }
                     },
                 );
                 // A script that failed explains the search better than the

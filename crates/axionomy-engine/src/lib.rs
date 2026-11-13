@@ -427,10 +427,13 @@ impl Engine {
                             candidates: set,
                             payoffs,
                             estimate,
+                            chance,
+                            rollout,
                             ..
                         } => {
                             candidates.push(set);
                             scripts.extend([payoffs, estimate]);
+                            scripts.extend(chance.iter().chain(rollout));
                         }
                     }
                 }

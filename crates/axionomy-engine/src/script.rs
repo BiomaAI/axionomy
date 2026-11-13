@@ -495,6 +495,32 @@ fn distances(edges: Array, from: &str) -> Result<Map, Failure> {
     Ok(reached)
 }
 
+/// The weighted outcomes in what a script returned: `[exchange, weight]`
+/// pairs, each weight an integer or a quantity.
+pub(crate) fn weighted_of(
+    returned: Array,
+) -> Result<Vec<WeightedExchange<paths::Exchange>>, EngineError> {
+    returned
+        .into_iter()
+        .map(|value| {
+            let found = value.type_name();
+            let returned = |expected| EngineError::Returned {
+                expected,
+                found: found.to_owned(),
+            };
+            let [exchange, weight]: [Dynamic; 2] = value
+                .try_cast::<Array>()
+                .and_then(|pair| pair.try_into().ok())
+                .ok_or_else(|| returned("an [exchange, weight] pair"))?;
+            let exchange = exchange
+                .try_cast::<paths::Exchange>()
+                .ok_or_else(|| returned("an exchange and its weight"))?;
+            let weight = weight_of(weight).map_err(|_| returned("an exchange and its weight"))?;
+            Ok(WeightedExchange::new(exchange, weight))
+        })
+        .collect()
+}
+
 /// The exchanges in what a script returned.
 pub fn exchanges_of(returned: Array) -> Result<Vec<paths::Exchange>, EngineError> {
     returned
