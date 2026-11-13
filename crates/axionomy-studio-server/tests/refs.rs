@@ -99,6 +99,11 @@ async fn get(router: &Router, uri: &str) -> (StatusCode, Value) {
     send(router, Request::get(uri).body(Body::empty()).unwrap()).await
 }
 
+async fn delete(router: &Router, expected: Point) -> (StatusCode, Value) {
+    let uri = format!("{LIVE}?expected={}", point(expected));
+    send(router, Request::delete(uri).body(Body::empty()).unwrap()).await
+}
+
 fn ok<T: DeserializeOwned>((status, body): (StatusCode, Value)) -> T {
     assert_eq!(status, StatusCode::OK, "{body}");
     serde_json::from_value(body).unwrap()
@@ -196,6 +201,45 @@ async fn a_ref_moves_only_forward_from_where_its_mover_expects_it() {
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn a_ref_is_deleted_from_where_its_deleter_saw_it() {
+    let (engine, start, router) = bank();
+    let _: RefView = ok(post(
+        &router,
+        "/api/refs",
+        json!({ "name": "live/game", "point": point(start) }),
+    )
+    .await);
+    let first = engine.apply(start, &[pay(5)]).unwrap();
+    let _: RefView = ok(advance(&router, start, first).await);
+
+    // A deleter who still saw the start is told where the ref went.
+    let (status, refused) = delete(&router, start).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let refused: RefMoved = serde_json::from_value(refused).unwrap();
+    assert_eq!(refused.current, first.into());
+    let read: RefView = ok(get(&router, LIVE).await);
+    assert_eq!(read.point, first.into());
+
+    // From where it is, it goes; what it named stays a point.
+    let deleted: RefView = ok(delete(&router, first).await);
+    assert_eq!(deleted, read);
+    let (status, _) = get(&router, LIVE).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = delete(&router, first).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = get(
+        &router,
+        &format!("/api/points/{}/ancestor?step=0", point(first)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // Without the point it saw, a deleter is refused before anything goes.
+    let request = Request::delete(LIVE).body(Body::empty()).unwrap();
+    let (status, _) = send(&router, request).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

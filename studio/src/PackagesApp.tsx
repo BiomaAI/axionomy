@@ -100,6 +100,8 @@ type Opened = {
   point: PointId;
   /** The ref the point is where, when it was opened as a ref's. */
   ref?: string;
+  /** The package that ships the ref, which fixes it: it never moves. */
+  shipped?: string;
   how: "ref" | "branch" | "continued" | "trial" | "link";
   /** What it was reached from, in words. */
   note?: string;
@@ -210,11 +212,12 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
     staleTime: Infinity,
   });
   const screenPoint: PointId | undefined = !opened || stale ? undefined : atEnd ? opened.point : settled === position ? earlier.data : undefined;
-  const onRefPoint = Boolean(opened?.ref) && atEnd;
+  // At a ref's point applying moves the ref, unless a package ships it.
+  const onRefPoint = Boolean(opened?.ref) && !opened?.shipped && atEnd;
   const objectives = useMemo(() => pkg?.objectives.map((objective) => objective.objective) ?? [], [pkg]);
   const follow = useFollowing(engine, opened?.ref, opened?.point, objectives, (point) => {
     pendingStep.current = "end";
-    setOpened((current) => current?.ref ? { point, ref: current.ref, how: "ref" } : current);
+    setOpened((current) => current?.ref ? { point, ref: current.ref, shipped: current.shipped, how: "ref" } : current);
     void queryClient.invalidateQueries({ queryKey: ["packages", kind] });
   });
 
@@ -228,7 +231,7 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
     try {
       const ref = await engine.readRef(name);
       pendingStep.current = step;
-      setOpened({ point: ref.point, ref: name, how: "ref" });
+      setOpened({ point: ref.point, ref: name, shipped: ref.shipped_by ?? undefined, how: "ref" });
       if (show) setView("point");
     } catch (cause) { setError(described(cause)); }
   };
@@ -257,6 +260,7 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
       else if (from.got === "kept") notice(`${what} could not be reached (${from.message}); the store's copy of ${names.join(", ")} is shown.`);
       else {
         notice(`Loaded ${names.join(", ")} from ${what}.`);
+        for (const release of from.loaded.replaced ?? []) notice(`Replaced ${release.name} ${release.version}: what it shipped and this version does not carry is gone; refs of your own stay.`);
         for (const ref of from.loaded.kept.refs) notice(`Kept ref ${ref}: the store already names another point with it.`);
         if (from.loaded.kept.definitions.length > 0) notice(`Kept ${from.loaded.kept.definitions.length} definitions the store already defines otherwise.`);
       }
@@ -336,6 +340,18 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
       notice(`${ref} moved to step ${stepOf(to)}.`);
       pendingStep.current = "end";
       setOpened({ point: to, ref, how: "ref" });
+      void refresh();
+    } catch (cause) { setError(described(cause)); }
+  };
+
+  /** Deletes the ref on screen from the point it is on; the point stays on screen, a branch now. */
+  const deleteRef = async () => {
+    if (!engine || !opened?.ref) return;
+    const ref = opened.ref;
+    try {
+      await engine.deleteRef(ref, opened.point);
+      notice(`${ref} is deleted; the points it named stay.`);
+      setOpened({ point: opened.point, how: "branch", note: `where ${ref} was` });
       void refresh();
     } catch (cause) { setError(described(cause)); }
   };
@@ -422,7 +438,7 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
           : !opened ? <div className="empty-state">This package names no point. Load another, or open an experiment's trial.</div>
           : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Drawing the point's history…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
           : snapshot && <QuantityFormats.Provider value={document.formats ?? {}}><div className="point-cockpit" aria-busy={stale}>
-            <PointHeading pkg={pkg} opened={opened} document={document} position={position} onKeep={keepAsRef} />
+            <PointHeading pkg={pkg} opened={opened} document={document} position={position} onKeep={keepAsRef} onDelete={deleteRef} />
             <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} frame={frame} onShare={copyLink} shared={copied} />
             <section className="stage no-boards">
               <div className="panel world-panel" ref={worldPanel}>
@@ -442,7 +458,7 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
             </section>
             <section className="evidence-grid act-grid">
               <div className="panel action-panel">
-                <PanelHeading kicker={onRefPoint ? `At ${opened.ref}'s point` : `At step ${position}`} title={action === "act" ? "Act" : action === "continue" ? "Continue from here" : "Follow"} aside={onRefPoint ? "applying moves the ref" : "applying makes a branch"} />
+                <PanelHeading kicker={onRefPoint ? `At ${opened.ref}'s point` : `At step ${position}`} title={action === "act" ? "Act" : action === "continue" ? "Continue from here" : "Follow"} aside={onRefPoint ? "applying moves the ref" : opened.shipped && atEnd ? `${opened.ref} is fixed: applying makes a branch` : "applying makes a branch"} />
                 <div className="action-tabs" role="tablist" aria-label="What to do here">
                   <button type="button" role="tab" aria-selected={action === "act"} onClick={() => setAction("act")}>Act</button>
                   <button type="button" role="tab" aria-selected={action === "continue"} onClick={() => setAction("continue")}>Continue from here</button>
@@ -473,26 +489,32 @@ function EmptyCatalog({ hasSamples }: { hasSamples: boolean }) {
 }
 
 /** What the point on screen is, and where it came from. */
-function PointHeading({ pkg, opened, document, position, onKeep }: { pkg?: PackageView; opened: Opened; document: ViewDocument; position: number; onKeep: (name: string) => void }) {
+function PointHeading({ pkg, opened, document, position, onKeep, onDelete }: { pkg?: PackageView; opened: Opened; document: ViewDocument; position: number; onKeep: (name: string) => void; onDelete: () => void }) {
   const [name, setName] = useState("");
-  const suggested = `${pkg?.name ?? "studio"}/branch/${opened.point.split(":")[0].slice(-8)}-${stepOf(opened.point)}`;
+  const suggested = `${pkg?.name ?? "studio"}/${opened.shipped ? "play" : "branch"}/${opened.point.split(":")[0].slice(-8)}-${stepOf(opened.point)}`;
+  const steps = `${document.frames.length} ${document.frames.length === 1 ? "step" : "steps"}`;
   const how = opened.ref ? `ref ${opened.ref}` : opened.how === "branch" ? "Branch" : opened.how === "continued" ? "Where a strategy ended" : opened.how === "trial" ? "A trial's end" : "A linked point";
   return <section className="document-heading point-heading">
     <div>
       <span className="eyebrow">{pkg?.name ?? "Package"} · {how}{opened.note ? ` · ${opened.note}` : ""}</span>
       <h1>{document.title}</h1>
-      <p>{opened.ref ? `The point ${opened.ref} names: the economy after ${document.frames.length} ${document.frames.length === 1 ? "step" : "steps"} of its history. Applying an exchange here and moving the ref over it is what makes a step count.` : "A point no ref names. It never changes; anything applied here makes another branch."}</p>
+      <p>{opened.shipped ? `The point package ${opened.shipped} ships as ${opened.ref}: the economy after ${steps} of its history. A package's ref is fixed, so the package means what it shipped; name a ref of your own here, and applying an exchange at your ref's point moves it.`
+        : opened.ref ? `The point ${opened.ref} names: the economy after ${steps} of its history. Applying an exchange here and moving the ref over it is what makes a step count.`
+        : "A point no ref names. It never changes; anything applied here makes another branch."}</p>
       <dl className="study-key" aria-label="Point on screen">
-        <div><dt>On screen</dt><dd>{opened.ref ? "On a ref" : "Not on any ref"}</dd></div>
+        <div><dt>On screen</dt><dd>{opened.shipped ? "On a package's ref" : opened.ref ? "On a ref" : "Not on any ref"}</dd></div>
         <div><dt>Point</dt><dd title={opened.point}>{shortPoint(opened.point)}</dd></div>
         <div><dt>History</dt><dd>{document.frames.length} steps</dd></div>
         <div><dt>Scrubbed to</dt><dd>step {position}</dd></div>
       </dl>
     </div>
-    {!opened.ref && <form className="keep-ref" onSubmit={(event) => { event.preventDefault(); onKeep(name || suggested); }}>
-      <label className="field"><span>Keep as a ref</span><input name="ref-name" type="text" value={name} placeholder={suggested} onChange={(event) => setName(event.target.value)} /></label>
+    {(!opened.ref || opened.shipped) && <form className="keep-ref" onSubmit={(event) => { event.preventDefault(); onKeep(name || suggested); setName(""); }}>
+      <label className="field"><span>{opened.shipped ? "Name a ref of your own here" : "Keep as a ref"}</span><input name="ref-name" type="text" value={name} placeholder={suggested} onChange={(event) => setName(event.target.value)} /></label>
       <button type="submit">Name it</button>
     </form>}
+    {opened.ref && !opened.shipped && <div className="keep-ref">
+      <button type="button" onClick={onDelete}>Delete {opened.ref}</button>
+    </div>}
   </section>;
 }
 

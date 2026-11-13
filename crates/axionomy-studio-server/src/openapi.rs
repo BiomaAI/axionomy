@@ -52,6 +52,7 @@ pub(crate) struct Endpoint<S> {
     parameters: Vec<(Location, SchemaFn)>,
     request: Option<Request>,
     response: Body,
+    forbidden: Option<&'static str>,
     conflict: Option<(&'static str, SchemaFn)>,
     fallible: bool,
     route: MethodRouter<S>,
@@ -72,6 +73,7 @@ impl<S> Endpoint<S> {
             parameters: Vec::new(),
             request: None,
             response: Body::Json(schema_of::<R>),
+            forbidden: None,
             conflict: None,
             fallible: false,
             route,
@@ -97,6 +99,13 @@ impl<S> Endpoint<S> {
     /// Errors are reported as `ErrorResponse` under the default status.
     pub(crate) fn fallible(mut self) -> Self {
         self.fallible = true;
+        self
+    }
+
+    /// A 403 Forbidden, what is never done however it is asked, said in
+    /// `description`, is reported as an `ErrorResponse`.
+    pub(crate) fn forbidden(mut self, description: &'static str) -> Self {
+        self.forbidden = Some(description);
         self
     }
 
@@ -323,6 +332,18 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>], also: &[SchemaFn]) -> OpenA
             }
         };
         responses.insert("200", success);
+        if let Some(description) = endpoint.forbidden {
+            responses.insert(
+                "403",
+                Response {
+                    description: description.into(),
+                    content: media(
+                        "application/json",
+                        schema_of::<crate::ErrorResponse>(&mut generator).to_value(),
+                    ),
+                },
+            );
+        }
         if let Some((description, conflict)) = endpoint.conflict {
             responses.insert(
                 "409",

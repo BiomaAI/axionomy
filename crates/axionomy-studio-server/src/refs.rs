@@ -2,13 +2,15 @@
 //! and moving it forward is what makes a step count. A ref moves only from
 //! where its mover expects it, so of two movers from one point the second is
 //! told where it went (409) and looks again; a follower pulls the steps a ref
-//! was moved over after the last point it handled, waiting for the next.
+//! was moved over after the last point it handled, waiting for the next. A
+//! ref is deleted from where its deleter saw it, as it is moved. A ref a
+//! package ships is fixed: moving or deleting it is forbidden (403).
 
 use crate::{ApiError, StudioState, engine::blocking};
 use axionomy_store::RefPath;
 use axionomy_studio_api::{
-    RefAdvanceRequest, RefCreateRequest, RefFrames, RefFramesQuery, RefView, advance_ref,
-    create_ref, frames as delivered, read_ref,
+    RefAdvanceRequest, RefCreateRequest, RefDeleteQuery, RefFrames, RefFramesQuery, RefView,
+    advance_ref, create_ref, delete_ref, frames as delivered, read_ref,
 };
 use axum::{
     Json,
@@ -52,6 +54,16 @@ pub(crate) async fn advance(
     })
     .await
     .map(Json)
+}
+
+pub(crate) async fn delete(
+    State(state): State<StudioState>,
+    Path(RefName { name }): Path<RefName>,
+    Query(query): Query<RefDeleteQuery>,
+) -> Result<Json<RefView>, ApiError> {
+    blocking(&state.engine, move |engine| delete_ref(engine, name, query))
+        .await
+        .map(Json)
 }
 
 pub(crate) async fn frames(

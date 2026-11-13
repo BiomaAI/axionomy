@@ -87,9 +87,9 @@ impl WorkerEngine {
     }
 
     /// Loads the package file `bytes`, a store file or a zip of one, as the
-    /// engine loads any package: its manifests checked, then merged. With
-    /// `from`, remembers it came from that URL with those validators, once it
-    /// is merged.
+    /// engine loads any package: its manifests checked, then merged, or in
+    /// place of the version of it the store holds. With `from`, remembers it
+    /// came from that URL with those validators, once it is installed.
     pub fn load_from(
         &self,
         bytes: &[u8],
@@ -179,8 +179,9 @@ impl WorkerEngine {
     }
 
     /// Loads the package file `bytes`, a store file or a zip of one: checks
-    /// its manifests, merges it into the store and, given the `url` it came
-    /// from, remembers the response's `etag` and `last_modified`. Gives a
+    /// its manifests, merges it into the store, or puts it in place of the
+    /// version of it the store holds, and, given the `url` it came from,
+    /// remembers the response's `etag` and `last_modified`. Gives a
     /// `LoadedView`.
     pub fn load(
         &self,
@@ -302,12 +303,24 @@ impl WorkerEngine {
     }
 
     /// Moves the ref `name` forward; `request` is a `RefAdvanceRequest`.
-    /// Refused with 409 and where the ref is when it is not at `expected`.
+    /// Refused with 409 and where the ref is when it is not at `expected`,
+    /// and with 403 for a ref a package ships, which is fixed.
     #[wasm_bindgen(js_name = advanceRef)]
     pub fn advance_ref(&self, name: &str, request: &str) -> Result<String, JsValue> {
         answer(
             path_of::<RefPath>(name)
                 .and_then(|name| api::advance_ref(&self.engine, name, parsed(request)?)),
+        )
+    }
+
+    /// Deletes the ref `name`, giving the `RefView` it was; `query` is a
+    /// `RefDeleteQuery`. Refused as a move is: with 409 and where the ref is
+    /// when it is not at `expected`, and with 403 for a ref a package ships.
+    #[wasm_bindgen(js_name = deleteRef)]
+    pub fn delete_ref(&self, name: &str, query: &str) -> Result<String, JsValue> {
+        answer(
+            path_of::<RefPath>(name)
+                .and_then(|name| api::delete_ref(&self.engine, name, parsed(query)?)),
         )
     }
 

@@ -508,6 +508,15 @@ pub struct RefAdvanceRequest {
     pub economy_id: EconomyId,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RefDeleteRequest {
+    pub ref_id: RefId,
+    /// Where the deleter expects the ref to be. The ref is deleted only
+    /// there; when it is anywhere else, the call fails with where it is.
+    pub expected_economy_id: EconomyId,
+}
+
 /// Where a ref is: the economy an application following it is at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RefPosition {

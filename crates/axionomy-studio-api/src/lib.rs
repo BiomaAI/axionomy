@@ -14,7 +14,7 @@ pub use experiments::{
 pub use ids::{Natural, ObjectiveList, PackageVersion, PointId, PointIdError};
 pub use packages::{
     ArmView, ExperimentView, KeptView, LoadedView, ObjectiveView, PackageList, PackageView,
-    SamplePackages, load, packages,
+    ReleaseView, SamplePackages, load, packages,
 };
 pub use points::{
     AccountBalances, Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances,
@@ -22,7 +22,7 @@ pub use points::{
     ancestor, apply, assess, balances, candidates, check_strategy, draw, run_strategy,
 };
 pub use refs::{
-    MAX_FRAMES, MAX_WAIT_SECONDS, RefAdvanceRequest, RefCreateRequest, RefFrame, RefFrames,
-    RefFramesQuery, RefView, advance_ref, create_ref, frames, read_ref,
+    MAX_FRAMES, MAX_WAIT_SECONDS, RefAdvanceRequest, RefCreateRequest, RefDeleteQuery, RefFrame,
+    RefFrames, RefFramesQuery, RefView, advance_ref, create_ref, delete_ref, frames, read_ref,
 };
 pub use refusal::{ErrorResponse, RefMoved, Refusal, RefusalBody, Refused};

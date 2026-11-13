@@ -2,8 +2,9 @@
 //! experiment runs, and a store kept on a backend that outlives it finds
 //! both again, with the URL the package came from and what it said.
 
-use axionomy_engine::{Engine, Version, zipped};
+use axionomy_engine::{Engine, EngineError, Version, zipped};
 use axionomy_store::Store;
+use axionomy_studio_api as api;
 use axionomy_studio_wasm::{Source, Validators, WorkerEngine};
 use redb::{StorageBackend, backends::InMemoryBackend};
 use serde_json::{Value, json};
@@ -137,6 +138,11 @@ fn parsed(json: &str) -> Value {
     serde_json::from_str(json).unwrap()
 }
 
+/// A request as the Worker reads its JSON.
+fn from<T: serde::de::DeserializeOwned>(json: &str) -> T {
+    serde_json::from_str(json).unwrap()
+}
+
 fn apply_request(candidate: &Value) -> String {
     json!({ "exchanges": [candidate["exchange"]] }).to_string()
 }
@@ -157,6 +163,8 @@ fn the_worker_offers_the_operations_the_server_offers() {
     );
     let micro = &listed["packages"][0]["refs"][0];
     assert_eq!(micro["name"], "maze/micro");
+    // The package ships it, so it is fixed.
+    assert_eq!(micro["shipped_by"], "maze");
     let start = micro["point"].as_str().unwrap().to_owned();
     let held = parsed(&worker.balances(&start).unwrap());
     assert_eq!(
@@ -167,8 +175,15 @@ fn the_worker_offers_the_operations_the_server_offers() {
         .unwrap()
     );
     assert!(!held["accounts"].as_array().unwrap().is_empty());
+    // A player names a ref of their own where it starts, and moves that.
+    let named = json!({ "name": "maze/play", "point": start }).to_string();
+    assert_eq!(
+        parsed(&worker.create_ref(&named).unwrap()),
+        json!({ "name": "maze/play", "point": start })
+    );
 
-    // The moves at the start, assessed; one applied, and the ref moved over it.
+    // The moves at the start, assessed; one applied, and the player's ref
+    // moved over it.
     let offered = parsed(
         &worker
             .candidates(&start, r#"{"set":"maze/moves"}"#)
@@ -187,17 +202,30 @@ fn the_worker_offers_the_operations_the_server_offers() {
     let applied = parsed(&worker.apply(&start, &apply_request(&candidate)).unwrap());
     let moved = applied["point"].as_str().unwrap().to_owned();
     let advance = json!({ "expected": start, "to": moved }).to_string();
-    let advanced = parsed(&worker.advance_ref("maze/micro", &advance).unwrap());
-    assert_eq!(advanced, json!({ "name": "maze/micro", "point": moved }));
+    // The package's ref refuses to move, with the status the server
+    // answers with: what the Worker throws.
+    let fixed = api::advance_ref(worker.engine(), path("maze/micro"), from(&advance)).unwrap_err();
+    assert_eq!(fixed.status(), 403);
+    assert!(
+        fixed.message().contains("`maze/micro`") && fixed.message().contains("package `maze`"),
+        "{}",
+        fixed.message()
+    );
+    let advanced = parsed(&worker.advance_ref("maze/play", &advance).unwrap());
+    assert_eq!(advanced, json!({ "name": "maze/play", "point": moved }));
     // Asking again for the move made is told it was made.
-    let again = parsed(&worker.advance_ref("maze/micro", &advance).unwrap());
+    let again = parsed(&worker.advance_ref("maze/play", &advance).unwrap());
     assert_eq!(again, advanced);
     assert_eq!(
-        parsed(&worker.read_ref("maze/micro").unwrap())["point"],
+        parsed(&worker.read_ref("maze/play").unwrap())["point"],
         json!(moved)
     );
+    assert_eq!(
+        parsed(&worker.read_ref("maze/micro").unwrap()),
+        json!({ "name": "maze/micro", "point": start, "shipped_by": "maze" })
+    );
     let query = json!({ "after": start, "objectives": "maze/energy" }).to_string();
-    let followed = parsed(&worker.frames("maze/micro", &query).unwrap());
+    let followed = parsed(&worker.frames("maze/play", &query).unwrap());
     assert_eq!(followed["frames"].as_array().unwrap().len(), 1);
     assert_eq!(followed["frames"][0]["point"], json!(moved));
     let drawn = parsed(&worker.draw(&moved).unwrap());
@@ -210,7 +238,7 @@ fn the_worker_offers_the_operations_the_server_offers() {
     let branched = parsed(&worker.apply(&earlier, &apply_request(&candidate)).unwrap());
     assert_ne!(branched["point"], json!(moved));
     assert_eq!(
-        parsed(&worker.read_ref("maze/micro").unwrap())["point"],
+        parsed(&worker.read_ref("maze/play").unwrap())["point"],
         json!(moved)
     );
     let named = json!({ "name": "maze/branch/one", "point": branched["point"] }).to_string();
@@ -222,6 +250,29 @@ fn the_worker_offers_the_operations_the_server_offers() {
             .iter()
             .any(|entry| entry["name"] == "maze/branch/one"),
         "{refs}"
+    );
+
+    // A ref goes from where its deleter saw it; the package's never does.
+    let at_start = json!({ "expected": start }).to_string();
+    let fixed = api::delete_ref(worker.engine(), path("maze/micro"), from(&at_start)).unwrap_err();
+    assert_eq!(fixed.status(), 403);
+    let elsewhere =
+        api::delete_ref(worker.engine(), path("maze/play"), from(&at_start)).unwrap_err();
+    assert_eq!(elsewhere.status(), 409);
+    let at_moved = json!({ "expected": moved }).to_string();
+    assert_eq!(
+        parsed(&worker.delete_ref("maze/play", &at_moved).unwrap()),
+        json!({ "name": "maze/play", "point": moved })
+    );
+    assert!(matches!(
+        worker.engine().referred(&path("maze/play")),
+        Err(EngineError::UnknownRef(_))
+    ));
+    assert!(
+        !parsed(&worker.draw(&moved).unwrap())["frames"]
+            .as_array()
+            .unwrap()
+            .is_empty()
     );
 
     // A strategy continued from the start, as the Worker runs it.

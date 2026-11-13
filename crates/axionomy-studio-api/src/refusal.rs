@@ -31,6 +31,9 @@ pub enum Refusal {
     NotFound(String),
     /// The request cannot be served as it is asked: 400.
     BadRequest(String),
+    /// The request asks for what is never done, however it is asked, such as
+    /// moving or deleting a ref a package ships, which is fixed: 403.
+    Forbidden(String),
     /// A ref was not where a move expected it: 409, with where it is.
     Moved(RefMoved),
     /// The engine failed: 500.
@@ -58,6 +61,7 @@ impl Refusal {
         match self {
             Self::NotFound(_) => 404,
             Self::BadRequest(_) => 400,
+            Self::Forbidden(_) => 403,
             Self::Moved(_) => 409,
             Self::Failed(_) => 500,
         }
@@ -66,9 +70,10 @@ impl Refusal {
     pub fn body(self) -> RefusalBody {
         match self {
             Self::Moved(moved) => RefusalBody::Moved(moved),
-            Self::NotFound(error) | Self::BadRequest(error) | Self::Failed(error) => {
-                RefusalBody::Error(ErrorResponse { error })
-            }
+            Self::NotFound(error)
+            | Self::BadRequest(error)
+            | Self::Forbidden(error)
+            | Self::Failed(error) => RefusalBody::Error(ErrorResponse { error }),
         }
     }
 
@@ -83,7 +88,10 @@ impl Refusal {
     pub fn message(&self) -> &str {
         match self {
             Self::Moved(moved) => &moved.error,
-            Self::NotFound(error) | Self::BadRequest(error) | Self::Failed(error) => error,
+            Self::NotFound(error)
+            | Self::BadRequest(error)
+            | Self::Forbidden(error)
+            | Self::Failed(error) => error,
         }
     }
 }
@@ -111,6 +119,7 @@ impl From<EngineError> for Refusal {
             | EngineError::UnknownPoint(_)
             | EngineError::Undefined(_)
             | EngineError::UnknownScript(_) => Self::NotFound(error.to_string()),
+            EngineError::Shipped { .. } => Self::Forbidden(error.to_string()),
             EngineError::Backward { .. } => Self::BadRequest(format!(
                 "{error}: a ref moves only forward, to a point whose history passes through where it is"
             )),

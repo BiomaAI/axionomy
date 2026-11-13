@@ -29,8 +29,9 @@ pub struct PackageView {
     pub format: u64,
     /// The script host API its scripts are written for.
     pub host_api: u64,
-    /// Its refs that name a point, in name order: those its manifest names
-    /// and any made under its name since, such as a branch kept as a ref.
+    /// Its refs that name a point, in name order: those it ships, which are
+    /// fixed, and any made under its name since, such as a branch kept as a
+    /// ref.
     pub refs: Vec<RefView>,
     pub experiments: Vec<ExperimentView>,
     pub strategies: Vec<StrategyPath>,
@@ -78,12 +79,24 @@ pub struct ArmView {
     pub start: Option<RefPath>,
 }
 
-/// What loading a package did: the packages it held, and the names the
-/// store already gave something else, which it kept.
+/// What loading a package did: the packages it held, the names the store
+/// already gave something else, which it kept, and the versions it replaced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct LoadedView {
     pub packages: Vec<PackagePath>,
     pub kept: KeptView,
+    /// The versions of these packages the store held before, which the load
+    /// replaced: what they shipped and the new versions do not carry is
+    /// gone. Loading the version the store holds changes nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub replaced: Vec<ReleaseView>,
+}
+
+/// A package at a version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ReleaseView {
+    pub name: PackagePath,
+    pub version: PackageVersion,
 }
 
 /// Names a load found the store giving something else, which keep what
@@ -113,6 +126,14 @@ impl From<&Loaded> for LoadedView {
                 refs: loaded.kept.refs.clone(),
                 definitions: loaded.kept.definitions.clone(),
             },
+            replaced: loaded
+                .replaced
+                .iter()
+                .map(|manifest| ReleaseView {
+                    name: manifest.name.clone(),
+                    version: PackageVersion(manifest.version),
+                })
+                .collect(),
         }
     }
 }
@@ -129,6 +150,7 @@ pub fn packages(engine: &Engine) -> Result<PackageList, Refusal> {
         for name in named {
             match engine.referred(&name) {
                 Ok(point) => refs.push(RefView {
+                    shipped_by: engine.shipped_by(&name)?,
                     name,
                     point: PointId::from(point),
                 }),

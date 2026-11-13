@@ -47,6 +47,7 @@ export type StoreRequest =
   | { kind: "read_ref"; name: string }
   | { kind: "create_ref"; name: string; point: PointId }
   | { kind: "advance_ref"; name: string; expected: PointId; to: PointId }
+  | { kind: "delete_ref"; name: string; expected: PointId }
   | { kind: "frames"; name: string; query: FramesQuery }
   | { kind: "run_strategy"; point: PointId; request: StrategyRequest }
   | { kind: "run_experiment"; experiment: string }
@@ -144,6 +145,10 @@ export class BrowserPackages implements PackageEngine {
 
   advanceRef(name: string, expected: PointId, to: PointId): Promise<RefView> {
     return this.request({ kind: "advance_ref", name, expected, to }) as Promise<RefView>;
+  }
+
+  deleteRef(name: string, expected: PointId): Promise<RefView> {
+    return this.request({ kind: "delete_ref", name, expected }) as Promise<RefView>;
   }
 
   /**

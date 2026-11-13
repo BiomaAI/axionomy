@@ -3,9 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Studio on packages (P12), run against the native server and against the
  * engine in the browser's Worker alike: both engines offer the same
- * operations, so the same steps give the same pages. The native server's
- * store outlives a test, so a test that moves a ref opens one of its own
- * and counts from wherever an earlier run left it.
+ * operations, so the same steps give the same pages. A package's refs are
+ * fixed, so a test that moves a ref names one of its own at a package's
+ * ref's point, a name no other run gives, since the native server's store
+ * outlives a test.
  */
 
 async function loadSample(page: Page, name: string) {
@@ -31,6 +32,27 @@ async function openRef(page: Page, name: string): Promise<number> {
   return await steps(page);
 }
 
+/** A ref name under `pkg` no other run gives. */
+function ownRef(pkg: string): string {
+  return `${pkg}/play/${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+/**
+ * Opens the package's ref `shipped`, which is fixed, and names a ref of
+ * one's own at its point, which opens; gives how many steps its history has.
+ */
+async function playFrom(page: Page, shipped: string, name: string): Promise<number> {
+  const start = await openRef(page, shipped);
+  await expect(page.getByLabel("Point on screen")).toContainText("On a package's ref");
+  await page.getByRole("textbox", { name: "Name a ref of your own here" }).fill(name);
+  await page.getByRole("button", { name: "Name it" }).click();
+  await expect(page.getByRole("status").filter({ hasText: `${name} names this point now` })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Ref" })).toHaveValue(name);
+  await expect(page.locator(".point-heading .eyebrow")).toContainText(`ref ${name}`);
+  expect(await steps(page)).toBe(start);
+  return start;
+}
+
 test("loads a sample package and scrubs a ref's history", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Packages" })).toHaveAttribute("aria-current", "page");
@@ -51,18 +73,23 @@ test("loads a sample package and scrubs a ref's history", async ({ page }) => {
 test("applies a candidate at a ref's point, moving the ref, and anywhere else makes a branch", async ({ page }) => {
   await page.goto("/");
   await loadSample(page, "maze");
-  const start = await openRef(page, "maze/showcase");
+  // The package's ref is fixed: at its point, applying makes a branch.
+  await openRef(page, "maze/showcase");
   const panel = page.locator(".action-panel");
-  await expect(panel.locator(".panel-heading")).toContainText("At maze/showcase's point");
+  await expect(panel.locator(".panel-heading")).toContainText("maze/showcase is fixed: applying makes a branch");
+  await expect(panel.locator(".candidate-applicable").first()).toBeVisible();
+  const mine = ownRef("maze");
+  const start = await playFrom(page, "maze/showcase", mine);
+  await expect(panel.locator(".panel-heading")).toContainText(`At ${mine}'s point`);
   // Each candidate is shown assessed before anything is applied.
   const applicable = panel.locator(".candidate-applicable");
   await expect(applicable.first()).toBeVisible();
   await applicable.first().click();
   await expect(panel.locator(".candidate-detail .assessment-applicable")).toBeVisible();
-  await panel.getByRole("button", { name: "Apply and move maze/showcase" }).click();
-  await expect(page.getByRole("status").filter({ hasText: `maze/showcase moved to step ${start + 1}` })).toBeVisible();
+  await panel.getByRole("button", { name: `Apply and move ${mine}` }).click();
+  await expect(page.getByRole("status").filter({ hasText: `${mine} moved to step ${start + 1}` })).toBeVisible();
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
-  await expect(page.getByRole("combobox", { name: "Ref" })).toHaveValue("maze/showcase");
+  await expect(page.getByRole("combobox", { name: "Ref" })).toHaveValue(mine);
 
   // Back at step 0 the point is not where the ref is: applying there branches.
   await page.getByRole("button", { name: "Go to initial state" }).click();
@@ -74,16 +101,28 @@ test("applies a candidate at a ref's point, moving the ref, and anywhere else ma
   await expect(page.locator(".point-heading .eyebrow")).toContainText("Branch");
   await expect(page.getByLabel("Point on screen")).toContainText("Not on any ref");
   await expect(trace(page)).toHaveAttribute("max", "1");
-  // The ref stayed where the first move took it.
-  expect(await openRef(page, "maze/showcase")).toBe(start + 1);
+  // The ref stayed where the first move took it, and the package's where it shipped.
+  expect(await openRef(page, mine)).toBe(start + 1);
+  expect(await openRef(page, "maze/showcase")).toBe(start);
+  expect(await openRef(page, mine)).toBe(start + 1);
 
   // A written exchange is assessed before it can be applied.
   await panel.locator(".exchange-editor summary").click();
   await panel.getByLabel("Exchange as JSON").fill('{"rate": "nowhere", "bindings": {}, "units": "1"}');
-  await expect(panel.getByRole("button", { name: "Apply and move maze/showcase" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: `Apply and move ${mine}` })).toBeDisabled();
   await panel.getByRole("button", { name: "Assess", exact: true }).click();
   await expect(panel.locator(".exchange-editor .assessment-invalid")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Apply and move maze/showcase" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: `Apply and move ${mine}` })).toBeDisabled();
+
+  // One's own ref is deleted; the point it named stays on screen.
+  await page.getByRole("button", { name: `Delete ${mine}` }).click();
+  await expect(page.getByRole("status").filter({ hasText: `${mine} is deleted` })).toBeVisible();
+  await expect(page.getByLabel("Point on screen")).toContainText("Not on any ref");
+  await expect(trace(page)).toHaveAttribute("max", String(start + 1));
+  await expect(page.getByRole("combobox", { name: "Ref" }).locator("option", { hasText: mine })).toHaveCount(0);
+  // A package's ref offers no deleting.
+  await openRef(page, "maze/showcase");
+  await expect(page.getByRole("button", { name: "Delete maze/showcase" })).toHaveCount(0);
 });
 
 test("continues from here with a strategy, showing where it ended and its thinking", async ({ page }) => {
@@ -109,26 +148,30 @@ test("continues from here with a strategy, showing where it ended and its thinki
   await expect(page.locator(".point-heading .eyebrow")).toContainText("Where a strategy ended");
   expect(await steps(page)).toBeGreaterThan(start);
 
-  // From the ref's point, the ref can move to where the strategy ended.
-  expect(await openRef(page, "maze/showcase")).toBe(start);
+  // The package's ref stays where it shipped; from a ref of one's own at
+  // its point, the ref can move to where the strategy ended.
+  const mine = ownRef("maze");
+  expect(await playFrom(page, "maze/showcase", mine)).toBe(start);
   await continueWith("maze/dijkstra");
-  await ended.getByRole("button", { name: "Move maze/showcase there" }).click();
-  await expect(page.getByRole("status").filter({ hasText: /maze\/showcase moved to step \d+/ })).toBeVisible();
-  await expect(page.locator(".point-heading .eyebrow")).toContainText("ref maze/showcase");
+  await ended.getByRole("button", { name: `Move ${mine} there` }).click();
+  await expect(page.getByRole("status").filter({ hasText: new RegExp(`${mine} moved to step \\d+`) })).toBeVisible();
+  await expect(page.locator(".point-heading .eyebrow")).toContainText(`ref ${mine}`);
   expect(await steps(page)).toBeGreaterThan(start);
+  expect(await openRef(page, "maze/showcase")).toBe(start);
 });
 
 test("follows a ref and receives the steps it is moved over", async ({ page }) => {
   await page.goto("/");
   await loadSample(page, "maze");
-  const start = await openRef(page, "maze/stress");
+  const mine = ownRef("maze");
+  const start = await playFrom(page, "maze/stress", mine);
   const panel = page.locator(".action-panel");
   await panel.getByRole("tab", { name: "Follow" }).click();
-  await panel.getByRole("button", { name: "Follow maze/stress" }).click();
+  await panel.getByRole("button", { name: `Follow ${mine}` }).click();
   // Following goes on while this page acts at the ref's point.
   await panel.getByRole("tab", { name: "Act" }).click();
   await panel.locator(".candidate-applicable").first().click();
-  await panel.getByRole("button", { name: "Apply and move maze/stress" }).click();
+  await panel.getByRole("button", { name: `Apply and move ${mine}` }).click();
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
   await panel.getByRole("tab", { name: "Follow" }).click();
   await expect(panel.getByRole("list", { name: "Delivered steps" })).toContainText(`step ${start + 1}`);

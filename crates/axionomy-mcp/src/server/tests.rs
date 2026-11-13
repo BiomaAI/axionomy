@@ -162,7 +162,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = server().tool_router.list_all();
-    assert_eq!(tools.len(), 17);
+    assert_eq!(tools.len(), 18);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -181,7 +181,9 @@ fn tools_declare_schemas_and_behavior_hints() {
             tool.name
         );
         if !read_only {
-            assert_eq!(hints.destructive_hint, Some(false), "{}", tool.name);
+            // Deleting a ref is the one call that takes something away.
+            let destructive = tool.name == "axionomy_ref_delete";
+            assert_eq!(hints.destructive_hint, Some(destructive), "{}", tool.name);
             // Every call makes a ref, or records runs, of its own.
             let idempotent = !matches!(
                 tool.name.as_ref(),
@@ -1411,6 +1413,17 @@ async fn advance(
     )
 }
 
+async fn delete(server: &AxionomyMcp, ref_id: &RefId, expected: &EconomyId) -> Outcome {
+    outcome(
+        server
+            .ref_delete(Parameters(RefDeleteRequest {
+                ref_id: ref_id.clone(),
+                expected_economy_id: expected.clone(),
+            }))
+            .await,
+    )
+}
+
 async fn follow(
     server: &AxionomyMcp,
     ref_id: &RefId,
@@ -1507,6 +1520,40 @@ async fn a_ref_moves_only_forward_from_where_its_mover_expects_it() {
     ] {
         assert_eq!(refused.value["error"], "not_found");
     }
+}
+
+#[tokio::test]
+async fn a_ref_is_deleted_from_where_its_deleter_expects_it() {
+    let server = server();
+    let start = id(&create(&server, fixture()).await);
+    let live = refer(&server, &start).await;
+    let mine = id(&apply(&server, &start, transfer(1)).await);
+    assert_eq!(id(&advance(&server, &live, &start, &mine).await), mine);
+
+    // A deleter who still saw the start is told where the ref went.
+    let refused = delete(&server, &live, &start).await;
+    assert_eq!(refused.value["error"], "moved");
+    assert_eq!(
+        refused.value["details"],
+        json!({ "current_economy_id": mine })
+    );
+    assert_eq!(id(&read_ref(&server, &live).await), mine);
+
+    // From where it is, it goes, and says where it was; the economy stays.
+    let deleted = delete(&server, &live, &mine).await;
+    assert!(!deleted.is_error, "{}", deleted.value);
+    assert_eq!(
+        deleted.value,
+        json!({ "ref_id": live.as_str(), "economy_id": mine })
+    );
+    for gone in [
+        read_ref(&server, &live).await,
+        delete(&server, &live, &mine).await,
+        follow(&server, &live, &mine, 10, 0, None).await,
+    ] {
+        assert_eq!(gone.value["error"], "not_found");
+    }
+    assert!(!apply(&server, &mine, transfer(1)).await.is_error);
 }
 
 #[tokio::test]

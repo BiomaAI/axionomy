@@ -8,10 +8,10 @@ use crate::{
         ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode, FrameReceipt,
         Issue, LineKind, PackageListRequest, PackageListResponse, PackageRef, PackageSummary,
         PackageVersion, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine,
-        RefAdvanceRequest, RefCreateRequest, RefFrame, RefFramesRequest, RefFramesResponse,
-        RefPosition, RefReadRequest, ReplayRequest, SearchOutcome, SearchRequest, SearchResponse,
-        SearchSolved, StateRoot, StudySummary, ToolFailure, TraceFindRequest, TraceFindResponse,
-        TraceStepRequest, TraceStepResponse, TrialResult,
+        RefAdvanceRequest, RefCreateRequest, RefDeleteRequest, RefFrame, RefFramesRequest,
+        RefFramesResponse, RefPosition, RefReadRequest, ReplayRequest, SearchOutcome,
+        SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary, ToolFailure,
+        TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse, TrialResult,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
     store::{self, Archive, Assessed, Loaded, Origin, content_name},
@@ -130,7 +130,10 @@ there, such as axionomy_exchange_apply's result; when another move came first it
 `moved` and details.current_economy_id, where the ref is, so look again from there. \
 axionomy_ref_frames gives a follower the steps the ref was moved over after the last economy it \
 handled, waiting up to wait_seconds for the next: an exchange that was only tried out is never \
-delivered. Every economy a ref or a frame names is an economy_id like any other.
+delivered. axionomy_ref_delete deletes a ref from the economy the deleter saw it at, failing with \
+`moved` as an advance does; the economies it named stay. A package's refs are the package's and \
+never move: make a ref of your own at the economy one names. Every economy a ref or a frame names \
+is an economy_id like any other.
 
 axionomy_problem_study and axionomy_search run as MCP tasks: declare the \
 io.modelcontextprotocol/tasks extension and poll tasks/get for the result. Without it they fail \
@@ -668,6 +671,49 @@ impl AxionomyMcp {
                     "`{economy_id}` was not made by exchanges from `{expected_economy_id}`, so ref `{ref_id}` cannot move there: a ref moves only forward, to an economy made from where it is"
                 ),
             )),
+            Err(error) => Err(self.ref_failure(&ref_id, error)),
+        }
+    }
+
+    #[tool(
+        name = "axionomy_ref_delete",
+        title = "Delete a ref",
+        description = "Delete a ref from `expected_economy_id`, where the deleter saw it, and return where it was. When it moved since, the call fails with `moved` and `details.current_economy_id`, where the ref is; look again from there. Only the ref goes: every economy it named stays, and a follower asking for its frames is told it is not found.",
+        output_schema = schema_for_output::<RefPosition>(),
+        annotations(destructive_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn ref_delete(
+        &self,
+        Parameters(request): Parameters<RefDeleteRequest>,
+    ) -> Result<Linked<RefPosition>, ToolError> {
+        let RefDeleteRequest {
+            ref_id,
+            expected_economy_id,
+        } = request;
+        let expected = self.economy(&expected_economy_id).await?;
+        match self.archive.delete(&ref_id, expected.record.point).await {
+            Ok(()) => {
+                let named = self
+                    .archive
+                    .handle_of(expected.record.point)
+                    .map_err(ToolError::internal)?;
+                Ok(positioned(ref_id, named))
+            }
+            // A ref that names nothing is one this store does not hold.
+            Err(EngineError::Moved { current: None, .. }) => Err(ToolError::new(
+                FailureCode::NotFound,
+                self.not_stored(&ref_id),
+            )),
+            Err(EngineError::Moved {
+                current: Some(current),
+                ..
+            }) => {
+                let current = self
+                    .archive
+                    .handle_of(current)
+                    .map_err(ToolError::internal)?;
+                Err(moved(&ref_id, &expected_economy_id, &current))
+            }
             Err(error) => Err(self.ref_failure(&ref_id, error)),
         }
     }
@@ -1452,6 +1498,7 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         "axionomy_ref_create" => check::<RefCreateRequest>(arguments),
         "axionomy_ref_read" => check::<RefReadRequest>(arguments),
         "axionomy_ref_advance" => check::<RefAdvanceRequest>(arguments),
+        "axionomy_ref_delete" => check::<RefDeleteRequest>(arguments),
         "axionomy_ref_frames" => check::<RefFramesRequest>(arguments),
         _ => Ok(()),
     }

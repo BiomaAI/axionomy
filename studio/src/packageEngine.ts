@@ -15,6 +15,7 @@ export type PackageView = Schemas["PackageView"];
 export type ExperimentView = Schemas["ExperimentView"];
 export type ObjectiveView = Schemas["ObjectiveView"];
 export type LoadedView = Schemas["LoadedView"];
+export type ReleaseView = Schemas["ReleaseView"];
 export type Candidates = Schemas["Candidates"];
 export type Candidate = Schemas["Candidate"];
 export type Exchange = Schemas["Exchange"];
@@ -94,8 +95,16 @@ export interface PackageEngine {
   apply(point: PointId, exchanges: Exchange[]): Promise<Applied>;
   readRef(name: string): Promise<RefView>;
   createRef(name: string, point: PointId): Promise<RefView>;
-  /** Moves a ref forward; refused with `moved` when it is not at `expected`. */
+  /**
+   * Moves a ref forward; refused with `moved` when it is not at `expected`,
+   * and with 403 for a ref a package ships, which is fixed.
+   */
   advanceRef(name: string, expected: PointId, to: PointId): Promise<RefView>;
+  /**
+   * Deletes a ref from `expected`, giving the ref as it was; refused as a
+   * move is. Its points stay.
+   */
+  deleteRef(name: string, expected: PointId): Promise<RefView>;
   /** The steps a ref was moved over after `query.after`, waiting up to `wait_seconds` for one. */
   frames(name: string, query: FramesQuery, signal?: AbortSignal): Promise<RefFrames>;
   runStrategy(point: PointId, request: StrategyRequest, onProgress: (progress: SearchProgress) => void): Running<RanView>;
@@ -227,6 +236,9 @@ export const nativePackages: PackageEngine = {
   },
   async advanceRef(name, expected, to) {
     return answered(await api.POST("/api/refs/{name}/advance", { params: { path: { name } }, body: { expected, to } }));
+  },
+  async deleteRef(name, expected) {
+    return answered(await api.DELETE("/api/refs/{name}", { params: { path: { name }, query: { expected } } }));
   },
   async frames(name, query, signal) {
     // The contract's frames: openapi-fetch reads their receipts' pairs as arrays.

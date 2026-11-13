@@ -132,6 +132,8 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       return read(engine.createRef(JSON.stringify({ name: request.name, point: request.point })));
     case "advance_ref":
       return read(engine.advanceRef(request.name, JSON.stringify({ expected: request.expected, to: request.to })));
+    case "delete_ref":
+      return read(engine.deleteRef(request.name, JSON.stringify({ expected: request.expected })));
     case "frames":
       return followers.frames(request.name, request.query);
     // A run says it has begun, so cancelling it terminates this Worker only

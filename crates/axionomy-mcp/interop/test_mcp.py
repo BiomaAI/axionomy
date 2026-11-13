@@ -126,16 +126,18 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert client.instructions and "axionomy_economy_create" in client.instructions
         # A first-time client learns where to start, what an exchange looks
         # like, and which tools need the tasks extension.
-        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"', "axionomy_ref_advance", "axionomy_package_list", "axionomy_experiment_run"):
+        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"', "axionomy_ref_advance", "axionomy_ref_delete", "axionomy_package_list", "axionomy_experiment_run"):
             assert words in client.instructions, words
         capabilities = client.server_capabilities
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 17
+        assert len(tools) == 18
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
+            # Deleting a ref is the one call that takes something away.
+            assert bool(tool.annotations.destructive_hint) == (tool.name == "axionomy_ref_delete"), tool.name
         templates = (await client.list_resource_templates()).resource_templates
         assert len(templates) == 17
         assert BALANCES in {template.uri_template for template in templates}
@@ -699,6 +701,10 @@ async def refer(client: Client, economy_id: str) -> str:
     return created.structured_content["ref_id"]
 
 
+async def delete(client: Client, ref_id: str, expected: str) -> CallToolResult:
+    return await client.call_tool("axionomy_ref_delete", {"ref_id": ref_id, "expected_economy_id": expected})
+
+
 def delivered(followed: CallToolResult) -> list[str]:
     assert not followed.is_error, followed.structured_content
     return [frame["economy_id"] for frame in followed.structured_content["frames"]]
@@ -730,6 +736,65 @@ async def test_two_clients_advance_one_ref_and_the_second_looks_again(url: str) 
         assert back.is_error and back.structured_content["error"] == "invalid_request"
         assert back.structured_content["details"] == {"pointer": "/economy_id"}
         assert "moves only forward" in back.structured_content["message"]
+
+
+async def test_a_ref_is_deleted_from_where_its_deleter_saw_it(url: str) -> None:
+    async with Client(url) as first, Client(url) as second:
+        start = await create(first, ECONOMY)
+        ref_id = await refer(first, start)
+        mine = await applied(first, start, transfer(1))
+        assert not (await advance(first, ref_id, start, mine)).is_error
+
+        # A deleter who still saw the start is told where the ref went, and
+        # the ref stays.
+        refused = await delete(second, ref_id, start)
+        assert refused.is_error
+        assert refused.structured_content["error"] == "moved"
+        assert refused.structured_content["details"] == {"current_economy_id": mine}
+        seen = await second.call_tool("axionomy_ref_read", {"ref_id": ref_id})
+        assert seen.structured_content == {"ref_id": ref_id, "economy_id": mine}
+
+        # From where it is, it goes and says where it was; its economy stays.
+        deleted = await delete(second, ref_id, mine)
+        assert not deleted.is_error, deleted.structured_content
+        assert deleted.structured_content == {"ref_id": ref_id, "economy_id": mine}
+        for gone in (
+            await first.call_tool("axionomy_ref_read", {"ref_id": ref_id}),
+            await delete(first, ref_id, mine),
+            await advance(first, ref_id, mine, await applied(first, mine, transfer(1))),
+        ):
+            assert gone.is_error and gone.structured_content["error"] == "not_found"
+        assert (await page(first, f"axionomy://economy/{mine}"))["root"]
+
+
+async def test_a_packages_refs_stay_its_own_and_a_client_moves_one_of_its_own(maze_url: str) -> None:
+    async with Client(maze_url) as client:
+        listed = await client.call_tool("axionomy_package_list", {})
+        micro = {named["ref"]: named["economy_id"] for named in listed.structured_content["packages"][0]["refs"]}["maze/micro"]
+
+        # A package's ref is not one a client moves or deletes: it is no ref
+        # handle.
+        for refused in (
+            await advance(client, "maze/micro", micro, micro),
+            await delete(client, "maze/micro", micro),
+        ):
+            assert refused.is_error
+            assert refused.structured_content["error"] == "invalid_request"
+            assert refused.structured_content["details"] == {"pointer": "/ref_id"}
+
+        # A client makes a ref of its own where the package's names, and
+        # moves that over the first step of a trial from there.
+        ref_id = await refer(client, micro)
+        ran = await client.call_tool("axionomy_experiment_run", {"experiment": "maze/micro"})
+        assert not ran.is_error, ran.structured_content
+        end = ran.structured_content["arms"][0]["trials"][0]["economy_id"]
+        first = (await exchanges(client, end))[0]
+        moved = await applied(client, micro, first)
+        assert not (await advance(client, ref_id, micro, moved)).is_error
+
+        # The package's ref names what it shipped.
+        again = await client.call_tool("axionomy_package_list", {})
+        assert again.structured_content == listed.structured_content
 
 
 async def test_a_follower_receives_only_the_steps_a_ref_moves_over(url: str) -> None:

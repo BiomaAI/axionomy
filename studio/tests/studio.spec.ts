@@ -830,17 +830,28 @@ test("follows a ref another proposer moves over the native server's HTTP API", a
   await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue("maze", { timeout: 30_000 });
   await page.getByRole("combobox", { name: "Ref" }).selectOption("maze/stress");
   await expect(page.locator(".point-heading .eyebrow")).toContainText("ref maze/stress");
+  // The package's ref is fixed: a ref of one's own at its point is the one that moves.
+  const fixed = await (await request.get("/api/refs/maze%2Fstress")).json();
+  expect(fixed.shipped_by).toBe("maze");
+  const live = `maze/live/${Date.now().toString(36)}`;
+  await page.getByRole("textbox", { name: "Name a ref of your own here" }).fill(live);
+  await page.getByRole("button", { name: "Name it" }).click();
+  await expect(page.locator(".point-heading .eyebrow")).toContainText(`ref ${live}`);
   const panel = page.locator(".action-panel");
   await panel.getByRole("tab", { name: "Follow" }).click();
-  await panel.getByRole("button", { name: "Follow maze/stress" }).click();
+  await panel.getByRole("button", { name: `Follow ${live}` }).click();
   await expect(panel).toContainText("Waiting for the ref to move");
 
   // Another proposer, over HTTP: an exchange applied where the ref is, then the ref moved over it.
-  const ref = await (await request.get("/api/refs/maze%2Fstress")).json();
+  const named = `/api/refs/${encodeURIComponent(live)}`;
+  const ref = await (await request.get(named)).json();
+  expect(ref.point).toBe(fixed.point);
   const offered = await (await request.get(`/api/points/${ref.point}/candidates?set=maze%2Fmoves`)).json();
   const move = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable");
   const applied = await (await request.post(`/api/points/${ref.point}/apply`, { data: { exchanges: [move.exchange] } })).json();
-  const advanced = await request.post("/api/refs/maze%2Fstress/advance", { data: { expected: ref.point, to: applied.point } });
+  const refused = await request.post("/api/refs/maze%2Fstress/advance", { data: { expected: ref.point, to: applied.point } });
+  expect(refused.status()).toBe(403);
+  const advanced = await request.post(`${named}/advance`, { data: { expected: ref.point, to: applied.point } });
   expect(advanced.ok()).toBe(true);
 
   // The step arrives as it is delivered, and the ref's history grows by it.

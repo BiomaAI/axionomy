@@ -9,7 +9,7 @@ mod refs;
 
 pub use axionomy_studio_api::{
     ErrorResponse, ObjectiveList, PointId, PointIdError, RefAdvanceRequest, RefCreateRequest,
-    RefFrame, RefFrames, RefFramesQuery, RefMoved, RefView,
+    RefDeleteQuery, RefFrame, RefFrames, RefFramesQuery, RefMoved, RefView,
 };
 pub use engine::{ExperimentName, PointName};
 pub use openapi::OpenApiDocument;
@@ -456,8 +456,22 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
             )
             .path_parameters::<RefName>()
             .json_body::<RefAdvanceRequest>()
+            .forbidden("The ref is one a package ships, which is fixed: name a ref of your own at its point and move that")
             .conflict::<RefMoved>(
                 "The ref is at neither `expected` nor `to`: another move came first, and it is at `current`",
+            )
+            .fallible(),
+        Endpoint::new::<RefView>("delete", "/api/refs/{name}", delete(refs::delete))
+            .describe(
+                "deleteRef",
+                "Delete a ref from the point its deleter saw it at; the points it named stay",
+                "refs",
+            )
+            .path_parameters::<RefName>()
+            .query::<RefDeleteQuery>()
+            .forbidden("The ref is one a package ships, which is fixed")
+            .conflict::<RefMoved>(
+                "The ref is not at `expected`: it moved since, and it is at `current`",
             )
             .fallible(),
         Endpoint::new::<RefFrames>("get", "/api/refs/{name}/frames", get(refs::frames))
@@ -1049,6 +1063,19 @@ mod tests {
                 ["schema"]["$ref"],
             "#/components/schemas/RefMoved"
         );
+        // A ref is deleted from where its deleter saw it; a package's is fixed.
+        let deleted = &paths["/api/refs/{name}"]["delete"];
+        assert_eq!(deleted["operationId"], "deleteRef");
+        assert_eq!(
+            deleted["responses"]["409"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/RefMoved"
+        );
+        for operation in [deleted, &paths["/api/refs/{name}/advance"]["post"]] {
+            assert_eq!(
+                operation["responses"]["403"]["content"]["application/json"]["schema"]["$ref"],
+                "#/components/schemas/ErrorResponse"
+            );
+        }
         let schemas = value["components"]["schemas"].as_object().unwrap();
         assert!(schemas.contains_key("StudioEvent"));
         assert!(schemas.contains_key("Study"));

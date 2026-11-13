@@ -1,8 +1,9 @@
 //! A package over HTTP, as Studio uses one: loaded from its bytes, listed
 //! with its refs and what it defines, a point's history drawn, the
-//! candidates at a point assessed, one applied and the ref moved over it, a
-//! strategy continued from a point and an experiment run while their
-//! progress streams, and their ends compared.
+//! candidates at a point assessed, one applied and a ref of one's own moved
+//! over it, the package's own refs fixed, a strategy continued from a point
+//! and an experiment run while their progress streams, and their ends
+//! compared.
 
 use axionomy_engine::{Engine, Version, zipped};
 use axionomy_store::Store;
@@ -62,6 +63,10 @@ async fn send(router: &Router, request: Request<Body>) -> (StatusCode, Value) {
 
 async fn get(router: &Router, uri: &str) -> (StatusCode, Value) {
     send(router, Request::get(uri).body(Body::empty()).unwrap()).await
+}
+
+async fn delete(router: &Router, uri: &str) -> (StatusCode, Value) {
+    send(router, Request::delete(uri).body(Body::empty()).unwrap()).await
 }
 
 async fn post(router: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
@@ -139,6 +144,14 @@ async fn a_package_loads_from_its_bytes_and_lists_what_it_holds() {
         .map(|entry| entry["name"].as_str().unwrap())
         .collect();
     assert_eq!(refs, ["maze/micro", "maze/showcase", "maze/stress"]);
+    // Each is the package's, so fixed.
+    assert!(
+        listed["refs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|entry| entry["shipped_by"] == "maze")
+    );
     assert_eq!(listed["goals"], json!(["maze/solved"]));
     assert_eq!(listed["candidates"], json!(["maze/moves"]));
     assert_eq!(listed["strategies"].as_array().unwrap().len(), 5);
@@ -181,6 +194,17 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let router = studio();
     ok(load(&router, maze()).await);
     let start = referred(&router, "maze/micro").await;
+    // A player names a ref of their own where the package's starts.
+    let named = ok(post(
+        &router,
+        "/api/refs",
+        json!({ "name": "maze/play", "point": start.to_string() }),
+    )
+    .await);
+    assert_eq!(
+        named,
+        json!({ "name": "maze/play", "point": start.to_string() })
+    );
 
     // The moves at the start, each assessed there and read with the maze's view.
     let offered = ok(get(
@@ -221,14 +245,37 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let moved = point(&applied["point"]);
     assert_eq!(moved.point().step, 1);
 
-    // At the ref's point the move counts once the ref moves over it.
+    // The package's ref is fixed: it neither moves nor goes, and says
+    // whose it is.
+    for (status, refused) in [
+        post(
+            &router,
+            "/api/refs/maze%2Fmicro/advance",
+            json!({ "expected": start.to_string(), "to": moved.to_string() }),
+        )
+        .await,
+        delete(&router, &format!("/api/refs/maze%2Fmicro?expected={start}")).await,
+    ] {
+        assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+        let error = refused["error"].as_str().unwrap();
+        assert!(
+            error.contains("`maze/micro`") && error.contains("package `maze`"),
+            "{error}"
+        );
+    }
+    let read = ok(get(&router, "/api/refs/maze%2Fmicro").await);
+    assert_eq!(read["shipped_by"], "maze");
+    assert_eq!(point(&read["point"]), start);
+
+    // At the player's ref's point the move counts once the ref moves over it.
     ok(post(
         &router,
-        "/api/refs/maze%2Fmicro/advance",
+        "/api/refs/maze%2Fplay/advance",
         json!({ "expected": start.to_string(), "to": moved.to_string() }),
     )
     .await);
-    assert_eq!(referred(&router, "maze/micro").await, moved);
+    assert_eq!(referred(&router, "maze/play").await, moved);
+    assert_eq!(referred(&router, "maze/micro").await, start);
     let drawn = ok(get(&router, &format!("/api/points/{moved}/document")).await);
     assert_eq!(drawn["frames"].as_array().unwrap().len(), 1);
     assert_eq!(drawn["title"], "Key-door maze");
@@ -236,7 +283,7 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     // Asking again for the move made is told it was made.
     let again = ok(post(
         &router,
-        "/api/refs/maze%2Fmicro/advance",
+        "/api/refs/maze%2Fplay/advance",
         json!({ "expected": start.to_string(), "to": moved.to_string() }),
     )
     .await);
@@ -253,7 +300,7 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     .await);
     let (status, conflict) = post(
         &router,
-        "/api/refs/maze%2Fmicro/advance",
+        "/api/refs/maze%2Fplay/advance",
         json!({ "expected": start.to_string(), "to": other["point"] }),
     )
     .await;
@@ -274,7 +321,7 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let branch = point(&branched["point"]);
     assert_eq!(branch.point().step, 1);
     assert_ne!(branch, moved);
-    assert_eq!(referred(&router, "maze/micro").await, moved);
+    assert_eq!(referred(&router, "maze/play").await, moved);
 
     // What the store lacks is 404; an exchange that does not apply is 400.
     let unknown = "run-000000000000feed0000000000000007:0";

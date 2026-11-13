@@ -85,13 +85,17 @@ pub(crate) fn studio(
     })
 }
 
-/// Merges every package file of `packages` into `engine`'s store, saying
-/// what each held and which names the store kept as it gives them.
+/// Installs every package file of `packages` in `engine`'s store, saying
+/// what each held, which versions it replaced and which names the store
+/// kept as it gives them.
 fn load(engine: &Engine, packages: &[PathBuf]) -> Result<(), CliError> {
     for file in packages {
         let loaded = crate::package::load(engine, file)?;
         for manifest in &loaded.manifests {
             info!(file = %file.display(), "loaded package {}", crate::package::describe(manifest));
+        }
+        for replaced in crate::package::replaced(&loaded) {
+            info!(file = %file.display(), "{replaced}");
         }
         for kept in crate::package::kept(&loaded) {
             warn!(file = %file.display(), "{kept}");

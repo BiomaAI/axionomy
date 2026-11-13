@@ -2,11 +2,13 @@
 //! moving it forward is what makes a step count. A ref moves only from where
 //! its mover expects it, so of two movers from one point the second is told
 //! where it went and looks again; a follower pulls the steps a ref was moved
-//! over after the last point it handled.
+//! over after the last point it handled. A ref a package ships is fixed:
+//! moving or deleting it is refused (403), and whoever wants to move from
+//! its point names a ref of their own there.
 
 use crate::{ObjectiveList, PointId, RefMoved, Refusal};
 use axionomy::{Quantity, paths};
-use axionomy_engine::{Engine, EngineError, Following, Frame, GoalPath};
+use axionomy_engine::{Engine, EngineError, Following, Frame, GoalPath, PackagePath};
 use axionomy_store::{Point, RefPath};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -36,11 +38,23 @@ pub struct RefAdvanceRequest {
     pub to: PointId,
 }
 
+/// Where a deleter saw the ref it deletes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RefDeleteQuery {
+    pub expected: PointId,
+}
+
 /// A ref and the point it names.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RefView {
     pub name: RefPath,
     pub point: PointId,
+    /// The package that ships the ref, when one does: such a ref is fixed,
+    /// so it is never moved or deleted; name a ref of your own at its point
+    /// to move from there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shipped_by: Option<PackagePath>,
 }
 
 /// Which steps to deliver, and what to measure at each.
@@ -132,6 +146,7 @@ pub fn create_ref(engine: &Engine, request: RefCreateRequest) -> Result<RefView,
         Ok(()) => Ok(RefView {
             name: request.name,
             point: request.point,
+            shipped_by: None,
         }),
         Err(EngineError::Moved {
             name,
@@ -145,17 +160,18 @@ pub fn create_ref(engine: &Engine, request: RefCreateRequest) -> Result<RefView,
     }
 }
 
-/// The point a ref names.
+/// The point a ref names, and the package that ships it, if one does.
 pub fn read_ref(engine: &Engine, name: RefPath) -> Result<RefView, Refusal> {
     let point = engine.referred(&name)?;
     Ok(RefView {
+        shipped_by: engine.shipped_by(&name)?,
         name,
         point: point.into(),
     })
 }
 
 /// Moves a ref forward from where its mover saw it, or finds it moved
-/// there already.
+/// there already; refused for a ref a package ships.
 pub fn advance_ref(
     engine: &Engine,
     name: RefPath,
@@ -165,6 +181,23 @@ pub fn advance_ref(
     Ok(RefView {
         name,
         point: request.to,
+        shipped_by: None,
+    })
+}
+
+/// Deletes a ref from where its deleter saw it, giving the ref as it was;
+/// refused with where it is when it moved since, and for a ref a package
+/// ships. Its points stay.
+pub fn delete_ref(
+    engine: &Engine,
+    name: RefPath,
+    query: RefDeleteQuery,
+) -> Result<RefView, Refusal> {
+    engine.delete_ref(&name, query.expected.point())?;
+    Ok(RefView {
+        name,
+        point: query.expected,
+        shipped_by: None,
     })
 }
 

@@ -36,7 +36,8 @@ pub(crate) enum Action {
         #[arg(long = "definition")]
         definitions: Vec<DefinitionPath>,
     },
-    /// Merge a package file into a store, creating the store if needed.
+    /// Install a package file in a store, creating the store if needed:
+    /// merged, or replacing the version of it the store holds.
     Load { store: PathBuf, package: PathBuf },
     /// Say what a package file holds.
     Inspect { package: PathBuf },
@@ -62,6 +63,7 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
             let engine = Engine::new(Store::open(&store)?)?;
             let loaded = load(&engine, &package)?;
             let mut lines: Vec<String> = loaded.manifests.iter().map(describe).collect();
+            lines.extend(replaced(&loaded));
             lines.extend(kept(&loaded));
             Ok(lines.join("\n"))
         }
@@ -120,9 +122,10 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
     }
 }
 
-/// Merges the package file `file`, zipped or not, into `engine`'s store,
+/// Installs the package file `file`, zipped or not, in `engine`'s store,
 /// once it passes the checks loading makes: it is a package, it has a
 /// manifest, and its scripts need no newer host API than this engine's.
+/// Another version of a package the store holds replaces it.
 pub(crate) fn load(engine: &Engine, file: &PathBuf) -> Result<Loaded, CliError> {
     read_package(&read(file)?)
         .and_then(|package| engine.load(&package))
@@ -130,6 +133,16 @@ pub(crate) fn load(engine: &Engine, file: &PathBuf) -> Result<Loaded, CliError> 
             path: file.clone(),
             source,
         })
+}
+
+/// The versions a load replaced, in words.
+pub(crate) fn replaced(loaded: &Loaded) -> impl Iterator<Item = String> + '_ {
+    loaded.replaced.iter().map(|manifest| {
+        format!(
+            "replaced {} {}: what it shipped and this version does not carry is gone",
+            manifest.name, manifest.version
+        )
+    })
 }
 
 /// The names a load kept as the store gives them, in words.

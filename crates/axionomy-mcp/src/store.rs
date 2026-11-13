@@ -410,6 +410,13 @@ impl Archive {
         Ok(named)
     }
 
+    /// Deletes the ref from `expected`, where its deleter saw it. The
+    /// economies it named stay.
+    pub async fn delete(&self, ref_id: &RefId, expected: Point) -> Result<(), EngineError> {
+        let (engine, name) = (self.engine.clone(), ref_path(ref_id));
+        blocking(move || engine.delete_ref(&name, expected)).await
+    }
+
     /// The economy the ref is at, `None` for a ref this store does not hold.
     pub fn referred(&self, ref_id: &RefId) -> Result<Option<EconomyId>, EngineError> {
         match self.engine.referred(&ref_path(ref_id)) {
