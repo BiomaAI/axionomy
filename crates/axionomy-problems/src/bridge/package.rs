@@ -1,7 +1,7 @@
-//! The bridge allocation as a package: its instances, the script its
-//! searches and policies call, its goal, the travellers' priority, credit and
-//! on-time objectives and the elapsed time, its strategies, and an experiment
-//! comparing them on each instance.
+//! The bridge allocation as a package: its instances, the scripts its
+//! searches, policies and view call, its goal, the travellers' priority,
+//! credit and on-time objectives and the elapsed time, its strategies, and
+//! an experiment comparing them on each instance.
 //!
 //! The exact Pareto searches run on Micro alone, as the study runs them:
 //! timed traffic is compared over the policies it evaluates, and its study's
@@ -13,14 +13,17 @@ use crate::{
     bridge::{self, Ontology},
     package::{call, written},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
+    ScriptCall, Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::Checkpoints;
 
+/// The script the searches and policies call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/bridge.rhai");
+const VIEW: &str = include_str!("../../scripts/bridge-view.rhai");
 
 /// The most turns a policy takes to clear the bridge's traffic.
 const HORIZON: u64 = 150;
@@ -30,6 +33,24 @@ const HORIZON: u64 = 150;
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let call = |function| call("bridge", function);
     engine.keep_script(&path!("bridge"), SCRIPT)?;
+    engine.keep_script(&path!("bridge/view"), VIEW)?;
+    let view = |function: &str| {
+        Some(ScriptCall::new(
+            path!("bridge/view"),
+            function.parse().expect("a function name"),
+        ))
+    };
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Bridge allocation".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_goal(&path!("bridge/solved"), &written(&bridge::goal()))?;
     engine.keep_candidates(
         &path!("bridge/mechanisms"),
