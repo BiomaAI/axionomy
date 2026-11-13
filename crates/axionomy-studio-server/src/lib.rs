@@ -1,9 +1,16 @@
-//! Native HTTP adapter for the interface-neutral Axionomy study runtime.
+//! Native HTTP adapter for the interface-neutral Axionomy study runtime, and
+//! for the refs of the engine's store.
 
 mod openapi;
+mod refs;
 
 pub use openapi::OpenApiDocument;
+pub use refs::{
+    ObjectiveList, PointId, PointIdError, RefAdvanceRequest, RefCreateRequest, RefFrame, RefFrames,
+    RefFramesQuery, RefMoved, RefName, RefView,
+};
 
+use axionomy_engine::Engine;
 use axionomy_study::{
     ProblemDescriptor, Progress, Registry, StudioEvent, StudioStudyId, Study, StudyControl,
     StudyError, StudyKey, StudyObserver, StudyRequest,
@@ -172,41 +179,56 @@ impl StudyRecord {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StudioState {
     registry: Arc<Registry>,
     studies: Arc<RwLock<HashMap<StudioStudyId, Arc<StudyRecord>>>>,
     next_study: Arc<AtomicU64>,
+    /// The engine whose store's refs the API creates, moves and follows.
+    engine: Engine,
 }
 
 impl StudioState {
-    /// A Studio engine for the problems of `registry`, with no studies yet.
-    pub fn new(registry: Registry) -> Self {
+    /// A Studio server over `engine`, whose store holds the points and refs
+    /// it serves, studying the problems of `registry`, with no studies yet.
+    pub fn new(engine: Engine, registry: Registry) -> Self {
         Self {
             registry: Arc::new(registry),
             studies: Arc::new(RwLock::new(HashMap::new())),
             next_study: Arc::new(AtomicU64::new(1)),
+            engine,
         }
     }
 }
 
 #[derive(Debug)]
-struct ApiError {
-    status: StatusCode,
-    message: String,
+enum ApiError {
+    Status {
+        status: StatusCode,
+        message: String,
+    },
+    /// A ref was not where a move expected it: 409 with where it is.
+    Moved(RefMoved),
 }
 
 impl ApiError {
     fn not_found(message: impl Into<String>) -> Self {
-        Self {
+        Self::Status {
             status: StatusCode::NOT_FOUND,
             message: message.into(),
         }
     }
 
     fn bad_request(message: impl Into<String>) -> Self {
-        Self {
+        Self::Status {
             status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
+    }
+
+    fn internal(message: impl Into<String>) -> Self {
+        Self::Status {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
             message: message.into(),
         }
     }
@@ -214,13 +236,12 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        (
-            self.status,
-            Json(ErrorResponse {
-                error: self.message,
-            }),
-        )
-            .into_response()
+        match self {
+            Self::Status { status, message } => {
+                (status, Json(ErrorResponse { error: message })).into_response()
+            }
+            Self::Moved(moved) => (StatusCode::CONFLICT, Json(moved)).into_response(),
+        }
     }
 }
 
@@ -303,6 +324,36 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         .path_parameters::<StudyDocumentPath>()
         .query::<FrameQuery>()
         .fallible(),
+        Endpoint::new::<RefView>("post", "/api/refs", post(refs::create))
+            .describe("createRef", "Name a point with a new ref", "refs")
+            .json_body::<RefCreateRequest>()
+            .conflict::<RefMoved>("A ref has the name already; it names `current`")
+            .fallible(),
+        Endpoint::new::<RefView>("get", "/api/refs/{name}", get(refs::read))
+            .describe("getRef", "Read the point a ref names", "refs")
+            .path_parameters::<RefName>()
+            .fallible(),
+        Endpoint::new::<RefView>("post", "/api/refs/{name}/advance", post(refs::advance))
+            .describe(
+                "advanceRef",
+                "Move a ref forward from the point its mover saw it at",
+                "refs",
+            )
+            .path_parameters::<RefName>()
+            .json_body::<RefAdvanceRequest>()
+            .conflict::<RefMoved>(
+                "The ref is not at `expected`: another move came first, and it is at `current`",
+            )
+            .fallible(),
+        Endpoint::new::<RefFrames>("get", "/api/refs/{name}/frames", get(refs::frames))
+            .describe(
+                "listRefFrames",
+                "Follow the steps a ref was moved over after a point, waiting for the next",
+                "refs",
+            )
+            .path_parameters::<RefName>()
+            .query::<RefFramesQuery>()
+            .fallible(),
     ]
 }
 
@@ -771,9 +822,14 @@ mod tests {
         serde_json::from_slice(&bytes).unwrap()
     }
 
+    fn state() -> StudioState {
+        let engine = Engine::new(axionomy_store::Store::memory().unwrap()).unwrap();
+        StudioState::new(engine, axionomy_problems::registry())
+    }
+
     #[tokio::test]
     async fn a_registry_study_is_identical_over_http() {
-        let (app, _) = api(StudioState::new(axionomy_problems::registry()));
+        let (app, _) = api(state());
         let request =
             StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap());
         let create = app
@@ -820,7 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn catalog_exposes_all_problems() {
-        let (app, _) = api(StudioState::new(axionomy_problems::registry()));
+        let (app, _) = api(state());
         let response = app
             .oneshot(Request::get("/api/problems").body(Body::empty()).unwrap())
             .await
@@ -831,7 +887,7 @@ mod tests {
 
     #[test]
     fn openapi_contains_full_service_surface() {
-        let (_, openapi) = api(StudioState::new(axionomy_problems::registry()));
+        let (_, openapi) = api(state());
         let value = serde_json::to_value(openapi).unwrap();
         let paths = value["paths"].as_object().unwrap();
         for path in [
@@ -844,11 +900,22 @@ mod tests {
             "/api/studies/{study_id}/study",
             "/api/studies/{study_id}/study/documents/{document}",
             "/api/studies/{study_id}/study/documents/{document}/frames",
+            "/api/refs",
+            "/api/refs/{name}",
+            "/api/refs/{name}/advance",
+            "/api/refs/{name}/frames",
         ] {
             assert!(paths.contains_key(path), "missing {path}");
         }
+        // A move that finds the ref elsewhere says where it is.
+        assert_eq!(
+            paths["/api/refs/{name}/advance"]["post"]["responses"]["409"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/RefMoved"
+        );
         let schemas = value["components"]["schemas"].as_object().unwrap();
         assert!(schemas.contains_key("StudioEvent"));
         assert!(schemas.contains_key("Study"));
+        assert!(schemas.contains_key("PointId"));
     }
 }

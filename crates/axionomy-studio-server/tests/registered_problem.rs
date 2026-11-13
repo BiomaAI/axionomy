@@ -163,7 +163,8 @@ fn get(uri: String) -> Request<Body> {
 async fn a_problem_of_your_own_is_listed_and_studied_in_its_own_words() {
     let mut registry = axionomy_problems::registry();
     registry.register(Baking::default()).unwrap();
-    let (app, _) = api(StudioState::new(registry));
+    let engine = axionomy_engine::Engine::new(axionomy_store::Store::memory().unwrap()).unwrap();
+    let (app, _) = api(StudioState::new(engine, registry));
 
     // The catalog lists it after the sample problems, as it declared itself.
     let (status, catalog) = json::<ProblemList>(&app, get("/api/problems".into())).await;

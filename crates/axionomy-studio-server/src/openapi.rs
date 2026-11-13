@@ -45,6 +45,7 @@ pub(crate) struct Endpoint<S> {
     parameters: Vec<(Location, SchemaFn)>,
     request: Option<SchemaFn>,
     response: Body,
+    conflict: Option<(&'static str, SchemaFn)>,
     fallible: bool,
     route: MethodRouter<S>,
 }
@@ -64,6 +65,7 @@ impl<S> Endpoint<S> {
             parameters: Vec::new(),
             request: None,
             response: Body::Json(schema_of::<R>),
+            conflict: None,
             fallible: false,
             route,
         }
@@ -88,6 +90,12 @@ impl<S> Endpoint<S> {
     /// Errors are reported as `ErrorResponse` under the default status.
     pub(crate) fn fallible(mut self) -> Self {
         self.fallible = true;
+        self
+    }
+
+    /// A 409 Conflict, said in `description`, is reported as a `C`.
+    pub(crate) fn conflict<C: JsonSchema>(mut self, description: &'static str) -> Self {
+        self.conflict = Some((description, schema_of::<C>));
         self
     }
 
@@ -279,6 +287,15 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
             },
         };
         responses.insert("200", success);
+        if let Some((description, conflict)) = endpoint.conflict {
+            responses.insert(
+                "409",
+                Response {
+                    description: description.into(),
+                    content: media("application/json", conflict(&mut generator).to_value()),
+                },
+            );
+        }
         if endpoint.request.is_some() {
             // Axum's JSON extractor rejects malformed bodies before the handler.
             responses.insert("400", text("Failed to parse the request body as JSON"));
@@ -307,7 +324,7 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
         openapi: "3.1.0",
         info: Info {
             title: "Axionomy Service API",
-            description: "Interface-neutral problem studies, their replays, lifecycle control, and Studio data.",
+            description: "Interface-neutral problem studies, their replays, lifecycle control, and Studio data; and refs to the points of the engine's store, which move forward and deliver the steps they move over.",
             version: env!("CARGO_PKG_VERSION"),
         },
         paths,

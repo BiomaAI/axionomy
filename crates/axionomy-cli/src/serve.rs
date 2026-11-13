@@ -24,14 +24,7 @@ pub(crate) fn mcp(
     store: Option<PathBuf>,
 ) -> Result<(), CliError> {
     logging("axionomy_cli=info,axionomy_mcp=info,rmcp=info");
-    let store = match store {
-        Some(path) => {
-            info!(store = %path.display(), "keeping economies on disk");
-            Store::open(path)?
-        }
-        None => Store::memory()?,
-    };
-    let engine = Engine::new(store)?;
+    let engine = engine(store, "keeping economies on disk")?;
     runtime(async move {
         let cancellation = CancellationToken::new();
         let service = stateless_http_service(engine, registry, cancellation.clone())?;
@@ -51,16 +44,19 @@ pub(crate) fn mcp(
     })
 }
 
-/// Serves Studio's API, and the frontend built in `frontend` when there is
-/// one.
+/// Serves Studio's API over the points and refs of `store` when given, a
+/// store in memory otherwise, and the frontend built in `frontend` when there
+/// is one.
 pub(crate) fn studio(
     registry: Registry,
     bind: SocketAddr,
     frontend: &Path,
+    store: Option<PathBuf>,
 ) -> Result<(), CliError> {
     logging("axionomy_cli=info,axionomy_studio_server=info,tower_http=info");
+    let engine = engine(store, "serving the points and refs of a store on disk")?;
     let serves_frontend = frontend.join("index.html").is_file();
-    let (router, _) = api(StudioState::new(registry));
+    let (router, _) = api(StudioState::new(engine, registry));
     let router = with_studio_frontend(router, frontend);
     let frontend = frontend.to_owned();
     runtime(async move {
@@ -78,6 +74,19 @@ pub(crate) fn studio(
             .await?;
         Ok(())
     })
+}
+
+/// An engine over the store file at `store`, saying `on_disk` when there is
+/// one, or over a store in memory.
+fn engine(store: Option<PathBuf>, on_disk: &str) -> Result<Engine, CliError> {
+    let store = match store {
+        Some(path) => {
+            info!(store = %path.display(), "{on_disk}");
+            Store::open(path)?
+        }
+        None => Store::memory()?,
+    };
+    Ok(Engine::new(store)?)
 }
 
 fn logging(default: &str) {

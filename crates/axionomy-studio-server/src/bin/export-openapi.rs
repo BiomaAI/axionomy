@@ -1,3 +1,5 @@
+use axionomy_engine::Engine;
+use axionomy_store::Store;
 use axionomy_studio_server::{StudioState, api};
 use axionomy_study::Registry;
 use std::{fs, path::PathBuf};
@@ -7,8 +9,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("studio/openapi.json"));
-    // The contract is the same whatever problems the server studies.
-    let (_, openapi) = api(StudioState::new(Registry::new()));
+    // The contract is the same whatever problems the server studies and
+    // whatever its store holds.
+    let engine = Engine::new(Store::memory()?)?;
+    let (_, openapi) = api(StudioState::new(engine, Registry::new()));
     let encoded = serde_json::to_string_pretty(&openapi)? + "\n";
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;

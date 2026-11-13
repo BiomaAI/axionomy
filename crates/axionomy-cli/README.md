@@ -16,7 +16,7 @@ cargo run -p axionomy-cli -- study logistics --instance showcase --strategy reli
 cargo run -p axionomy-cli -- study marketplace --instance micro --format json > marketplace.json
 cargo run -p axionomy-cli -- export-studies studio/public/studies
 cargo run -p axionomy-cli -- mcp --bind 127.0.0.1:8000 --store economies.redb
-cargo run -p axionomy-cli -- studio --bind 127.0.0.1:3000
+cargo run -p axionomy-cli -- studio --bind 127.0.0.1:3000 --store work.redb
 cargo run -p axionomy-cli -- package export work.redb maze.zip --name maze --version 1.0.0
 cargo run -p axionomy-cli -- package inspect maze.zip
 cargo run -p axionomy-cli -- package load mine.redb maze.zip
@@ -33,9 +33,10 @@ sample's package, zipped, into a directory.
 `mcp` serves MCP over Streamable HTTP at `/mcp` with `/health`, keeping
 economies in a store file when `--store` names one and in memory otherwise.
 `studio` serves Studio's API and the frontend built in `studio/dist`
-(`--frontend`). Each flag can be given by its environment variable instead:
-`AXIONOMY_MCP_BIND`, `AXIONOMY_MCP_STORE`, `AXIONOMY_STUDIO_BIND`,
-`AXIONOMY_STUDIO_DIR`.
+(`--frontend`), over the points and refs of a store file when `--store` names
+one and of a store in memory otherwise. Each flag can be given by its
+environment variable instead: `AXIONOMY_MCP_BIND`, `AXIONOMY_MCP_STORE`,
+`AXIONOMY_STUDIO_BIND`, `AXIONOMY_STUDIO_DIR`, `AXIONOMY_STUDIO_STORE`.
 
 Every problem declares its instances, and `describe` lists them with its
 family and capabilities in the words the problem gives them; the canonical

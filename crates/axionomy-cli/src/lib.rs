@@ -58,6 +58,11 @@ enum Command {
         /// The built frontend to serve.
         #[arg(long, env = "AXIONOMY_STUDIO_DIR", default_value = "studio/dist")]
         frontend: PathBuf,
+        /// A store file whose points and refs the API serves, such as one a
+        /// package was loaded into; in memory, until the server stops, when
+        /// omitted.
+        #[arg(long, env = "AXIONOMY_STUDIO_STORE")]
+        store: Option<PathBuf>,
     },
 }
 
@@ -146,9 +151,11 @@ pub fn run(registry: Registry, cli: Cli) -> Result<Option<String>, CliError> {
         }
         Command::Mcp { bind, store } => serve::mcp(registry, bind, store).map(|()| None),
         Command::Package { action } => package::run(action).map(Some),
-        Command::Studio { bind, frontend } => {
-            serve::studio(registry, bind, &frontend).map(|()| None)
-        }
+        Command::Studio {
+            bind,
+            frontend,
+            store,
+        } => serve::studio(registry, bind, &frontend, store).map(|()| None),
     }
 }
 
