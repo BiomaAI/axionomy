@@ -15,10 +15,10 @@ use crate::{
     marketplace::{self, Ontology},
     package::{call, written},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
-    ObjectivePath, Strategy,
+    ObjectivePath, Strategy, View,
 };
 use axionomy_search::{
     bounded::Tie,
@@ -26,7 +26,9 @@ use axionomy_search::{
 };
 use axionomy_store::Checkpoints;
 
+/// The script the searches call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/marketplace.rhai");
+const VIEW: &str = include_str!("../../scripts/marketplace-view.rhai");
 
 /// The states each depth of the study's fulfillment planner keeps.
 const WIDTH: u64 = 24;
@@ -40,8 +42,21 @@ const TIE: Tie = Tie::Last;
 /// Writes the marketplace's package into `engine`'s store, everything named
 /// under `marketplace`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let view = |function| Some(call("marketplace/view", function));
     let call = |function| call("marketplace", function);
     engine.keep_script(&path!("marketplace"), SCRIPT)?;
+    engine.keep_script(&path!("marketplace/view"), VIEW)?;
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Multi-party marketplace".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_candidates(
         &path!("marketplace/settlements"),
         &CandidateSet::Script(call("settlements")),

@@ -7,8 +7,8 @@
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
 use axionomy_problems::{
-    WritePackage, amm, bridge, exact_cover, lending, maze, registry, rescue, scheduling, sokoban,
-    workshop,
+    WritePackage, amm, bridge, exact_cover, lending, marketplace, maze, registry, rescue,
+    scheduling, sokoban, workshop,
 };
 use axionomy_store::{Checkpoints, Recordable, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
@@ -125,7 +125,7 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 9] = [
+const VIEWS: [Drawn; 10] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
@@ -167,6 +167,13 @@ const VIEWS: [Drawn; 9] = [
     }),
     ("amm", |instances| {
         draws_like_rust::<amm::Ontology>("amm", amm::package::write, instances)
+    }),
+    ("marketplace", |instances| {
+        draws_like_rust::<marketplace::Ontology>(
+            "marketplace",
+            marketplace::package::write,
+            instances,
+        )
     }),
 ];
 
