@@ -267,6 +267,7 @@ fn an_experiment_names_only_what_is_kept() {
     unmeasured.objectives.push(path("unknown"));
     assert!(engine.keep_experiment(&path("bad"), &unmeasured).is_err());
     assert!(engine.results(&path("never-run")).is_err());
+    assert!(engine.experiments().unwrap().is_empty());
     engine
         .keep_experiment(
             &path("nowhere"),
@@ -276,6 +277,13 @@ fn an_experiment_names_only_what_is_kept() {
             },
         )
         .unwrap();
+    engine
+        .keep_experiment(&path("bank/paying"), &experiment(&["ones"]))
+        .unwrap();
+    assert_eq!(
+        engine.experiments().unwrap(),
+        [path("bank/paying"), path("nowhere")]
+    );
     assert!(
         engine
             .run_experiment(&path("nowhere"), &mut |_| ControlFlow::Continue(()))

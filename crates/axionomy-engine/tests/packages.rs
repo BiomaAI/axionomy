@@ -301,6 +301,23 @@ fn loading_checks_the_package() {
     ));
     assert!(engine.manifests().unwrap().is_empty());
 
+    // So is one whose manifest says it is written in another store format.
+    let other = package(&bytes).unwrap();
+    manifest.host_api = axionomy_engine::HOST_API;
+    manifest.format = axionomy_store::FORMAT_VERSION + 1;
+    let encoded = postcard::to_allocvec(&manifest).unwrap();
+    other
+        .transact(axionomy_store::Durability::Immediate, move |txn| {
+            txn.define(&path("package/bank"), Some(&encoded))
+        })
+        .wait()
+        .unwrap();
+    assert!(matches!(
+        engine.load(&other),
+        Err(EngineError::Package(PackageError::Format { .. }))
+    ));
+    assert!(engine.manifests().unwrap().is_empty());
+
     assert!(matches!(
         package(b"PK\x03\x04 not really a zip"),
         Err(EngineError::Package(PackageError::Archive(_)))

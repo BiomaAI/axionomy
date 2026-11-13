@@ -166,11 +166,17 @@ pub struct Objective {
 /// The name a definition of `kind` at `path` is kept under in the store,
 /// such as `script/maze/heuristic`.
 pub(crate) fn definition<K: PathKind>(path: &Path<K>) -> axionomy_store::DefinitionPath {
+    format!("{}{path}", prefix::<K>())
+        .parse()
+        .expect("a kind and a path make a path")
+}
+
+/// What the name of every definition of `kind` starts with, such as
+/// `script/`.
+pub(crate) fn prefix<K: PathKind>() -> String {
     let kind = K::SCHEMA
         .strip_suffix("Path")
         .unwrap_or(K::SCHEMA)
         .to_ascii_lowercase();
-    format!("{kind}/{path}")
-        .parse()
-        .expect("a kind and a path make a path")
+    format!("{kind}/")
 }

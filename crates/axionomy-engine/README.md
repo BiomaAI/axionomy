@@ -55,15 +55,17 @@ goes.
   `wait` blocks until a ref moves, or a time is up.
 - `keep_experiment` keeps an experiment: a ref to start from, strategies as
   arms (each from that start or a ref of its own), objectives, a seed, a
-  budget and a number of trials. `run_experiment` runs every arm's trials
-  over the same seeds, records the runs as a store group of kind
-  `experiment` and keeps the results, which `results` reads back.
+  budget and a number of trials, and `experiments` lists those the store
+  keeps. `run_experiment` runs every arm's trials over the same seeds,
+  records the runs as a store group of kind `experiment` and keeps the
+  results, which `results` reads back.
 - `compare` gives points' objective vectors and the front no other point
   dominates; `pick` the best point by objectives in order.
 - `export` copies a package (refs and definitions and everything they reach)
   into a new store with a manifest; `load` merges one into the engine's store
-  after checking it; `manifests` lists those the store holds; `package`
-  opens a package file's bytes, a redb file or a zip of one, and `zipped`
+  after checking each manifest's store format and script host API;
+  `manifests` lists those the store holds; `package` opens a package file's
+  bytes, a redb file or a zip of one, wherever they came from, and `zipped`
   zips one.
 - `keep_view` keeps how people read an ontology's runs: script functions that
   label its identifiers, format its quantities, carry what the view needs
@@ -105,9 +107,11 @@ treats a comparer that fails as finding its two items equal, so a broken
 comparer sorts wrongly rather than failing.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
-tasks, and so will the Studio server, the CLI and Studio's browser Worker
-(D-045). A transport
-never implements an operation the engine has.
+tasks, and so do the Studio server and the CLI (D-045). It builds for
+`wasm32-unknown-unknown` too, Rhai included, and runs in Studio's browser
+Worker over a store on the origin private file system (D-047); `wait`,
+which blocks a thread until a ref moves, is for hosts with threads. A
+transport never implements an operation the engine has.
 
 ```rust
 use axionomy::{Quantity, Rate, basket, path::Path, paths};

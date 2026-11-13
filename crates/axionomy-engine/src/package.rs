@@ -110,6 +110,13 @@ pub enum PackageError {
     NoManifest,
     #[error("package `{package}` needs script host API {needs}; this engine has {HOST_API}")]
     HostApi { package: PackagePath, needs: u64 },
+    /// A manifest saying its package is written in a store format other
+    /// than this version's.
+    #[error(
+        "package `{package}` is written in store format {format}; this version reads only format {}",
+        axionomy_store::FORMAT_VERSION
+    )]
+    Format { package: PackagePath, format: u64 },
     #[error("`{0}` is no kind of definition a package carries")]
     UnknownKind(DefinitionPath),
     /// A zip that holds no store file, several, or cannot be read; the
@@ -242,13 +249,23 @@ impl Engine {
     }
 
     /// Merges `package` into the engine's store, after checking every
-    /// manifest it holds asks for a script host API this engine has. Names
-    /// the store already gives something else keep what they are, and are
-    /// returned.
+    /// manifest it holds is written in this version's store format and asks
+    /// for a script host API this engine has. Names the store already gives
+    /// something else keep what they are, and are returned.
     pub fn load(&self, package: &Store) -> Result<Loaded, EngineError> {
         let manifests = manifests(package)?;
         if manifests.is_empty() {
             return Err(PackageError::NoManifest.into());
+        }
+        if let Some(other) = manifests
+            .iter()
+            .find(|manifest| manifest.format != axionomy_store::FORMAT_VERSION)
+        {
+            return Err(PackageError::Format {
+                package: other.name.clone(),
+                format: other.format,
+            }
+            .into());
         }
         if let Some(newer) = manifests
             .iter()

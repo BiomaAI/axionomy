@@ -13,7 +13,7 @@ use axionomy_search::{
     pareto::{Dominance, ObjectiveDirection},
     sampling::sample_seed,
 };
-use axionomy_store::{Durability, Group, GroupId, Member, Point, RefPath};
+use axionomy_store::{Durability, Group, GroupId, Member, Point, RefPath, StoreError};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, ops::ControlFlow};
 
@@ -136,6 +136,24 @@ impl Engine {
 
     pub fn experiment(&self, path: &ExperimentPath) -> Result<Experiment, EngineError> {
         self.defined(path)
+    }
+
+    /// The experiments the store keeps, in path order.
+    pub fn experiments(&self) -> Result<Vec<ExperimentPath>, EngineError> {
+        let prefix = crate::definitions::prefix::<kind::Experiment>();
+        self.store
+            .read()?
+            .definitions(&prefix, usize::MAX)?
+            .into_iter()
+            .map(|(name, _)| {
+                name.as_str()
+                    .strip_prefix(&prefix)
+                    .and_then(|path| path.parse().ok())
+                    .ok_or(EngineError::Store(StoreError::Malformed(
+                        "an experiment's path",
+                    )))
+            })
+            .collect()
     }
 
     /// Runs every arm of the experiment at `path` once per trial, records
