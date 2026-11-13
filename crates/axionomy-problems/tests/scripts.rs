@@ -76,10 +76,8 @@ fn sokobans_candidates_as_a_script_are_the_rust_candidates() {
             let scripted: rhai::Array = engine
                 .call(&script, "candidates", (ScriptState::new(written(&state)),))
                 .unwrap();
-            let expected: Vec<paths::Exchange> = sokoban::candidates(&state)
-                .iter()
-                .map(|exchange| written(exchange))
-                .collect();
+            let expected: Vec<paths::Exchange> =
+                sokoban::candidates(&state).iter().map(written).collect();
             assert_eq!(exchanges_of(scripted).unwrap(), expected);
         }
     }
@@ -163,7 +161,7 @@ fn incidents_nature_view_and_triage_as_a_script_are_the_rust_ones() {
                 world.apply(turn.clone()).unwrap();
                 scripted.push(turn);
             }
-            let expected: Vec<paths::Exchange> = trace.iter().map(|e| written(e)).collect();
+            let expected: Vec<paths::Exchange> = trace.iter().map(written).collect();
             assert_eq!(scripted, expected, "{name}");
         }
     }
