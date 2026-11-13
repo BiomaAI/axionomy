@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 import init, { Engine, catalog as wasmCatalog, protocol, study as wasmStudy } from "./generated/wasm/axionomy_studio_wasm";
 import type { ProblemDescriptor, Study, StudyRequest, StudioEvent } from "./api";
-import type { Fetched, Loaded, Opened, StoreMessage, StoreRequest } from "./browserPackages";
+import type { StoreMessage, StoreRequest } from "./browserPackages";
+import type { LoadedFrom, LoadedView, StoreKept } from "./packageEngine";
 
 type Command =
   | { kind: "initialize" }
@@ -32,7 +33,7 @@ scope.onmessage = async (message: MessageEvent<Command>) => {
     try {
       post({ kind: "store_reply", id, ok: true, value: await serve(id, request) });
     } catch (cause) {
-      post({ kind: "store_reply", id, ok: false, message: described(cause) });
+      post({ kind: "store_reply", id, ok: false, ...refused(cause) });
     }
     return;
   }
@@ -67,7 +68,7 @@ const STORE_FILE = "axionomy.redb";
 const HANDLE_ATTEMPTS = 30;
 const HANDLE_RETRY_MS = 100;
 
-let store: Promise<{ engine: Engine; opened: Opened }> | undefined;
+let store: Promise<{ engine: Engine; opened: StoreKept }> | undefined;
 
 function opened() {
   store ??= openStore().catch((cause: unknown) => {
@@ -77,28 +78,71 @@ function opened() {
   return store;
 }
 
+/** The engine's JSON answer, read. */
+function read(answer: string): unknown {
+  return JSON.parse(answer);
+}
+
+/**
+ * The operation `request` names, as the native server serves it, with the
+ * same JSON. The engine throws a refusal as the JSON of `{status, body}`.
+ */
 async function serve(id: number, request: StoreRequest): Promise<unknown> {
   const { engine, opened: where } = await opened();
+  const progress = (watched: string) => post({ kind: "store_progress", id, progress: JSON.parse(watched) });
   switch (request.kind) {
     case "open":
       return where;
     case "load_url":
       return loadUrl(engine, request.url);
-    case "packages":
-      return JSON.parse(engine.packages());
-    case "experiments":
-      return JSON.parse(engine.experiments());
-    case "run_experiment":
-      return JSON.parse(engine.runExperiment(request.experiment, (progress: string) => {
-        post({ kind: "store_progress", id, progress: JSON.parse(progress) });
-      }));
-    case "results": {
-      const results = engine.results(request.experiment);
-      return results === undefined ? undefined : JSON.parse(results);
+    case "load_bytes": {
+      const loaded = read(engine.load(new Uint8Array(request.bytes), undefined, undefined, undefined)) as LoadedView;
+      return { got: "loaded", loaded } satisfies LoadedFrom;
     }
+    case "packages":
+      return read(engine.packages());
+    case "experiments":
+      return read(engine.experiments());
     case "draw":
-      return JSON.parse(engine.draw(JSON.stringify(request.point)));
+      return read(engine.draw(request.point));
+    case "ancestor":
+      return read(engine.ancestor(request.point, JSON.stringify({ step: request.step })));
+    case "candidates":
+      return read(engine.candidates(request.point, JSON.stringify({ set: request.set })));
+    case "assess":
+      return read(engine.assess(request.point, JSON.stringify({ exchange: request.exchange })));
+    case "apply":
+      return read(engine.apply(request.point, JSON.stringify({ exchanges: request.exchanges })));
+    case "read_ref":
+      return read(engine.readRef(request.name));
+    case "create_ref":
+      return read(engine.createRef(JSON.stringify({ name: request.name, point: request.point })));
+    case "advance_ref":
+      return read(engine.advanceRef(request.name, JSON.stringify({ expected: request.expected, to: request.to })));
+    case "frames":
+      return read(engine.frames(request.name, JSON.stringify(request.query)));
+    case "run_strategy":
+      return read(engine.runStrategy(request.point, JSON.stringify(request.request), progress));
+    case "run_experiment":
+      return read(engine.runExperiment(request.experiment, progress));
+    case "results":
+      return read(engine.results(request.experiment));
+    case "compare":
+      return read(engine.compare(JSON.stringify(request.request)));
   }
+}
+
+/** A refusal's status and body: as the engine threw it, or a failure. */
+function refused(cause: unknown): { status: number; body: unknown } {
+  if (typeof cause === "string") {
+    try {
+      const thrown = JSON.parse(cause) as { status?: unknown; body?: unknown };
+      if (typeof thrown.status === "number") return { status: thrown.status, body: thrown.body };
+    } catch {
+      // Not a refusal the engine wrote.
+    }
+  }
+  return { status: 500, body: { error: described(cause) } };
 }
 
 /**
@@ -107,7 +151,7 @@ async function serve(id: number, request: StoreRequest): Promise<unknown> {
  * tab holds it, or it holds a store this version cannot open (which is left
  * as it is).
  */
-async function openStore(): Promise<{ engine: Engine; opened: Opened }> {
+async function openStore(): Promise<{ engine: Engine; opened: StoreKept }> {
   await initialize();
   const { handle, reason } = await accessHandle();
   if (!handle) return { engine: Engine.open(undefined), opened: { persistent: false, reason } };
@@ -140,7 +184,8 @@ async function accessHandle(): Promise<{ handle?: FileSystemSyncAccessHandle; re
   }
 }
 
-type Validators = { etag?: string | null; last_modified?: string | null };
+/** What the store loaded from a URL: what the response said, and the packages it held. */
+type Source = { validators: { etag?: string | null; last_modified?: string | null }; packages: string[] };
 
 /**
  * Loads the package at `url`. When the store holds what the URL served
@@ -149,9 +194,10 @@ type Validators = { etag?: string | null; last_modified?: string | null };
  * else answers with it, and it is loaded. A cross-origin host that does not
  * allow the conditional headers is asked again plainly.
  */
-async function loadUrl(engine: Engine, url: string): Promise<Fetched> {
+async function loadUrl(engine: Engine, url: string): Promise<LoadedFrom> {
   const known = engine.source(url);
-  const validators = known === undefined ? undefined : (JSON.parse(known) as Validators);
+  const source = known === undefined ? undefined : (JSON.parse(known) as Source);
+  const validators = source?.validators;
   const headers = new Headers();
   if (validators?.etag) headers.set("If-None-Match", validators.etag);
   else if (validators?.last_modified) headers.set("If-Modified-Since", validators.last_modified);
@@ -163,15 +209,15 @@ async function loadUrl(engine: Engine, url: string): Promise<Fetched> {
     try {
       response = await fetch(url, { cache: "no-store" });
     } catch (cause) {
-      if (validators) return { url, got: "kept", message: described(cause) };
+      if (source) return { url, got: "kept", message: described(cause), packages: source.packages };
       throw new Error(`${url} could not be fetched: ${described(conditional)}`);
     }
   }
-  if (response.status === 304 && validators) return { url, got: "current", status: 304 };
+  if (response.status === 304 && source) return { url, got: "current", status: 304, packages: source.packages };
   if (!response.ok) throw new Error(`${url} answered ${response.status} ${response.statusText}`.trim());
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const loaded = JSON.parse(engine.load(bytes, url, response.headers.get("ETag"), response.headers.get("Last-Modified"))) as Loaded;
-  return { url, got: "downloaded", status: response.status, loaded };
+  const loaded = read(engine.load(bytes, url, response.headers.get("ETag") ?? undefined, response.headers.get("Last-Modified") ?? undefined)) as LoadedView;
+  return { url, got: "loaded", status: response.status, loaded };
 }
 
 function described(cause: unknown) {

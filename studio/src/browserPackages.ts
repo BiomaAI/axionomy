@@ -1,97 +1,59 @@
 import type { ViewDocument } from "./api";
+import {
+  EngineRefusal,
+  type Applied,
+  type Candidate,
+  type Candidates,
+  type CompareRequest,
+  type ComparisonView,
+  type Exchange,
+  type FramesQuery,
+  type LoadedFrom,
+  type PackageEngine,
+  type PackageList,
+  type PointId,
+  type RanView,
+  type RefFrames,
+  type RefView,
+  type ResultsView,
+  type Running,
+  type SearchProgress,
+  type StoreKept,
+  type StrategyRequest,
+} from "./packageEngine";
 
 /**
- * The engine itself in the browser (P11, D-047): the Worker holds an
+ * The engine itself in the browser (P11, P12, D-047): the Worker holds an
  * `axionomy-engine` over a store on the origin private file system, or in
- * memory where that is unavailable, loads packages from URLs and runs their
- * experiments. The types below are the JSON the Worker's Rust writes; Studio
- * moves onto them in P12.
+ * memory where that is unavailable, and offers the operations the native
+ * Studio server does, giving the same JSON. One Worker at a time holds the
+ * saved store.
  */
 
-/** What a package says of itself (D-048). */
-export type Manifest = {
-  name: string;
-  version: { major: number; minor: number; patch: number };
-  /** The store format the package is written in. */
-  format: number;
-  /** The script host API its scripts are written for. */
-  host_api: number;
-  refs: string[];
-  definitions: string[];
-};
-
-/** What loading a package did: its manifests, and the names the store already gave something else, which it kept. */
-export type Loaded = {
-  manifests: Manifest[];
-  kept: { refs: string[]; definitions: string[] };
-};
-
-/** A point of the store: the state after `step` steps of a run's history. */
-export type Point = { run: string; step: number };
-
-export type Ended =
-  | "Reached"
-  | "Stopped"
-  | "Horizon"
-  | "Exhausted"
-  | "Spent"
-  | "Interrupted"
-  | { Refused: { turn: number } };
-
-/**
- * One seeded run of an arm. Its seed, a 64-bit number JSON gives JavaScript
- * inexactly, is left out.
- */
-export type Trial = {
-  end: Point;
-  ended: Ended;
-  /** The experiment's objectives at `end`, exact, in its order. */
-  values: string[];
-};
-
-export type ArmResult = {
-  arm: { strategy: string; start: string | null };
-  start: Point;
-  trials: Trial[];
-};
-
-/** An experiment's results: every arm's trials, and the store group its runs were recorded in. */
-export type Results = { group: string; arms: ArmResult[] };
-
-export type SearchProgress = {
-  expanded: number;
-  generated: number;
-  frontier: number;
-  visited: number;
-  solution_depth: number | null;
-};
-
-/** Where the Worker keeps its store, and why in memory when it does. */
-export type Opened = { persistent: boolean; reason?: string };
-
-/**
- * How a package was got from its URL: downloaded and loaded; current, the
- * URL answering that it serves what the store loaded from it (304), so
- * nothing was downloaded; or kept, the URL unreachable and the store holding
- * what it served before.
- */
-export type Fetched =
-  | { url: string; got: "downloaded"; status: number; loaded: Loaded }
-  | { url: string; got: "current"; status: 304 }
-  | { url: string; got: "kept"; message: string };
-
+/** What the Worker is asked, each the operation of the same name. */
 export type StoreRequest =
   | { kind: "open" }
   | { kind: "load_url"; url: string }
+  | { kind: "load_bytes"; bytes: ArrayBuffer }
   | { kind: "packages" }
   | { kind: "experiments" }
+  | { kind: "draw"; point: PointId }
+  | { kind: "ancestor"; point: PointId; step: number }
+  | { kind: "candidates"; point: PointId; set: string }
+  | { kind: "assess"; point: PointId; exchange: Exchange }
+  | { kind: "apply"; point: PointId; exchanges: Exchange[] }
+  | { kind: "read_ref"; name: string }
+  | { kind: "create_ref"; name: string; point: PointId }
+  | { kind: "advance_ref"; name: string; expected: PointId; to: PointId }
+  | { kind: "frames"; name: string; query: FramesQuery }
+  | { kind: "run_strategy"; point: PointId; request: StrategyRequest }
   | { kind: "run_experiment"; experiment: string }
   | { kind: "results"; experiment: string }
-  | { kind: "draw"; point: Point };
+  | { kind: "compare"; request: CompareRequest };
 
 export type StoreMessage =
   | { kind: "store_reply"; id: number; ok: true; value: unknown }
-  | { kind: "store_reply"; id: number; ok: false; message: string }
+  | { kind: "store_reply"; id: number; ok: false; status: number; body: unknown }
   | { kind: "store_progress"; id: number; progress: SearchProgress };
 
 type Waiting = {
@@ -100,45 +62,117 @@ type Waiting = {
   progress?: (progress: SearchProgress) => void;
 };
 
-/** A client of the Worker's engine. One Worker at a time holds the store. */
-export class BrowserPackages {
+/** How often a follower asks the Worker again whether a ref moved. */
+const FOLLOW_EVERY_MS = 200;
+
+/** A client of the Worker's engine. */
+export class BrowserPackages implements PackageEngine {
+  readonly kind = "browser" as const;
   private next = 1;
   private waiting = new Map<number, Waiting>();
   private worker = this.spawn();
 
   /** Opens the store, if it is not open yet, and says where it is kept. */
-  open(): Promise<Opened> {
-    return this.request({ kind: "open" }) as Promise<Opened>;
+  open(): Promise<StoreKept> {
+    return this.request({ kind: "open" }) as Promise<StoreKept>;
+  }
+
+  store(): Promise<StoreKept> {
+    return this.open();
   }
 
   /**
    * Loads the package at `url`, asking for it whole only when the store does
    * not hold what it served, and otherwise only whether it changed.
    */
-  loadUrl(url: string | URL): Promise<Fetched> {
+  loadUrl(url: string | URL): Promise<LoadedFrom> {
     const absolute = new URL(url, window.location.href).href;
-    return this.request({ kind: "load_url", url: absolute }) as Promise<Fetched>;
+    return this.request({ kind: "load_url", url: absolute }) as Promise<LoadedFrom>;
   }
 
-  packages(): Promise<Manifest[]> {
-    return this.request({ kind: "packages" }) as Promise<Manifest[]>;
+  async loadFile(file: Blob): Promise<LoadedFrom> {
+    const bytes = await file.arrayBuffer();
+    return this.request({ kind: "load_bytes", bytes }, undefined, [bytes]) as Promise<LoadedFrom>;
+  }
+
+  packages(): Promise<PackageList> {
+    return this.request({ kind: "packages" }) as Promise<PackageList>;
   }
 
   experiments(): Promise<string[]> {
     return this.request({ kind: "experiments" }) as Promise<string[]>;
   }
 
-  runExperiment(experiment: string, progress?: (progress: SearchProgress) => void): Promise<Results> {
-    return this.request({ kind: "run_experiment", experiment }, progress) as Promise<Results>;
-  }
-
-  /** The results the experiment last recorded, or undefined before it has run. */
-  results(experiment: string): Promise<Results | undefined> {
-    return this.request({ kind: "results", experiment }) as Promise<Results | undefined>;
-  }
-
-  draw(point: Point): Promise<ViewDocument> {
+  draw(point: PointId): Promise<ViewDocument> {
     return this.request({ kind: "draw", point }) as Promise<ViewDocument>;
+  }
+
+  async ancestor(point: PointId, step: number): Promise<PointId> {
+    return ((await this.request({ kind: "ancestor", point, step })) as { point: PointId }).point;
+  }
+
+  candidates(point: PointId, set: string): Promise<Candidates> {
+    return this.request({ kind: "candidates", point, set }) as Promise<Candidates>;
+  }
+
+  assess(point: PointId, exchange: Exchange): Promise<Candidate> {
+    return this.request({ kind: "assess", point, exchange }) as Promise<Candidate>;
+  }
+
+  apply(point: PointId, exchanges: Exchange[]): Promise<Applied> {
+    return this.request({ kind: "apply", point, exchanges }) as Promise<Applied>;
+  }
+
+  readRef(name: string): Promise<RefView> {
+    return this.request({ kind: "read_ref", name }) as Promise<RefView>;
+  }
+
+  createRef(name: string, point: PointId): Promise<RefView> {
+    return this.request({ kind: "create_ref", name, point }) as Promise<RefView>;
+  }
+
+  advanceRef(name: string, expected: PointId, to: PointId): Promise<RefView> {
+    return this.request({ kind: "advance_ref", name, expected, to }) as Promise<RefView>;
+  }
+
+  /**
+   * The engine's own wait blocks a thread, which a Worker has only one of;
+   * the Worker answers at once, and a follower waiting for the ref to move
+   * asks again until it has or the wait is over.
+   */
+  async frames(name: string, query: FramesQuery, signal?: AbortSignal): Promise<RefFrames> {
+    const until = performance.now() + (query.wait_seconds ?? 0) * 1_000;
+    const asked = { ...query, wait_seconds: 0 };
+    for (;;) {
+      signal?.throwIfAborted();
+      const frames = await (this.request({ kind: "frames", name, query: asked }) as Promise<RefFrames>);
+      if (frames.point !== query.after || performance.now() >= until) return frames;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, FOLLOW_EVERY_MS);
+        signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+      });
+    }
+  }
+
+  runStrategy(point: PointId, request: StrategyRequest, onProgress: (progress: SearchProgress) => void): Running<RanView> {
+    return this.running(this.request({ kind: "run_strategy", point, request }, onProgress) as Promise<RanView>);
+  }
+
+  runExperiment(experiment: string, onProgress?: (progress: SearchProgress) => void): Running<ResultsView> {
+    return this.running(this.request({ kind: "run_experiment", experiment }, onProgress) as Promise<ResultsView>);
+  }
+
+  async results(experiment: string): Promise<ResultsView | undefined> {
+    try {
+      return (await this.request({ kind: "results", experiment })) as ResultsView;
+    } catch (cause) {
+      if (cause instanceof EngineRefusal && cause.status === 404) return undefined;
+      throw cause;
+    }
+  }
+
+  compare(request: CompareRequest): Promise<ComparisonView> {
+    return this.request({ kind: "compare", request }) as Promise<ComparisonView>;
   }
 
   /**
@@ -159,6 +193,10 @@ export class BrowserPackages {
     this.fail(new Error("the Worker was terminated"));
   }
 
+  private running<T>(result: Promise<T>): Running<T> {
+    return { result, cancel: () => this.cancel() };
+  }
+
   private spawn() {
     const worker = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module", name: "axionomy-store" });
     worker.onmessage = (message: MessageEvent<StoreMessage>) => {
@@ -171,17 +209,17 @@ export class BrowserPackages {
       }
       this.waiting.delete(data.id);
       if (data.ok) waiting.resolve(data.value);
-      else waiting.reject(new Error(data.message));
+      else waiting.reject(new EngineRefusal(data.status, data.body));
     };
     worker.onerror = (event) => this.fail(new Error(event.message || "the store's Worker failed"));
     return worker;
   }
 
-  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void) {
+  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void, transfer: Transferable[] = []) {
     const id = this.next++;
     return new Promise<unknown>((resolve, reject) => {
       this.waiting.set(id, { resolve, reject, progress });
-      this.worker.postMessage({ kind: "store", id, request });
+      this.worker.postMessage({ kind: "store", id, request }, transfer);
     });
   }
 
