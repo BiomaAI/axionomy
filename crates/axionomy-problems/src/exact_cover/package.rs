@@ -1,22 +1,37 @@
 //! Exact cover as a package: its instances and each one's unsatisfiable
-//! twin, breadth-first search and Algorithm X as strategies, and an
-//! experiment comparing them on every instance.
+//! twin, breadth-first search and Algorithm X as strategies, an experiment
+//! comparing them on every instance, and its view.
 
 use crate::{
     exact_cover::{self, Ontology},
     package::{call, written},
 };
-use axionomy::path;
-use axionomy_engine::{Arm, CandidateSet, Engine, EngineError, Experiment, Strategy};
+use axionomy::{OntologyPath, path};
+use axionomy_engine::{Arm, CandidateSet, Engine, EngineError, Experiment, Strategy, View};
 use axionomy_store::Checkpoints;
 
+/// The script the searches call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/exact-cover.rhai");
+const VIEW: &str = include_str!("../../scripts/exact-cover-view.rhai");
 
 /// Writes exact cover's package into `engine`'s store, everything named
 /// under `exact-cover`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let view = |function| Some(call("exact-cover/view", function));
     let call = |function| call("exact-cover", function);
     engine.keep_script(&path!("exact-cover"), SCRIPT)?;
+    engine.keep_script(&path!("exact-cover/view"), VIEW)?;
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Exact cover".into(),
+            labels: view("label"),
+            formats: None,
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_goal(
         &path!("exact-cover/covered"),
         &written(&exact_cover::goal()),

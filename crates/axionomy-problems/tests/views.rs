@@ -6,7 +6,7 @@
 
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
-use axionomy_problems::{WritePackage, maze, registry, sokoban};
+use axionomy_problems::{WritePackage, exact_cover, maze, registry, sokoban};
 use axionomy_store::{Checkpoints, Recordable, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
 use axionomy_view::{DocumentPath, ViewDocument};
@@ -103,12 +103,19 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 2] = [
+const VIEWS: [Drawn; 3] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
     ("sokoban", |instances| {
         draws_like_rust::<sokoban::Ontology>("sokoban", sokoban::package::write, instances)
+    }),
+    ("exact-cover", |instances| {
+        draws_like_rust::<exact_cover::Ontology>(
+            "exact-cover",
+            exact_cover::package::write,
+            instances,
+        )
     }),
 ];
 
