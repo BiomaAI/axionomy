@@ -156,6 +156,7 @@ async fn a_package_loads_from_its_bytes_and_lists_what_it_holds() {
         .find(|experiment| experiment["experiment"] == "maze/micro")
         .unwrap();
     assert_eq!(micro["start"], "maze/micro");
+    assert_eq!(micro["goal"], "maze/solved");
     // A seed and a budget are written in decimal, exactly.
     assert_eq!(micro["seed"], "17");
     assert_eq!(micro["budget"], "10000000");
@@ -303,13 +304,19 @@ async fn a_strategy_continues_from_a_point_reporting_its_thinking() {
     let events = streamed(
         &router,
         &format!("/api/points/{start}/run"),
-        json!({ "strategy": "maze/a-star", "seed": "17", "budget": "10000000" }),
+        json!({
+            "strategy": "maze/a-star",
+            "goal": "maze/solved",
+            "seed": "17",
+            "budget": "10000000",
+        }),
     )
     .await;
     let ran = events.last().unwrap();
     assert_eq!(ran["kind"], "ran", "{events:?}");
     let ran = &ran["ran"];
     assert_eq!(ran["strategy"], "maze/a-star");
+    assert_eq!(ran["goal"], "maze/solved");
     assert_eq!(point(&ran["start"]), start);
     assert_eq!(ran["outcome"]["kind"], "reached");
     assert!(ran["thinking"]["expanded"].as_u64().unwrap() > 0);
@@ -322,14 +329,24 @@ async fn a_strategy_continues_from_a_point_reporting_its_thinking() {
         end.point().step
     );
 
-    // A strategy the store lacks is refused before anything runs.
+    // A strategy or a goal the store lacks is refused before anything runs.
+    for (strategy, goal) in [("maze/none", "maze/solved"), ("maze/a-star", "maze/none")] {
+        let (status, _) = post(
+            &router,
+            &format!("/api/points/{start}/run"),
+            json!({ "strategy": strategy, "goal": goal, "seed": "17", "budget": "1" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{strategy} toward {goal}");
+    }
+    // Every run names the goal it works toward.
     let (status, _) = post(
         &router,
         &format!("/api/points/{start}/run"),
-        json!({ "strategy": "maze/none", "seed": "17", "budget": "1" }),
+        json!({ "strategy": "maze/a-star", "seed": "17", "budget": "1" }),
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(status.is_client_error(), "{status}");
 }
 
 #[tokio::test]

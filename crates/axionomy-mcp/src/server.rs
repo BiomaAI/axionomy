@@ -529,7 +529,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_experiment_run",
         title = "Run an experiment",
-        description = "Run an experiment of a loaded package, such as `maze/micro` (axionomy_package_list lists them): every arm's strategy from its start, once per trial, trial i seeded from the experiment's seed and i so every arm meets the same chances, measured on the experiment's objectives; and record the results, which axionomy_experiment_results gives again. Returns each arm's strategy and start economy, and every trial's seed, how it ended, its objective values, exact, and the economy_id it reached: step through its trace with axionomy_trace_step, branch from any step, diff, assess and apply as with any economy. An experiment runs at most 1,000 trials over all its arms. Every call records runs of its own, so the economies it names get handles of their own; equal roots say they are equal.",
+        description = "Run an experiment of a loaded package, such as `maze/micro` (axionomy_package_list lists them): every arm's strategy from its start toward the experiment's goal, once per trial, trial i seeded from the experiment's seed and i so every arm meets the same chances, measured on the experiment's objectives; and record the results, which axionomy_experiment_results gives again. Returns the goal, each arm's strategy and start economy, and every trial's seed, how it ended, its objective values, exact, and the economy_id it reached: step through its trace with axionomy_trace_step, branch from any step, diff, assess and apply as with any economy. An experiment runs at most 1,000 trials over all its arms. Every call records runs of its own, so the economies it names get handles of their own; equal roots say they are equal.",
         output_schema = schema_for_output::<ExperimentResults>(),
         annotations(destructive_hint = false, idempotent_hint = false, open_world_hint = false)
     )]
@@ -559,7 +559,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_experiment_results",
         title = "Read an experiment's results",
-        description = "Give the results an experiment of a loaded package last recorded, by axionomy_experiment_run or in its package, in the shape axionomy_experiment_run returns them: each arm's strategy and start economy, and every trial's seed, how it ended, its objective values and the economy_id it reached. An experiment that has recorded none is `not_found`; run it first.",
+        description = "Give the results an experiment of a loaded package last recorded, by axionomy_experiment_run or in its package, in the shape axionomy_experiment_run returns them: the goal, each arm's strategy and start economy, and every trial's seed, how it ended, its objective values and the economy_id it reached. An experiment that has recorded none is `not_found`; run it first.",
         output_schema = schema_for_output::<ExperimentResults>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -863,6 +863,7 @@ impl AxionomyMcp {
         Ok(Linked::new(
             ExperimentResults {
                 experiment: path,
+                goal: experiment.goal.clone(),
                 objectives,
                 arms,
             },
@@ -1821,13 +1822,12 @@ async fn run_search(
         engine.keep_candidates(&candidates_path, &CandidateSet::Listed(candidates))?;
         let strategy = Strategy::BreadthFirst {
             candidates: candidates_path,
-            goal: goal_path,
         };
         let effort = Effort {
             seed: 0,
             budget: max_expansions as u64,
         };
-        engine.run_strategy(start, &strategy, effort, &mut |progress| {
+        engine.run_strategy(start, &strategy, &goal_path, effort, &mut |progress| {
             if watching.is_cancel_requested() {
                 return ControlFlow::Break(());
             }

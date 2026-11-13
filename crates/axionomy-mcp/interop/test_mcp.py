@@ -610,6 +610,8 @@ async def test_an_experiment_runs_and_a_client_steps_through_a_trial(maze_url: s
         ran = await client.call_tool("axionomy_experiment_run", {"experiment": "maze/micro"})
         assert not ran.is_error, ran.structured_content
         results = ran.structured_content
+        # Every arm worked toward the goal the experiment names.
+        assert results["goal"] == "maze/solved"
         assert results["objectives"] == [
             {"objective": "maze/energy", "direction": "minimize"},
             {"objective": "maze/time", "direction": "minimize"},

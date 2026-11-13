@@ -4,7 +4,7 @@
 
 use crate::{Natural, PointId, Refusal};
 use axionomy::paths;
-use axionomy_engine::{CandidatesPath, Effort, Engine, Outcome, Ran, StrategyPath};
+use axionomy_engine::{CandidatesPath, Effort, Engine, GoalPath, Outcome, Ran, StrategyPath};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{ProposalView, ViewDocument};
 use schemars::JsonSchema;
@@ -68,12 +68,16 @@ pub struct Applied {
     pub point: PointId,
 }
 
-/// A strategy to run from a point, with the seed of its randomness and its
-/// budget, in expansions for a search.
+/// A strategy to run from a point toward a goal, with the seed of its
+/// randomness and its budget, in expansions for a search. The strategy is
+/// how to choose; the point, the goal and the effort are the question it is
+/// asked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StrategyRequest {
     pub strategy: StrategyPath,
+    /// A goal the store keeps, such as one of the package's goals.
+    pub goal: GoalPath,
     pub seed: Natural,
     pub budget: Natural,
 }
@@ -83,6 +87,8 @@ pub struct StrategyRequest {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct RanView {
     pub strategy: StrategyPath,
+    /// The goal it worked toward.
+    pub goal: GoalPath,
     pub start: PointId,
     /// Where the run ended: a new point a run forked from `start` reaches,
     /// or `start` itself when it applied nothing.
@@ -216,8 +222,8 @@ pub fn apply(engine: &Engine, point: PointId, request: ApplyRequest) -> Result<A
     })
 }
 
-/// Checks that `point` and the strategy `request` names exist, so a
-/// transport can refuse at once before it runs anything.
+/// Checks that `point` and the strategy and goal `request` names exist, so
+/// a transport can refuse at once before it runs anything.
 pub fn check_strategy(
     engine: &Engine,
     point: PointId,
@@ -225,11 +231,12 @@ pub fn check_strategy(
 ) -> Result<(), Refusal> {
     engine.reach(point.point())?;
     engine.strategy(&request.strategy)?;
+    engine.goal(&request.goal)?;
     Ok(())
 }
 
-/// Runs the strategy `request` names from `point`; `watch` sees its search's
-/// progress and may stop it.
+/// Runs the strategy `request` names from `point` toward its goal; `watch`
+/// sees its search's progress and may stop it.
 pub fn run_strategy(
     engine: &Engine,
     point: PointId,
@@ -247,9 +254,10 @@ pub fn run_strategy(
         outcome,
         thinking,
         cost,
-    } = engine.run_strategy(point.point(), &strategy, effort, watch)?;
+    } = engine.run_strategy(point.point(), &strategy, &request.goal, effort, watch)?;
     Ok(RanView {
         strategy: request.strategy,
+        goal: request.goal,
         start: start.into(),
         end: end.into(),
         outcome: outcome.into(),

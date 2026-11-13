@@ -1768,6 +1768,7 @@ async fn an_experiment_runs_as_the_engine_runs_it_and_names_every_trial_end() {
     let ran = run_experiment(&server, "maze/micro").await;
     assert!(!ran.is_error, "{}", ran.value);
     assert_eq!(ran.value["experiment"], "maze/micro");
+    assert_eq!(ran.value["goal"], "maze/solved");
     assert_eq!(
         ran.value["objectives"],
         json!([

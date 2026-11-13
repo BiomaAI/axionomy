@@ -45,7 +45,7 @@ pub struct TrialView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EndedView {
-    /// The strategy's goal holds where the run ends.
+    /// The experiment's goal holds where the run ends.
     Reached,
     /// The policy proposed nothing, or a plan ended short of the goal.
     Stopped,

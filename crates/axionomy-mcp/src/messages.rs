@@ -9,7 +9,9 @@ use axionomy::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Quantity,
     RatePath, RolePath, paths,
 };
-use axionomy_engine::{Ended, ExperimentPath, ObjectivePath, PackagePath, StrategyPath, Version};
+use axionomy_engine::{
+    Ended, ExperimentPath, GoalPath, ObjectivePath, PackagePath, StrategyPath, Version,
+};
 use axionomy_search::{GraphSearchProgress, pareto::ObjectiveDirection};
 use axionomy_store::RefPath;
 use axionomy_study::StudyKey;
@@ -681,6 +683,8 @@ pub struct ExperimentRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ExperimentResults {
     pub experiment: ExperimentPath,
+    /// The goal every arm worked toward, which the experiment names.
+    pub goal: GoalPath,
     /// The objectives every trial is measured on, in the experiment's order.
     pub objectives: Vec<ExperimentObjective>,
     pub arms: Vec<ArmResults>,

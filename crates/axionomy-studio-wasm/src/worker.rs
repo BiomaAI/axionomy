@@ -236,9 +236,9 @@ impl WorkerEngine {
         answer(point_id(point).and_then(|point| api::apply(&self.engine, point, parsed(request)?)))
     }
 
-    /// Runs a strategy from `point`, `request` a `StrategyRequest`, calling
-    /// `progress` with its search's `GraphSearchProgress` as JSON now and
-    /// then; gives a `RanView`.
+    /// Runs a strategy from `point` toward a goal, `request` a
+    /// `StrategyRequest` naming both, calling `progress` with its search's
+    /// `GraphSearchProgress` as JSON now and then; gives a `RanView`.
     #[wasm_bindgen(js_name = runStrategy)]
     pub fn run_strategy(
         &self,

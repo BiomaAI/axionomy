@@ -95,6 +95,8 @@ test("continues from here with a strategy, showing where it ended and its thinki
   const continueWith = async (strategy: string) => {
     await panel.getByRole("tab", { name: "Continue from here" }).click();
     await panel.getByRole("combobox", { name: "Strategy" }).selectOption(strategy);
+    // The goal and the effort are those of the experiment that runs the strategy.
+    await expect(panel.getByRole("combobox", { name: "Goal" })).toHaveValue("maze/solved");
     await expect(panel.getByRole("textbox", { name: "Seed" })).toHaveValue("17");
     await panel.getByRole("button", { name: "Run strategy" }).click();
     await expect(ended).toContainText("Reached its goal", { timeout: 30_000 });

@@ -53,6 +53,8 @@ pub struct ExperimentView {
     pub experiment: ExperimentPath,
     /// The ref naming the point the arms start from.
     pub start: RefPath,
+    /// The goal every arm works toward.
+    pub goal: GoalPath,
     pub arms: Vec<ArmView>,
     pub objectives: Vec<ObjectiveView>,
     pub seed: Natural,
@@ -167,6 +169,7 @@ fn experiment_view(
     };
     Ok(ExperimentView {
         start: experiment.start,
+        goal: experiment.goal,
         arms: experiment
             .arms
             .into_iter()
