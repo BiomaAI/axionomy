@@ -2,8 +2,8 @@
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
 [plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 and P10 to
-P12 are done; P9 is under way, its study machinery retiring now that Studio
-runs on packages, and P13 follows.
+P13 are done; P9 is under way, its study machinery retiring now that Studio
+runs on packages.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -732,10 +732,44 @@ strategy continued, a ref followed, an experiment run and compared, and a
 `?package=` link opened and reloaded; natively, a ref another proposer
 moves over HTTP is followed as it moves.
 
-**P13. Acceptance.** A Python test drives the native server over HTTP with the
-connect-four package: two players advance `live`, one thinking by applying
-moves at `live`'s point without moving it, while a learner follows `live`
-through `frames(after)`.
+**P13. Acceptance (done).** A Python test drives the native server over HTTP
+with the connect-four package: two players advance `live`, one thinking by
+applying moves at `live`'s point without moving it, while a learner follows
+`live` through `frames(after)`.
+
+Built in `acceptance/`, a uv project beside the MCP interop suite: the
+session builds the sample packages with `axionomy package samples`, starts
+`axionomy studio` with `connect-four.zip` loaded into a store in memory, and
+plays Connect Four on the standard board from `connect-four/showcase`, with
+the ref `connect-four/live` made there and four threads, each over its own
+connection, using nothing but refs, candidates, apply and frames. Red and
+Yellow each read where `live` is and ask for the moves there; when they are
+its drops, a player picks one from its seed, applies it at that point and
+advances `live` from it to the new point, and otherwise waits on a long poll
+for `live` to move. Both adjudicate every drop, meeting first so both
+propose from the same point: one advance counts and the other is refused
+with 409 and where `live` went, and its player looks again from there. A
+thinker tries every move out at each point it finds `live` on, never moving
+it, and a learner follows `live` through `frames(after)` with a long poll,
+measuring both players' values, until a frame says the game is over. The
+test shows that of two advances from one point exactly one counts, every
+other refused with where the ref was; that the learner receives exactly the
+steps the players advanced over, in order and contiguous, ending at the
+ref's point, and none a thinker or a refused advance only tried out; that
+the game is won or drawn at its last frame and not before; and that the
+same players alone, applying a move at a time with no ref, play the same
+game, so neither the thinking nor the races change it. It runs in a few
+seconds, in CI after the MCP interop suite.
+
+It found that two advances committed in one transaction were both refused,
+the ref left where it was and both movers told it was where the first had
+moved it: the store's writer commits many callers' writes together, and one
+that fails fails them all. A refused move is now what the ref's write gives
+rather than a failed write, and an engine test commits two moves together.
+A frame delivered after the ref has moved on names its step in the run the
+next step made from it, as the ref's history names it then, so a follower
+that falls behind receives a different name for the point its mover
+advanced to; the test accepts either.
 
 ## Not planned
 
