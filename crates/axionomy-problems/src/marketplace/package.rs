@@ -19,7 +19,7 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
+    Arm, CandidateSet, Effort, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
     ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::{
@@ -198,8 +198,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                 } else {
                     front.to_vec()
                 },
-                seed: 17,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: 17,
+                    budget: 10_000_000,
+                    // Its strategies search or plan; none plays turns.
+                    turns: 0,
+                },
                 trials: 1,
             },
         )?;

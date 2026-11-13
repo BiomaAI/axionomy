@@ -1,7 +1,7 @@
 //! Experiments and comparison (D-050). An experiment runs strategies as arms
-//! from one start toward one goal, each over the same seeds, and measures
-//! every run on the same objectives; comparison ranks any runs by objective vectors, dominance
-//! and the Pareto front.
+//! from one start toward one goal with one effort, each over the same seeds,
+//! and measures every run on the same objectives; comparison ranks any runs
+//! by objective vectors, dominance and the Pareto front.
 
 use crate::{
     Engine, EngineError, ExperimentPath, GoalPath, ObjectivePath, Outcome, StrategyPath,
@@ -36,11 +36,12 @@ pub struct Experiment {
     pub goal: GoalPath,
     pub arms: Vec<Arm>,
     pub objectives: Vec<ObjectivePath>,
-    pub seed: u64,
-    pub budget: u64,
-    /// How many trials each arm runs, trial `i` seeded from the
-    /// experiment's seed and `i`; more than one makes a Monte Carlo
-    /// estimate of each arm.
+    /// What every arm is given to spend: one effort for every arm, so arms
+    /// are compared on the same terms; its seed seeds the trials.
+    pub effort: Effort,
+    /// How many trials each arm runs, trial `i` seeded from the effort's
+    /// seed and `i`; more than one makes a Monte Carlo estimate of each
+    /// arm.
     pub trials: u64,
 }
 
@@ -161,8 +162,8 @@ impl Engine {
     }
 
     /// Runs every arm of the experiment at `path` once per trial, toward the
-    /// experiment's goal, records the runs as a store group of kind
-    /// `experiment`, and keeps and returns the results. `watch` sees every
+    /// experiment's goal with its effort, records the runs as a store group
+    /// of kind `experiment`, and keeps and returns the results. `watch` sees every
     /// search's progress and may stop it, which stops the experiment: it
     /// keeps no results, and the results it kept before stay, so an
     /// experiment stopped is never mistaken for one whose searches ran out.
@@ -195,12 +196,12 @@ impl Engine {
             let mut trials = Vec::new();
             for trial in 0..experiment.trials {
                 let seed = sample_seed(
-                    experiment.seed,
+                    experiment.effort.seed,
                     usize::try_from(trial).unwrap_or(usize::MAX),
                 );
                 let effort = Effort {
                     seed,
-                    budget: experiment.budget,
+                    ..experiment.effort
                 };
                 let ran = self.run_strategy(from, &strategy, &experiment.goal, effort, watch)?;
                 if let Outcome::Interrupted = ran.outcome {

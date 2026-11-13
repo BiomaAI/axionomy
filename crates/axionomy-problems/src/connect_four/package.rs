@@ -22,8 +22,8 @@ use crate::{
 };
 use axionomy::{Economy, Goal, OntologyPath, basket, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath, View,
+    Arm, CandidateSet, Chooser, Effort, Engine, EngineError, Experiment, Measure, Objective,
+    ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::Maximize;
 use axionomy_store::Checkpoints;
@@ -36,8 +36,11 @@ const SEED: u64 = 17;
 /// How deep a search's simulations look, counted from the position it
 /// searches.
 const DEPTH: u64 = 20;
-/// The most turns an opponent game takes, on either board.
-const OPPONENT_HORIZON: u64 = 85;
+/// The most turns a game plays: a drop into every cell of the standard
+/// board, each with its adjudication, and one more. Every game ends sooner,
+/// by Red's win or with no move left, Micro's compact board soonest.
+const TURNS: u64 =
+    connect_four::STANDARD_WIDTH as u64 * connect_four::STANDARD_HEIGHT as u64 * 2 + 1;
 
 /// Writes Connect Four's package into `engine`'s store, everything named
 /// under `connect-four`.
@@ -81,17 +84,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         objectives.push(objective);
     }
 
-    // The most turns self-play takes: a drop into every cell, each with its
-    // adjudication on the standard board, and one more.
-    let compact = u64::from(connect_four::WIDTH) * u64::from(connect_four::HEIGHT) + 1;
-    let standard =
-        u64::from(connect_four::STANDARD_WIDTH) * u64::from(connect_four::STANDARD_HEIGHT) * 2 + 1;
     // The study's iterations per move at its default budget of 128: Micro's
     // clamped to at most 64, Showcase's an eighth and Stress's a quarter.
-    for (instance, initial, iterations, most) in [
-        ("micro", connect_four::initial(), 64, compact),
-        ("showcase", connect_four::initial_standard(), 16, standard),
-        ("stress", connect_four::initial_standard(), 32, standard),
+    for (instance, initial, iterations) in [
+        ("micro", connect_four::initial(), 64),
+        ("showcase", connect_four::initial_standard(), 16),
+        ("stress", connect_four::initial_standard(), 32),
     ] {
         let searching = Chooser::Mcts {
             candidates: path!("connect-four/tactical"),
@@ -103,22 +101,21 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             rollout: Some(script("playout")),
             salt: 0,
         };
-        let game = |horizon, yellow| Strategy::Game {
-            horizon,
+        let game = |yellow| Strategy::Game {
             nature: None,
             actor: script("mover"),
             players: vec![searching.clone(), yellow],
         };
         let mut arms = Vec::new();
         for (document, strategy) in [
-            ("mcts-game", game(most, searching.clone())),
+            ("mcts-game", game(searching.clone())),
             (
                 "center-opponent",
-                game(OPPONENT_HORIZON, Chooser::Policy(script("center_opponent"))),
+                game(Chooser::Policy(script("center_opponent"))),
             ),
             (
                 "search-opponent",
-                game(OPPONENT_HORIZON, Chooser::Policy(script("search_opponent"))),
+                game(Chooser::Policy(script("search_opponent"))),
             ),
         ] {
             let name: StrategyPath = format!("connect-four/{instance}/{document}")
@@ -139,9 +136,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                 goal: path!("connect-four/red-wins"),
                 arms,
                 objectives: objectives.clone(),
-                seed: SEED,
-                // A game's searches spend their iterations, not a budget.
-                budget: 1,
+                effort: Effort {
+                    seed: SEED,
+                    // A game's searches spend their iterations, not a budget.
+                    budget: 1,
+                    turns: TURNS,
+                },
                 trials: 1,
             },
         )?;

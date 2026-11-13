@@ -447,7 +447,7 @@ fn rescue_monte_carlo(engine: &Engine) {
     rescue::policy_front(
         &rescue::uniform_uncertain(),
         trials,
-        experiment.seed,
+        experiment.effort.seed,
         &mut episodes,
     )
     .unwrap();
@@ -581,17 +581,18 @@ fn logistics_beyond_the_study(engine: &Engine) {
         .record::<logistics::Ontology>(logistics::initial(), Checkpoints::Ends)
         .finish()
         .unwrap();
-    let goal = engine.experiment(&path!("logistics/micro")).unwrap().goal;
+    // The goal and the turns its experiment gives.
+    let experiment = engine.experiment(&path!("logistics/micro")).unwrap();
     let ran = |strategy: &str| {
         let strategy = engine
             .strategy(&format!("logistics/{strategy}").parse().unwrap())
             .unwrap();
         let effort = Effort {
             seed: SEED,
-            budget: 1,
+            ..experiment.effort
         };
         let ran = engine
-            .run_strategy(start, &strategy, &goal, effort, &mut |_| {
+            .run_strategy(start, &strategy, &experiment.goal, effort, &mut |_| {
                 ControlFlow::Continue(())
             })
             .unwrap();
@@ -662,7 +663,7 @@ fn mission_planned(engine: &Engine, seeds: impl IntoIterator<Item = u64>) -> Vec
     use axionomy_search::mcts::MctsConfig;
     let model = mission::initial();
     let planner = engine.strategy(&path!("mission/coordinated")).unwrap();
-    let goal = engine.experiment(&path!("mission/micro")).unwrap().goal;
+    let experiment = engine.experiment(&path!("mission/micro")).unwrap();
     let prior = engine.referred(&path!("mission/micro")).unwrap();
     let mut outcomes = Vec::new();
     for seed in seeds {
@@ -684,9 +685,12 @@ fn mission_planned(engine: &Engine, seeds: impl IntoIterator<Item = u64>) -> Vec
             .collect();
         // The run's first exchange is Nature's draw of its scenario.
         let scenario = engine.apply(prior, &trace[..1]).unwrap();
-        let effort = Effort { seed, budget: 1 };
+        let effort = Effort {
+            seed,
+            ..experiment.effort
+        };
         let ran = engine
-            .run_strategy(scenario, &planner, &goal, effort, &mut |_| {
+            .run_strategy(scenario, &planner, &experiment.goal, effort, &mut |_| {
                 ControlFlow::Continue(())
             })
             .unwrap();
@@ -841,7 +845,10 @@ fn work_league_beyond_the_study(engine: &Engine, instance: &str) {
             .unwrap();
         let strategy = engine.strategy(&arm.strategy).unwrap();
         for seed in 0..4 {
-            let effort = Effort { seed, budget: 1 };
+            let effort = Effort {
+                seed,
+                ..experiment.effort
+            };
             let ran = engine
                 .run_strategy(start, &strategy, &experiment.goal, effort, &mut |_| {
                     ControlFlow::Continue(())

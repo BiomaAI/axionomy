@@ -49,6 +49,8 @@ fn solve(
     let effort = Effort {
         seed: 17,
         budget: 1_000_000,
+        // As many turns as an incident takes; a search plays none.
+        turns: incident::HORIZON as u64,
     };
     engine
         .run_strategy(start, &strategy, &path(goal), effort, &mut |_| {
@@ -169,7 +171,6 @@ fn incidents_policies_run_the_rust_incidents() {
                 &path(&format!("incident/{}", function.replace('_', "-"))),
                 &Strategy::Policy {
                     policy: call("incident", function),
-                    horizon: incident::HORIZON as u64,
                 },
             )
             .unwrap();

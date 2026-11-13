@@ -15,7 +15,7 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
+    Arm, CandidateSet, Effort, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
     ScriptCall, Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
@@ -82,7 +82,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     }
     let policy = |function| Strategy::Policy {
         policy: call(function),
-        horizon: HORIZON,
     };
     // The exact front over both travellers' priority and credit, ranked by
     // one traveller's priority and credit, then the other's.
@@ -168,8 +167,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                     })
                     .collect(),
                 objectives,
-                seed: 17,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: 17,
+                    budget: 10_000_000,
+                    turns: HORIZON,
+                },
                 trials: 1,
             },
         )?;

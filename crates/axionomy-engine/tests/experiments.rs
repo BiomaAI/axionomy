@@ -3,7 +3,8 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{
-    Arm, CandidateSet, Chooser, Ended, Engine, Experiment, Measure, Objective, ScriptCall, Strategy,
+    Arm, CandidateSet, Chooser, Effort, Ended, Engine, Experiment, Measure, Objective, ScriptCall,
+    Strategy,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::{Point, Store};
@@ -71,7 +72,6 @@ fn bank() -> (Engine, Point) {
                 &path(function),
                 &Strategy::Policy {
                     policy: call(function),
-                    horizon: 20,
                 },
             )
             .unwrap();
@@ -119,8 +119,11 @@ fn experiment(arms: &[&str]) -> Experiment {
             })
             .collect(),
         objectives: vec![path("payments"), path("paid")],
-        seed: 11,
-        budget: 10_000,
+        effort: Effort {
+            seed: 11,
+            budget: 10_000,
+            turns: 20,
+        },
         trials: 4,
     }
 }
@@ -389,7 +392,6 @@ fn walk() -> Engine {
             .keep_strategy(
                 &path(player),
                 &Strategy::Game {
-                    horizon: 10,
                     nature: Some(walk_call("weather")),
                     actor: walk_call("walker"),
                     players: vec![Chooser::Policy(walk_call(player))],
@@ -428,8 +430,11 @@ fn nature_samples_weighted_scenarios_whatever_the_players_think() {
                     })
                     .collect(),
                 objectives: vec![path("rain")],
-                seed: 3,
-                budget: 0,
+                effort: Effort {
+                    seed: 3,
+                    budget: 0,
+                    turns: 10,
+                },
                 trials: 16,
             },
         )

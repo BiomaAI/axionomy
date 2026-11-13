@@ -7,7 +7,7 @@ use crate::{
     package::{call, written},
 };
 use axionomy::{OntologyPath, path};
-use axionomy_engine::{Arm, CandidateSet, Engine, EngineError, Experiment, Strategy, View};
+use axionomy_engine::{Arm, CandidateSet, Effort, Engine, EngineError, Experiment, Strategy, View};
 use axionomy_store::Checkpoints;
 
 /// The script the searches call, and the view's.
@@ -99,8 +99,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                         })
                         .collect(),
                     objectives: Vec::new(),
-                    seed: 17,
-                    budget: 10_000_000,
+                    effort: Effort {
+                        seed: 17,
+                        budget: 10_000_000,
+                        // Its strategies search or plan; none plays turns.
+                        turns: 0,
+                    },
                     trials: 1,
                 },
             )?;

@@ -19,8 +19,8 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath, Strategy,
-    StrategyPath, View,
+    Arm, Effort, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
 use axionomy_store::Checkpoints;
@@ -36,7 +36,7 @@ const SEED: u64 = 17;
 /// The most turns a season takes: thin liquidity's opening withdrawal, and
 /// on each of at most twelve days commissioning, every actor's six
 /// decisions and the end of its trading, and the day's close.
-const HORIZON: u64 = 1 + 12 * (1 + amm::ACTORS.len() as u64 * 7 + 1);
+const TURNS: u64 = 1 + 12 * (1 + amm::ACTORS.len() as u64 * 7 + 1);
 
 /// Each document the study gives, and the script function that plays it,
 /// a season's turn, or with `_plan` Micro's whole day.
@@ -102,21 +102,20 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &policy,
             &Strategy::Policy {
                 policy: call(function),
-                horizon: HORIZON,
             },
         )?;
         seasonal.push(policy);
     }
-    // Micro's day ends where the actors' goals are met; a season, when the
-    // market closes.
+    // Micro's day ends where the actors' goals are met, its plans playing
+    // no turns; a season, when the market closes, within its turns.
     let (met, closed): (GoalPath, GoalPath) = (path!("amm/day/met"), path!("amm/closed"));
-    for (instance, initial, goal, strategies) in [
-        ("micro", amm::initial(), &met, &day),
-        ("showcase", season, &closed, &seasonal),
+    for (instance, initial, (goal, turns), strategies) in [
+        ("micro", amm::initial(), (&met, 0), &day),
+        ("showcase", season, (&closed, TURNS), &seasonal),
         (
             "stress",
             amm::initial_stress_with_seed(SEED),
-            &closed,
+            (&closed, TURNS),
             &seasonal,
         ),
     ] {
@@ -139,8 +138,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                     })
                     .collect(),
                 objectives: objectives.clone(),
-                seed: SEED,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: SEED,
+                    budget: 10_000_000,
+                    turns,
+                },
                 trials: 1,
             },
         )?;

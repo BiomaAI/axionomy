@@ -13,8 +13,8 @@ use crate::{
 };
 use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath, Strategy,
-    StrategyPath, View,
+    Arm, Effort, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Point, Recordable, RefPath};
@@ -74,6 +74,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     )?;
     let micro = Family {
         goal: path!("rescue/solved"),
+        turns: MICRO_TURNS,
         objectives: measures(
             engine,
             "rescue",
@@ -86,7 +87,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         strategies: policies(
             engine,
             "rescue",
-            MICRO_TURNS,
             &[
                 ("observe-then-follow", "observe_then_follow"),
                 ("direct-north", "direct_north"),
@@ -95,6 +95,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     };
     let incidents = Family {
         goal: path!("rescue/incident/closed"),
+        turns: incident::HORIZON as u64,
         objectives: measures(
             engine,
             "rescue/incident",
@@ -110,7 +111,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         strategies: policies(
             engine,
             "rescue/incident",
-            incident::HORIZON as u64,
             &[
                 ("observe-then-follow", "triage"),
                 ("direct-north", "rapid_north"),
@@ -146,9 +146,10 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
 }
 
 /// An ontology's goal, objectives and strategies, which its experiments
-/// compare toward the goal.
+/// compare toward the goal, each within `turns`.
 struct Family {
     goal: GoalPath,
+    turns: u64,
     objectives: Vec<ObjectivePath>,
     strategies: Vec<StrategyPath>,
 }
@@ -179,8 +180,11 @@ impl Family {
                     })
                     .collect(),
                 objectives: self.objectives.clone(),
-                seed: SEED,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: SEED,
+                    budget: 10_000_000,
+                    turns: self.turns,
+                },
                 trials,
             },
         )
@@ -225,11 +229,10 @@ fn measures(
 }
 
 /// Keeps `<script>/<key>` for each policy, the function of `script` that
-/// plays a turn, until the run's goal or `horizon` turns.
+/// plays a turn, until the run's goal or its turns.
 fn policies(
     engine: &Engine,
     script: &str,
-    horizon: u64,
     policies: &[(&str, &str)],
 ) -> Result<Vec<StrategyPath>, EngineError> {
     policies
@@ -240,7 +243,6 @@ fn policies(
                 &strategy,
                 &Strategy::Policy {
                     policy: call(script, function),
-                    horizon,
                 },
             )?;
             Ok(strategy)

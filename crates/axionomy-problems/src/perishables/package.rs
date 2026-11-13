@@ -18,7 +18,7 @@ use crate::{
 };
 use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
+    Arm, CandidateSet, Effort, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
     ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
@@ -116,7 +116,6 @@ fn micro(engine: &Engine) -> Result<(), EngineError> {
         "perishables/outage",
         &Strategy::Policy {
             policy: call("outage"),
-            horizon: OUTAGE_TURNS,
         },
     )?;
     let plans = vec![
@@ -137,14 +136,15 @@ fn micro(engine: &Engine) -> Result<(), EngineError> {
     experiment(
         engine,
         "micro",
-        path!("perishables/solved"),
+        (path!("perishables/solved"), OUTAGE_TURNS),
         vec![outage],
         objectives.clone(),
     )?;
     experiment(
         engine,
         "micro/storage-plans",
-        path!("perishables/plan-sealed"),
+        // A search plays no turns.
+        (path!("perishables/plan-sealed"), 0),
         plans,
         objectives,
     )
@@ -192,7 +192,8 @@ fn cold_chain(engine: &Engine) -> Result<(), EngineError> {
         experiment(
             engine,
             instance,
-            path!("perishables/cold-chain/closed"),
+            // Each daily policy is planned whole, playing no turns.
+            (path!("perishables/cold-chain/closed"), 0),
             arms.clone(),
             objectives.clone(),
         )?;
@@ -218,11 +219,11 @@ fn recorded<O: Recordable>(
 }
 
 /// Keeps the experiment `perishables/<name>` comparing `strategies` toward
-/// `goal` from the instance its first segment names.
+/// `goal` within `turns`, from the instance its first segment names.
 fn experiment(
     engine: &Engine,
     name: &str,
-    goal: GoalPath,
+    (goal, turns): (GoalPath, u64),
     strategies: Vec<StrategyPath>,
     objectives: Vec<ObjectivePath>,
 ) -> Result<(), EngineError> {
@@ -240,8 +241,11 @@ fn experiment(
                 })
                 .collect(),
             objectives,
-            seed: SEED,
-            budget: 10_000_000,
+            effort: Effort {
+                seed: SEED,
+                budget: 10_000_000,
+                turns,
+            },
             trials: 1,
         },
     )

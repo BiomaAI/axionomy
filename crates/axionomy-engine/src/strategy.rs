@@ -34,25 +34,30 @@ use std::{
 /// The most expansions a search makes between two looks at its progress.
 const CHUNK: usize = 1_000;
 
-/// An algorithm with what it calls: how to choose, never what to choose
-/// for. The question comes from whoever runs it: the point it starts from
-/// and the goal it works toward are the run's (D-052), so a strategy means
-/// the same at every start and toward any goal. "The goal" below is the
-/// goal the run is given.
+/// An algorithm with what it calls and its own settings: how to choose,
+/// never what to choose for or how much to spend. The question comes from
+/// whoever runs it: the point it starts from, the goal it works toward and
+/// the [`Effort`] it is given are the run's (D-052), so a strategy means the
+/// same at every start, toward any goal and at any effort. "The goal",
+/// "the budget" and "the turns" below are the run's; each kind reads only
+/// the limit it spends.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Strategy {
     /// A policy driving the economy turn by turn: each turn it proposes one
     /// exchange, `fn(state, random)`, or nothing, until the goal holds, it
-    /// proposes nothing, or `horizon` turns. Turn order, Nature's responses
-    /// and who acts are the policy's to decide.
-    Policy { policy: ScriptCall, horizon: u64 },
+    /// proposes nothing, or it has played the turns. Turn order, Nature's
+    /// responses and who acts are the policy's to decide. It spends turns,
+    /// never the budget.
+    Policy { policy: ScriptCall },
     /// A plan a script makes whole, `fn(state)` returning the exchanges in
     /// order or nothing, such as a specialised solver's or an outside
     /// solver's answer, or `fn(state, random)` for a plan that draws chance
     /// (Nature's outcomes) from the run's seed: the kernel applies them all
-    /// or none, and the run ends at the goal or where the plan ends.
+    /// or none, and the run ends at the goal or where the plan ends. It
+    /// spends neither the budget nor the turns.
     Plan { plan: ScriptCall },
-    /// The fewest exchanges from the candidate set that reach the goal.
+    /// The fewest exchanges from the candidate set that reach the goal,
+    /// within the budget's expansions.
     BreadthFirst { candidates: CandidatesPath },
     /// The cheapest exchanges from the candidate set that reach the goal,
     /// each costing what `cost` charges, `fn(before, exchange, after)`: by
@@ -60,7 +65,7 @@ pub enum Strategy {
     /// equally cheap plans reaches the one its heap yields first and stops
     /// without a plan once it has expanded its budget; or, when `heuristic`,
     /// `fn(state)`, bounds the cost still to pay from below, by A*, watched
-    /// as it goes.
+    /// as it goes. Either spends at most the budget's expansions.
     Cheapest {
         candidates: CandidatesPath,
         cost: ScriptCall,
@@ -69,7 +74,7 @@ pub enum Strategy {
     /// The cheapest goal state the candidate set reaches, by depth-first
     /// branch-and-bound: `cost` is a goal state's cost, `fn(state)`, and
     /// `bound` a lower bound on the cost of any goal state reachable from a
-    /// state, `fn(state)`.
+    /// state, `fn(state)`, within the budget's expansions.
     BranchAndBound {
         candidates: CandidatesPath,
         cost: ScriptCall,
@@ -78,7 +83,8 @@ pub enum Strategy {
     /// Beam search: each depth keeps the `width` states that score best,
     /// `fn(state)` returning an integer, higher better, for at most `depth`
     /// depths; the best-scoring goal state found, the first or the last
-    /// found of those scoring alike, as `tie` says.
+    /// found of those scoring alike, as `tie` says. Its width and depth
+    /// bound it, not the budget.
     Beam {
         candidates: CandidatesPath,
         score: ScriptCall,
@@ -89,7 +95,7 @@ pub enum Strategy {
     /// The goal state the candidate set reaches that ranks best by `cost`,
     /// `fn(state)`, a state's whole cost so far, plus `heuristic`'s estimate,
     /// `fn(state)`, of what is left, lower first; states of equal rank in the
-    /// order they were found. It runs to its end.
+    /// order they were found. It runs to its end, whatever the budget.
     BestFirst {
         candidates: CandidatesPath,
         cost: ScriptCall,
@@ -98,23 +104,24 @@ pub enum Strategy {
     /// The exact Pareto front of the goal states the candidate set reaches,
     /// each measured by `objectives`, which measure states: the run reaches
     /// the front's best state by the objectives `by`, each one of
-    /// `objectives`, in order, the first found on a tie. A budget spent
-    /// before the front is exact leaves it at its start.
+    /// `objectives`, in order, the first found on a tie. A budget of
+    /// expansions spent before the front is exact leaves it at its start.
     Pareto {
         candidates: CandidatesPath,
         objectives: Vec<ObjectivePath>,
         by: Vec<ObjectivePath>,
     },
-    /// A game played turn by turn until the goal or `horizon` turns: each
+    /// A game played turn by turn until the goal holds or it has played the
+    /// turns, which are all it spends: each
     /// turn Nature responds if `nature`, `fn(state, random)`, proposes an
     /// exchange, and otherwise the player `actor`, `fn(state)` returning an
     /// index into `players`, chooses as its chooser does. Nature draws from
     /// a random stream of its own, so how hard the players think never
     /// changes what Nature does: weighted scenarios are Nature sampling
     /// them, and receding-horizon planning is a player that searches again
-    /// every turn from what happened.
+    /// every turn from what happened. How hard each player thinks is its
+    /// own, its iterations or its depth, as its [`Chooser`] says.
     Game {
-        horizon: u64,
         nature: Option<ScriptCall>,
         actor: ScriptCall,
         players: Vec<Chooser>,
@@ -263,12 +270,22 @@ struct Believing {
     players: BTreeMap<usize, Beliefs>,
 }
 
-/// What a strategy is given to spend: the seed of its randomness and its
-/// budget, in expansions for a search.
+/// What a run is given to spend, which its caller names with its start and
+/// its goal (D-052): the seed of its randomness and two limits, of which
+/// each kind of strategy reads only the one it spends. A search
+/// (breadth-first, cheapest, branch-and-bound, Pareto) expands at most
+/// `budget` states; a policy or a game plays at most `turns` turns, and
+/// ends [`Outcome::Horizon`] when it has played them all; a plan spends
+/// neither. Beam search is bounded by its own width and depth, best-first
+/// search runs to its end, and a game's players think as hard as their
+/// choosers say: those describe the strategy, not the run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Effort {
     pub seed: u64,
+    /// The most states a search expands.
     pub budget: u64,
+    /// The most turns a policy or a game plays.
+    pub turns: u64,
 }
 
 /// How a strategy's run ended.
@@ -278,7 +295,7 @@ pub enum Outcome {
     Reached,
     /// The policy proposed nothing, or a plan ended short of the goal.
     Stopped,
-    /// The policy used its every turn.
+    /// The policy or the game played every turn it was given.
     Horizon,
     /// The policy proposed an exchange that does not apply, on turn `turn`
     /// counting from zero; the run ends before it.
@@ -327,9 +344,7 @@ impl Engine {
         let initial = self.reach(at)?.state.economy.clone();
         let goal = self.goal(goal)?;
         match strategy {
-            Strategy::Policy { policy, horizon } => {
-                self.drive(at, initial, policy, &goal, *horizon, effort.seed)
-            }
+            Strategy::Policy { policy } => self.drive(at, initial, policy, &goal, effort),
             Strategy::Plan { plan } => {
                 let (script, function) = (&plan.script, plan.function.as_str());
                 let state = ScriptState::new(initial.clone());
@@ -511,20 +526,10 @@ impl Engine {
                 watch,
             ),
             Strategy::Game {
-                horizon,
                 nature,
                 actor,
                 players,
-            } => self.play(
-                at,
-                initial,
-                &goal,
-                *horizon,
-                nature.as_ref(),
-                actor,
-                players,
-                effort.seed,
-            ),
+            } => self.play(at, initial, &goal, nature.as_ref(), actor, players, effort),
             Strategy::Cheapest {
                 candidates,
                 cost,
@@ -950,11 +955,10 @@ impl Engine {
         at: Point,
         mut economy: paths::Economy,
         goal: &paths::Goal,
-        horizon: u64,
         nature: Option<&ScriptCall>,
         actor: &ScriptCall,
         players: &[Chooser],
-        seed: u64,
+        Effort { seed, turns, .. }: Effort,
     ) -> Result<Ran, EngineError> {
         let chance = Random::new(seed);
         let random = Random::new(sample_seed(seed, 1));
@@ -967,7 +971,7 @@ impl Engine {
                 break Outcome::Reached;
             }
             let turn = exchanges.len() as u64;
-            if turn >= horizon {
+            if turn >= turns {
                 break Outcome::Horizon;
             }
             let responded = match nature {
@@ -1247,8 +1251,7 @@ impl Engine {
         mut economy: paths::Economy,
         policy: &ScriptCall,
         goal: &paths::Goal,
-        horizon: u64,
-        seed: u64,
+        Effort { seed, turns, .. }: Effort,
     ) -> Result<Ran, EngineError> {
         let random = Random::new(seed);
         let mut exchanges = Vec::new();
@@ -1257,7 +1260,7 @@ impl Engine {
                 break Outcome::Reached;
             }
             let turn = exchanges.len() as u64;
-            if turn >= horizon {
+            if turn >= turns {
                 break Outcome::Horizon;
             }
             let proposed: rhai::Dynamic = self.call(

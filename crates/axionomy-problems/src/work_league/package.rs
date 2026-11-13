@@ -22,8 +22,8 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath, Strategy,
-    StrategyPath, View,
+    Arm, Effort, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
 use axionomy_store::{Checkpoints, RefPath};
@@ -37,7 +37,7 @@ const SEED: u64 = 17;
 /// The most turns a season takes: at each of Stress's 79 clock readings,
 /// an event for each of its 24 contracts, four services ending, four
 /// decisions and the tick, and then the season's end.
-const HORIZON: u64 = 79 * (24 + 4 + 4 + 1) + 1;
+const TURNS: u64 = 79 * (24 + 4 + 4 + 1) + 1;
 
 /// The documents the study gives, each the field its workers hold.
 fn fields() -> [(&'static str, [Policy; 4]); 3] {
@@ -65,6 +65,15 @@ fn goal(profile: Profile) -> GoalPath {
     match profile {
         Profile::Micro => path!("work-league/serial/completed"),
         Profile::Showcase | Profile::Stress => path!("work-league/season-ended"),
+    }
+}
+
+/// The most turns a run at `profile` plays: none for Micro's match, planned
+/// whole; a season's, turn by turn.
+fn turns(profile: Profile) -> u64 {
+    match profile {
+        Profile::Micro => 0,
+        Profile::Showcase | Profile::Stress => TURNS,
     }
 }
 
@@ -120,7 +129,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &strategy(Profile::Showcase, document),
             &Strategy::Policy {
                 policy: call("season"),
-                horizon: HORIZON,
             },
         )?;
     }
@@ -162,8 +170,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                 arms,
 
                 objectives: objectives.clone(),
-                seed: SEED,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: SEED,
+                    budget: 10_000_000,
+                    turns: turns(profile),
+                },
                 trials: 1,
             },
         )?;

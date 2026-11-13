@@ -8,8 +8,8 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ScriptCall, Strategy,
-    View,
+    Arm, CandidateSet, Effort, Engine, EngineError, Experiment, Measure, Objective, ScriptCall,
+    Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::Checkpoints;
@@ -113,8 +113,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                     })
                     .collect(),
                 objectives: vec![path!("maze/energy"), path!("maze/time")],
-                seed: 17,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: 17,
+                    budget: 10_000_000,
+                    // Its strategies search or plan; none plays turns.
+                    turns: 0,
+                },
                 trials: 1,
             },
         )?;

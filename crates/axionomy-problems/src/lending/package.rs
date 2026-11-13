@@ -17,7 +17,7 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
+    Arm, CandidateSet, Effort, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
     ObjectivePath, ScriptCall, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
@@ -125,8 +125,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                     })
                     .collect(),
                 objectives: objectives.clone(),
-                seed: 17,
-                budget: 10_000_000,
+                effort: Effort {
+                    seed: 17,
+                    budget: 10_000_000,
+                    turns: HORIZON,
+                },
                 trials: 1,
             },
         )?;
@@ -161,7 +164,6 @@ fn strategies() -> [(&'static str, Strategy); 4] {
             "over-borrowed",
             Strategy::Policy {
                 policy: call("over_borrowed"),
-                horizon: HORIZON,
             },
         ),
         (

@@ -9,7 +9,7 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
+    Arm, CandidateSet, Effort, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
     ScriptCall, Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
@@ -132,8 +132,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                         })
                         .collect(),
                     objectives: objectives.clone(),
-                    seed: 17,
-                    budget: 10_000_000,
+                    effort: Effort {
+                        seed: 17,
+                        budget: 10_000_000,
+                        // Its strategies search or plan; none plays turns.
+                        turns: 0,
+                    },
                     trials: 1,
                 },
             )?;

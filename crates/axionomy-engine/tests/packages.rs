@@ -3,8 +3,8 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{
-    Arm, CandidateSet, Contents, Engine, EngineError, Experiment, Manifest, Measure, Objective,
-    PackageError, ScriptCall, Strategy, Version, package, zipped,
+    Arm, CandidateSet, Contents, Effort, Engine, EngineError, Experiment, Manifest, Measure,
+    Objective, PackageError, ScriptCall, Strategy, Version, package, zipped,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::Store;
@@ -99,7 +99,6 @@ fn bank() -> Engine {
             &path("bank/randomly"),
             &Strategy::Policy {
                 policy: call("randomly"),
-                horizon: 20,
             },
         )
         .unwrap();
@@ -143,8 +142,11 @@ fn bank() -> Engine {
                     })
                     .collect(),
                 objectives: vec![path("bank/payments"), path("bank/paid")],
-                seed: 5,
-                budget: 1_000,
+                effort: Effort {
+                    seed: 5,
+                    budget: 1_000,
+                    turns: 20,
+                },
                 trials: 3,
             },
         )

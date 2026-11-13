@@ -23,6 +23,7 @@ fn call(function: &str) -> ScriptCall {
 const EFFORT: Effort = Effort {
     seed: 7,
     budget: 10_000,
+    turns: 10,
 };
 
 /// A bank paying alice, a goal of alice holding `wanted`, payments of one
@@ -127,27 +128,33 @@ fn a_search_reaches_the_goal_or_says_why_not() {
 }
 
 #[test]
-fn a_policy_runs_until_the_goal_nothing_a_refusal_or_its_horizon() {
+fn a_policy_runs_until_the_goal_nothing_a_refusal_or_its_turns() {
     let (engine, start) = bank(10);
-    let policy = |function: &str, horizon| Strategy::Policy {
+    let policy = |function: &str| Strategy::Policy {
         policy: call(function),
-        horizon,
     };
-    let ran = run(&engine, start, &policy("five", 10), "rich", EFFORT);
+    let ran = run(&engine, start, &policy("five"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.end.step, start.step + 2);
     assert!(engine.holds(ran.end, &path("rich")).unwrap());
 
-    let ran = run(&engine, start, &policy("five", 1), "rich", EFFORT);
+    // One turn is not enough for two payments.
+    let ran = run(
+        &engine,
+        start,
+        &policy("five"),
+        "rich",
+        Effort { turns: 1, ..EFFORT },
+    );
     assert!(matches!(ran.outcome, Outcome::Horizon));
     assert_eq!(ran.end.step, start.step + 1);
 
-    let ran = run(&engine, start, &policy("nothing", 10), "rich", EFFORT);
+    let ran = run(&engine, start, &policy("nothing"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(ran.end, start);
 
     // Fifty overdraws the bank: refused on the first turn, nothing recorded.
-    let ran = run(&engine, start, &policy("too_much", 10), "rich", EFFORT);
+    let ran = run(&engine, start, &policy("too_much"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Refused { turn: 0, .. }));
     assert_eq!(ran.end, start);
 }
@@ -201,7 +208,7 @@ fn a_plan_is_applied_whole_or_not_at_all() {
             start,
             &plan("drawn"),
             "rich",
-            Effort { seed, budget: 1 },
+            Effort { seed, ..EFFORT },
         );
         ran.end.step - start.step
     };
@@ -495,7 +502,6 @@ fn nim_call(function: &str) -> ScriptCall {
 
 fn game(chooser: axionomy_engine::Chooser) -> Strategy {
     Strategy::Game {
-        horizon: 10,
         nature: None,
         actor: nim_call("player"),
         players: vec![chooser.clone(), chooser],
@@ -621,8 +627,9 @@ fn gamble() -> (Engine, Point) {
 fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
     let (engine, start) = gamble();
     let call = |function: &str| ScriptCall::new(path("gamble"), function.parse().unwrap());
+    // The game's three turns: the start, a choice and Nature's result.
+    let effort = Effort { turns: 3, ..EFFORT };
     let searching = |chance: Option<&str>, rollout: Option<&str>| Strategy::Game {
-        horizon: 3,
         nature: Some(call("nature")),
         actor: call("player"),
         players: vec![axionomy_engine::Chooser::Mcts {
@@ -648,12 +655,12 @@ fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
     // left to choose: the game stops short of a good result.
     let knowing = searching(Some("draws"), Some("first"));
     engine.keep_strategy(&path("knowing"), &knowing).unwrap();
-    let ran = run(&engine, start, &knowing, "over", EFFORT);
+    let ran = run(&engine, start, &knowing, "over", effort);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(rates(&ran), ["begin", "safe"]);
 
     // A tree without Nature thinks the player picks the good result.
-    let ran = run(&engine, start, &searching(None, None), "over", EFFORT);
+    let ran = run(&engine, start, &searching(None, None), "over", effort);
     assert_eq!(rates(&ran)[..2], ["begin", "gamble"]);
 
     // A rollout must pick one of the candidates.
@@ -661,7 +668,7 @@ fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
         start,
         &searching(Some("draws"), Some("wrong")),
         &path("over"),
-        EFFORT,
+        effort,
         &mut |_| ControlFlow::Continue(()),
     );
     assert!(matches!(
@@ -825,7 +832,6 @@ fn coin_call(function: &str) -> ScriptCall {
 /// what `observe` shows it, over the candidate set `candidates`.
 fn calling(observe: &str, candidates: &str) -> Strategy {
     Strategy::Game {
-        horizon: 8,
         nature: Some(coin_call("nature")),
         actor: coin_call("player"),
         players: vec![axionomy_engine::Chooser::Ismcts {
@@ -944,7 +950,7 @@ fn rollouts_draw_the_searchs_own_tickets(
     let rollout =
         |function: &str| Some(ScriptCall::new(path("rollouts"), function.parse().unwrap()));
     let played = |strategy: &Strategy, seed| {
-        let ran = run(engine, start, strategy, goal, Effort { seed, budget: 1 });
+        let ran = run(engine, start, strategy, goal, Effort { seed, ..EFFORT });
         engine.history(ran.end).unwrap().1
     };
     let (uniform, sampled, apart) = (
@@ -978,7 +984,6 @@ fn a_rollout_draws_the_searchs_own_tickets() {
     });
     let (engine, start) = coin();
     rollouts_draw_the_searchs_own_tickets(&engine, start, "settled", |rollout| Strategy::Game {
-        horizon: 8,
         nature: Some(coin_call("nature")),
         actor: coin_call("player"),
         players: vec![axionomy_engine::Chooser::Ismcts {

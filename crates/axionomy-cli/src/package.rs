@@ -293,7 +293,6 @@ mod tests {
                     &"walk/stay".parse().unwrap(),
                     &Strategy::Policy {
                         policy: ScriptCall::new("walk".parse().unwrap(), "stay".parse().unwrap()),
-                        horizon: 1,
                     },
                 )
                 .unwrap();

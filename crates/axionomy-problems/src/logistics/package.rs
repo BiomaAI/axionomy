@@ -19,8 +19,8 @@ use crate::{
 };
 use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
-    ObjectivePath, Strategy, StrategyPath, View,
+    Arm, CandidateSet, Chooser, Effort, Engine, EngineError, Experiment, GoalPath, Measure,
+    Objective, ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Recordable};
@@ -91,10 +91,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     // Micro: the fixed routes turn by turn, and the planner.
     let route = |function: &str| Strategy::Policy {
         policy: micro(function),
-        horizon: HORIZON,
     };
     let planner = Strategy::Game {
-        horizon: HORIZON,
         nature: Some(micro("nature")),
         actor: micro("dispatcher"),
         players: vec![Chooser::Mcts {
@@ -131,7 +129,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     experiment(
         engine,
         "logistics/micro",
-        path!("logistics/all-delivered"),
+        (path!("logistics/all-delivered"), HORIZON),
         &strategies,
         &objectives,
     )?;
@@ -151,7 +149,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name,
             &Strategy::Policy {
                 policy: call("logistics/fleet", function),
-                horizon: fleet::HORIZON as u64,
             },
         )?;
         dispatch.push(name);
@@ -174,7 +171,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         experiment(
             engine,
             &name,
-            path!("logistics/fleet/closed"),
+            (path!("logistics/fleet/closed"), fleet::HORIZON as u64),
             &dispatch,
             &outcomes,
         )?;
@@ -196,12 +193,12 @@ fn recorded<O: Recordable>(
 }
 
 /// Keeps the experiment `name`, every strategy run once toward `goal` from
-/// the ref of the same name with the study's seed, measured by
-/// `objectives`.
+/// the ref of the same name with the study's seed, playing at most `turns`
+/// turns, measured by `objectives`.
 fn experiment(
     engine: &Engine,
     name: &str,
-    goal: GoalPath,
+    (goal, turns): (GoalPath, u64),
     strategies: &[StrategyPath],
     objectives: &[ObjectivePath],
 ) -> Result<(), EngineError> {
@@ -218,8 +215,11 @@ fn experiment(
                 })
                 .collect(),
             objectives: objectives.to_vec(),
-            seed: SEED,
-            budget: 10_000_000,
+            effort: Effort {
+                seed: SEED,
+                budget: 10_000_000,
+                turns,
+            },
             trials: 1,
         },
     )
