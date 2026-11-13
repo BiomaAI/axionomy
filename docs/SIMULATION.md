@@ -505,7 +505,11 @@ which needed scripts to sample weighted outcomes with the tickets
 makespan, the branch optimizer as branch-and-bound under the clock, and
 Pareto picks for either job finishing first, over a script dispatching the
 executed shop's events in the study's order; each instance's horizon too
-short for the work, where every search runs out) needed nothing new. The
+short for the work, where every search runs out) needed nothing new. The Living Market's (the market day and
+its no-whale and thin-liquidity counterfactuals: plans for Micro's single
+day, each errand quoted against the reserves the plan follows, and policies
+for the seasons, which find whose turn it is from the decisions each actor
+has left) reproduces all three documents and needed nothing new. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package

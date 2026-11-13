@@ -7,6 +7,8 @@ use axionomy::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(feature = "packages")]
+pub mod package;
 mod season;
 mod study;
 mod view;

@@ -500,6 +500,16 @@ fn scheduling(engine: &Engine, instance: &str) {
     assert_eq!(ended, [Ended::Exhausted; 4], "{instance}");
 }
 
+fn amm(engine: &Engine, instance: &str) {
+    // Micro plans its one market day whole; the seasons play turn by turn.
+    let documents = ["market-day", "no-whale", "thin-liquidity"];
+    assert_eq!(
+        reproduces(engine, "amm", instance, &documents),
+        documents.len(),
+        "{instance}"
+    );
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -507,7 +517,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 7] = [
+const SAMPLES: [Sample; 8] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -531,6 +541,7 @@ const SAMPLES: [Sample; 7] = [
         axionomy_problems::scheduling::package::write,
         scheduling,
     ),
+    ("amm", axionomy_problems::amm::package::write, amm),
 ];
 
 /// Each sample's package reproduces its study at `instances`.
