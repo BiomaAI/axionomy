@@ -1,4 +1,5 @@
 import Axionomy.Account
+import Axionomy.Ordered
 
 namespace Axionomy.ModelConstruction
 
@@ -39,9 +40,15 @@ def addInvariant (builder : Builder AccountId AccountData RateId RateData Invari
     (value : Invariant) : Builder AccountId AccountData RateId RateData Invariant :=
   { builder with invariants := builder.invariants ++ [value] }
 
-def build (builder : Builder AccountId AccountData RateId RateData Invariant) :
+/-- The model a builder describes, its accounts and rates in the order of
+their identifiers, or the issues that refuse it. -/
+def build (cmpAccount : AccountId → AccountId → Ordering) (cmpRate : RateId → RateId → Ordering)
+    (builder : Builder AccountId AccountData RateId RateData Invariant) :
     Except (List (Issue AccountId RateId)) (Model AccountId AccountData RateId RateData Invariant) :=
-  if builder.issues.isEmpty then .ok builder.toModel else .error builder.issues
+  if builder.issues.isEmpty then
+    .ok ⟨Ordered.ordered cmpAccount builder.accounts, Ordered.ordered cmpRate builder.rates,
+      builder.invariants⟩
+  else .error builder.issues
 
 def Valid (builder : Builder AccountId AccountData RateId RateData Invariant) : Prop :=
   (builder.accounts.map Prod.fst).Nodup ∧ (builder.rates.map Prod.fst).Nodup
@@ -49,9 +56,26 @@ def Valid (builder : Builder AccountId AccountData RateId RateData Invariant) : 
 @[simp] theorem empty_valid : (empty : Builder AccountId AccountData RateId RateData Invariant).Valid := by
   simp [Valid, empty]
 
-theorem build_success_iff (builder : Builder AccountId AccountData RateId RateData Invariant) :
-    build builder = .ok builder.toModel ↔ builder.issues = [] := by
+theorem build_success_iff (cmpAccount : AccountId → AccountId → Ordering)
+    (cmpRate : RateId → RateId → Ordering) (builder : Builder AccountId AccountData RateId RateData Invariant) :
+    build cmpAccount cmpRate builder =
+        .ok ⟨Ordered.ordered cmpAccount builder.accounts, Ordered.ordered cmpRate builder.rates,
+          builder.invariants⟩ ↔
+      builder.issues = [] := by
   simp [build]
+
+/-- A model is the same model whichever order its accounts and rates were
+added in. -/
+theorem build_order_independent {cmpAccount : AccountId → AccountId → Ordering}
+    {cmpRate : RateId → RateId → Ordering}
+    (lawfulAccount : Ordered.Lawful cmpAccount) (lawfulRate : Ordered.Lawful cmpRate)
+    (left right : Builder AccountId AccountData RateId RateData Invariant) (valid : left.Valid)
+    (accounts : left.accounts.Perm right.accounts) (rates : left.rates.Perm right.rates)
+    (invariants : left.invariants = right.invariants) (issues : left.issues = right.issues) :
+    build cmpAccount cmpRate left = build cmpAccount cmpRate right := by
+  unfold build
+  rw [issues, invariants, Ordered.ordered_eq_of_perm lawfulAccount valid.1 accounts,
+    Ordered.ordered_eq_of_perm lawfulRate valid.2 rates]
 
 theorem duplicate_account_retained [DecidableEq AccountId]
     (builder : Builder AccountId AccountData RateId RateData Invariant)

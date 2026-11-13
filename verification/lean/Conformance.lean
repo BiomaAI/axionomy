@@ -277,13 +277,19 @@ structure ModelSnapshot where
   invariants : List Nat
   issues : List (Nat × Nat)
   accepted : Bool
+  /-- The accounts and rates of the model built, in their identifiers' order. -/
+  builtAccounts : List (Nat × Nat)
+  builtRates : List (Nat × Nat)
   deriving ToJson
 
 def modelSnapshot (builder : ModelConstruction.Builder Nat Nat Nat Nat Nat) : ModelSnapshot :=
+  let built := builder.build compare compare
   ⟨builder.accounts, builder.rates, builder.invariants,
     builder.issues.map (fun issue => match issue with
       | .duplicateAccount id => (0, id) | .duplicateRate id => (1, id)),
-    match builder.build with | .ok _ => true | .error _ => false⟩
+    match built with | .ok _ => true | .error _ => false,
+    match built with | .ok model => model.accounts | .error _ => [],
+    match built with | .ok model => model.rates | .error _ => []⟩
 
 structure ModelCase where
   steps : List (Nat × Nat × Nat)

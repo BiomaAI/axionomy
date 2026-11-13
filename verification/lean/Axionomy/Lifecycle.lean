@@ -1,3 +1,4 @@
+import Axionomy.Ordered
 import Axionomy.TransactionExecution
 
 /-!
@@ -12,6 +13,9 @@ proposal names each opened account; the kernel never invents identifiers.
 * A closed account must be left empty by the exchange's own effects, so closing
   never destroys anything: whatever it held was moved by an explicit effect.
 * A closed identifier may be opened again by a later exchange.
+* Accounts are kept in the order of their identifiers: an opened account takes
+  its place among them, so the accounts after an exchange are a function of
+  which accounts there are, never of the order they were opened in.
 
 The proven transition in `Transaction` does the rest unchanged: it analyzes
 the exchange against the model in which the opened accounts exist.
@@ -41,9 +45,11 @@ def openingIssues [DecidableEq AccountId] [DecidableEq Role] (cmpRole : Role →
         some (.openingShared role)
       else none
 
-/-- The model with `accounts` opened, empty. -/
-def opened (model : Model AccountId A RateId Role) (accounts : List AccountId) : Model AccountId A RateId Role :=
-  { model with accounts := model.accounts ++ accounts.map fun account => (account, []) }
+/-- The model with `accounts` opened, empty, each in its place. -/
+def opened (cmpAccount : AccountId → AccountId → Ordering) (model : Model AccountId A RateId Role)
+    (accounts : List AccountId) : Model AccountId A RateId Role :=
+  { model with
+    accounts := Ordered.ordered cmpAccount (model.accounts ++ accounts.map fun account => (account, [])) }
 
 /-- What `account` holds after the exchange's effects: its prepared balances
 if the exchange touched it, else what it held before. -/
@@ -79,7 +85,7 @@ def analyze [DecidableEq AccountId] [DecidableEq A] [DecidableEq RateId] [Decida
   | some rule =>
     match openingIssues cmpRole model rule proposal with
     | [] =>
-      let extended := opened model (boundTo cmpRole rule.opens proposal)
+      let extended := opened cmpAccount model (boundTo cmpRole rule.opens proposal)
       (Transaction.analyze cmpAccount cmpRole extended proposal).map
         (checkClosing extended.accounts (boundTo cmpRole rule.closes proposal))
     | issue :: issues => some (invalid (issue :: issues))
@@ -102,7 +108,7 @@ def apply [DecidableEq AccountId] [DecidableEq A] [DecidableEq RateId] [Decidabl
     let openedAccounts := boundTo cmpRole rule.opens proposal
     let closedAccounts := boundTo cmpRole rule.closes proposal
     let prepared ← analysis.prepared
-    let committed ← install (opened model openedAccounts).accounts prepared
+    let committed ← install (opened cmpAccount model openedAccounts).accounts prepared
     some (.ok ⟨⟨proposal, deltas⟩, openedAccounts, closedAccounts⟩,
       { model with accounts := committed.filter fun entry => decide (entry.1 ∉ closedAccounts) })
 
@@ -160,14 +166,14 @@ theorem analyze_conserves (model : Model AccountId A RateId Role) (proposal : Pr
     cases issues : openingIssues cmpRole model found proposal with
     | nil =>
       simp only [issues] at success
-      cases inner : Transaction.analyze cmpAccount cmpRole (opened model (boundTo cmpRole found.opens proposal)) proposal with
+      cases inner : Transaction.analyze cmpAccount cmpRole (opened cmpAccount model (boundTo cmpRole found.opens proposal)) proposal with
       | none => simp [inner] at success
       | some result =>
         simp only [inner, Option.map_some, Option.some.injEq] at success
         subst success
         exact checkClosing_conserves _ _ _ _
           (TransactionExecution.analysis_conserves cmpAccount cmpRole
-            (opened model (boundTo cmpRole found.opens proposal)) proposal result inner)
+            (opened cmpAccount model (boundTo cmpRole found.opens proposal)) proposal result inner)
     | cons issue rest =>
       simp only [issues, Option.some.injEq] at success
       subst success
@@ -195,7 +201,7 @@ theorem rejection_atomic (model after : Model AccountId A RateId Role) (proposal
         cases prepared : analysis.prepared with
         | none => simp [apply, analyzed, assessed, rule, prepared] at rejected
         | some staged =>
-          cases installed : install (opened model (boundTo cmpRole found.opens proposal)).accounts staged <;>
+          cases installed : install (opened cmpAccount model (boundTo cmpRole found.opens proposal)).accounts staged <;>
             simp [apply, analyzed, assessed, rule, prepared, installed] at rejected
 
 /-- Every receipt conserves every declared invariant, and the invariants are unchanged. -/
@@ -218,7 +224,7 @@ theorem apply_conserves (model : Model AccountId A RateId Role) (proposal : Prop
         cases prepared : analysis.prepared with
         | none => simp [apply, analyzed, assessed, rule, prepared] at success
         | some staged =>
-          cases installed : install (opened model (boundTo cmpRole found.opens proposal)).accounts staged with
+          cases installed : install (opened cmpAccount model (boundTo cmpRole found.opens proposal)).accounts staged with
           | none => simp [apply, analyzed, assessed, rule, prepared, installed] at success
           | some committed =>
             simp only [apply, analyzed, assessed, rule, prepared, installed, Option.bind_eq_bind,
@@ -278,7 +284,7 @@ theorem apply_opens_new (model : Model AccountId A RateId Role) (proposal : Prop
         cases prepared : analysis.prepared with
         | none => simp [apply, analyzed, assessed, rule, prepared] at success
         | some staged =>
-          cases installed : install (opened model (boundTo cmpRole found.opens proposal)).accounts staged with
+          cases installed : install (opened cmpAccount model (boundTo cmpRole found.opens proposal)).accounts staged with
           | none => simp [apply, analyzed, assessed, rule, prepared, installed] at success
           | some committed =>
             simp only [apply, analyzed, assessed, rule, prepared, installed, Option.bind_eq_bind,
@@ -287,13 +293,15 @@ theorem apply_opens_new (model : Model AccountId A RateId Role) (proposal : Prop
             exact opening_absent cmpRole model found proposal
               (applicable_opening cmpAccount cmpRole model proposal analysis found analyzed rule accounts deltas assessed)
 
-/-- After an exchange, the accounts are exactly those before it and those it
-opened, less those it closed, in that order. -/
-theorem apply_accounts (model : Model AccountId A RateId Role) (proposal : Proposal AccountId RateId Role)
+/-- After an exchange, the accounts are those before it and those it opened,
+in the order of their identifiers, less those it closed. -/
+theorem apply_keys (model : Model AccountId A RateId Role) (proposal : Proposal AccountId RateId Role)
     (receipt : Receipt AccountId A RateId Role) (after : Model AccountId A RateId Role)
     (success : apply cmpAccount cmpRole model proposal = some (.ok receipt, after)) :
     after.accounts.map Prod.fst =
-      (model.accounts.map Prod.fst ++ receipt.opened).filter fun account => decide (account ∉ receipt.closed) := by
+      ((Ordered.ordered cmpAccount
+          (model.accounts ++ receipt.opened.map fun account => (account, []))).map Prod.fst).filter
+        fun account => decide (account ∉ receipt.closed) := by
   cases analyzed : analyze cmpAccount cmpRole model proposal with
   | none => simp [apply, analyzed] at success
   | some analysis =>
@@ -307,17 +315,41 @@ theorem apply_accounts (model : Model AccountId A RateId Role) (proposal : Propo
         cases prepared : analysis.prepared with
         | none => simp [apply, analyzed, assessed, rule, prepared] at success
         | some staged =>
-          cases installed : install (opened model (boundTo cmpRole found.opens proposal)).accounts staged with
+          cases installed : install (opened cmpAccount model (boundTo cmpRole found.opens proposal)).accounts staged with
           | none => simp [apply, analyzed, assessed, rule, prepared, installed] at success
           | some committed =>
             simp only [apply, analyzed, assessed, rule, prepared, installed, Option.bind_eq_bind,
               Option.bind_some, Option.some.injEq, Prod.mk.injEq, Except.ok.injEq] at success
             obtain ⟨rfl, rfl⟩ := success
             have keys := install_keys _ staged committed installed
-            simp [opened, Function.comp_def] at keys
+            simp [opened] at keys
             dsimp only
             rw [← keys, List.filter_map]
             rfl
+
+/-- After an exchange, the accounts are exactly those before it and those it
+opened, less those it closed. -/
+theorem apply_accounts (model : Model AccountId A RateId Role) (proposal : Proposal AccountId RateId Role)
+    (receipt : Receipt AccountId A RateId Role) (after : Model AccountId A RateId Role)
+    (success : apply cmpAccount cmpRole model proposal = some (.ok receipt, after)) :
+    (after.accounts.map Prod.fst).Perm
+      ((model.accounts.map Prod.fst ++ receipt.opened).filter fun account => decide (account ∉ receipt.closed)) := by
+  rw [apply_keys cmpAccount cmpRole model proposal receipt after success]
+  apply List.Perm.filter
+  have keys := (Ordered.ordered_perm cmpAccount
+    (model.accounts ++ receipt.opened.map fun account => (account, []))).map Prod.fst
+  simpa [Function.comp_def] using keys
+
+/-- After an exchange, the accounts are in the order of their identifiers,
+whatever order they were in before it and whatever it opened. -/
+theorem apply_ordered (lawful : Ordered.Lawful cmpAccount) (model : Model AccountId A RateId Role)
+    (proposal : Proposal AccountId RateId Role)
+    (receipt : Receipt AccountId A RateId Role) (after : Model AccountId A RateId Role)
+    (success : apply cmpAccount cmpRole model proposal = some (.ok receipt, after)) :
+    (after.accounts.map Prod.fst).Pairwise fun left right => cmpAccount left right ≠ .gt := by
+  rw [apply_keys cmpAccount cmpRole model proposal receipt after success]
+  apply List.Pairwise.filter
+  exact List.pairwise_map.mpr (Ordered.ordered_pairwise lawful _)
 
 /-- An applicable exchange leaves nothing in the accounts it closes: whatever
 they held was moved by its own effects, so closing destroys nothing. -/
@@ -329,11 +361,11 @@ theorem applicable_closes_empty (model : Model AccountId A RateId Role) (proposa
     (assessed : analysis.assessment = .applicable accounts deltas)
     (staged : List (AccountId × Balances A)) (prepared : analysis.prepared = some staged) :
     ∀ account ∈ boundTo cmpRole rule.closes proposal,
-      remaining (opened model (boundTo cmpRole rule.opens proposal)).accounts staged account = [] := by
+      remaining (opened cmpAccount model (boundTo cmpRole rule.opens proposal)).accounts staged account = [] := by
   have quiet := applicable_opening cmpAccount cmpRole model proposal analysis rule analyzed found accounts deltas assessed
   unfold analyze at analyzed
   simp only [found, quiet] at analyzed
-  cases inner : Transaction.analyze cmpAccount cmpRole (opened model (boundTo cmpRole rule.opens proposal)) proposal with
+  cases inner : Transaction.analyze cmpAccount cmpRole (opened cmpAccount model (boundTo cmpRole rule.opens proposal)) proposal with
   | none => simp [inner] at analyzed
   | some result =>
     simp only [inner, Option.map_some, Option.some.injEq] at analyzed

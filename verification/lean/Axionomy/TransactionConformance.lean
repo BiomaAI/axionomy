@@ -1,3 +1,4 @@
+import Axionomy.Ordered
 import Lean
 import Axionomy.Lifecycle
 import Axionomy.Execution
@@ -90,7 +91,8 @@ def scenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : String
     (rawRule : Rule) (proposal : Proposal) (invariants : List (Transaction.Invariant Nat) := []) : Json :=
   let rule := normalize rawRule
   let before := before.map fun (id, entries) => (id, Basket.canonical entries)
-  let model : Model := ⟨before, [(7, rule)], invariants⟩
+  -- Built as the kernel builds an economy: its accounts in their order.
+  let model : Model := ⟨Ordered.ordered compare before, [(7, rule)], invariants⟩
   let expected := match Lifecycle.analyze compare compare model proposal, Lifecycle.apply compare compare model proposal with
     | some analyzed, some (applied, after) => Json.mkObj [
         ("assessment", assessment analyzed.assessment), ("after", accounts after.accounts),
@@ -175,7 +177,8 @@ def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json :=
 def replayScenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : String)
     (before : List (Nat × List (Nat × Nat))) (rule : Rule) (actions : List Proposal)
     (invariants : List (Transaction.Invariant Nat) := []) : Json :=
-  let model : Model := ⟨before.map (fun (id, entries) => (id, Basket.canonical entries)), [(7, normalize rule)], invariants⟩
+  let model : Model := ⟨Ordered.ordered compare (before.map (fun (id, entries) => (id, Basket.canonical entries))),
+    [(7, normalize rule)], invariants⟩
   let expected := match Execution.replay (Lifecycle.apply compare compare) model actions with
     | none => tagged "panic"
     | some (result, after) => Json.mkObj [("after", accounts after.accounts),

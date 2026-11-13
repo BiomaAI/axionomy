@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-/// Accounts in the order they were created.
+/// Accounts in the order of their identifiers.
 ///
 /// Every part is persistent and shared between forks: identifiers and
 /// holdings live in 32-way trees indexed by creation slot, and a persistent
@@ -21,6 +21,9 @@ pub(crate) struct Accounts<AccountId, A> {
     ids: Slots<Option<AccountId>>,
     holdings: Slots<Option<Arc<Account<A>>>>,
     live: usize,
+    /// No live identifier is greater: an account greater than it opens in
+    /// the next slot and keeps the slots in order.
+    greatest: Option<AccountId>,
 }
 
 impl<AccountId, A> Accounts<AccountId, A>
@@ -52,14 +55,17 @@ where
 
 impl<AccountId, A> Accounts<AccountId, A>
 where
-    AccountId: Clone + Eq + Hash,
+    AccountId: Clone + Ord + Hash,
 {
-    /// Accounts with distinct identifiers, in order.
+    /// Accounts with distinct identifiers, kept in their order.
     ///
     /// # Panics
     ///
     /// If an identifier repeats; the builder rejects that first.
     pub(crate) fn new(accounts: impl IntoIterator<Item = (AccountId, Arc<Account<A>>)>) -> Self {
+        let mut accounts: Vec<_> = accounts.into_iter().collect();
+        accounts.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+        let greatest = accounts.last().map(|(id, _)| id.clone());
         let (ids, holdings): (Vec<_>, Vec<_>) = accounts
             .into_iter()
             .map(|(id, holder)| (Some(id), Some(holder)))
@@ -77,16 +83,33 @@ where
             live: ids.len(),
             ids: Slots::new(ids),
             holdings: Slots::new(holdings),
+            greatest,
         }
     }
 
-    /// Adds an account after every existing one.
+    /// Adds an account in its place: in the next slot when it is greater
+    /// than every account, and otherwise by laying the accounts out again.
     ///
     /// # Panics
     ///
     /// If the account exists; the kernel opens only accounts it has checked
     /// are absent.
     pub(crate) fn open(&mut self, id: AccountId, holder: Arc<Account<A>>) {
+        if self
+            .greatest
+            .as_ref()
+            .is_some_and(|greatest| id < *greatest)
+        {
+            assert!(!self.contains(&id), "only absent accounts are opened");
+            *self = Self::new(
+                self.iter()
+                    .map(|(id, holder)| (id.clone(), Arc::clone(holder)))
+                    .chain([(id, holder)])
+                    .collect::<Vec<_>>(),
+            );
+            return;
+        }
+        self.greatest = Some(id.clone());
         let slot = self.ids.len();
         assert!(
             self.index.insert(id.clone(), slot).is_none(),
@@ -665,20 +688,21 @@ mod tests {
     }
 
     #[test]
-    fn accounts_open_close_and_reopen_in_creation_order() {
+    fn accounts_open_close_and_reopen_in_their_order() {
         let holder = |amount| {
             Arc::new(Account::<u8>::new(
                 [(0, crate::Quantity::new(amount))].into(),
             ))
         };
-        let mut accounts = Accounts::new([(1_u32, holder(1)), (2, holder(2))]);
+        let mut accounts = Accounts::new([(2_u32, holder(2)), (1, holder(1))]);
         let fork = accounts.clone();
         accounts.open(3, holder(3));
         accounts.close(&1);
         assert!(!accounts.contains(&1));
+        // Opened below the greatest account, it takes its place in order.
         accounts.open(1, holder(4));
         let order: Vec<_> = accounts.iter().map(|(id, _)| *id).collect();
-        assert_eq!(order, [2, 3, 1]);
+        assert_eq!(order, [1, 2, 3]);
         assert_eq!(
             accounts.get(&1).unwrap().balance(&0),
             crate::Quantity::new(4)
@@ -693,7 +717,7 @@ mod tests {
         let order: Vec<_> = accounts.iter().map(|(id, _)| *id).collect();
         assert_eq!(
             order,
-            [2, 3, 1, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199]
+            [1, 2, 3, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199]
         );
         assert!(accounts.ids.len() < 64, "closed slots are compacted away");
     }

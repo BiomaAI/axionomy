@@ -463,10 +463,11 @@ duplicate asset identifiers, remove zero quantities, and accept quantities only
 as decimal strings below `2²⁵⁶`. Invalid serialized input cannot construct a looser economy
 than ordinary Rust input.
 
-Semantic maps use `IndexMap`: iteration, diagnostics, and direct Serde output
-preserve stable insertion order without requiring every user ontology to
-implement serialization-specific ordering. When semantic identity must ignore
-construction order, `state_key` explicitly sorts account, asset, and quantity
+An economy keeps its accounts and rates in the order of their identifiers,
+however they were written or opened (D-051), so iteration, diagnostics, and
+direct Serde output depend only on which accounts and rates it holds. Other
+semantic maps use `IndexMap` and keep insertion order. When semantic identity
+must ignore construction order, `state_key` explicitly sorts account, asset, and quantity
 tuples; `state_fingerprint` hashes that canonical logical key for compact
 model-scoped caches. Neither stable presentation nor a 64-bit fingerprint is a
 substitute for validation, trace replay, collision-safe durable identity, or a
@@ -2235,6 +2236,24 @@ minimax with alpha-beta. The samples become packages built from these
 primitives, and `Problem`, `Registry`, `Study` and `axionomy-study` retire
 once every sample experiment reproduces its study's outcomes from its
 package alone.
+
+### D-051: An economy's order is its identifiers' order
+
+Decided with P7. An economy keeps its accounts and its rates in the order of
+their identifiers, never in the order they were written or opened: the
+builder orders both, and an exchange that opens an account puts it in its
+place (`Ordered.lean`, `Lifecycle.lean`). Before this, accounts and rates
+iterated in creation order while the store, which keys everything by
+identifier, read them back in identifier order, so a policy or a search could
+see the same point two ways, and decide differently, depending on whether
+the engine had the point in memory or read it from disk. Lean now proves that
+a built model is the same whatever order its accounts and rates were added
+in (`build_order_independent`) and that the accounts after any exchange are
+those before and those it opened, less those it closed, in order
+(`apply_accounts`, `apply_ordered`); the conformance fixtures were
+regenerated from it. Opening an account greater than every account costs
+what it did; opening one below lays the accounts out again, as compaction
+already does.
 
 ## 16. Success criteria
 

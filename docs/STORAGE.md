@@ -78,8 +78,10 @@ slot, and a persistent hash trie from identifier to slot. A fork copies a few
 pointers; replacing, opening or closing an account copies one root-to-leaf
 path, in place when nothing else shares it; a closed account leaves an empty
 slot until more slots are empty than full, when the accounts are compacted.
-Accounts keep the order they were created in, so every serialized artifact
-stayed byte for byte what it was before the index changed.
+Slots are kept in the order of the accounts' identifiers (D-051): an account
+greater than every account opens in the next slot, and one below lays the
+accounts out again, so an economy iterates, serializes and is stored in one
+order, the order the store reads it back in.
 
 The kernel does not produce content hashes. Problem ontologies are Rust types
 with `Ord` and `Hash` but no canonical byte encoding, and a canonical root

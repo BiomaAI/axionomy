@@ -17,6 +17,7 @@ import Axionomy.Lifecycle
 import Axionomy.ModelConstruction
 import Axionomy.MulDiv
 import Axionomy.Observations
+import Axionomy.Ordered
 import Axionomy.OrderedEffects
 import Axionomy.Quantity
 import Axionomy.RateConstruction

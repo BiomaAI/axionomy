@@ -326,12 +326,16 @@ impl<O: Ontology> EconomyBuilder<O> {
         self
     }
 
-    pub fn build(self) -> ModelBuildResult<O> {
+    /// The economy, its accounts and rates in the order of their
+    /// identifiers, however they were added: an economy is the same economy
+    /// whichever order it was written in, and reads the same once stored.
+    pub fn build(mut self) -> ModelBuildResult<O> {
         if !self.issues.is_empty() {
             return Err(ModelBuildError {
                 issues: self.issues,
             });
         }
+        self.rates.sort_unstable_keys();
         Ok(Economy {
             accounts: Accounts::new(
                 self.accounts
@@ -491,6 +495,8 @@ impl<O: Ontology> Economy<O> {
             .map_or(Quantity::ZERO, |account| account.balance(asset))
     }
 
+    /// The accounts, in the order of their identifiers, however they were
+    /// added or opened.
     pub fn accounts(&self) -> impl Iterator<Item = (&O::Account, &Account<O::Asset>)> {
         self.accounts
             .iter()
@@ -501,6 +507,7 @@ impl<O: Ontology> Economy<O> {
         self.rates.get(id)
     }
 
+    /// The rates' identifiers, in their order.
     pub fn rate_ids(&self) -> impl Iterator<Item = &O::Rate> {
         self.rates.keys()
     }
@@ -1748,12 +1755,16 @@ mod construction_conformance {
     type Builder = EconomyBuilder<Test>;
 
     #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct Snapshot {
         accounts: Vec<(u64, u64)>,
         rates: Vec<(u64, u64)>,
         invariants: Vec<u64>,
         issues: Vec<(u64, u64)>,
         accepted: bool,
+        /// The built model's accounts and rates, in their identifiers' order.
+        built_accounts: Vec<(u64, u64)>,
+        built_rates: Vec<(u64, u64)>,
     }
 
     #[derive(Debug, Deserialize)]
@@ -1870,7 +1881,7 @@ mod construction_conformance {
                                         holder.balances().quantity(&Asset(0)).to_u64()
                                     ))
                                     .collect::<Vec<_>>(),
-                                snapshot.accounts
+                                snapshot.built_accounts
                             );
                             assert_eq!(
                                 model
@@ -1884,7 +1895,7 @@ mod construction_conformance {
                                             .to_u64()
                                     ))
                                     .collect::<Vec<_>>(),
-                                snapshot.rates
+                                snapshot.built_rates
                             );
                             assert_eq!(
                                 model
