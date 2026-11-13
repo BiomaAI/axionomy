@@ -1,22 +1,23 @@
 //! Connect Four as a package: its boards as `connect-four` economies, Micro
 //! the compact 4×4 board and Showcase and Stress the standard 7×6 one; its
 //! legal and tactical moves; Red's win as the goal; each player's terminal
-//! value as an objective; and, for every instance, the study's three games
+//! value as an objective; and, for every instance, the sample's three games
 //! and an experiment comparing them.
 //!
 //! Every game is played turn by turn, with no Nature: every turn is a
 //! choice. Red searches each of its drops by Monte Carlo tree search over
-//! the tactical moves, simulating as the study's players do, with the
+//! the tactical moves, simulating as the Rust players do, with the
 //! search's own tickets; Yellow, who also takes every drop's adjudication,
 //! searches alike in self-play, or drops nearest the center, or as a
 //! depth-five alpha-beta search scores. The search of the game's `k`th turn
-//! is seeded with the study's seed plus `k`, as the study seeds it, and
-//! searches as many iterations as the study gives a move at that size. How
+//! is seeded with the sample's seed plus `k`, as the Rust game seeds it,
+//! and searches as many iterations as the Rust game gives a move at that
+//! size. How
 //! many is Red's strength, its player's own, so the games are named by it,
 //! the same game at every size: `connect-four/mcts-<iterations>/<game>`,
 //! where the game is `self-play`, `center-opponent` or `search-opponent`,
-//! and each instance's experiment plays the games of the strength its study
-//! gives. Its view draws the board, its pieces and the tactics of the
+//! and each instance's experiment plays the games of the strength its Rust
+//! games give. Its view draws the board, its pieces and the tactics of the
 //! player to move.
 
 use crate::{
@@ -34,7 +35,7 @@ use axionomy_store::Checkpoints;
 const SCRIPT: &str = include_str!("../../scripts/connect-four.rhai");
 const VIEW: &str = include_str!("../../scripts/connect-four-view.rhai");
 
-/// The seed of the study's default request.
+/// The seed the sample's Rust games are played with.
 const SEED: u64 = 17;
 /// How deep a search's simulations look, counted from the position it
 /// searches.
@@ -87,8 +88,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         objectives.push(objective);
     }
 
-    // The study's iterations per move at its default budget of 128: Micro's
-    // clamped to at most 64, Showcase's an eighth and Stress's a quarter.
+    // Red's iterations per move, as the Rust games give them an effort of
+    // 128: Micro's clamped to at most 64, Showcase's an eighth and Stress's a quarter.
     for (instance, initial, iterations) in [
         ("micro", connect_four::initial(), 64),
         ("showcase", connect_four::initial_standard(), 16),

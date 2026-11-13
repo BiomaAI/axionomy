@@ -26,10 +26,6 @@ use std::ops::ControlFlow;
 pub mod expedition;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Mission;
 
 const HORIZON: usize = 12;
 

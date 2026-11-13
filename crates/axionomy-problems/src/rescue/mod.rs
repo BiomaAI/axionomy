@@ -23,10 +23,6 @@ use axionomy_search::{
 pub mod incident;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Rescue;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Location {

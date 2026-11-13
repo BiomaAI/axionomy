@@ -73,11 +73,11 @@ match.
 - `mod.rs` is the model: the Micro rescue, its Nature, policies, scenario
   evaluation and Monte Carlo.
 - `incident/` is the Showcase and Stress incident, an ontology of its own
-  laid out the same way: its model in `mod.rs`, the documents of its studies
-  in `study.rs`, and its presentation in `view.rs`.
-- `study.rs` is `Rescue`, the rescue's `axionomy_study::Problem`: its catalog
-  entry, strategies and the documents a study holds, each derived by replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+  laid out the same way: its model in `mod.rs`, and its scripts
+  `scripts/incident.rhai` and `scripts/incident-view.rhai`.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/rescue.rhai`
+  and `scripts/rescue-view.rhai`.
 
 [`examples/rescue.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/rescue.rs) runs it:
 

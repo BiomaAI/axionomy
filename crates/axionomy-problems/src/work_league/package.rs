@@ -1,11 +1,11 @@
 //! The Autonomous Work League as a package. Every worker holds its policy,
-//! so each field the study plays is an economy of its own: an instance's
+//! so each field the league plays is an economy of its own: an instance's
 //! ref, `work-league/<instance>`, holds the mixed field, the catalog's
 //! default, and `work-league/<instance>/<document>` the throughput and
 //! sustainable fields, from which those documents' arms start. Contract
 //! value, jobs completed and residual waste, summed over the workers, are
 //! the objectives, and each instance has an experiment comparing its fields.
-//! Its view ranks the workers on leaderboards as the study's documents do.
+//! Its view ranks the workers on leaderboards, replayed from each step.
 //!
 //! Micro is the serial fixture: each turn runs until its job is done, which
 //! takes a count of attempts the economy does not hold, and a steward's
@@ -31,7 +31,7 @@ use axionomy_store::{Checkpoints, RefPath};
 const SCRIPT: &str = include_str!("../../scripts/work-league.rhai");
 const VIEW: &str = include_str!("../../scripts/work-league-view.rhai");
 
-/// The seed of the study's default request, which keys Nature's tickets.
+/// The seed the sample's Rust league runs with, which keys Nature's tickets.
 const SEED: u64 = 17;
 
 /// The most turns a season takes: at each of Stress's 79 clock readings,
@@ -39,7 +39,7 @@ const SEED: u64 = 17;
 /// decisions and the tick, and then the season's end.
 const TURNS: u64 = 79 * (24 + 4 + 4 + 1) + 1;
 
-/// The documents the study gives, each the field its workers hold.
+/// The league's fields, each the policies its workers hold.
 fn fields() -> [(&'static str, [Policy; 4]); 3] {
     [
         ("mixed-field", work_league::mixed_lineup()),
@@ -99,7 +99,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let season = work_league::league(Profile::Showcase, work_league::mixed_lineup());
     engine.keep_goal(&goal(Profile::Micro), &written(micro.goal()))?;
     engine.keep_goal(&goal(Profile::Showcase), &written(season.goal()))?;
-    // Named by the keys the study's documents report them under.
+    // Named by the keys the samples' objectives were reported under.
     let mut objectives: Vec<ObjectivePath> = Vec::new();
     for (key, function, direction) in [
         ("value", "contract_value", Maximize),

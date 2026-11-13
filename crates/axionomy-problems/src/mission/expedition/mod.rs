@@ -6,9 +6,6 @@ use axionomy::{
 };
 use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
 
-pub(super) mod study;
-mod view;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Agent {
     Scout,

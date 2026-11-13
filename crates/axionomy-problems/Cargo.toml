@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-problems"
-description = "Sample problems for Axionomy: their encodings, conformance models, studies and presentations"
+description = "Sample problems for Axionomy: their encodings, solvers, conformance models and packages"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
@@ -18,8 +18,6 @@ axionomy.workspace = true
 axionomy-engine = { workspace = true, optional = true }
 axionomy-search.workspace = true
 axionomy-store = { workspace = true, optional = true }
-axionomy-study.workspace = true
-axionomy-view.workspace = true
 postcard = { workspace = true, optional = true }
 serde.workspace = true
 thiserror.workspace = true

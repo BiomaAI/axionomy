@@ -8,10 +8,6 @@ use axionomy::{
 #[cfg(feature = "packages")]
 pub mod package;
 mod production;
-mod study;
-mod view;
-
-pub use study::Workshop;
 
 use axionomy_search::{
     SearchSolution, best_first, bfs,

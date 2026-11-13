@@ -75,9 +75,9 @@ entitlements while the remaining actors respond to changed market conditions.
   actors, the Micro Market Day, counterfactuals and price attribution.
 - `season.rs` builds the Showcase and Stress seasons: repeated production,
   consumption and investment over the same exact AMM.
-- `study.rs` is `Amm`, the market's `axionomy_study::Problem`: its catalog
-  entry, strategies and the documents a study holds, each derived by replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/amm.rhai`
+  and `scripts/amm-view.rhai`.
 
 [`examples/amm.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/amm.rs) runs it:
 

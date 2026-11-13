@@ -14,10 +14,6 @@ use std::collections::HashSet;
 pub mod execution;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Scheduling;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Job {

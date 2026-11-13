@@ -1,8 +1,8 @@
 # axionomy-problems
 
 Canonical closed-problem encodings for
-[Axionomy](https://github.com/BiomaAI/axionomy), and how each is studied and
-shown.
+[Axionomy](https://github.com/BiomaAI/axionomy), their solvers, and the
+packages they are written as.
 
 Problem models exercise Axionomy exclusively through its public API. They are
 reference encodings and conformance fixtures, not privileged engine semantics.
@@ -37,120 +37,68 @@ Each problem lives in one folder of `src`, named as its module (`maze`,
   require, and the pressure it puts on the API. It is also the module's
   documentation.
 - `mod.rs` is the model, with the model's own submodules beside it
-  (`maze/dynamics.rs`).
-- `study.rs` is the problem's `axionomy_study::Problem`, such as `maze::Maze`:
-  its catalog entry, its strategies and the documents a study holds, each
-  derived by replay. The catalog entry is the only copy of what each instance
-  holds and what each strategy does.
-- `view.rs` is its presentation: labels, units, scene and leaderboards.
+  (`maze/dynamics.rs`): its economy builders and its solvers, policies,
+  planners and games, written in Rust.
+- `package.rs` writes the problem's package into an engine's store, behind
+  the `packages` feature: its economies as runs under refs, its goals, its
+  Rhai scripts (`scripts/`), its strategies, its experiments and its view.
 
 Sub-ontologies such as `logistics/fleet` follow the same layout inside their
-problem's folder. A model uses neither its study nor its view, so it remains a
-pure domain encoding usable without Studio, and no viewer becomes part of a
-problem's semantics.
+problem's folder. A model uses neither its package nor its view, so it remains
+a pure domain encoding usable without the engine or Studio, and no viewer
+becomes part of a problem's semantics.
 
-`registry()` registers every problem, in catalog order, for the CLI, MCP and
-Studio. The suite's index, with its conformance matrix and instance profiles,
-is [`PROBLEMS.md`](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
+`packages()` lists every sample's package builder, in the order Studio lists
+them; `axionomy package samples` writes them all, zipped, with the
+`index.json` Studio lists them by. The suite's index, with its conformance
+matrix and instance profiles, is
+[`PROBLEMS.md`](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
 
-## Study your own problem
+## The samples as packages
 
-A problem of your own is studied the same way. Implement
-`axionomy_study::Problem`: `descriptor` gives its catalog entry, and `study`
-gives the documents of the study a `StudyKey` names, built with the runtime's
-helpers (`document` replays a trace into a view document, and `proposal`,
-`telemetry`, `simulate` and `frontier_trace` add the evidence beside it). Its
-ontology's identifiers derive `axionomy::Identifier` and implement
-`axionomy_view::Label`, with `Format` for assets, so a document can name them.
-A catalog entry declares its own family, what it exercises and its instances,
-each a path with the words people read for it; Studio, MCP and the CLI show
-those words and know nothing else about the problem. This one studies the
-smallest maze by breadth-first search alone:
+A sample's Rust code is the oracle its package is checked against.
+`tests/packages.rs` exports each package, loads it alone into a fresh store,
+runs its experiments and requires exactly what the sample's Rust code gives:
+the traces its solvers, policies, planners and games make and their values on
+every objective, the plans it keeps beside them (a legal but losing Sokoban
+plan, an unsatisfiable cover, too short a horizon) from the economies it
+starts at, and the totals its Monte Carlo fronts average. Micro is checked in
+every test run, Showcase and Stress in a release build (`--ignored`).
+`tests/views.rs` draws every run of every experiment with its package's view
+and checks each document: a frame for every step, each explained, scenes that
+join up, evidence in the snapshot it explains, and formats for the assets the
+view reads in units.
 
 ```rust
+# #[cfg(feature = "packages")] {
 use axionomy::path;
+use axionomy_engine::Engine;
 use axionomy_problems::maze;
-use axionomy_study::{
-    Capability, DocumentSpec, InstanceDescriptor, Problem, ProblemDescriptor, ProblemFamily,
-    Registry, StrategyDescriptor, StudyError, StudyKey, StudyProgress, StudyRequest, document,
-    problem_error,
-};
-use axionomy_view::ViewDocument;
+use axionomy_store::Store;
+use std::ops::ControlFlow;
 
-struct FewestMoves(ProblemDescriptor);
-
-impl Problem for FewestMoves {
-    fn descriptor(&self) -> &ProblemDescriptor {
-        &self.0
-    }
-
-    fn study(
-        &self,
-        key: &StudyKey,
-        progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, StudyError> {
-        let initial = maze::initial();
-        let route = maze::solve_bfs(&initial)
-            .ok_or_else(|| problem_error(&key.problem, "no route reaches the exit"))?;
-        let spec = DocumentSpec {
-            problem: &key.problem,
-            document: path!("breadth-first"),
-            title: "Fewest moves",
-            description: "The route with the fewest exchanges.",
-            source_label: "Fewest moves",
-        };
-        // Replays the route through the core, with no scene.
-        let document = document(
-            progress,
-            spec,
-            &initial,
-            &maze::goal(),
-            route.trace(),
-            Vec::new(),
-            |_, _| None,
-        )
-        .map_err(|error| problem_error(&key.problem, error))?;
-        Ok(vec![document])
-    }
-}
-
-let mut registry = Registry::new();
-registry.register(FewestMoves(ProblemDescriptor {
-    key: path!("fewest-moves"),
-    title: "Fewest moves".into(),
-    summary: "Reach the maze's exit in as few exchanges as possible.".into(),
-    family: ProblemFamily::new(path!("pathfinding"), "Pathfinding"),
-    default_instance: path!("smallest"),
-    instances: vec![InstanceDescriptor {
-        key: path!("smallest"),
-        label: "Smallest".into(),
-        description: "The smallest key-door maze".into(),
-    }],
-    default_strategy: path!("breadth-first"),
-    strategies: vec![StrategyDescriptor {
-        key: path!("breadth-first"),
-        label: "Breadth-first".into(),
-        description: "Tries every route one exchange longer at a time.".into(),
-        algorithm: "breadth-first search".into(),
-    }],
-    capabilities: vec![Capability::new(path!("fewest-exchanges"), "Fewest exchanges")],
-}))?;
-
-let study = registry.study(StudyRequest::new(path!("fewest-moves")))?;
-assert_eq!(study.key.instance, path!("smallest"));
-assert_eq!(study.selected().map(|document| document.frames.len()), Some(3));
+let engine = Engine::new(Store::memory()?)?;
+maze::package::write(&engine)?;
+let results = engine.run_experiment(&path!("maze/micro"), &mut |_| ControlFlow::Continue(()))?;
+let searched = results
+    .arms
+    .iter()
+    .find(|arm| arm.arm.strategy.as_str() == "maze/breadth-first")
+    .expect("the maze's experiment searches breadth first");
+let (_, exchanges) = engine.history(searched.trials[0].end)?;
+// The package's breadth-first search finds the route the Rust solver finds.
+let route = maze::solve_bfs(&maze::initial()).expect("the smallest maze has an exit");
+assert_eq!(exchanges.len(), route.trace().exchanges().len());
+# }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-`Registry::register` refuses a key already registered, so a problem can join
-the samples in `registry()` or stand in a registry of its own. Hand
-that registry to a front end: `axionomy_cli::run` or `run_from` for the CLI,
-`AxionomyMcp::new` or `stateless_http_service` for the MCP server and
-`StudioState::new` for the Studio server, each beside an
-`axionomy_engine::Engine`, and `catalog_of` and `study_in` for Studio's
-browser Worker. The `axionomy` application serves
-`registry()` (`axionomy mcp`, `axionomy studio`); an application of your own
-serves your registry with the same calls.
+A problem of your own is a package of your own, written the same way:
+record its economies as runs under refs, keep its goals, scripts, strategies,
+experiments and view as definitions, and export them with `Engine::export`
+or `axionomy package export`
+([D-048, D-049](https://github.com/BiomaAI/axionomy/blob/main/PDD.md)).
+Any sample's `package.rs` shows each step.
 
 ## Examples
 

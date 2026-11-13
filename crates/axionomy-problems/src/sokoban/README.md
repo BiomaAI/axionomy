@@ -63,9 +63,9 @@ decision quality directly inspectable.
 
 - `mod.rs` is the model: every warehouse, its moves, pushes and mechanisms,
   and the searches over them.
-- `study.rs` is `Sokoban`, the puzzle's `axionomy_study::Problem`: its catalog
-  entry, strategies and the documents a study holds, each derived by replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/sokoban.rhai`
+  and `scripts/sokoban-view.rhai`.
 
 [`examples/sokoban.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/sokoban.rs) runs it:
 

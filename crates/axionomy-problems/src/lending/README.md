@@ -95,9 +95,9 @@ period's interest to the plan; breadth-first search counts exchanges.
 - `mod.rs` is the model: the market's terms, rates and every instance, the
   search policy, the scripted liquidation and first-depositor attack, and
   the valuation views.
-- `study.rs` is `Lending`, the market's `axionomy_study::Problem`: its catalog
-  entry, strategies and the documents a study holds, each derived by replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/lending.rhai`
+  and `scripts/lending-view.rhai`.
 
 [`examples/lending.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/lending.rs) runs it:
 

@@ -69,9 +69,9 @@ each algorithm's own expansion history rather than relabeling one shared log.
   and the searches over them.
 - `dynamics.rs` adds the larger mazes' shared power, protective gear,
   persistent injuries and recovery.
-- `study.rs` is `Maze`, the maze's `axionomy_study::Problem`: its catalog
-  entry, strategies and the documents a study holds, each derived by replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/maze.rhai`
+  and `scripts/maze-view.rhai`.
 
 [`examples/maze.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/maze.rs) runs it:
 

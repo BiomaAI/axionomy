@@ -10,10 +10,6 @@ use axionomy_search::{SearchSolution, bfs, dijkstra};
 
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Lending;
 
 /// Fixed-point scale of the borrow index and every market term (10^18).
 pub const WAD: u64 = 1_000_000_000_000_000_000;

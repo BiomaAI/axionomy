@@ -525,8 +525,6 @@ dependencies = [
  "axionomy-engine",
  "axionomy-search",
  "axionomy-store",
- "axionomy-study",
- "axionomy-view",
  "criterion",
  "postcard",
  "proptest",
@@ -621,19 +619,6 @@ dependencies = [
  "serde_json",
  "wasm-bindgen",
  "web-sys",
-]
-
-[[package]]
-name = "axionomy-study"
-version = "0.1.0"
-dependencies = [
- "axionomy",
- "axionomy-search",
- "axionomy-view",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "thiserror",
 ]
 
 [[package]]

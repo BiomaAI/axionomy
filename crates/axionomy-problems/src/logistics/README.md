@@ -80,12 +80,11 @@ delivery, refueling, travel, repair, and order completion are all rates.
 - `mod.rs` is the model: the Micro vehicle and its routes, Nature, rollouts,
   Monte Carlo and MCTS planning.
 - `fleet/` is the Showcase and Stress fleet, an ontology of its own laid out
-  the same way: its model in `mod.rs`, the documents of its studies in
-  `study.rs`, and its presentation in `view.rs`.
-- `study.rs` is `Logistics`, the problem's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+  the same way: its model in `mod.rs`, and its scripts `scripts/fleet.rhai`
+  and `scripts/fleet-view.rhai`.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/logistics.rhai`
+  and `scripts/logistics-view.rhai`.
 
 [`examples/logistics.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/logistics.rs) runs it, and the
 `rollout_throughput` bench measures its long-horizon workload:

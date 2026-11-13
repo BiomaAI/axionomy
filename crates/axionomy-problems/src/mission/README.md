@@ -100,12 +100,11 @@ outcome exchanges. The selected live action is core-revalidated.
 - `mod.rs` is the model: the Micro mission, its Nature, agent views, beliefs,
   ISMCTS planning, scenario evaluation and Monte Carlo.
 - `expedition/` is the Showcase and Stress expedition, an ontology of its own
-  laid out the same way: its model in `mod.rs`, the documents of its studies
-  in `study.rs`, and its presentation in `view.rs`.
-- `study.rs` is `Mission`, the mission's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+  laid out the same way: its model in `mod.rs`, and its scripts
+  `scripts/expedition.rhai` and `scripts/expedition-view.rhai`.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/mission.rhai`
+  and `scripts/mission-view.rhai`.
 
 [`examples/mission.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/mission.rs) runs it:
 

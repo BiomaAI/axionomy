@@ -57,10 +57,9 @@ The rate book deliberately includes a malformed proposal:
   instance.
 - `production.rs` builds the Showcase and Stress workshops: contracts, the
   single workbench, tool wear, repair, upgrades and recycling.
-- `study.rs` is `Workshop`, the workshop's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/workshop.rhai`
+  and `scripts/workshop-view.rhai`.
 
 [`examples/workshop.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/workshop.rs) runs it:
 

@@ -22,10 +22,6 @@ use std::ops::ControlFlow;
 pub mod fleet;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Logistics;
 
 const REFUEL_AMOUNT: u64 = 4;
 const REPAIR_TIME: u64 = 2;

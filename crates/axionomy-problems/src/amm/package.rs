@@ -9,7 +9,7 @@
 //! its economy holds does not say which errand comes next, so its strategies
 //! are plans, `amm/day/<document>`, that follow the reserves by the pool's
 //! own law and end where the actors' goals are met. Showcase and Stress are
-//! seasons, their sunlight seeded as the study seeds it, played turn by turn
+//! seasons, their sunlight seeded as the Rust seasons seed it, played turn by turn
 //! by `amm/<document>` until the market closes. Its view carries each
 //! actor's direct contribution to the price over the trace, and ranks them.
 
@@ -29,7 +29,7 @@ use axionomy_store::Checkpoints;
 const SCRIPT: &str = include_str!("../../scripts/amm.rhai");
 const VIEW: &str = include_str!("../../scripts/amm-view.rhai");
 
-/// The seed of the study's default request, which seeds a season's
+/// The seed the sample's Rust seasons run with, which seeds a season's
 /// sunlight.
 const SEED: u64 = 17;
 
@@ -38,7 +38,7 @@ const SEED: u64 = 17;
 /// decisions and the end of its trading, and the day's close.
 const TURNS: u64 = 1 + 12 * (1 + amm::ACTORS.len() as u64 * 7 + 1);
 
-/// Each document the study gives, and the script function that plays it,
+/// Each of the market's scenarios, and the script function that plays it,
 /// a season's turn, or with `_plan` Micro's whole day.
 const DOCUMENTS: [(&str, &str); 3] = [
     ("market-day", "market_day"),
@@ -67,7 +67,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     engine.keep_goal(&path!("amm/day/met"), &written(&amm::goal()))?;
     let season = amm::initial_showcase_with_seed(SEED);
     engine.keep_goal(&path!("amm/closed"), &written(&amm::market_goal(&season)))?;
-    // Named by the keys the study's documents report them under.
+    // Named by the keys the samples' objectives were reported under.
     let mut objectives: Vec<ObjectivePath> = Vec::new();
     for (key, function, direction) in [
         ("needs", "needs", Maximize),

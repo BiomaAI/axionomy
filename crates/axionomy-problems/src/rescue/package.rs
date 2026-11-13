@@ -1,5 +1,5 @@
 //! The uncertain rescue as a package. Micro is a `rescue` economy: Nature's
-//! weighted prior, the scenario its study plays, sense-then-follow and
+//! weighted prior, the scenario Micro plays, sense-then-follow and
 //! direct-north policies, success, sensor and energy objectives, an
 //! experiment on that scenario and a Monte Carlo experiment over the prior.
 //! Showcase and Stress are `rescue/incident` economies, an ontology of their
@@ -25,10 +25,10 @@ const INCIDENT: &str = include_str!("../../scripts/incident.rhai");
 const VIEW: &str = include_str!("../../scripts/rescue-view.rhai");
 const INCIDENT_VIEW: &str = include_str!("../../scripts/incident-view.rhai");
 
-/// The seed the study plays: the incidents' scenario, and the Monte Carlo's
+/// The seed the sample's Rust runs play: the incidents' scenario, and the Monte Carlo's
 /// samples.
 const SEED: u64 = 17;
-/// How many scenarios the Micro study samples at its default budget.
+/// How many scenarios Micro's Monte Carlo samples.
 const SAMPLES: u64 = 128;
 /// The turns a Micro run may take: Nature's draw and the eight a Rust
 /// rollout may take after it. None takes more than six.
@@ -119,11 +119,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         )?,
     };
 
-    // Micro: the weighted model, and the scenario the study plays, the
+    // Micro: the weighted model, and the scenario it plays, the
     // survivor south and the sensor's seed 1, a step on from it.
     let model = rescue::uniform_uncertain();
     let scenario = rescue::instantiate(&model, Location::South, 1)
-        .expect("the study's scenario is one Nature encodes");
+        .expect("the scenario Micro plays is one Nature encodes");
     let start = recorded(engine, "rescue/micro", model)?;
     let played = engine.apply(start, &[written(&scenario)])?;
     engine.refer(&path!("rescue/micro/scenario"), played)?;
@@ -134,7 +134,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         1,
     )?;
     // Each trial draws its scenario from the prior with the ticket the
-    // study's Monte Carlo draws for the same sample.
+    // Rust Monte Carlo draws for the same sample.
     micro.experiment(engine, "rescue/micro/monte-carlo", None, SAMPLES)?;
 
     for (instance, stress) in [("showcase", false), ("stress", true)] {

@@ -1,16 +1,16 @@
 //! The hidden-information mission as a package. Micro is a `mission`
 //! economy: Nature's weighted prior over where the victim is, the sensor's
-//! seed and the hazard, the scenario its study plays, a step on from it,
+//! seed and the hazard, the scenario its seed draws, a step on from it,
 //! and success, time and medical-kit objectives. Its planner is a game as
-//! the study's receding-horizon run plays it: Nature answers the team, and
+//! the Rust receding-horizon run plays it: Nature answers the team, and
 //! the Scout chooses every public action by information-set tree search
 //! over what it sees, each iteration in a world its observations since the
 //! prior leave possible; the direct-north policy commits without looking.
-//! An experiment on the study's scenario compares them, and a Monte Carlo
-//! experiment over the prior samples the fixed policies the study's front
+//! An experiment on that scenario compares them, and a Monte Carlo
+//! experiment over the prior samples the fixed policies the Rust front
 //! compares, share-and-coordinate and direct north.
 //! Showcase and Stress are `mission/expedition` economies, an ontology of
-//! its own whose hidden sites and hazard the study's seed sets, so their
+//! its own whose hidden sites and hazard the sample's seed sets, so their
 //! goal, policies and objectives are named under `mission/expedition`: radio
 //! coordination, north-first search and rendezvous, each named for the
 //! document it gives. Every instance has an experiment comparing its
@@ -34,10 +34,10 @@ const EXPEDITION: &str = include_str!("../../scripts/expedition.rhai");
 const VIEW: &str = include_str!("../../scripts/mission-view.rhai");
 const EXPEDITION_VIEW: &str = include_str!("../../scripts/expedition-view.rhai");
 
-/// The seed of the study's default request: Micro's scenario and planning
+/// The seed the sample's Rust runs are played with: Micro's scenario and planning
 /// seeds, and the expeditions' hidden sites and hazard.
 const SEED: u64 = 17;
-/// The study's samples at its default budget, 128 clamped to at most 16:
+/// Micro's Monte Carlo samples at an effort of 128, clamped to at most 16:
 /// the planner's iterations per decision, and the scenarios its Monte Carlo
 /// samples for each fixed policy.
 const SAMPLES: u64 = 16;
@@ -103,7 +103,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             iterations: SAMPLES,
             depth: HORIZON,
             rollout: Some(micro("informed")),
-            // The study seeds its kth decision with its seed, plus k.
+            // The Rust planner seeds its kth decision with its seed, plus k.
             salt: 0,
         }],
     };
@@ -117,8 +117,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     };
     let coordinated = kept("mission/coordinated", &planner)?;
     let direct_north = kept("mission/direct-north", &policy("direct_north"))?;
-    // The fixed coordinating policy the study's front samples beside direct
-    // north; no document plays it.
+    // The fixed coordinating policy the Rust front samples beside direct
+    // north; the planner, not it, plays the `coordinated` arm.
     let share_and_coordinate = kept(
         "mission/share-and-coordinate",
         &policy("share_and_coordinate"),
@@ -132,7 +132,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             ("medical", "kit_used", Minimize),
         ],
     )?;
-    // The study plays the scenario its seed's systematic ticket draws from
+    // Micro plays the scenario its seed's systematic ticket draws from
     // the prior, sample `seed` of the sixteen.
     let model = mission::initial();
     let scenario = mission::systematic_scenario(&model, (SEED % 16) as usize);
@@ -150,8 +150,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         },
         &objectives,
     )?;
-    // The fixed policies' front, as the study samples it: each trial draws
-    // its scenario from the prior with the ticket the study's Monte Carlo
+    // The fixed policies' front, as the Rust Monte Carlo samples it: each
+    // trial draws its scenario from the prior with the ticket that Monte Carlo
     // draws for the same sample.
     experiment(
         engine,
@@ -240,7 +240,7 @@ fn recorded<O: Recordable>(
 }
 
 /// Keeps the experiment `name` on the instance its first two segments name,
-/// toward `goal` within `turns`, with `arms`, the study's seed, and
+/// toward `goal` within `turns`, with `arms`, the sample's seed, and
 /// `objectives`.
 fn experiment(
     engine: &Engine,

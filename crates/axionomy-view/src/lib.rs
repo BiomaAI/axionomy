@@ -48,7 +48,7 @@ pub mod kind {
     pub enum Measure {}
     /// A semantic class a renderer may style, such as `location` or `current`.
     pub enum Class {}
-    /// One document of a study, such as one strategy's outcome.
+    /// A document: a history drawn for people to read.
     pub enum Document {}
     /// A proposal assessed against a snapshot.
     pub enum Proposal {}
@@ -86,7 +86,7 @@ pub type ItemPath = Path<kind::Item>;
 pub type MeasurePath = Path<kind::Measure>;
 /// A semantic class, such as `location` or `search-explored`.
 pub type ClassPath = Path<kind::Class>;
-/// A document of a study, such as `a-star` or `deadlock`.
+/// A document's name, such as `point/run-…/3` for the point the engine draws.
 pub type DocumentPath = Path<kind::Document>;
 /// A proposal, such as `locked-door`.
 pub type ProposalPath = Path<kind::Proposal>;
@@ -1492,13 +1492,13 @@ pub enum SearchObservationKindView {
     Candidate,
     Incumbent,
     Prune,
-    /// A replayable document the study has recorded; bookkeeping, not search.
+    /// A replayable document recorded; bookkeeping, not search.
     Document,
 }
 
 /// A bounded, transport-neutral view of solver work. Search crates expose
 /// typed session state; the service maps it into this presentation contract so
-/// HTTP, WASM, saved studies, and Studio use identical evidence.
+/// HTTP, WASM and Studio use identical evidence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchObservationView {
     pub sequence: u64,
@@ -1544,8 +1544,8 @@ pub struct ViewDocument {
     #[serde(default)]
     pub observations: Vec<ObservationView>,
     /// Thinking: the search observations of how this outcome was chosen,
-    /// bounded and retained so a fast native study or a static Pages study is
-    /// as inspectable as a live stream.
+    /// bounded and retained so a fast run is as inspectable as a live
+    /// stream.
     #[serde(default)]
     pub thinking: Vec<SearchObservationView>,
 }

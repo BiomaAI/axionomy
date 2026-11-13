@@ -11,10 +11,6 @@ use std::collections::HashSet;
 pub mod fulfillment;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Marketplace;
 
 pub const GROSS_PAYMENT: u64 = 100;
 pub const SELLER_PROCEEDS: u64 = 80;

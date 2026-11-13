@@ -3,8 +3,8 @@
 //! credit and on-time objectives and the elapsed time, its strategies, and
 //! an experiment comparing them on each instance.
 //!
-//! The exact Pareto searches run on Micro alone, as the study runs them:
-//! timed traffic is compared over the policies it evaluates, and its study's
+//! The exact Pareto searches run on Micro alone, as the Rust bridge runs them:
+//! timed traffic is compared over the policies it evaluates, and the Rust
 //! preference for a traveller is the best of those runs by that traveller's
 //! on-time trips, priority and credit, which `pick` finds among the
 //! experiment's results.
@@ -60,7 +60,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &path!("bridge/routes"),
         &CandidateSet::Script(call("routes")),
     )?;
-    // Named by the keys the study's documents report them under.
+    // Named by the keys the samples' objectives were reported under.
     let objective =
         |key: &str| -> ObjectivePath { format!("bridge/{key}").parse().expect("a path") };
     for (key, function, direction) in [

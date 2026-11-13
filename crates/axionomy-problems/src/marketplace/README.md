@@ -87,10 +87,9 @@ ordinary replayable exchange trace, not a second market state.
   ranking and clearing.
 - `fulfillment.rs` builds the Showcase and Stress markets: funded offers
   become reservations, shipments and only then settlements.
-- `study.rs` is `Marketplace`, the market's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/marketplace.rhai`
+  and `scripts/marketplace-view.rhai`.
 
 [`examples/marketplace.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/marketplace.rs) runs it:
 

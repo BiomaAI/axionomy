@@ -7,7 +7,7 @@
 //! cooling energy as objectives. Showcase and Stress are
 //! `perishables/cold-chain` economies, an ontology of their own with its own
 //! goal, so its strategies and objectives are named under
-//! `perishables/cold-chain`: the four daily policies on the study's outage
+//! `perishables/cold-chain`: the four daily policies on the seeded outage
 //! schedule, each a plan for every day, with food saved, delivered, revenue,
 //! energy, fuel and missed obligations as objectives. Each instance has an
 //! experiment comparing its strategies, and each ontology a view of its own.
@@ -30,7 +30,7 @@ const COLD_CHAIN: &str = include_str!("../../scripts/cold-chain.rhai");
 const VIEW: &str = include_str!("../../scripts/perishables-view.rhai");
 const COLD_CHAIN_VIEW: &str = include_str!("../../scripts/cold-chain-view.rhai");
 
-/// The seed of the study's default request, which picks the day the cold
+/// The seed the sample's Rust cold chains run with, which picks the day the cold
 /// chain's outage begins.
 const SEED: u64 = 17;
 
@@ -88,7 +88,7 @@ fn micro(engine: &Engine) -> Result<(), EngineError> {
         &path!("perishables/storage-plans"),
         &CandidateSet::Script(call("storage_plans")),
     )?;
-    // Named by the keys the study's documents report them under: the outage
+    // Named by the keys the samples' objectives were reported under: the outage
     // reports claims and usable claims; the storage plans usable stock and
     // cooling energy, where usable claims are the refrigerated ones a sealed
     // plan keeps.
@@ -128,7 +128,7 @@ fn micro(engine: &Engine) -> Result<(), EngineError> {
             &pareto([&objectives[2], &objectives[1]]),
         )?,
     ];
-    // Micro's study holds seventy claims in the warehouse and thirty in the
+    // Micro holds seventy claims in the warehouse and thirty in the
     // fridge, and moves ten at a time.
     recorded(engine, "micro", perishables::initial_with_inventory(70, 30))?;
     // The outage plays until it is resolved; the storage plans are searched

@@ -7,10 +7,6 @@ use axionomy::{
 mod dynamics;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Maze;
 
 use axionomy_search::{
     SearchSolution, astar, bfs, dijkstra,

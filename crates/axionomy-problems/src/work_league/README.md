@@ -68,8 +68,6 @@ replayed snapshot.
   across the complete match.
 - Every snapshot carries all six leaderboards, and at least two different
   agents lead the final set of objectives.
-- Native SSE and browser Wasm publish each derived frame with the same
-  leaderboard state retained by the completed portable study.
 
 ## API pressure
 
@@ -89,10 +87,9 @@ replayed snapshot.
   and policies, the Micro serial fixture, and the runner.
 - `continuous.rs` is the Showcase and Stress season on the shared clock:
   leases, deadlines, activity durations and facility occupancy as laws.
-- `study.rs` is `WorkLeague`, the league's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and the six leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/work-league.rhai`
+  and `scripts/work-league-view.rhai`.
 
 [`examples/work_league.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/work_league.rs) runs it:
 

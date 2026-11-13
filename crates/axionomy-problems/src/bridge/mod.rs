@@ -12,11 +12,7 @@ use axionomy_search::{
 
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
 pub mod timed;
-mod view;
-
-pub use study::Bridge;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AgentId {

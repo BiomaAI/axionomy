@@ -15,11 +15,8 @@ use std::ops::ControlFlow;
 
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
 mod tactics;
-mod view;
 
-pub use study::ConnectFour;
 pub use tactics::{
     Opponent, TacticalEvidence, play_opponent_game, play_opponent_game_from_with_progress,
     play_opponent_game_with_progress, tactical_candidates, tactical_evidence,

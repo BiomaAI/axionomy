@@ -10,11 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "packages")]
 pub mod package;
 mod season;
-mod study;
-mod view;
 
 pub use season::{market_goal, period, seasonal_decision};
-pub use study::Amm;
 
 pub const FEE_DENOMINATOR: u64 = 1_000;
 pub const FEE_NUMERATOR: u64 = 997;

@@ -9,7 +9,7 @@
 //! branch-and-bound over the gross value a clearing forgoes, and its Pareto
 //! picks rank the exact front of the participants' utility. Showcase and
 //! Stress fund contracts that are dispatched and delivered over time,
-//! planned as the study plans them, by the same strategies at either size:
+//! planned as the Rust planner plans them, by the same strategies at either size:
 //! a beam of 24 states scored for volume, or weighted toward buyers or
 //! sellers.
 
@@ -32,7 +32,7 @@ use axionomy_store::Checkpoints;
 const SCRIPT: &str = include_str!("../../scripts/marketplace.rhai");
 const VIEW: &str = include_str!("../../scripts/marketplace-view.rhai");
 
-/// The states each depth of the study's fulfillment planner keeps.
+/// The states each depth of the Rust fulfillment planner keeps.
 const WIDTH: u64 = 24;
 /// The planner runs forty rounds, each taking the goal states of its depth
 /// and expanding the others, so a plan it keeps settles every order within
@@ -67,7 +67,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &path!("marketplace/fulfillment"),
         &CandidateSet::Script(call("fulfillment")),
     )?;
-    // Named by the keys the study's documents report them under.
+    // Named by the keys the samples' objectives were reported under.
     let objective =
         |key: &str| -> ObjectivePath { format!("marketplace/{key}").parse().expect("a path") };
     for (key, function, direction) in [
@@ -112,7 +112,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         tie: TIE,
     };
     // Every allocation on Micro's front gives its buyers 55 and its sellers
-    // 20; of equals the study takes the one the search keeps last, which
+    // 20; of equals the Rust ranking takes the one the search keeps last, which
     // gives buyer B and seller B the most.
     let pareto = |by: [&str; 3]| Strategy::Pareto {
         candidates: path!("marketplace/settlements"),

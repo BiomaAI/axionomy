@@ -6,7 +6,7 @@
 //! The goal is the instance's: the bill paid and all of its collateral
 //! free again. The strategies are the same at every size, since each
 //! experiment names the goal its arms work toward: least interest,
-//! Dijkstra's search over each closed period's interest as the study runs
+//! Dijkstra's search over each closed period's interest as the Rust sample runs
 //! it; fewest steps, breadth-first search; the over-borrowed scenario, a
 //! policy played turn by turn; and the first-depositor attack, a plan run
 //! from the instance's fresh market.
@@ -62,7 +62,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &path!("lending/moves"),
         &CandidateSet::Script(call("candidates")),
     )?;
-    // Named by the keys the study's documents report them under.
+    // Named by the keys the samples' objectives were reported under.
     let objectives: Vec<ObjectivePath> = vec![
         path!("lending/interest"),
         path!("lending/collateral"),

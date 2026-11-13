@@ -12,10 +12,6 @@ use std::collections::{BTreeMap, BinaryHeap};
 pub mod cold_chain;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Perishables;
 
 pub const DEFAULT_WAREHOUSE_CLAIMS: u64 = 7_000;
 pub const DEFAULT_FRIDGE_CLAIMS: u64 = 3_000;

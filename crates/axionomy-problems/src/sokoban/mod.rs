@@ -9,10 +9,6 @@ use axionomy_search::{SearchSolution, astar, bfs};
 
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::Sokoban;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AccountId {

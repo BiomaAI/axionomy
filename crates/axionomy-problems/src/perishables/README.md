@@ -103,12 +103,11 @@ facts and only proposes ordinary spoil exchanges.
 - `mod.rs` is the model: the Micro storage fixture, its clock, spoilage and
   outage, the `ClaimIndex` and `EffectAgenda`, and the storage plans.
 - `cold_chain/` is the Showcase and Stress cold chain, an ontology of its own
-  laid out the same way: its model in `mod.rs`, the documents of its studies
-  in `study.rs`, and its presentation in `view.rs`.
-- `study.rs` is `Perishables`, the inventory's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+  laid out the same way: its model in `mod.rs`, and its scripts
+  `scripts/cold-chain.rhai` and `scripts/cold-chain-view.rhai`.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/perishables.rhai`
+  and `scripts/perishables-view.rhai`.
 
 [`examples/perishables.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/perishables.rs) runs it:
 

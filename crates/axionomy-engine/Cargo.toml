@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-engine"
-description = "The work every Axionomy front end shares: studies, economies and runs over a store"
+description = "The work every Axionomy front end shares: economies, runs, refs, strategies and experiments over a store"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true

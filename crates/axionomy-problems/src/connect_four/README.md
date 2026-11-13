@@ -47,10 +47,9 @@ action is revalidated by the live economy.
   rates, MCTS and self-play.
 - `tactics.rs` is read-only board reasoning for opponents and evidence; every
   move it suggests is still a core exchange.
-- `study.rs` is `ConnectFour`, the game's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/connect-four.rhai`
+  and `scripts/connect-four-view.rhai`.
 
 [`examples/connect_four.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/connect_four.rs) runs it:
 

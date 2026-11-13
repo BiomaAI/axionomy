@@ -57,10 +57,9 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
   the searches over every instance.
 - `execution.rs` builds the executed Showcase and Stress job shops: queues,
   setup, shared crews, the machine failure and its repair.
-- `study.rs` is `Scheduling`, the job shop's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/scheduling.rhai`
+  and `scripts/scheduling-view.rhai`.
 
 [`examples/scheduling.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/scheduling.rs) runs it:
 

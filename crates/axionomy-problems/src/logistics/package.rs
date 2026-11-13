@@ -1,13 +1,13 @@
 //! Stochastic logistics as a package. Micro is a `logistics` economy: one
 //! vehicle with one package left to deliver, its direct and reliable route
 //! policies, its planner, and completion, delivery and elapsed-time
-//! objectives. The planner is a game as the study's receding-horizon run
+//! objectives. The planner is a game as the Rust receding-horizon run
 //! plays it: Nature draws each leg's weather from the run's seed, the
 //! vehicle takes the one move it has when it has one, and otherwise the
 //! dispatcher replans by Monte Carlo tree search over its moves and
 //! Nature's draws, simulating the reliable policy. Showcase and Stress are
 //! `logistics/fleet` economies, an ontology of their own whose orders and
-//! route tickets the study's seed sets, so their goal, policies and
+//! route tickets the sample's seed sets, so their goal, policies and
 //! objectives are named under `logistics/fleet`: the fastest-route,
 //! reliable-route and hub-relay dispatch policies, each named for the
 //! document it gives. Every instance has an experiment comparing its
@@ -31,14 +31,14 @@ const FLEET: &str = include_str!("../../scripts/fleet.rhai");
 const VIEW: &str = include_str!("../../scripts/logistics-view.rhai");
 const FLEET_VIEW: &str = include_str!("../../scripts/fleet-view.rhai");
 
-/// The seed of the study's default request: the weather Micro's runs meet,
+/// The seed the sample's Rust runs are played with: the weather Micro's runs meet,
 /// and the fleet's route tickets.
 const SEED: u64 = 17;
-/// What the study's seed is XORed with to seed the planner's searches,
+/// What the seed is XORed with to seed the planner's searches,
 /// `LOGISTIC` in ASCII, so search randomness is apart from the weather.
 const PLANNING_SALT: u64 = 0x4c4f_4749_5354_4943;
-/// The planner's iterations per decision: the study's samples at its default
-/// budget, 128 clamped to at most 16.
+/// The planner's iterations per decision: Micro's Monte Carlo samples at an
+/// effort of 128, clamped to at most 16.
 const ITERATIONS: u64 = 16;
 /// The most exchanges a Micro run takes, and how deep the planner's
 /// simulations look.
@@ -193,7 +193,7 @@ fn recorded<O: Recordable>(
 }
 
 /// Keeps the experiment `name`, every strategy run once toward `goal` from
-/// the ref of the same name with the study's seed, playing at most `turns`
+/// the ref of the same name with the sample's seed, playing at most `turns`
 /// turns, measured by `objectives`.
 fn experiment(
     engine: &Engine,

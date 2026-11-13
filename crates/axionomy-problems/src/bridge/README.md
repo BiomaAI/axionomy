@@ -60,9 +60,9 @@ asset, making the terminal economy quiescent.
   mechanisms, and the searches and proposals over every instance.
 - `timed.rs` builds the Showcase and Stress traffic: the shared clock,
   leases, occupied crossings, deadlines and the paid detour.
-- `study.rs` is `Bridge`, the bridge's `axionomy_study::Problem`: its catalog
-  entry, strategies and the documents a study holds, each derived by replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/bridge.rhai`
+  and `scripts/bridge-view.rhai`.
 
 [`examples/bridge.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/bridge.rs) runs it:
 

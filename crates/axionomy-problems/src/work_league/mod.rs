@@ -9,10 +9,6 @@ use axionomy::{
 mod continuous;
 #[cfg(feature = "packages")]
 pub mod package;
-mod study;
-mod view;
-
-pub use study::WorkLeague;
 
 /// Why a league season could not be played to its end.
 #[derive(Debug, Clone, thiserror::Error)]

@@ -5,9 +5,6 @@ use axionomy::{
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
 };
 
-pub(super) mod study;
-mod view;
-
 pub const BATCHES: [u8; 6] = [0, 1, 2, 3, 4, 5];
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Place {

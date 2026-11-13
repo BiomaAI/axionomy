@@ -43,10 +43,9 @@ tokens.
 
 - `mod.rs` is the model: every instance's universe and subsets, plain search,
   and Algorithm X.
-- `study.rs` is `ExactCover`, the problem's `axionomy_study::Problem`: its
-  catalog entry, strategies and the documents a study holds, each derived by
-  replay.
-- `view.rs` presents it: labels, units, scene and leaderboards.
+- `package.rs` writes its package: its economies under refs, goals,
+  strategies, experiments and view, whose scripts are `scripts/exact-cover.rhai`,
+  `scripts/exact-cover-algorithm-x.rhai` and `scripts/exact-cover-view.rhai`.
 
 [`examples/exact_cover.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/exact_cover.rs) runs it:
 
