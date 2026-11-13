@@ -1,25 +1,41 @@
-//! The stoichiometric workshop as a package: its instances, the script its
-//! searches call, its goal, waste, time and revenue objectives, its
-//! strategies, and an experiment comparing them on each instance.
+//! The stoichiometric workshop as a package: its instances, the scripts its
+//! searches and view call, its goal, waste, time and revenue objectives,
+//! its strategies, and an experiment comparing them on each instance.
 
 use crate::{
     package::{call, written},
     workshop::{self, Ontology},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
+    Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::Checkpoints;
 
+/// The script the searches call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/workshop.rhai");
+const VIEW: &str = include_str!("../../scripts/workshop-view.rhai");
 
 /// Writes the workshop's package into `engine`'s store, everything named
 /// under `workshop`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let view = |function| Some(call("workshop/view", function));
     let call = |function| call("workshop", function);
     engine.keep_script(&path!("workshop"), SCRIPT)?;
+    engine.keep_script(&path!("workshop/view"), VIEW)?;
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Stoichiometric workshop".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_goal(&path!("workshop/delivered"), &written(&workshop::goal()))?;
     engine.keep_candidates(
         &path!("workshop/recipes"),
