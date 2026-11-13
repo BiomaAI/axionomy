@@ -15,7 +15,7 @@
     "test:ui": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:wasm": "playwright test --config playwright.wasm.config.ts",
-    "generate": "cargo run -q --release -p axionomy-studio-server --bin export-openapi -- openapi.json && openapi-typescript openapi.json -o src/generated/api.d.ts && cargo run -q --release -p axionomy-cli --bin axionomy -- export-studies public/studies && pnpm generate:packages",
+    "generate": "cargo run -q --release -p axionomy-studio-server --bin export-openapi -- openapi.json && openapi-typescript openapi.json -o src/generated/api.d.ts && pnpm generate:packages",
     "generate:packages": "rm -rf public/packages && cargo run -q --release -p axionomy-cli --bin axionomy -- package samples public/packages"
   },
   "dependencies": {

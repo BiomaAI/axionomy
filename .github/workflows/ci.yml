@@ -47,10 +47,10 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-targets --all-features
-      # The samples' larger instances, as packages and as their views draw
-      # them, against their studies: minutes in a debug build, about two in a
-      # release build.
-      - name: Every sample package and view reproduces its larger instances
+      # The samples' larger instances: their packages against the samples'
+      # Rust code, and every run their views draw. Many minutes in a debug
+      # build, a few in a release build.
+      - name: Every sample package reproduces its larger instances, and every view draws them
         run: cargo test --release -p axionomy-problems --features packages --test packages --test views -- --ignored
       - run: cargo test --workspace --doc --all-features
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
@@ -125,7 +125,6 @@ jobs:
           pnpm build:ui
           test -f dist/index.html
           test -f dist/.nojekyll
-          test -f dist/studies/catalog.json
           test -f dist/packages/maze.zip
           find dist/assets -name '*.wasm' -size +100k | grep -q .
           grep -q '/axionomy/' dist/index.html
