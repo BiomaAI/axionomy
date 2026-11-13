@@ -1,5 +1,8 @@
-//! The store's one writer: a thread that commits many callers' batches per
-//! transaction.
+//! The store's one writer. Where threads run, a thread of its own commits
+//! many callers' batches per transaction; on WebAssembly, which has none to
+//! spare, each batch commits inline on its caller, in a transaction of its
+//! own. Either way a batch commits or fails whole, and says when it is
+//! durable.
 
 use crate::StoreError;
 use axionomy_tree::{Hash, Tree};
@@ -8,17 +11,20 @@ use std::{
     collections::HashSet,
     future::Future,
     pin::Pin,
-    sync::{Arc, Condvar, Mutex, mpsc},
+    sync::{Arc, Condvar, Mutex},
     task::{Context, Poll, Waker},
-    time::{Duration, Instant},
 };
 
-/// Batches a caller does not wait for reach disk at least this often.
-const FLUSH_INTERVAL: Duration = Duration::from_secs(1);
-/// The most batches one transaction commits.
-const GROUP: usize = 256;
-/// Batches queued before callers wait: backpressure instead of memory.
-pub(crate) const QUEUE: usize = 64;
+#[cfg(any(target_family = "wasm", test))]
+mod inline;
+#[cfg(not(target_family = "wasm"))]
+mod threaded;
+
+#[cfg(target_family = "wasm")]
+pub(crate) use inline::Writer;
+#[cfg(not(target_family = "wasm"))]
+pub(crate) use threaded::Writer;
+
 /// Node hashes remembered as stored, so writing a state looks up only the
 /// nodes it changed; forgotten wholesale past this many.
 const KNOWN_NODES: usize = 1 << 20;
@@ -98,7 +104,6 @@ impl Known {
 }
 
 trait Job: Send {
-    fn immediate(&self) -> bool;
     fn run(&mut self, txn: &mut Transaction<'_>) -> Result<(), StoreError>;
     fn complete(self: Box<Self>, result: Result<(), StoreError>);
 }
@@ -106,15 +111,21 @@ trait Job: Send {
 struct Task<T> {
     work: Option<Work<T>>,
     output: Option<T>,
-    immediate: bool,
     promise: Arc<Promise<T>>,
 }
 
-impl<T: Send> Job for Task<T> {
-    fn immediate(&self) -> bool {
-        self.immediate
-    }
+/// A job doing `work`, and the result its caller waits for.
+fn job<T: Send + 'static>(work: Work<T>) -> (Box<dyn Job>, Pending<T>) {
+    let promise = Arc::new(Promise::default());
+    let task = Task {
+        work: Some(work),
+        output: None,
+        promise: Arc::clone(&promise),
+    };
+    (Box::new(task), Pending { promise })
+}
 
+impl<T: Send> Job for Task<T> {
     fn run(&mut self, txn: &mut Transaction<'_>) -> Result<(), StoreError> {
         let work = self.work.take().expect("a job runs once");
         self.output = Some(work(txn)?);
@@ -134,108 +145,28 @@ impl<T> Drop for Task<T> {
     }
 }
 
-pub(crate) struct Writer {
-    jobs: Option<mpsc::SyncSender<Box<dyn Job>>>,
-    thread: Option<std::thread::JoinHandle<()>>,
-}
-
-impl Writer {
-    pub fn start(database: Arc<Database>) -> Self {
-        let (jobs, queue) = mpsc::sync_channel(QUEUE);
-        let thread = std::thread::Builder::new()
-            .name("axionomy-store-writer".into())
-            .spawn(move || write(&database, &queue))
-            .expect("the writer thread starts");
-        Self {
-            jobs: Some(jobs),
-            thread: Some(thread),
-        }
-    }
-
-    /// Queues `work`, waiting while the queue is full. With `immediate`, the
-    /// transaction that commits it is durable when it returns; otherwise it
-    /// reaches disk with a later durable commit, within a second.
-    pub fn submit<T: Send + 'static>(&self, immediate: bool, work: Work<T>) -> Pending<T> {
-        let promise = Arc::new(Promise::default());
-        let task = Task {
-            work: Some(work),
-            output: None,
-            immediate,
-            promise: Arc::clone(&promise),
-        };
-        if let Some(jobs) = &self.jobs {
-            // A send fails only when the writer has stopped, and dropping the
-            // task then resolves it as closed.
-            let _ = jobs.send(Box::new(task));
-        }
-        Pending { promise }
-    }
-}
-
-impl Drop for Writer {
-    fn drop(&mut self) {
-        self.jobs.take();
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
-    }
-}
-
-fn write(database: &Database, queue: &mpsc::Receiver<Box<dyn Job>>) {
-    let mut known = Known::default();
-    let mut last_durable = Instant::now();
-    let mut unflushed = false;
-    loop {
-        let first = if unflushed {
-            match queue.recv_timeout(FLUSH_INTERVAL.saturating_sub(last_durable.elapsed())) {
-                Ok(job) => job,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if flush(database).is_ok() {
-                        unflushed = false;
-                        last_durable = Instant::now();
-                    }
-                    continue;
-                }
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            }
-        } else {
-            match queue.recv() {
-                Ok(job) => job,
-                Err(_) => break,
-            }
-        };
-        let mut group = vec![first];
-        while group.len() < GROUP {
-            match queue.try_recv() {
-                Ok(job) => group.push(job),
-                Err(_) => break,
-            }
-        }
-        let durable =
-            group.iter().any(|job| job.immediate()) || last_durable.elapsed() >= FLUSH_INTERVAL;
-        let result = commit(database, &mut known, &mut group, durable);
-        match &result {
-            Ok(()) => {
-                known.committed();
-                if durable {
-                    last_durable = Instant::now();
-                    unflushed = false;
-                } else {
-                    unflushed = true;
-                }
-            }
-            Err(_) => known.aborted(),
-        }
-        for job in group {
-            job.complete(result.clone());
-        }
-    }
-    if unflushed {
-        let _ = flush(database);
-    }
-}
-
+/// Runs `group` in one write transaction, commits it, durable or not, and
+/// gives every job the outcome: all of them commit or none does. Returns
+/// whether they did.
 fn commit(
+    database: &Database,
+    known: &mut Known,
+    mut group: Vec<Box<dyn Job>>,
+    durable: bool,
+) -> bool {
+    let result = transaction(database, known, &mut group, durable);
+    match &result {
+        Ok(()) => known.committed(),
+        Err(_) => known.aborted(),
+    }
+    let committed = result.is_ok();
+    for job in group {
+        job.complete(result.clone());
+    }
+    committed
+}
+
+fn transaction(
     database: &Database,
     known: &mut Known,
     group: &mut [Box<dyn Job>],
@@ -263,7 +194,8 @@ fn flush(database: &Database) -> Result<(), StoreError> {
 }
 
 /// The result of queued work, once its transaction commits. Wait for it from
-/// a thread, or await it from async code.
+/// a thread, or await it from async code. Where the writer runs inline, the
+/// result is there when [`Store::transact`](crate::Store::transact) returns.
 #[must_use = "dropping a pending write does not cancel it; wait for it to know it committed"]
 pub struct Pending<T> {
     promise: Arc<Promise<T>>,

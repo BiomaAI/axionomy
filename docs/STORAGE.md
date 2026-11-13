@@ -272,18 +272,20 @@ Patterns these support:
 
 redb is the transaction layer for everything physical, and the only storage
 engine: there is no storage trait of our own. Where data lives is chosen with
-redb's backend, `FileBackend` or `InMemoryBackend`, and in the browser, as
-planned (D-047), a backend over the origin private file system's
-`FileSystemSyncAccessHandle`. One write transaction publishes an operation's
-nodes, its run and step records and any handle together, so a state or handle
-exists if and only if its transaction committed.
+redb's backend, `FileBackend` or `InMemoryBackend`, and in the browser a
+backend over the origin private file system's `FileSystemSyncAccessHandle`
+(D-047); `Store::on` opens a store on any of them. One write transaction
+publishes an operation's nodes, its run and step records and any handle
+together, so a state or handle exists if and only if its transaction
+committed.
 
 - **One writer, group commit.** Each store has one writer thread (where
-  threads exist; in a browser Worker the writer is planned to run each job
-  inline on the caller, D-047). Runs and MCP calls send batches over a bounded
-  channel, which applies backpressure instead of growing memory, and the
-  writer commits many batches per transaction. Nothing holds a write
-  transaction while the kernel computes.
+  threads exist; on WebAssembly the writer runs each job inline on the
+  caller, in a transaction of its own, and a job nobody waits on is durable
+  with the next one somebody does, D-047). Runs and MCP calls send batches
+  over a bounded channel, which applies backpressure instead of growing
+  memory, and the writer commits many batches per transaction. Nothing
+  holds a write transaction while the kernel computes.
 - **Idempotent writes.** Nodes are inserted by hash, so retries and duplicates
   are harmless, and the initial state of ten thousand runs is stored once.
 - **Merge later.** Any writer, a thread, a process, a machine or a server,
@@ -304,9 +306,9 @@ exists if and only if its transaction committed.
   pins, tags and metrics and every node under its states. A package is such
   a store, compacted (`Store::compact`), and `Store::from_bytes` opens a
   store file held in memory, such as a package fetched or unzipped.
-- **Tests** use `InMemoryBackend`: the same code, with storage in memory. The
-  browser does not use the store yet; it is planned to, in memory or on the
-  origin private file system (D-047).
+- **Tests** use `InMemoryBackend`: the same code, with storage in memory.
+  Studio's browser Worker keeps its store on the origin private file system,
+  or in memory where it cannot (D-047).
 
 ## Reading
 

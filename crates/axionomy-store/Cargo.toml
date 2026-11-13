@@ -19,6 +19,11 @@ redb.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 
+# Without an operating system, randomness for a new store's prefix comes from
+# the browser's `crypto.getRandomValues`.
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
+
 [dev-dependencies]
 criterion.workspace = true
 

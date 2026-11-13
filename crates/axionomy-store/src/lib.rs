@@ -26,8 +26,9 @@ pub use writer::{Pending, Transaction};
 use axionomy::{Economy, OntologyPath};
 use axionomy_tree::Hash;
 use records::{FORMAT, GROUPS, META, RUNS, STORE_PREFIX};
-use redb::{Database, ReadableDatabase, ReadableTable, backends::InMemoryBackend};
+use redb::{Database, ReadableDatabase, ReadableTable, StorageBackend, backends::InMemoryBackend};
 use std::{
+    any::TypeId,
     path::Path,
     sync::{
         Arc,
@@ -45,7 +46,9 @@ pub enum Durability {
     Immediate,
     /// Durable with the writer's next durable commit, within a second: for
     /// batches nobody waits on. A crash loses at most that tail, never
-    /// consistency.
+    /// consistency. Where the writer runs inline (on WebAssembly, which has
+    /// no threads and so no timer), with the next `Immediate` write or when
+    /// the store closes.
     Eventual,
 }
 
@@ -127,8 +130,9 @@ storage_errors!(
 
 /// Runs, their states and what organizes them, in one redb database.
 ///
-/// Clones share the database and its one writer thread; the last clone
-/// dropped flushes and stops the writer.
+/// Clones share the database and its one writer; the last clone dropped
+/// flushes and stops the writer. The writer is a thread of its own or, on
+/// WebAssembly, runs each write inline on its caller.
 #[derive(Clone)]
 pub struct Store {
     inner: Arc<Inner>,
@@ -154,17 +158,29 @@ impl Store {
         Self::with(Database::create(path)?, false)
     }
 
+    /// Opens the store a redb `backend` holds, creating it when the backend
+    /// is empty: memory, or wherever else redb can keep a database, such as
+    /// a browser's origin private file system.
+    ///
+    /// # Panics
+    ///
+    /// When creating a store and the platform provides no randomness for
+    /// its identifier prefix.
+    pub fn on<B: StorageBackend>(backend: B) -> Result<Self, StoreError> {
+        let in_memory = TypeId::of::<B>() == TypeId::of::<InMemoryBackend>();
+        Self::with(Database::builder().create_with_backend(backend)?, in_memory)
+    }
+
     /// A store kept in memory holding the store file `bytes`, such as a
     /// package fetched or unzipped: changes stay in memory.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, StoreError> {
-        use redb::StorageBackend;
         let backend = InMemoryBackend::new();
         let length = u64::try_from(bytes.len()).expect("a length fits in 64 bits");
         backend
             .set_len(length)
             .and_then(|()| backend.write(0, bytes))
             .map_err(redb::StorageError::from)?;
-        Self::with(Database::builder().create_with_backend(backend)?, true)
+        Self::on(backend)
     }
 
     /// Compacts the store file at `path`, which no store may have open, so
@@ -175,14 +191,11 @@ impl Store {
 
     /// A store kept in memory: the same store, gone when dropped.
     pub fn memory() -> Result<Self, StoreError> {
-        Self::with(
-            Database::builder().create_with_backend(InMemoryBackend::new())?,
-            true,
-        )
+        Self::on(InMemoryBackend::new())
     }
 
-    /// Whether the store is kept in memory, so everything in it is gone once
-    /// its last clone is dropped.
+    /// Whether the store is kept in redb's memory backend, so everything in
+    /// it is gone once its last clone is dropped.
     pub fn in_memory(&self) -> bool {
         self.inner.in_memory
     }

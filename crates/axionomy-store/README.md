@@ -2,11 +2,14 @@
 
 `axionomy-store` keeps what Axionomy runs produce: states, the exchanges
 between them, and the tags, groups, metrics and refs that organize them, in
-one [redb](https://crates.io/crates/redb) database, on disk or in memory, and
-as planned (D-047) in a browser Worker, in memory or on the origin private
-file system. It stores economies of any `axionomy::Ontology` whose identifiers
-serialize: a problem's own Rust types, or paths (`axionomy::paths::Paths`). A
-run records its ontology's name and is read back only as that ontology.
+one [redb](https://crates.io/crates/redb) database: in a file
+(`Store::open`), in memory (`Store::memory`, or `Store::from_bytes` over a
+store file's bytes), or on any other redb backend (`Store::on`), such as
+the origin private file system of Studio's browser Worker (D-047). It
+builds natively and for `wasm32-unknown-unknown`. It stores economies of any
+`axionomy::Ontology` whose identifiers serialize: a problem's own Rust
+types, or paths (`axionomy::paths::Paths`). A run records its ontology's
+name and is read back only as that ontology.
 
 The kernel decides; the store remembers. A state is what replaying a trace
 produces, so stored states are a cache of replay and replay verifies them.
@@ -21,7 +24,10 @@ produces, so stored states are a cache of replay and replay verifies them.
   decides whether the steps are kept.
 - **One writer** commits many callers' batches per transaction. Each write
   states its durability: `Immediate` for callers that wait, `Eventual` for
-  batches nobody waits on, durable within a second.
+  batches nobody waits on, durable within a second. On WebAssembly, which
+  has no threads, the writer runs each batch inline on its caller, in a
+  transaction of its own, and an `Eventual` batch is durable with the next
+  `Immediate` one or when the store closes.
 - **Tags, metrics, groups and refs** organize runs, whatever produced them:
   search, simulation, evaluation, Monte Carlo, MPPI, agents or learning; none
   of them changes what an exchange does. Planned (D-046): an application

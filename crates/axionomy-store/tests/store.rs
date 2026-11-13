@@ -170,6 +170,54 @@ fn a_store_on_disk_keeps_its_runs_and_mints_new_identifiers() {
     std::fs::remove_dir_all(&directory).unwrap();
 }
 
+/// Bytes that outlive the stores opened on them, as a browser's origin
+/// private file system does: any redb backend serves.
+#[derive(Debug, Clone, Default)]
+struct Kept(std::sync::Arc<redb::backends::InMemoryBackend>);
+
+impl redb::StorageBackend for Kept {
+    fn len(&self) -> Result<u64, std::io::Error> {
+        self.0.len()
+    }
+
+    fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), std::io::Error> {
+        self.0.read(offset, out)
+    }
+
+    fn set_len(&self, len: u64) -> Result<(), std::io::Error> {
+        self.0.set_len(len)
+    }
+
+    fn sync_data(&self) -> Result<(), std::io::Error> {
+        self.0.sync_data()
+    }
+
+    fn write(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+        self.0.write(offset, data)
+    }
+}
+
+#[test]
+fn a_store_on_any_backend_keeps_its_runs_there() {
+    let kept = Kept::default();
+    let (first, root) = {
+        let store = Store::on(kept.clone()).unwrap();
+        assert!(!store.in_memory());
+        let mut recorder = store.record::<Paths>(economy(3), Checkpoints::Ends);
+        for exchange in exchanges(5, 25, 3) {
+            recorder.apply(exchange).unwrap();
+        }
+        let root = recorder.state().root();
+        (recorder.finish().unwrap(), root)
+    };
+    let store = Store::on(kept).unwrap();
+    let reader = store.read().unwrap();
+    assert_eq!(reader.state::<Paths>(first).unwrap().unwrap().root(), root);
+    reader.verify::<Paths>(first.run).unwrap();
+    assert!(store.mint_run() > first.run);
+    assert!(Store::memory().unwrap().in_memory());
+}
+
 #[test]
 fn episodes_from_one_state_store_its_nodes_once() {
     let store = Store::memory().unwrap();
