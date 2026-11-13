@@ -10,7 +10,7 @@ use axionomy_store::Store;
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
 use axionomy_view::{DocumentPath, TelemetryKindView};
 use serde::{Serialize, de::DeserializeOwned};
-use std::ops::ControlFlow;
+use std::{cell::RefCell, collections::HashMap, ops::ControlFlow};
 
 #[derive(Default)]
 struct Trajectories(Vec<(DocumentPath, paths::Trace)>);
@@ -43,13 +43,28 @@ fn loaded(name: &str, write: axionomy_problems::WritePackage) -> Engine {
     engine
 }
 
+/// A study and the trajectory of each of its documents.
+type Studied = (axionomy_study::Study, Vec<(DocumentPath, paths::Trace)>);
+
+/// What a study is asked for: a problem, an instance, maybe a strategy.
+type Asked = (String, String, Option<String>);
+
+thread_local! {
+    /// Every study made so far, which a sample's checks may ask for again.
+    static STUDIED: RefCell<HashMap<Asked, Studied>> = RefCell::default();
+}
+
 /// The study of `problem` at `instance`, asked for `strategy` or its
 /// default, and the trajectory of each of its documents.
-fn study(
-    problem: &str,
-    instance: &str,
-    strategy: Option<&str>,
-) -> (axionomy_study::Study, Vec<(DocumentPath, paths::Trace)>) {
+fn study(problem: &str, instance: &str, strategy: Option<&str>) -> Studied {
+    let key = (
+        problem.to_owned(),
+        instance.to_owned(),
+        strategy.map(str::to_owned),
+    );
+    if let Some(studied) = STUDIED.with_borrow(|studied| studied.get(&key).cloned()) {
+        return studied;
+    }
     let mut request =
         StudyRequest::new(problem.parse().unwrap()).with_instance(instance.parse().unwrap());
     if let Some(strategy) = strategy {
@@ -59,7 +74,9 @@ fn study(
     let study = registry()
         .study_with(&request, &StudyControl::default(), &mut observed)
         .unwrap();
-    (study, observed.0)
+    let studied = (study, observed.0);
+    STUDIED.with_borrow_mut(|studied_so_far| studied_so_far.insert(key, studied.clone()));
+    studied
 }
 
 /// Where the objective `key` a document reports is among `objectives`: the
@@ -451,6 +468,38 @@ fn rescue_monte_carlo(engine: &Engine) {
     }
 }
 
+fn scheduling(engine: &Engine, instance: &str) {
+    let compared = reproduces(
+        engine,
+        "scheduling",
+        instance,
+        &[
+            "best-first",
+            "bounded-optimizer",
+            "pareto-job-one",
+            "pareto-job-two",
+        ],
+    );
+    assert_eq!(compared, 4, "{instance}");
+    let infeasible = format!("scheduling/{instance}/infeasible-horizon");
+    recorded(
+        engine,
+        "scheduling",
+        instance,
+        "infeasible-horizon",
+        &infeasible,
+    );
+    // No strategy fits the work into too short a horizon: every search
+    // runs out.
+    let results = engine
+        .run_experiment(&infeasible.parse().unwrap(), &mut |_| {
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    let ended: Vec<_> = results.arms.iter().map(|arm| arm.trials[0].ended).collect();
+    assert_eq!(ended, [Ended::Exhausted; 4], "{instance}");
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -458,7 +507,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 6] = [
+const SAMPLES: [Sample; 7] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -477,6 +526,11 @@ const SAMPLES: [Sample; 6] = [
     ),
     ("bridge", axionomy_problems::bridge::package::write, bridge),
     ("rescue", axionomy_problems::rescue::package::write, rescue),
+    (
+        "scheduling",
+        axionomy_problems::scheduling::package::write,
+        scheduling,
+    ),
 ];
 
 /// Each sample's package reproduces its study at `instances`.
@@ -490,14 +544,14 @@ fn samples_reproduce(instances: &[&str]) {
 }
 
 #[test]
-fn every_sample_reproduces_its_small_instances() {
-    samples_reproduce(&["micro", "showcase"]);
+fn every_sample_reproduces_its_micro_instance() {
+    samples_reproduce(&["micro"]);
 }
 
 #[test]
 #[ignore = "minutes in a debug build; CI runs it in a release build"]
-fn every_sample_reproduces_its_stress_instance() {
-    samples_reproduce(&["stress"]);
+fn every_sample_reproduces_its_larger_instances() {
+    samples_reproduce(&["showcase", "stress"]);
 }
 
 #[test]

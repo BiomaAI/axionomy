@@ -499,9 +499,14 @@ ontology of their own whose goal and policies are named under
 `rescue/incident`) reproduces every policy's document, and a Monte Carlo
 experiment of 128 trials plays each sampled scenario of its study's front,
 which needed scripts to sample weighted outcomes with the tickets
-`axionomy_search`'s sampler draws. The small instances are checked with
-every test run; the stress instances, minutes in a debug build, run in a
-release build in CI. Rhai is optimised in debug builds too, since package
+`axionomy_search`'s sampler draws. Scheduling's (best-first search over the
+makespan, the branch optimizer as branch-and-bound under the clock, and
+Pareto picks for either job finishing first, over a script dispatching the
+executed shop's events in the study's order; each instance's horizon too
+short for the work, where every search runs out) needed nothing new. The
+micro instances are checked with
+every test run; the showcase and stress instances, minutes in a debug build,
+run in a release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.
 
 **P10. Live refs.** The store's refs gain compare-and-set and an index of each
