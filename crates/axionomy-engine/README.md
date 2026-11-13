@@ -104,7 +104,8 @@ table a function needs is itself a function. Inside a closure, a variable
 named like one of the script's functions reads as a pointer to that
 function: name variables apart from functions. `array.sort(comparer)`
 treats a comparer that fails as finding its two items equal, so a broken
-comparer sorts wrongly rather than failing.
+comparer sorts wrongly rather than failing. `shared` is a keyword, not a name
+a variable may have.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so do the Studio server and the CLI (D-045). It builds for
