@@ -134,9 +134,13 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       return read(engine.advanceRef(request.name, JSON.stringify({ expected: request.expected, to: request.to })));
     case "frames":
       return followers.frames(request.name, request.query);
+    // A run says it has begun, so cancelling it terminates this Worker only
+    // while it runs it.
     case "run_strategy":
+      post({ kind: "store_begun", id });
       return read(engine.runStrategy(request.point, JSON.stringify(request.request), progress));
     case "run_experiment":
+      post({ kind: "store_begun", id });
       return read(engine.runExperiment(request.experiment, progress));
     case "results":
       return read(engine.results(request.experiment));

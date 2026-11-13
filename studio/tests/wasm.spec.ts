@@ -148,3 +148,77 @@ test("a second Worker keeps its store in memory while another holds the saved on
   expect(opened.first).toEqual({ persistent: true });
   expect(opened.second).toEqual({ persistent: false, reason: "another tab holds the saved store" });
 });
+
+test("cancelling a run terminates its Worker mid-run, and the next one opens the store with all committed before", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/?studies");
+  const client = "/src/browserPackages.ts";
+  const first = await page.evaluate(async (client) => {
+    let terminated = 0;
+    const terminate = Worker.prototype.terminate;
+    Worker.prototype.terminate = function (this: Worker) {
+      terminated += 1;
+      return terminate.call(this);
+    };
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    await packages.open();
+    await packages.loadUrl("/packages/connect-four.zip");
+    const listed = await packages.packages();
+    const refs = listed.packages.find((listed: { name: string }) => listed.name === "connect-four").refs;
+    const start: string = refs.find((ref: { name: string }) => ref.name === "connect-four/stress").point;
+    const move = async (at: string) => {
+      const offered = await packages.candidates(at, "connect-four/moves");
+      const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").exchange;
+      return (await packages.apply(at, [exchange])).point as string;
+    };
+    // Committed before the cancel: a drop at the ref's point, the ref moved
+    // over it, and a ref of its own naming it.
+    const dropped = await move(start);
+    await packages.advanceRef("connect-four/stress", start, dropped);
+    await packages.createRef("connect-four/kept", dropped);
+    // A follower waiting for the ref across the cancel.
+    const following = packages.frames("connect-four/stress", { after: dropped, wait_seconds: 30 });
+
+    // A game, cancelled once it has reported its progress a few times.
+    let reports = 0;
+    const run = packages.runStrategy(dropped, { strategy: "connect-four/mcts-32/self-play", goal: "connect-four/red-wins", seed: "17", budget: "1", turns: "1000" }, () => { reports += 1; });
+    while (reports < 3) await new Promise((resolve) => setTimeout(resolve, 10));
+    // Asked while the game runs, so answered by the next Worker.
+    const reading = packages.readRef("connect-four/kept");
+    run.cancel();
+    const cancelled = await run.result.then(() => "it ended", (cause: Error) => cause.message);
+    // Mid-game: the Worker running it was terminated.
+    const terminatedMidRun = terminated;
+    const kept = await reading;
+    const opened = await packages.open();
+    // The follower goes on following: the next move reaches it.
+    const adjudicated = await move(dropped);
+    await packages.advanceRef("connect-four/stress", dropped, adjudicated);
+    const followed = await following;
+    packages.terminate();
+    return { dropped, adjudicated, cancelled, terminatedMidRun, kept, opened, followed };
+  }, client);
+  expect(first.cancelled).toBe("cancelled by terminating the Worker");
+  expect(first.terminatedMidRun).toBe(1);
+  expect(first.kept).toEqual({ name: "connect-four/kept", point: first.dropped });
+  expect(first.opened).toEqual({ persistent: true });
+  expect(first.followed.point).toBe(first.adjudicated);
+  expect(first.followed.frames.map((frame: { point: string }) => frame.point)).toEqual([first.adjudicated]);
+
+  // A page loaded again opens the same store: everything committed is there.
+  await page.reload();
+  const again = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    const opened = await packages.open();
+    const stress = await packages.readRef("connect-four/stress");
+    const kept = await packages.readRef("connect-four/kept");
+    const drawn = await packages.draw(stress.point);
+    return { opened, stress: stress.point, kept: kept.point, steps: drawn.frames.length };
+  }, client);
+  expect(again.opened).toEqual({ persistent: true });
+  expect(again.stress).toBe(first.adjudicated);
+  expect(again.kept).toBe(first.dropped);
+  expect(again.steps).toBeGreaterThanOrEqual(2);
+});

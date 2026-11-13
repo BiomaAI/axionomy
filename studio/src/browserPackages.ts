@@ -56,12 +56,17 @@ export type StoreRequest =
 export type StoreMessage =
   | { kind: "store_reply"; id: number; ok: true; value: unknown }
   | { kind: "store_reply"; id: number; ok: false; status: number; body: unknown }
-  | { kind: "store_progress"; id: number; progress: SearchProgress };
+  | { kind: "store_progress"; id: number; progress: SearchProgress }
+  | { kind: "store_begun"; id: number };
 
 type Waiting = {
+  /** What the Worker was asked, to ask the next one should it be terminated. */
+  request: StoreRequest;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   progress?: (progress: SearchProgress) => void;
+  /** Whether the Worker has begun it; a run says so as it begins. */
+  begun?: boolean;
 };
 
 /** A client of the Worker's engine. */
@@ -69,6 +74,8 @@ export class BrowserPackages implements PackageEngine {
   readonly kind = "browser" as const;
   private next = 1;
   private waiting = new Map<number, Waiting>();
+  /** Runs cancelled before the Worker began them, each stopped as it begins. */
+  private stopping = new Set<number>();
   private worker = this.spawn();
 
   /** Opens the store, if it is not open yet, and says where it is kept. */
@@ -90,8 +97,9 @@ export class BrowserPackages implements PackageEngine {
   }
 
   async loadFile(file: Blob): Promise<LoadedFrom> {
+    // Copied to the Worker, not transferred, so the next one can be asked again.
     const bytes = await file.arrayBuffer();
-    return this.request({ kind: "load_bytes", bytes }, undefined, [bytes]) as Promise<LoadedFrom>;
+    return this.request({ kind: "load_bytes", bytes }) as Promise<LoadedFrom>;
   }
 
   packages(): Promise<PackageList> {
@@ -145,15 +153,15 @@ export class BrowserPackages implements PackageEngine {
    * Aborting `signal` stops waiting for its answer.
    */
   frames(name: string, query: FramesQuery, signal?: AbortSignal): Promise<RefFrames> {
-    return this.request({ kind: "frames", name, query }, undefined, [], signal) as Promise<RefFrames>;
+    return this.request({ kind: "frames", name, query }, undefined, signal) as Promise<RefFrames>;
   }
 
   runStrategy(point: PointId, request: StrategyRequest, onProgress: (progress: SearchProgress) => void): Running<RanView> {
-    return this.running(this.request({ kind: "run_strategy", point, request }, onProgress) as Promise<RanView>);
+    return this.running<RanView>({ kind: "run_strategy", point, request }, onProgress);
   }
 
   runExperiment(experiment: string, onProgress?: (progress: SearchProgress) => void): Running<ResultsView> {
-    return this.running(this.request({ kind: "run_experiment", experiment }, onProgress) as Promise<ResultsView>);
+    return this.running<ResultsView>({ kind: "run_experiment", experiment }, onProgress);
   }
 
   async results(experiment: string): Promise<ResultsView | undefined> {
@@ -169,32 +177,69 @@ export class BrowserPackages implements PackageEngine {
     return this.request({ kind: "compare", request }) as Promise<ComparisonView>;
   }
 
-  /**
-   * Stops whatever the Worker is doing by terminating it, failing every
-   * request waiting on it, and starts another, which opens the store again.
-   * Writes the stopped Worker had not made durable are lost, never the
-   * store's consistency.
-   */
-  cancel() {
-    this.worker.terminate();
-    this.fail(new Error("cancelled by terminating the Worker"));
-    this.worker = this.spawn();
-  }
-
   /** Stops the Worker for good, releasing the store. */
   terminate() {
     this.worker.terminate();
     this.fail(new Error("the Worker was terminated"));
   }
 
-  private running<T>(result: Promise<T>): Running<T> {
-    return { result, cancel: () => this.cancel() };
+  /**
+   * A run in the Worker, and how to cancel it. A synchronous WebAssembly
+   * run reads no message until it returns, and no flag in shared memory
+   * reaches it without cross-origin isolation, which GitHub Pages cannot
+   * give: cancelling terminates the Worker while it runs the run.
+   */
+  private running<T>(request: StoreRequest, progress?: (progress: SearchProgress) => void): Running<T> {
+    const id = this.next++;
+    const result = this.send(id, request, progress) as Promise<T>;
+    return { result, cancel: () => this.cancel(id) };
+  }
+
+  /**
+   * Fails the run `id` as cancelled and stops it: at once when the Worker
+   * has begun it, and otherwise as it begins, the Worker meanwhile left to
+   * finish what it is doing.
+   */
+  private cancel(id: number) {
+    const run = this.waiting.get(id);
+    if (!run) return;
+    this.waiting.delete(id);
+    run.reject(new Error("cancelled by terminating the Worker"));
+    if (run.begun) this.restart();
+    else this.stopping.add(id);
+  }
+
+  /**
+   * Terminates the Worker, running a run cancelled, and starts another,
+   * which opens the store again, asking it everything still waiting, in
+   * order. None of it had begun but waits and fetches, which write nothing:
+   * the Worker serves one request at a time. The store keeps whatever the
+   * terminated Worker had committed: it writes through its file's handle as
+   * it goes, and redb opens a file a commit was cut short in as it was
+   * before that commit.
+   */
+  private restart() {
+    this.worker.terminate();
+    this.stopping.clear();
+    this.worker = this.spawn();
+    for (const [id, waiting] of this.waiting) {
+      waiting.begun = false;
+      this.worker.postMessage({ kind: "store", id, request: waiting.request });
+    }
   }
 
   private spawn() {
     const worker = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module", name: "axionomy-store" });
     worker.onmessage = (message: MessageEvent<StoreMessage>) => {
+      // A Worker terminated is no longer heard: the next one answers.
+      if (worker !== this.worker) return;
       const data = message.data;
+      if (data.kind === "store_begun") {
+        if (this.stopping.has(data.id)) return this.restart();
+        const begun = this.waiting.get(data.id);
+        if (begun) begun.begun = true;
+        return;
+      }
       const waiting = this.waiting.get(data.id);
       if (!waiting) return;
       if (data.kind === "store_progress") {
@@ -205,20 +250,25 @@ export class BrowserPackages implements PackageEngine {
       if (data.ok) waiting.resolve(data.value);
       else waiting.reject(new EngineRefusal(data.status, data.body));
     };
-    worker.onerror = (event) => this.fail(new Error(event.message || "the store's Worker failed"));
+    worker.onerror = (event) => {
+      if (worker === this.worker) this.fail(new Error(event.message || "the store's Worker failed"));
+    };
     return worker;
   }
 
-  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void, transfer: Transferable[] = [], signal?: AbortSignal) {
-    const id = this.next++;
+  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void, signal?: AbortSignal) {
+    return this.send(this.next++, request, progress, signal);
+  }
+
+  private send(id: number, request: StoreRequest, progress?: (progress: SearchProgress) => void, signal?: AbortSignal) {
     return new Promise<unknown>((resolve, reject) => {
       if (signal?.aborted) return reject(signal.reason);
-      this.waiting.set(id, { resolve, reject, progress });
+      this.waiting.set(id, { request, resolve, reject, progress });
       signal?.addEventListener("abort", () => {
         this.waiting.delete(id);
         reject(signal.reason);
       }, { once: true });
-      this.worker.postMessage({ kind: "store", id, request }, transfer);
+      this.worker.postMessage({ kind: "store", id, request });
     });
   }
 

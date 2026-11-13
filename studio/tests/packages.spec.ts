@@ -135,6 +135,34 @@ test("follows a ref and receives the steps it is moved over", async ({ page }) =
   await expect(panel.getByRole("button", { name: "Stop following" })).toBeVisible();
 });
 
+test("cancels a game mid-run, and nothing else notices", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await loadSample(page, "connect-four");
+  const start = await openRef(page, "connect-four/stress");
+  const panel = page.locator(".action-panel");
+  await panel.getByRole("tab", { name: "Follow" }).click();
+  await panel.getByRole("button", { name: "Follow connect-four/stress" }).click();
+  await panel.getByRole("tab", { name: "Continue from here" }).click();
+  await panel.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/self-play");
+  await panel.getByRole("button", { name: "Run strategy" }).click();
+  // A game reports its turns, and its players' searches, as it plays.
+  await expect(panel.locator(".study-activity-progress")).toContainText(/\d+ expanded · \d+ generated/, { timeout: 60_000 });
+  await panel.getByRole("button", { name: "Cancel" }).click();
+  await expect(panel.locator(".continue [role=alert]")).toContainText("Cancelled: the strategy stopped");
+  await expect(panel.getByRole("button", { name: "Run strategy" })).toBeEnabled();
+  // The follower never noticed: it is still waiting, and hears the next move.
+  await expect(panel.locator(".follow [role=alert]")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Stop following", includeHidden: true })).toBeAttached();
+  await panel.getByRole("tab", { name: "Act" }).click();
+  await panel.locator(".candidate-applicable").first().click();
+  await panel.getByRole("button", { name: "Apply and move connect-four/stress" }).click();
+  await expect(trace(page)).toHaveAttribute("max", String(start + 1));
+  await panel.getByRole("tab", { name: "Follow" }).click();
+  await expect(panel.getByRole("list", { name: "Delivered steps" })).toContainText(`step ${start + 1}`);
+  await expect(panel.locator(".follow [role=alert]")).toHaveCount(0);
+});
+
 test("runs an experiment and compares its trials", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/");

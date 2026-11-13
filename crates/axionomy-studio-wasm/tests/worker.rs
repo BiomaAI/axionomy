@@ -258,3 +258,68 @@ fn the_worker_offers_the_operations_the_server_offers() {
     let compared = parsed(&worker.compare(&compare).unwrap());
     assert!(!compared["front"].as_array().unwrap().is_empty());
 }
+
+/// The point the first maze move that applies at `at` reaches.
+fn moved_on(engine: &Engine, at: axionomy_store::Point) -> axionomy_store::Point {
+    let offered = engine.candidates(at, &path("maze/moves")).unwrap();
+    let applicable = engine.reach(at).unwrap().state.economy.applicable(offered);
+    engine.apply(at, &applicable[..1]).unwrap()
+}
+
+/// A Worker's store opened on `bytes`, as the next Worker opens the file a
+/// terminated one left.
+fn reopened(bytes: &[u8]) -> WorkerEngine {
+    let file = Kept::default();
+    file.set_len(bytes.len() as u64).unwrap();
+    file.write(0, bytes).unwrap();
+    WorkerEngine::over(Store::on(file).unwrap()).unwrap()
+}
+
+/// Cancelling a run in the browser terminates its Worker: whatever the
+/// store's file holds at that moment is what the next Worker opens. A
+/// Worker writes through its file's handle as it goes, holding nothing back,
+/// so the file at any of the run's looks at its progress is the file a
+/// Worker terminated there leaves. Every such file opens, holding all that
+/// was committed before the run and none of what the run had not finished.
+#[test]
+fn a_worker_terminated_mid_run_leaves_its_store_whole() {
+    let file = Kept::default();
+    let worker = WorkerEngine::over(Store::on(file.clone()).unwrap()).unwrap();
+    worker.load_from(&maze(), None).unwrap();
+    let engine = worker.engine();
+    // Committed before the run: an experiment's results, a move at a ref's
+    // point with the ref moved over it, and a ref of its own.
+    let results = engine
+        .run_experiment(&path("maze/micro"), &mut |_| ControlFlow::Continue(()))
+        .unwrap();
+    let start = engine.referred(&path("maze/micro")).unwrap();
+    let moved = moved_on(engine, start);
+    engine.advance(&path("maze/micro"), start, moved).unwrap();
+    engine.refer(&path("maze/kept"), moved).unwrap();
+
+    // The experiment runs again, recording its trials as it goes; a Worker
+    // is cut off at each of its looks, its trials' records among them.
+    let mut cut = Vec::new();
+    let again = engine
+        .run_experiment(&path("maze/micro"), &mut |_| {
+            cut.push(file.bytes());
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    assert!(cut.len() > 4, "{} looks", cut.len());
+    for bytes in cut {
+        let opened = reopened(&bytes);
+        let engine = opened.engine();
+        assert_eq!(engine.manifests().unwrap()[0].name, path("maze"));
+        assert_eq!(engine.referred(&path("maze/micro")).unwrap(), moved);
+        assert_eq!(engine.referred(&path("maze/kept")).unwrap(), moved);
+        // The results kept are those the stopped run had not replaced yet.
+        assert_eq!(engine.results(&path("maze/micro")).unwrap(), results);
+        assert_eq!(engine.draw(moved).unwrap().frames.len(), 1);
+        // And the store goes on: the next move is recorded and counts.
+        let next = moved_on(engine, moved);
+        engine.advance(&path("maze/micro"), moved, next).unwrap();
+    }
+    // The run that went on recorded what it found.
+    assert_eq!(engine.results(&path("maze/micro")).unwrap(), again);
+}
