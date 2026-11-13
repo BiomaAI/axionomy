@@ -20,20 +20,20 @@ allowed, never on the async runtime.
 A point is written `PointId`: its run, `:` and its step, such as
 `run-000000000000feed0000000000000007:3`. A path such as an experiment's
 `maze/micro` or a ref's `live/game` is a single URL segment, its `/` written
-`%2F`. A seed or a budget is `Natural`, a 64-bit number written in decimal,
+`%2F`. A seed, a budget or a number of turns is `Natural`, a 64-bit number written in decimal,
 since JSON's numbers cannot carry every one exactly; quantities are exact
 decimal text.
 
 | Route | Body or query | Result |
 | --- | --- | --- |
-| `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it names and any made under its name since), experiments with their start, goal, arms, objectives, seed, budget, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
+| `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it names and any made under its name since), experiments with their start, goal, arms, objectives, seed, budget, turns, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
 | `POST /api/packages` | the file's bytes, `application/octet-stream` | `LoadedView {packages, kept}`: the packages it held and the names the store kept as it gives them; 400 for a file that is no package or one this engine cannot load |
 | `GET /api/points/{point}/document` | | the point's history as a `ViewDocument`, drawn with its view |
 | `GET /api/points/{point}/ancestor` | `step` | `Ancestor {point}`: the point at that step of the history |
 | `GET /api/points/{point}/candidates` | `set` | `Candidates`: each exchange the candidate set offers there, with its `ProposalView`, read with the point's view and assessed there |
 | `POST /api/points/{point}/assess` | `{exchange}` | `Candidate`: the exchange assessed there; nothing is recorded |
 | `POST /api/points/{point}/apply` | `{exchanges}` | `Applied {from, point}`: the new point, all of them applied or none; 400 when one does not apply |
-| `POST /api/points/{point}/run` | `{strategy, goal, seed, budget}` | server-sent `StrategyEvent`s: `progress` with the search's counts, then `ran` (the goal it worked toward, how it ended, where, its thinking and cost) or `failed`; 404 for a strategy or a goal the store lacks |
+| `POST /api/points/{point}/run` | `{strategy, goal, seed, budget, turns}`: the budget a search's expansions, the turns the most a policy or a game plays | server-sent `StrategyEvent`s: `progress` with the search's counts, then `ran` (the goal it worked toward, how it ended, where, its thinking and cost) or `failed`; 404 for a strategy or a goal the store lacks |
 | `GET /api/experiments/{experiment}/results` | | `ResultsView`: every arm's trials with their seeds, ends, how they ended and exact objective values; 404 before it has run |
 | `POST /api/experiments/{experiment}/run` | | server-sent `ExperimentEvent`s: `progress`, then `results` or `failed` |
 | `POST /api/compare` | `{points, objectives}` | `ComparisonView`: each point's values, the front no point dominates, and the pick, best by the objectives in order |

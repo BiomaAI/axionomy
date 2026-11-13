@@ -2251,8 +2251,8 @@ P4 to P9). Axionomy is complete without problems or studies. Goals,
 objectives, candidates, strategies, experiments and comparison are
 primitives: a strategy is a built-in algorithm of `axionomy-search` with the
 scripts it calls and its parameters; an experiment runs strategies as arms
-from one start point toward one goal with one seed and budget and records
-their runs as a group; comparison gives objective vectors, dominance and the Pareto front
+from one start point toward one goal with one effort and records their
+runs as a group; comparison gives objective vectors, dominance and the Pareto front
 over any runs. `axionomy-search` stays generic over the ontology and gains
 the algorithms the samples wrote by hand: branch-and-bound, beam search and
 minimax with alpha-beta. The samples become packages built from these
@@ -2284,11 +2284,18 @@ store keys them by position, so they read back in that order too.
 
 Decided with P9 ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives)).
 A strategy is an algorithm, the scripts it calls and its own settings: how
-to choose, never what to choose for. The goal it works toward is part of the
-question, like the point it starts from, and comes from whoever runs it:
+to choose, never what to choose for or how much to spend. The goal it works
+toward and the effort it is given are part of the question, like the point
+it starts from, and come from whoever runs it:
 `run_strategy(at, strategy, goal, effort)`, the goal one the store keeps.
-An experiment names one goal for every arm, so its arms are compared toward
-the same thing. A strategy used to carry its goal, so a sample whose
+An effort is a seed and two limits, of which each kind of strategy reads
+only the one it spends: a budget of expansions, which searches spend, and
+turns, the most a policy or a game plays, which was each strategy's
+horizon. What describes the strategy itself stays with it: a beam's width
+and depth, and a player's iterations or depth, which are its strength, not
+the caller's spend. An experiment names one goal and one effort for every
+arm, so its arms are compared toward the same thing on the same terms, and
+arms take no effort of their own. A strategy used to carry its goal, so a sample whose
 instances have goals of their own kept the same algorithm under a key per
 instance (`lending/micro/least-interest`), and a key could not mean one
 thing at every size; now lending's strategies are `lending/<name>` and the
@@ -2296,6 +2303,11 @@ funded marketplaces share `marketplace/<name>`. An experiment whose arms
 worked toward different goals was asking two questions, and is two
 experiments (perishables' Micro outage, toward its resolution, and its
 storage plans, toward a sealed plan, `perishables/micro/storage-plans`).
+Connect Four's games differed by instance only in Red's iterations once the
+goal and the turns were the run's, so they are named by that strength,
+`connect-four/mcts-<iterations>/<game>`; every game of an instance plays
+within one limit of 85 turns, Micro's self-play, which had 17, filling its
+board in 17 all the same. No strategy key is named by an instance.
 The store format is unchanged: it covers the store's own records and trees,
 and a definition is the bytes its owner encodes, as when strategies gained
 fields before; packages are written again from their builders.

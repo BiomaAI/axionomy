@@ -60,24 +60,24 @@ is that overlaps stay few and no Axionomy term means two things.
 | Group | The runs produced together, such as an experiment's or one Monte Carlo estimate's |
 | Policy | How an actor chooses; in a package, a Rhai script |
 | Decision | One choice a policy makes |
-| Strategy | How to choose: a built-in algorithm, the scripts it calls and its own settings. Whoever runs it asks the question: the point to start from, the goal and the effort (seed, budget) |
+| Strategy | How to choose: a built-in algorithm, the scripts it calls and its own settings, such as a player's iterations. Whoever runs it asks the question: the point to start from, the goal and the effort (seed, budget, turns) |
 | Objective | A measure of a state with a direction, minimize or maximize |
-| Experiment | A start point, a goal, strategies as arms, objectives, a seed, a budget and a number of trials; it produces runs, recorded as a group |
+| Experiment | A start point, a goal, strategies as arms, objectives, an effort (a seed, a budget and turns) and a number of trials; it produces runs, recorded as a group |
 | Comparison | Objective vectors, dominance and the Pareto front, over any runs |
 | Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; the search observations of how a run was found |
 | Ref | A named label on a point, like a Git branch name on a commit. An application keeps a ref on the point its game or simulation is actually at, and moving the ref forward is what makes a step count; only the steps a ref is moved over are delivered |
 | Learning | Updating a policy from experience; done outside Axionomy, by the Autonomy Harness ([CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md)) |
 | Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a proposer like any other |
 | Tick | The clock advancing |
-| Horizon | The most steps a rollout may take |
+| Horizon | The most turns a policy or a game may play: the turns of the effort a run is given |
 | Script | Rhai source a package carries for anything a generic algorithm cannot know: candidates, policies, Nature responses, heuristics, objectives, view logic |
 | Package | A redb file, zipped optionally, holding everything above for an ontology; loaded, it is what an engine continues from |
 | Engine | `axionomy-engine`: the work every front end shares, natively and in the browser, with nothing registered |
 | Study | Retiring in P9: today's request to study a problem, replaced by an experiment on a package |
 | Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
-An experiment is named for what it is: the same start, goal, seed and
-budget, strategies as arms, each measured on the same objectives. Monte Carlo's
+An experiment is named for what it is: the same start, goal and effort,
+strategies as arms, each measured on the same objectives. Monte Carlo's
 single sample, which its code still calls an experiment, is a trial.
 
 None of these names is a mode or a separate execution system. A game or a
@@ -348,17 +348,20 @@ Studio (P12).
 **P5. Strategies (done, ISMCTS with P9).** A strategy is a built-in algorithm (priority, BFS,
 Dijkstra, A*, best-first, rollout, Monte Carlo, MCTS, ISMCTS, Pareto search,
 and the new branch-and-bound, beam search and minimax with alpha-beta) with
-the scripts it calls and its parameters (seed, budget, horizon, actor). The
+the scripts it calls and its own settings (an actor, a player's iterations
+or depth); the run gives the seed, the budget and the turns. The
 engine runs one from a point and gets a run and its thinking. MCP's
 breadth-first search becomes one such strategy.
 
 Built so far: a strategy is a definition (`strategy/<path>`) naming its
 candidate set and scripts, and a candidate set is a script or a list of
 exchanges reconsidered at each state. A strategy is how to choose; the goal
-is the caller's, named with each run like the point it starts from (D-052).
+and the effort are the caller's, named with each run like the point it
+starts from (D-052). An effort is a seed, a budget of expansions, which
+only searches spend, and turns, which only policies and games play.
 `run_strategy` runs a policy turn by turn
 (`fn(state, random)`, ending at the goal, when it proposes nothing, at a
-refusal or at its horizon), breadth-first search, or the cheapest search in
+refusal or when it has played its turns), breadth-first search, or the cheapest search in
 Dijkstra's or A*'s order over a script's step costs and heuristic, within a
 budget of expansions that a watcher may also stop, and records what it
 reaches as a run forked from its start. Maze's A* and Dijkstra find routes
@@ -379,7 +382,7 @@ say what an actor observes and how hidden worlds are sampled, joins with the
 mission sample in P9.
 
 **P6. Experiments and comparison (done).** An experiment is a start point,
-a goal, strategies as arms, objectives, a seed and a budget, with Monte Carlo over
+a goal, strategies as arms, objectives and an effort, with Monte Carlo over
 strategies and weighted scenarios, receding-horizon replanning, and
 counterfactual variants (a trace played first, an actor dropped). Running one
 records a store group of runs. Comparison works over any runs: objective
@@ -388,11 +391,13 @@ objectives. Monte Carlo's `Experiment` becomes `Trial`.
 
 Built: an experiment is a definition (`experiment/<path>`) naming the ref
 it starts from, the goal every arm works toward, so the arms answer one
-question, its arms, objectives, seed, budget and number of trials. An
+question, its arms, objectives, the effort every arm is given (a seed, a
+budget and turns, one for every arm, so arms are compared on the same
+terms) and number of trials. An
 arm is a strategy, from the experiment's start or from a ref of its own,
 which is how a counterfactual variant is run: a trace played first, or an
 actor's holdings withdrawn, is a point with a ref. Every arm runs the same
-trials, trial `i` seeded from the experiment's seed and `i`, so arms meet
+trials, trial `i` seeded from the effort's seed and `i`, so arms meet
 the same chances. `run_experiment` records every trial's run in a store
 group of kind `experiment`, with each objective as a metric named
 `<strategy>/<objective>`, and keeps the results (each trial's seed, end
@@ -469,8 +474,10 @@ the same trials.
 packages: economies for each instance and each seed shipped, goals, scripts,
 strategies, experiments, views. A strategy key means one thing at every
 size: a strategy is how to choose, and each run names its start, its goal
-and its effort, so an instance's own goal is its experiment's, never a
-strategy's (D-052). Done when every experiment reproduces today's study outcomes
+and its effort, so an instance's own goal and turn limit are its
+experiment's, never a strategy's, and what a strategy keeps of its own,
+such as how many iterations a player searches, is named in its key
+(D-052). Done when every experiment reproduces today's study outcomes
 (objectives and traces) from its package alone; then `Problem`, `Registry`,
 `Study`, `axionomy-study` and `export-studies` go, MCP's problem tools become
 package and experiment tools, Studio's catalog lists the loaded packages, and
@@ -571,7 +578,9 @@ player sees them as it saw the real economy. Connect Four's (Micro's
 compact board and the standard one of Showcase and Stress, each with its
 self-play and its games against the center-first and depth-five opponents,
 every turn a choice: Red searching its drops by tree search over the
-tactical moves, seeded per turn, and Yellow, who takes each drop's
+tactical moves, seeded per turn, with the iterations the instance's study
+gives a move, which name its games (`connect-four/mcts-<iterations>/<game>`),
+every game within the 85 turns its experiment gives, and Yellow, who takes each drop's
 adjudication, searching alike or scripted, the depth-five opponent a
 negamax over bitboards) reproduces every document; it needed either tree
 search's rollout to be given the search's random,
@@ -704,7 +713,7 @@ The Studio server serves them over HTTP (`/api/packages`,
 `/api/compare`, and the refs as before), in its OpenAPI contract, and the
 Worker's `Engine` calls the same functions and gives the same JSON, so
 Studio talks to both through one TypeScript interface on the generated
-types. A point is a `PointId`; a seed or a budget, which JSON's numbers
+types. A point is a `PointId`; a seed, a budget or turns, which JSON's numbers
 cannot always carry, is decimal text; a refusal carries the status the
 server answers with, 409 with where a ref is. A strategy's or an
 experiment's run streams its searches' progress, as server-sent events
@@ -729,7 +738,7 @@ before it can be applied: at the point a ref is on, applying moves the ref
 over the new step, refused with where it went when another mover came
 first, and anywhere else it makes a branch, a point no ref names, which can
 be kept as a ref. Continue from here runs a strategy from the step on
-screen toward one of the package's goals, with a seed and a budget, shows how it ended, its search's counts,
+screen toward one of the package's goals, with a seed, a budget and turns, shows how it ended, its search's counts,
 and where it ended, and from a ref's point moves the ref there. Follow
 delivers the steps a ref is moved over as they come, by whoever moves it.
 An experiment runs from the Experiments view, its trials listed by arm with
