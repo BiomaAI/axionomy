@@ -56,7 +56,7 @@ replace encoded multi-objective outcomes with benchmark-owned utility.
 
 The future implementation should live in an outer `axionomy-eval` or
 `axionomy-benchmarks` crate that consumes public engine APIs and portable
-studies. Evaluation pressure may improve generic counters, observation and
+packages. Evaluation pressure may improve generic counters, observation and
 proposal boundaries, policy artifacts, or service contracts. An agent- or
 domain-specific concept moves inward only when independent domains demonstrate
 that it is universal economic machinery.
@@ -347,10 +347,10 @@ support for:
 - Reproducible instance generation and hidden-case execution.
 - Uniform transition-work accounting across algorithms and interfaces.
 - Policies and contingent plans in addition to completed traces.
-- Incremental candidate and study publication.
+- Incremental candidate and result publication.
 - Actor-scoped observation and proposal authority.
 - Multi-agent proposal collection and encoded resolution.
-- Team, opponent, role, seed, and budget identity in studies.
+- Team, opponent, role, seed, and budget identity in experiments.
 - Structured exhaustion, interruption, invalid-result, and operational-error
   outcomes across every search family.
 - Evaluation projections derived from exact account balances and receipts.

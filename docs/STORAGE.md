@@ -1,10 +1,10 @@
 # Storage, runs and replay
 
 Status: being built, in the order the phases at the end give. The kernel's
-forks are constant-time, the canonical tree and the store exist, and MCP keeps
-its snapshots and its studies' runs in the store; Studio, search and every
-other producer of runs move onto it next, Studio through `axionomy-engine` and
-in the browser as well ([SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives)).
+forks are constant-time, the canonical tree and the store exist, and MCP,
+Studio's server and Studio's browser Worker keep their economies as runs in
+the store through `axionomy-engine`; search and every other producer of runs
+move onto it next ([SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives)).
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -398,24 +398,18 @@ survive the members they summarize.
   snapshots carry state roots, `axionomy_trace_step` names any state of the
   exchanges that made a snapshot, `axionomy_trace_find` names the first state
   where a balance condition holds, a `diff` resource compares two snapshots,
-  and accounts and balances page from the state tree. Studies are runs too,
-  and no study is kept as JSON: the study runtime reports each document's
-  trajectory written as paths (D-044), and MCP records its initial state as a
-  run of its own and its trace as a run forked from it, one step per exchange,
-  each under an `eco-` handle the study's summary lists. Every tool and
-  resource that takes an economy therefore steps through, diffs and branches
-  from a study's documents. The `mcp-studies` table keeps only a study's key
-  and its documents' handles; documents and frames are computed again from the
-  key when they are not in memory, and refused when they no longer replay the
-  runs the study recorded. Work-league's showcase study took a 135 MB store
-  file as JSON and takes 8.4 MB as runs. Run IDs, tags, refs and
+  and accounts and balances page from the state tree. Studies, the
+  documents MCP once served for the sample problems, were runs too, never
+  JSON (work-league's showcase study took a 135 MB store file as JSON and 8.4
+  MB as runs), until they retired with P9: an experiment's trials are runs the
+  engine records, each under an `eco-` handle. Run IDs, tags, refs and
   groups are store-wide names that would let one caller find another's
   snapshots, so MCP exposes only what a handle reaches until it has
   authentication; watch and actor views follow with phase 4.
-- **Studio server and browser**: through `axionomy-engine` (D-045), studies
-  record their runs in the store, and scrubbing renders frames from stored
-  roots instead of loading whole studies; in the browser the store runs in
-  Studio's Worker (D-047).
+- **Studio server and browser** (done): through `axionomy-engine` (D-045),
+  every point Studio draws is a point of a run in the store, and scrubbing
+  draws a point's history from it; in the browser the store runs in Studio's
+  Worker (D-047).
 - **Problems** (done): every sample problem's `World` has an `Ontology`,
   and its runs are stored and read back unchanged.
 - **Producers of runs**: kept search branches and solutions, rollouts,
@@ -452,10 +446,10 @@ Each phase is a validated commit or series of commits.
    and the time index it gives; every sample problem recordable, with
    rollouts recorded as runs in a Monte Carlo group (done); rollouts and Monte
    Carlo episodes recording where they run, through `Apply` and `Episodes`
-   (done); studies recording their runs in the store (done for MCP; the Studio
-   server and the browser through `axionomy-engine` next, with refs that
-   proposers advance by compare-and-set and readers follow, as
-   [SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives) plans); recording from
+   (done); MCP, the Studio server and the browser recording their runs in the
+   store through `axionomy-engine`, with refs that proposers advance by
+   compare-and-set and readers follow (done, as
+   [SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives) planned); recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Many writers, one history:** stores written independently by any

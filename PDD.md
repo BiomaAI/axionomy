@@ -600,9 +600,9 @@ them.
   learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
   specialized proposers, conformance tests, and, beside each model, the README
-  that specifies it, its `Problem` (catalog entry, strategies, documents) and
-  its presentation (labels, units, scene, leaderboards). `registry()`
-  registers them all.
+  that specifies it and the builder of its package: its economies, goals,
+  Rhai scripts, strategies, experiments and view. `packages()` lists them
+  all, and its Rust solvers are the oracles the packages are checked against.
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
@@ -617,13 +617,21 @@ them.
   replay-derived frames, and what a problem presents itself with (labels,
   quantity formats, scene helpers, Pareto front views), without owning a
   domain ontology or runtime.
-- `axionomy-study` owns the interface-neutral study runtime: the `Problem`
-  trait and the `Registry` of problems a front end offers, reproducible study
-  requests, cooperative controls, progress, and complete studies. It knows no
-  specific problem.
+- `axionomy-engine` owns the operations every front end shares over a store:
+  points, runs, refs, scripts, goals, objectives, strategies, experiments,
+  comparison, views and packages, with nothing registered (D-045).
+- `axionomy-studio-api` owns what Studio asks of an engine, written once over
+  it with its wire types, so the native server and the browser Worker give
+  the same JSON.
 - `axionomy-cli` owns human- and script-oriented command parsing and output.
-- `axionomy-studio-server` owns native HTTP, OpenAPI, SSE, in-memory study
-  lifecycle, static export, and hosting for the browser application.
+- `axionomy-studio-server` owns native HTTP, OpenAPI, SSE and hosting for the
+  browser application.
+- `axionomy-studio-wasm` owns the browser Worker's engine over a store on the
+  origin private file system (D-047).
+
+`axionomy-study`, the interface-neutral study runtime of the `Problem` trait,
+the `Registry` and the studies every front end once computed, retired with P9
+once every sample was a package (D-050).
 
 The kernel must never depend on a solver or problem crate. Moving BFS and A*
 out of the kernel is philosophically significant: algorithms explore the
@@ -645,8 +653,8 @@ its successors are generated implicitly from applicable exchanges. It remains a
 reasonable future adapter when a user needs explicit graph import, export, or
 analysis.
 
-The MCP adapter depends inward on the shared study runtime, the problems it serves
-by default, search, and kernel.
+The MCP adapter depends inward on the engine, search, and kernel; it knows
+no package and no problem.
 Neither reusable crate depends on rmcp, Tokio, Axum, Clap, a browser, or a
 database. This direction is essential: interface requirements may improve the
 generic progress, explanation, and interruption contracts, but they cannot
@@ -654,60 +662,38 @@ make a protocol task, UI selection, or storage record part of economic truth.
 
 ### 6.1 Interfaces pressure one application boundary
 
-CLI, HTTP/Studio, and MCP use one interface-neutral study runtime rather than
-reimplementing problem dispatch. Its public vocabulary is intentionally small:
+CLI, HTTP/Studio, and MCP use one engine, `axionomy-engine` (D-045), rather
+than reimplementing its operations. Its vocabulary is the plan's
+([SIMULATION.md](docs/SIMULATION.md#names)): a point is a saved state, a run
+a trajectory, a ref a named label on a point; goals, objectives, candidate
+sets, strategies, experiments and views are definitions a store keeps; a
+package is a store file holding them. The engine has no HTTP, async runtime,
+CLI parser, MCP types, browser state, or specific problem, and a front end
+serves whatever its store holds: the samples reach every front end as
+packages, as a user's own do. Studio's operations over it are written once
+(`axionomy-studio-api`, P12).
 
-```text
-Problem           = catalog entry + the documents a study of it holds
-Registry          = the problems a front end offers, each under its own key
-ProblemDescriptor = identity + family + instances + strategies + capabilities,
-                    each a path with the label the problem declares for it
-StudyRequest      = problem + instance + strategy + deterministic seed + work budget
-StudyKey          = the request with its instance and strategy decided
-StudyControl      = cooperative pause + resume + cancel
-StudyProgress     = what a problem reports through, checking control at each report
-Progress          = ordered phase + completed/total work + message
-StudyObserver     = progress + solver observation + replay-verified frame
-                    + each document's trajectory, written as paths
-Study             = key + resolved instance + selected document + replayable alternatives
-                    + assessed constraint probes
-```
-
-A study is what Studio, MCP and the CLI compute: one request, a problem's
-instance under its strategies with a seed and a budget. "Run" means only a
-trajectory, a trace from a state; each document of a study holds one. Machinery
-names avoid words a user's ontology is likely to own: work-league's workers
-claim jobs, so a study is never a job.
-
-The study runtime contains no HTTP, async runtime, CLI parser, MCP types, database,
-browser state, or specific problem. A problem implements `Problem`, and front
-ends study the problems of the `Registry` they are given. Every canonical
-problem's implementation lives in its folder of `axionomy-problems`, beside its
-model, and translates its user-defined ontology and solver evidence into
-`axionomy-view`; no problem gets a privileged viewer module, and a user's own
-ontology is studied in Studio, MCP and the CLI the same way. A synchronous
-caller may use `study`, while a runtime calls `study_with` and owns the thread,
-task, scheduling policy, and `StudyControl` lifetime.
-
-Studies are the only shared layer today. Operations on recorded economies
-(author, assess, apply, step, find, diff, paged reads, search) are implemented
-inside `axionomy-mcp`, so the Studio server, the CLI and the browser have none
-of them. `axionomy-engine` is planned to hold them, with the registry and the
-store, for every front end (D-045).
+Until P9 the front ends shared an interface-neutral study runtime instead,
+`axionomy-study`: a `Problem` gave a catalog entry and the documents a study
+of it held, a `Registry` offered the problems, and a `Study` was what Studio,
+MCP and the CLI computed from a request. It retired once every sample's
+experiments reproduced its studies from its package alone (D-050).
 
 Different interfaces create useful pressure. CLI requires discoverability,
 stable machine-readable output, and useful defaults. HTTP requires resumable
 event streams, lifecycle control, pagination, and generated schemas. MCP
 requires explicit task semantics and cancellation. Studio requires
 alternatives, explanations, scrubbing, partial observations, and domain-aware
-projections. These demands may change the study and view contracts. They
+projections. These demands may change the engine and view contracts. They
 move into the kernel only when they are transport-neutral parts of economic
 validation, assessment, application, or replay.
 
-Semantic parity is executable: CLI JSON, HTTP studies, and the studies MCP
-serves as resources are compared with the complete study of the same `Registry`,
-not merely a shared identifier. Transport events and study records are allowed to differ;
-economic documents, assessments, receipts, objectives, and traces are not.
+Semantic parity is executable: the Studio server and the browser Worker call
+the same `axionomy-studio-api` functions and give the same JSON, and Studio's
+package tests run the same steps against both; MCP's experiment results are
+checked against the engine's run of the same experiment. Transport events are
+allowed to differ; economic documents, assessments, receipts, objectives, and
+traces are not.
 
 ### 6.2 Instance profiles keep examples honest
 
@@ -716,7 +702,7 @@ scale with three explicit problem profiles:
 
 ```text
 Micro     = compact exact fixture, independent oracle, fast integration proof
-Showcase  = decision-dense default for Studio and portable studies
+Showcase  = decision-dense instance Studio's gallery and Pages open
 Stress    = larger domain-relevant workload for scale and interruption checks
 ```
 
@@ -746,18 +732,16 @@ Profiles remain closed problem definitions. Their accounts, assets, rates,
 invariants, goals, and initial quantities are ordinary model data. Each problem
 declares its instances as paths with labels; the reference problems declare
 these three as `micro`, `showcase` and `stress`, which is interface identity,
-not semantic authority, and a problem of another registry declares its own. Every study records its key:
-the problem, instance, strategy, seed and budget it was computed from. Micro continues to support exact
+not semantic authority, and a package of your own names its own. Every experiment names the
+instance's ref it starts from and the effort it gives, its seed, budget and turns. Micro continues to support exact
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
 
-The conformance tests enforce minimum Showcase pressure for every
-problems. Every result also receives transport-neutral **Model size** evidence:
-accounts, rules, steps in the trace, rule-check probes, and alternatives. These
-measurements are explanatory, not objectives, and cannot affect validity.
-Studio uses them with a generic
-outcome-comparison table so API awkwardness and accidental toy regressions are
-visible early across unrelated domains.
+The view tests enforce minimum Showcase pressure for every problem: the
+frames, accounts and rates its Showcase runs draw. These measurements are
+explanatory, not objectives, and cannot affect validity; they make API
+awkwardness and accidental toy regressions visible early across unrelated
+domains.
 
 ### 6.3 Presentation is a replay-derived boundary
 
@@ -810,10 +794,9 @@ Stable keys and human labels are deliberately separate. Every key a view
 carries is a typed path: items such as `maze/account/agent` or `node/start`,
 measures, classes, documents, proposals, phases and algorithms each have their
 own kind, so one cannot stand where another is expected. Each canonical
-problem's view module implements `Label` for its account, asset, rate, and
-role enums while retaining the same path-derived keys used by studies and
-scene links. User-defined economies keep the generic Debug-label fallback
-unless they implement `Label`. Labels stay out of the kernel and out of a
+problem's view is a Rhai script its package carries, naming its accounts,
+assets, rates and roles while every key stays the path-derived key scene
+links use (P7); a run without a view is drawn by its paths. Labels stay out of the kernel and out of a
 problem's model, wording never becomes semantic identity, and views do not
 parse formatted Debug strings to recover domain meaning.
 
@@ -828,33 +811,20 @@ Rust DTOs
 ```
 
 `pnpm generate` produces the OpenAPI document, its TypeScript declarations and
-Studio's pre-built studies from the Rust source; `pnpm dev`, `pnpm test` and
+every sample's package from the Rust source; `pnpm dev`, `pnpm test` and
 `pnpm build` run it first, so CI regenerates them on every build. They are
 gitignored, never committed and never edited manually, so they cannot go
 stale. This repository pins the
 Schemars-1-native Aide line because duplicating the entire DTO graph for an old
 schema-trait release would create two contract systems.
 
-The native server exposes the catalog, starts studies, reports their
-state, pauses, resumes, or cancels them cooperatively, serves each published
-study, its documents, and paginated frames under the study's minted ID
-(`study-7`), and streams tagged `StudioEvent` values through Server-Sent Events.
-The study runtime emits one monotonic event sequence across a study's phases.
-`FrameAppended` carries the complete newly verified frame and its document
-identity, so native SSE and browser Wasm can show authoritative progress while
-the study is still being computed. The event is produced by replay derivation,
-not by a timer or an invented animation, and published studies retain the
-same frames for later inspection.
-Logistics, Connect Four, and Mission advance their resumable Monte Carlo,
-MCTS, and ISMCTS sessions in bounded work chunks, publishing phase-local
-samples, iterations, nodes, and moves while observing pause or cancellation at
-each chunk boundary. Adapters whose domain algorithms are still indivisible
-observe control between their larger phases.
-Event sequence numbers order transport observations only; they are not encoded
-time. Study records and documents are process-local reference state, just like a
-search queue. They do not survive restart and cannot authorize an exchange.
-Applications that need persistence may store portable `Study` JSON or build
-their own outer study service without changing the core.
+The native server serves the engine's operations over HTTP with server-sent
+events for the progress of a strategy's or an experiment's run, and the
+browser Worker runs the same functions (P12). A run's progress is produced by
+the engine's searches as they work, not by a timer or an invented animation.
+Event order is a transport observation only; it is not encoded time, and it
+cannot authorize an exchange. Until P9 the server also computed studies,
+pausable, resumable and cancellable, and streamed their events.
 
 `SearchObservationView` is the presentation lowering of disposable solver
 state. It records phase, algorithm, evidence kind, bounded progress, and exact
@@ -862,22 +832,18 @@ metrics without turning a queue, rollout tree, frontier, or belief cache into
 economic truth. An observation may also name stable Rust-owned scene subjects,
 allowing a generic viewer to emphasize the expanded room, candidate, agent, or
 other projected entity without learning the domain ontology in TypeScript.
-The study runtime streams observations as `thinking` events through a bounded
-observer channel and retains at most its configured history as every
-completed document's `thinking`. Live execution and a saved study therefore
-expose the same evidence surface; transport speed does not decide whether a
-study is explainable.
+A strategy's run reports its search's counts as it goes and keeps them, its
+thinking, with where it ended, so transport speed does not decide whether a
+run is explainable.
 
-The React application uses one `EngineClient` boundary for native HTTP/SSE,
-the browser Worker, and static playback. The native connection badge is backed
-by a periodic health check; a catalog loaded before a server stopped cannot
-claim that the engine is still connected. The browser adapter runs
-`axionomy-study` and the sample problems compiled to Rust/Wasm inside a
-dedicated Worker, and static
-playback advertises that it cannot execute. Local playback position and play/pause state
+The React application uses one `PackageEngine` boundary for native HTTP/SSE
+and the browser Worker, chosen once as Studio opens, since each keeps its own
+store. The native connection badge is backed by a health check. The browser
+adapter runs `axionomy-engine` compiled to Rust/Wasm inside a dedicated
+Worker. Local playback position and play/pause state
 stay in a component reducer/state boundary rather than becoming server or
-economic state. React Flow renders graph pictures; Apache ECharts renders
-tradeoff views; specialized grids remain ordinary React/SVG until measured
+economic state. React Flow renders graph pictures; specialized grids remain
+ordinary React/SVG until measured
 scale requires Canvas. TanStack Query owns server-cache behavior. Vite,
 Vitest, and Playwright provide build, component-contract, and real-server
 browser verification. Tabler supplies the curated implementation of semantic
@@ -907,67 +873,43 @@ language. That intentional animation is distinct from incidental layout motion;
 canvas, panel, and control geometry must remain stable while their economic
 contents change.
 
-Thinking and trace playback are deliberately distinct controls. Thinking is
-trying exchanges at a point and playing them out before choosing, with the
-same apply as the step finally chosen; a document's
-`thinking` is the bounded search observations of how its outcome was found.
-`Study` computes a new study; the transport controls only replay its accepted
-exchanges. The Thinking surface exposes live or retained phase, rollout, tree,
-frontier, incumbent, and document-derivation observations. When observations identify
-scene subjects, Studio derives a scrubbable exploration map from the same
-Rust-owned initial scene; accumulated subjects show explored structures and
-the selected checkpoint shows the current expansion. It never fabricates an
-edge between consecutive expansions. An active study immediately exposes a
-spinner, phase message, elapsed time, deterministic request parameters, and
-the latest bounded-work counter.
-Completion leaves a dismissible receipt containing duration and request
-identity and visibly marks the replacement study, so even a sub-second study
-has an inspectable result.
+Thinking and trace playback are deliberately distinct. Thinking is trying
+exchanges at a point and playing them out before choosing, with the same
+apply as the step finally chosen; a strategy continued from a step reports
+what its search expanded, generated, left on its frontier and visited. The
+transport controls only replay a point's accepted exchanges.
 
 Every meaningful Studio selection is encoded in a static-host-compatible query
-URL: problem, instance, strategy, document, thinking/replay view, replay step,
-leaderboard, seed, and budget. Major selections create browser history;
-scrubbing replaces the current entry; `popstate` restores the corresponding
-study and frame. Invalid identities visibly fall back to a catalog default,
-and shared links never start a study. The same URL therefore works
-against the native server, the browser Wasm engine, and GitHub Pages.
+URL: the package's URL, the ref or point, the step and the view. Reloading or
+sharing a link opens the same, against the native server, the browser Wasm
+engine, and GitHub Pages alike.
 
-The implemented Studio exposes the complete Showcase
-surface: pathfinding and networks use graphs; Sokoban and Connect Four use
-grids; Exact Cover uses a constraint matrix; scheduling and perishables use
-timelines; the Living Market draws its pool on the neutral reserves surface,
-whose every caption it writes; markets expose multi-party settlement and
-rejected shortfalls;
-stochastic and partially observed domains expose telemetry, sampled policy
-evidence, and actor-relative views. Every study includes replayable strategy
-alternatives where the domain supplies them. The universal model explorer
-exposes rates, roles, goals, and invariants even when a specialized
-scene is absent. The shared scene vocabulary renders stable semantic entities,
-typed links to their proving accounts or balances, paths, statuses, exact
-metrics, annotations, and transition cues across all four geometric surfaces.
-Graph adapters for Maze, Bridge, Workshop, Marketplace, Logistics, Mission,
-Rescue, and Work League all expose replay-changing linked entities through one
-generic motion system. A transition remains visible through its receipt-
-derived cue even when before/after geometry is identical. An instance selector
-makes Micro and Stress available to either executable engine, while static
-fallback deliberately serves the pre-built Showcase studies.
+Studio draws every package's runs with its view: pathfinding and networks use
+graphs; Sokoban and Connect Four use grids; Exact Cover uses a constraint
+matrix; scheduling and perishables use timelines; the Living Market draws its
+pool on the neutral reserves surface, whose every caption it writes. The
+universal model explorer exposes rates, roles, goals, and invariants even
+when a specialized scene is absent. The shared scene vocabulary renders
+stable semantic entities, typed links to their proving accounts or balances,
+paths, statuses, exact metrics, annotations, and transition cues across all
+four geometric surfaces, and one generic motion system animates them. A
+transition remains visible through its receipt-derived cue even when
+before/after geometry is identical. An exchange offered or written at a step
+is assessed before it can be applied, with a structured issue kind and the
+role, account, asset, or rate identities involved, kept separate from
+transport failures.
 
-Assessed proposals in conformance documents are rule checks. Some are
-deliberately malformed or infeasible, and their rejection proves that the
-roles, balances, and invariants are active. The view contract preserves a
-structured issue kind plus involved role, account, asset, or rate identities;
-Studio labels these as moves that should be refused and keeps them separate from
-operational study and transport failures.
-
-Portable studies prove offline playback for the full catalog. The native
-path proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
-study and frame retrieval, and scrubbing. Browser tests prove that the same
-Rust study runtime initializes, studies, streams observations, publishes
-studies, and cancels inside an isolated Worker. The Pages build uses a
-repository-relative Vite base, includes its Wasm binary and `.nojekyll`, and
-deploys from `main` without a server. Specialized projections are added
-only when they materially improve comprehension; the authoritative account,
+The native path proves generated OpenAPI calls, server-sent progress, and
+scrubbing; the browser path proves that the same engine loads packages,
+runs experiments and cancels inside an isolated Worker, its store kept on the
+origin private file system. The Pages build uses a repository-relative Vite
+base, includes its Wasm binary, the sample packages and `.nojekyll`, and
+deploys from `main` without a server. Specialized projections are added only
+when they materially improve comprehension; the authoritative account,
 assessment, receipt, and model inspectors remain available for every problem.
+Until P9, Studio also played studies: their documents, thinking, strategy
+comparisons, leaderboards and rule-check probes, computed natively, in the
+Worker or read from pre-built files.
 
 ## 7. Solver contract
 
@@ -1153,7 +1095,7 @@ No request or result grows with the economy. A call adds at most 10,000
 authored entries or replays at most 1,000 exchanges, so an economy of any size
 is built by chaining `axionomy_economy_extend` calls, each of which stores a
 valid snapshot. A tool result carries handles, counts, at most ten preview
-lines, and `resource_link`s. Everything an economy, assessment or study holds
+lines, and `resource_link`s. Everything an economy or assessment holds
 is an `axionomy://` resource under RFC 6570 URI templates. `resources/read`
 is not paginated by the protocol, so each page of a list is its own resource:
 the page carries `nextCursor` under MCP's pagination rules and the next page is
@@ -1407,7 +1349,7 @@ examples, but they are not promised as reusable domain APIs.
   states of a trace can be named, and snapshots can be diffed.
 - No MCP request or result grows with the economy: economies are authored in
   bounded chunks, results carry handles, counts and `resource_link`s, and
-  everything a snapshot, assessment or study holds is read as paged, immutable,
+  everything a snapshot or assessment holds is read as paged, immutable,
   cacheable `axionomy://` resources with completion for their arguments. A
   100,000-asset economy is exercised end to end.
 - MCP search tasks are registered before their handles are returned and expose
@@ -1471,20 +1413,18 @@ The current foundation is intentionally bounded:
   engine targets. GitHub Pages cannot supply cross-origin isolation headers, so
   the reference browser engine deliberately avoids Wasm threads and
   `SharedArrayBuffer`; scale comes from a dedicated Worker, not parallelism.
-- Studio study control is cooperative. Resumable Monte Carlo, MCTS, and ISMCTS
-  adapters check pause/cancel between bounded work chunks; other adapters check
-  at phase and document-publication boundaries. A one-shot domain solver is not
-  preempted in the middle of an indivisible call. Native studies support resumable
-  pause. Browser cancellation is immediate because the Worker is disposable;
-  browser pause is intentionally not advertised until study sessions can be
-  suspended and resumed across Worker event-loop turns.
+- Stopping a run is cooperative natively: every kind of run consults its
+  watcher as it goes, and closing its stream stops it there. In the browser
+  a synchronous run reads no message until it returns, so cancelling one
+  terminates its Worker and starts another on the same store; no run pauses
+  and resumes.
 - Full model projection currently materializes every concrete rate. Studio
   filters large rate books client-side. Standard 7×6 Connect Four now uses 226
   concrete placement, adjudication, and four-cell certificate rates—smaller
   than the former 1,282-rate 4×4 counter cross-product—but pagination or a
   generic parameterized-rate view still awaits measured pressure from other
   domains.
-- The MCP reference binary keeps snapshots, assessments and studies in
+- The MCP reference binary keeps snapshots, assessments and refs in
   its store, durable with `AXIONOMY_MCP_STORE`; task lifecycle stays in the
   process, and distributed task recovery remains outside the reference scope.
 - The MCP reference server has no authentication, tenant isolation,
@@ -1679,17 +1619,17 @@ factor.
    the redb store with runs, durability rules, tags, groups, metrics and refs,
    MCP on the store, storing any ontology whose identifiers serialize, and
    rollouts and Monte Carlo episodes recording where they run (`Apply`,
-   `Episodes`, `GroupRecorder`), and MCP recording each study document as an
-   economy are built; next, search sessions, MPPI and RL record, and the Studio
-   server keeps studies and scrubs from stored roots, as
-   [simulation, runs and studies](docs/SIMULATION.md) describes. Extract generic holdings, dependency, and event indexes only after a
+   `Episodes`, `GroupRecorder`), and every front end recording its economies
+   through the engine are built; next, search sessions, MPPI and RL record, as
+   [simulation, runs and packages](docs/SIMULATION.md) describes. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
-5. Build [Axionomy on primitives](docs/SIMULATION.md#plan-axionomy-on-primitives):
+5. Built: [Axionomy on primitives](docs/SIMULATION.md#plan-axionomy-on-primitives):
    binary records, one engine with nothing registered (D-045), Rhai scripts
    for every proposer a package carries (D-049), goals, objectives,
    strategies, experiments and comparison as primitives (D-050), views per
    ontology, packages as redb files (D-048), live refs (D-046), the engine
-   in the browser (D-047), and Studio on packages, points and refs.
+   in the browser (D-047), and Studio on packages, points and refs, the
+   samples among the packages and the study machinery retired (P9).
 6. Extend invariants with carefully constrained local and inequality forms.
 7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
@@ -1708,7 +1648,7 @@ factor.
 14. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-15. Measure full-study transfer and rendering across the Studio
+15. Measure package transfer and rendering across the Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
@@ -1949,12 +1889,16 @@ transport lifecycle and presentation state never become economic authority.
 Operations on economies and runs are not shared yet: they live in MCP until
 `axionomy-engine` (D-045).
 
+Retired with P9: the front ends now share the engine (D-045) and its
+packages (D-048) instead, and the study runtime is gone (D-050).
+
 ### D-034: Correctness fixtures and product workloads are distinct instances
 
 Micro keeps exhaustive laws and independent oracles cheap. Showcase is the
 decision-dense interface default. Stress scales a domain-relevant dimension.
-All three are ordinary closed economies with explicit study identity; none
-may introduce external semantic state. Complexity telemetry and per-problem
+All three are ordinary closed economies with explicit identity, once a
+study's key and, since P9, the refs and experiments a package names after
+each instance; none may introduce external semantic state. Complexity telemetry and per-problem
 Showcase thresholds prevent attractive visualizations from hiding trivial
 models or forced traces.
 
@@ -1969,6 +1913,10 @@ the Worker is the first-class GitHub Pages engine, and pre-built studies are
 the final read-only fallback. Connection labels report verified current
 capability rather than inferring liveness from cached data. The engine, store
 included, runs in the same Worker (D-047).
+
+Retired with P9: the study runtime and the pre-built studies are gone, and
+the Worker runs the engine alone, over the packages its store holds, which
+Pages serves.
 
 ### D-036: Visual richness is typed explanation, not extra truth
 
@@ -2048,8 +1996,9 @@ read into its own type: accounts and assets, problems and strategies
 (`work-league`, `a-star`), instances (`showcase`), families and
 capabilities, documents, view items (`maze/account/agent`), measures, classes,
 phases and algorithms, and store tags, metrics, refs and group kinds. What a server mints has its own handle type instead: economy,
-assessment and study handles in MCP, run and group IDs in the store, and
-Studio study IDs (`study-7`). JSON field names and closed vocabularies, such as
+assessment and ref handles in MCP, and run and group IDs in the store (and,
+until P9 retired them, MCP's study handles and Studio's study IDs,
+`study-7`). JSON field names and closed vocabularies, such as
 glyphs, tones and event kinds, stay snake_case like the schema they belong to.
 Whatever a problem declares for people to read beside a path, a family, a
 capability, an instance, a phase or an algorithm, travels with the path as its
@@ -2278,7 +2227,7 @@ simulators) send exchanges through a transport, generated however they like.
 ### D-050: Primitives before packages
 
 Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives),
-P4 to P9). Axionomy is complete without problems or studies. Goals,
+P4 to P9; done). Axionomy is complete without problems or studies. Goals,
 objectives, candidates, strategies, experiments and comparison are
 primitives: a strategy is a built-in algorithm of `axionomy-search` with the
 scripts it calls and its parameters; an experiment runs strategies as arms
@@ -2290,6 +2239,10 @@ minimax with alpha-beta. The samples become packages built from these
 primitives, and `Problem`, `Registry`, `Study` and `axionomy-study` retire
 once every sample experiment reproduces its study's outcomes from its
 package alone.
+
+Retired with P9: every sample is a package whose experiments reproduce
+exactly what its Rust solvers give, the functions its studies called, and
+the study machinery is gone from every front end.
 
 ### D-051: An economy's order is its identifiers' order
 
@@ -2360,16 +2313,15 @@ Axionomy succeeds when:
 - Invalid proposals cannot bypass core constraints.
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay
   without relying on hidden session state.
-- Browser users can load a portable document, follow a native live study, or
-  run the same Rust study runtime in a Worker; they can inspect a study's thinking,
-  scrub every accepted exchange, and inspect exact balances and deltas without
-  a parallel mutable world model or handwritten cross-language contract.
-- Every sample problem can be discovered, studied, replayed, and
-  meaningfully inspected through Studio and static Showcase studies, with
-  explicit Micro and Stress selection on live interfaces.
-- CLI, HTTP, MCP, and the browser Worker serve the same semantic studies for
-  the same request, while retaining interface-appropriate
-  operational behavior.
+- Browser users can load a package, follow a native live ref, or run the
+  same Rust engine in a Worker; they can inspect a run's thinking, scrub
+  every accepted exchange, and inspect exact balances and deltas without a
+  parallel mutable world model or handwritten cross-language contract.
+- Every sample problem can be loaded, played, replayed, and meaningfully
+  inspected through Studio as a package, its Micro, Showcase and Stress
+  instances each an experiment.
+- HTTP, MCP, and the browser Worker serve the same engine operations over the
+  same packages, while retaining interface-appropriate operational behavior.
 - Infeasible proposals expose every account-and-asset shortfall without
   mutation.
 - Successful assessments project the same account deltas later confirmed by

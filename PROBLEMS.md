@@ -120,7 +120,7 @@ links, the CLI's `--instance` and MCP's `instance` take:
 
 - **Micro** preserves the compact exact fixtures and independent oracles used
   by unit tests and quick integration checks.
-- **Showcase** is the Studio, CLI, HTTP, and MCP default. It adds decision
+- **Showcase** is the instance Studio's gallery opens. It adds decision
   density: longer plans, competing actions, coupled resources, more accounts,
   additional constraints, or broader uncertainty.
 - **Stress** increases a problem-appropriate dimension such as board size,
@@ -128,22 +128,24 @@ links, the CLI's `--instance` and MCP's `instance` take:
 
 These are problem instances, not alternate semantics. A profile may change
 initial accounts, the closed rate book, and encoded goals, but it never moves
-truth into the service or viewer. Instance identity is carried in
-`StudyRequest` and `Study`, so a result cannot be compared or replayed as
-though it came from a different workload.
+truth into the service or viewer. Instance identity is carried by the refs
+and experiments a problem's package names after it, such as `maze/showcase`,
+so a result cannot be compared or replayed as though it came from a
+different workload.
 
-What each instance holds and what each strategy does is written once, in the
-problem's catalog entry in its `study.rs`, with its family and what it
-exercises: each a path with the words people read for it, from the suite's
-shared vocabulary in `support.rs`. Studio shows those words, and
-`cargo run -p axionomy-cli -- describe <problem>` prints them. A problem of
-your own declares its own instances, family and capabilities the same way.
+Every problem is a package: its refs name each instance's economy, and its
+goals, scripts, strategies and experiments say how each is played, beside the
+view that draws its runs (`cargo run -p axionomy-cli -- package inspect
+packages/maze.zip` lists what one holds). The package tests
+(`crates/axionomy-problems/tests/packages.rs`) require every experiment to
+reproduce exactly what the problem's Rust code gives, and a problem of your
+own is a package written the same way.
 
-**Model size** telemetry records accounts, rules, trace steps, rule-check
-probes, and compared alternatives for every result. The study tests
-(`crates/axionomy-problems/tests/studies.rs`) also enforce per-problem minimum
-pressure (and a maximum compact-rate bound for standard Connect Four),
-preventing future refactors from silently collapsing Showcase back into a toy.
+The view tests (`crates/axionomy-problems/tests/views.rs`) draw every run of
+every experiment and enforce per-problem minimum pressure on the Showcase
+runs: frames, accounts and rates (and a maximum compact-rate bound for
+standard Connect Four), preventing future refactors from silently collapsing
+Showcase back into a toy.
 
 Each problem's README describes the Micro conformance contract unless it names
 a larger profile explicitly. Showcase builds on those same laws; it does not

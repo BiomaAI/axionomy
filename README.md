@@ -34,14 +34,14 @@ information-set MCTS run on it unchanged. A rollout steps whatever it is
 given: an economy of its own, so its steps live and die in memory, or a
 recorder that keeps every step in the store.
 
-[![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&leaderboard=contract-value&seed=17&budget=128)
+[![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments)
 
-<p align="center"><sub>Autonomous Work League makes topology, agents, jobs, facilities, relationships, and economic state readable in one verified replay. <a href="https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&leaderboard=contract-value&seed=17&budget=128">Open this view in the live Studio</a>.</sub></p>
+<p align="center"><sub>Autonomous Work League makes topology, agents, jobs, facilities, relationships, and economic state readable in one verified replay. <a href="https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments">Open this view in the live Studio</a>.</sub></p>
 
 Try the
-[Autonomous Work League](https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=24&leaderboard=resource-efficiency&seed=17&budget=128)
-to see several agents lead different replay-derived rankings at the same
-economic step.
+[Autonomous Work League](https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments)
+to run its season for three fields of workers and compare what each field
+earns, completes and wastes competing for the same finite work.
 
 Axionomy is a Rust engine for encoding bounded problem spaces through four
 primitives:
@@ -89,8 +89,8 @@ evaluation and rating design, and
 [docs/CONTINUOUS_AGENT_SYSTEMS.md](docs/CONTINUOUS_AGENT_SYSTEMS.md) for the boundary
 between the Work Utility System and the Autonomy Harness that owns agents,
 learning, deployment, and assurance, and
-[docs/SIMULATION.md](docs/SIMULATION.md) for how simulations, runs and studies
-build on the kernel without new machinery.
+[docs/SIMULATION.md](docs/SIMULATION.md) for how simulations, runs, packages
+and experiments build on the kernel without new machinery.
 
 The kernel's semantics are specified in Lean: exact checked arithmetic,
 rounded mul-div, baskets and accounts, rate evaluation against one snapshot,
@@ -102,7 +102,7 @@ tested against it. See [verification/README.md](verification/README.md).
 
 The reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
-Showcase is the default that Studio and its pre-built studies use. Stress
+Showcase is the instance Studio and Pages open first. Stress
 raises a domain-relevant dimension—sampling, topology, board size, horizon,
 uncertainty, coupled participants, or inventory. This keeps examples honest
 without turning arbitrary size into a product claim, and it lets CLI, HTTP,
@@ -118,18 +118,18 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
-| `axionomy-problems` | Sample problem encodings, specialized proposers, and conformance tests; beside each model, its README, `Problem` and presentation, all in `registry()` |
+| `axionomy-problems` | Sample problem encodings, specialized proposers, and conformance tests; beside each model, its README and the builder of its package, all in `packages()` |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
-| `axionomy-engine` | The work every front end shares: studies, and economies as points of runs recorded in a store |
-| `axionomy-mcp` | Strict stateless MCP 2026-07-28 transport over the engine, with stored, steppable, diffable economies, explorable studies, and interruptible search tasks |
+| `axionomy-engine` | The work every front end shares: economies as points of runs recorded in a store, refs, scripts, strategies, experiments, views and packages |
+| `axionomy-mcp` | Strict stateless MCP 2026-07-28 transport over the engine, with stored, steppable, diffable economies, refs, packages and experiments, and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts, and the labels, formats, scene helpers and Pareto front views problems present themselves with |
-| `axionomy-study` | Generic study runtime: the `Problem` trait and `Registry`, study requests and control, progress reporting, and replay-derived studies of any registered problem |
-| `axionomy-cli` | The `axionomy` application: registers the sample problems, studies them, and serves them over MCP (`axionomy mcp`) and to Studio (`axionomy studio`) |
-| `axionomy-studio-server` | Native OpenAPI/SSE backend for Axionomy Studio, over any registry of problems |
-| `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust study runtime and problems in a browser |
+| `axionomy-studio-api` | What Studio asks of an engine, written once over `axionomy-engine` with its wire types |
+| `axionomy-cli` | The `axionomy` application: makes, loads and inspects packages, the samples' among them, and serves a store's packages over MCP (`axionomy mcp`) and to Studio (`axionomy studio`) |
+| `axionomy-studio-server` | Native OpenAPI/SSE backend for Axionomy Studio, over the packages a store holds |
+| `axionomy-studio-wasm` | Single-threaded Web Worker adapter running the same engine in a browser, over a store on the origin private file system |
 
 ```text
 axionomy ─────────────→ axionomy-derive
@@ -139,22 +139,22 @@ axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-tree          (no workspace dependencies)
 axionomy-store ───────→ axionomy-tree + axionomy
 axionomy-view ────────→ axionomy-search + axionomy
-axionomy-study ───────→ axionomy-view + axionomy-search
-axionomy-problems ────→ axionomy-study + axionomy-view + axionomy-search
-axionomy-engine ──────→ axionomy-study + axionomy-store
-axionomy-mcp ─────────→ axionomy-engine + axionomy-study + axionomy-search
-axionomy-studio-server → axionomy-study + axionomy-view
+axionomy-engine ──────→ axionomy-view + axionomy-store + axionomy-search
+axionomy-problems ────→ axionomy-search (+ axionomy-engine for its packages)
+axionomy-studio-api ──→ axionomy-engine
+axionomy-mcp ─────────→ axionomy-engine + axionomy-search
+axionomy-studio-server → axionomy-studio-api + axionomy-view
 axionomy-cli ─────────→ axionomy-problems + axionomy-engine + axionomy-mcp
                          + axionomy-studio-server
-axionomy-studio-wasm ──→ axionomy-problems + axionomy-study
+axionomy-studio-wasm ──→ axionomy-studio-api + axionomy-engine
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate; its one
 workspace dependency is the derive for its identifiers. The packages are
 independently publishable: release `axionomy-derive` and then `axionomy`
 first; search and units may follow; time follows units; view follows search;
-the study runtime follows view; problems follow the study runtime; CLI, MCP,
-HTTP, and Studio remain outer adapters.
+the store and the engine follow view; problems follow search and, for their
+packages, the engine; CLI, MCP, HTTP, and Studio remain outer adapters.
 
 ## What is implemented
 
@@ -179,19 +179,19 @@ HTTP, and Studio remain outer adapters.
 
 ### Interfaces
 
-- One study runtime shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm; operations on economies and runs (author, apply, step, find, diff) are MCP's today, and `axionomy-engine` is planned to give them to every interface, in the browser too ([plan](docs/SIMULATION.md#plan-axionomy-on-primitives)).
-- Discoverable reference problems, each with explicit Micro, Showcase, and Stress instances.
+- One engine shared by the CLI, HTTP/SSE, MCP, Studio and browser Wasm: points, runs, refs, scripts, strategies, experiments, views and packages, with nothing registered ([plan](docs/SIMULATION.md#plan-axionomy-on-primitives)).
+- The reference problems as packages, each with explicit Micro, Showcase, and Stress instances, checked against their Rust solvers.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
-- A strict stateless MCP 2026-07-28 server whose economies persist in a store, with content roots, trace stepping, diffs, and studies a client can step into and branch from.
-- Rust-owned OpenAPI, generated TypeScript, portable studies, and cross-interface tests.
+- A strict stateless MCP 2026-07-28 server whose economies persist in a store, with content roots, trace stepping, diffs, refs, and experiments whose trials a client can step into and branch from.
+- Rust-owned OpenAPI, generated TypeScript, portable packages, and cross-interface tests.
 
 ### Studio
 
-- Thinking: search progress, live and saved with the study, for fast and slow studies.
-- Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
+- Packages loaded from a file or a URL, their refs' histories scrubbed with each package's view.
+- Replay-derived accounts, assessments, receipts and rule inspection.
 - Graph, grid, matrix, and timeline pictures with semantic icons, exact metrics, and replay-derived motion linked to accounts and receipts.
-- Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
-- Shareable deep links to any problem, strategy, Thinking or replay view, replay step, and leaderboard.
+- Acting at any step, continuing with a strategy, following a ref, and experiments compared on their front, natively over SSE or in a Web Worker.
+- Shareable deep links to any package, ref or point, step and view.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -223,14 +223,12 @@ Axionomy Studio is a universal economic debugger and trace player, not a
 second simulator. It scrubs a trace by replaying accepted exchanges through
 the Rust core, then shows the resulting accounts, assets, assessments,
 receipt deltas, objectives, semantic transition cues, and an optional read-only
-picture. Its separate Thinking view shows what the search simulated before it
-chose: it follows bounded search observations live and retains them in the
-study, so even a sub-second study remains inspectable. The Maze exposes a
-scrubbable BFS, Dijkstra, or A* expansion map before its verified replay, while Sokoban and Connect Four grids, Exact Cover
-matrix, scheduling and perishables timelines, market and logistics networks,
-stochastic telemetry,
-Pareto alternatives, rejected proposals, and actor-relative observations are
-all views over that same truth; none can make an exchange valid.
+picture. A strategy continued from a step reports what its search expanded,
+generated, left on its frontier and visited, its thinking, beside where it
+ended. Sokoban and Connect Four grids, the Exact Cover matrix, scheduling and
+perishables timelines, maze, market and logistics networks, an experiment's
+trials on their front, and assessed candidates are all views over that same
+truth; none can make an exchange valid.
 Graph and grid entities carry stable identities plus typed links to the accounts
 or balances they illustrate, so one generic renderer can animate travel,
 arrival, production, consumption, preservation, and route flow directly from
@@ -240,25 +238,24 @@ recreated from a cell label. Stepping shows the real transition; seeking jumps
 directly to the requested state without fabricating motion across skipped
 exchanges. Playback speed changes the time available to inspect that evidence
 without suppressing it.
-Deliberately invalid or infeasible proposals appear under **Moves that should
-be refused**, with structured role, account, asset, and rate diagnostics. They
-demonstrate that the rules are active and are kept visually separate
-from genuine study or transport failures.
+An exchange offered or written at a step is assessed before it can be
+applied, with structured role, account, asset, and rate diagnostics, kept
+visually separate from transport failures.
 
 ### Reading Studio
 
 - Assets and accounts appear under **Source of truth**.
 - Rates, roles, goals, and invariants appear under **The rules**.
 - Each applied exchange appears under **One step** and in the replay scrubber.
-- Goals become outcome objectives; competing outcomes appear under **Tradeoffs**.
+- An experiment's trials, their objective values and the front appear under **Experiments**.
 
-Studio, the CLI, the HTTP API, and MCP deliberately call the same
-interface-neutral service. Their different usability demands pressure one
-shared catalog, request, progress, control, and study API. A capability is
+Studio, the CLI, the HTTP API, and MCP deliberately call the same engine.
+Their different usability demands pressure one engine API. A capability is
 promoted toward the core only when it is independent of transport and
 presentation and belongs to economic validation or replay; interface-specific
-state stays outside. Cross-interface tests compare complete studies so the
-four surfaces cannot quietly acquire different semantics.
+state stays outside. The same package tests run against the native server and
+the browser Worker, so the surfaces cannot quietly acquire different
+semantics.
 
 ```console
 cargo run -p axionomy-cli -- studio
@@ -267,62 +264,60 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
-Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
-loads the same Rust service as WebAssembly in an isolated Worker and keeps
-Study enabled for every problem. Worker cancellation is immediate by
-terminating that disposable worker. If WebAssembly cannot initialize, the
-pre-built Showcase studies still provide read-only playback. The status badge
-is backed by a current health/initialization check rather than by a catalog that
-may have been cached earlier.
+Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy
+as Studio opens, Studio uses its store over HTTP/SSE; otherwise it runs the same
+engine as WebAssembly in an isolated Worker, over a store kept in the origin
+private file system. Cancelling a run in the Worker terminates it and starts
+another on the same store. The status badge is backed by a current health
+check.
 
-The repository deploys the browser engine and pre-built studies to
+The repository deploys the browser engine and the sample packages to
 `https://biomaai.github.io/axionomy/` from `main` through the Pages workflow.
 GitHub Pages requires no application server and no cross-origin isolation: the
 engine is intentionally single-threaded inside a Worker. See
 [`studio/README.md`](studio/README.md) for contract generation and verification.
 
-The same service is available without a browser:
+The same engine is available without a browser:
 
 ```console
-cargo run -p axionomy-cli -- catalog
-cargo run -p axionomy-cli -- describe logistics
-cargo run -p axionomy-cli -- study logistics --instance showcase --strategy reliable
+cargo run -p axionomy-cli -- package samples packages
+cargo run -p axionomy-cli -- package inspect packages/logistics.zip
+cargo run -p axionomy-cli -- mcp --package packages/logistics.zip
 ```
 
 ## Three questions the examples can answer
 
 **What changes when an agent learns something?** In the
-[Mission](https://biomaai.github.io/axionomy/?problem=mission&strategy=coordinated&seed=11&budget=128),
-press **Study**, then follow the private sighting, belief update, explicit sharing,
-and subsequent decisions. Each public action in the coordinated replay is
-chosen by ISMCTS. Compare it with the direct North commitment in the same
-scenario. Try seed 17 afterward: a misleading sighting shows why valid actions
-can still lead to failure. Actor observations follow the replay step, and the
-premature coordinated move is rejected for missing shared information.
+[Mission](https://biomaai.github.io/axionomy/?package=packages/mission.zip&ref=mission/micro&view=experiments),
+run `mission/micro`, then open the coordinated trial and follow the scan, the
+sighting, the sharing and the decisions after it. Each public action of the
+coordinated run is chosen by ISMCTS from the Scout's own view. Compare it with
+the direct North commitment in the same scenario: here the sighting is
+misleading, which shows why valid actions can still lead to failure.
+`mission/micro/monte-carlo` samples both fixed policies over Nature's prior.
 
 **How much does one participant change the outcome?** The
-[Living Market](https://biomaai.github.io/axionomy/?problem=amm&strategy=market-day)
+[Living Market](https://biomaai.github.io/axionomy/?package=packages/amm.zip&ref=amm/micro&view=experiments)
 compares its market day with the same economy without the whale and with thin
-liquidity. Read initial-to-final price and reserves side by side, then inspect
-individual effects and exact coalition attribution. Its Rust example also
-proves that a trader demanding more than the quote receives nothing and leaves
-all accounts unchanged.
+liquidity. Read initial-to-final price and reserves side by side. Its Rust
+example also computes each actor's exact coalition attribution, and proves
+that a trader demanding more than the quote receives nothing and leaves all
+accounts unchanged.
 
 **What does borrowing early cost?** The
-[Lending market](https://biomaai.github.io/axionomy/?problem=lending&strategy=least-interest)
+[Lending market](https://biomaai.github.io/axionomy/?package=packages/lending.zip&ref=lending/micro&view=experiments)
 finances a bill that falls due before revenue arrives. Compare the
 least-interest plan with fewest steps: one borrows the shortfall just before
 the bill is due and repays from each installment, the other borrows on day one.
-Then open **Over-borrowed** to watch interest and a scheduled price drop push a
+Then open the over-borrowed trial to watch interest and a scheduled price drop push a
 loan past its liquidation threshold, stop the clock, and hand collateral plus a
 bonus to the keeper.
 
 **Who wins, and what does winning cost?** In the
-[Work League](https://biomaai.github.io/axionomy/?problem=work-league&strategy=mixed-field&step=24&leaderboard=resource-efficiency),
-change the ranking dimension at the same economic step. Value, throughput,
-resource efficiency, waste, and reliability expose different consequences of
-competing for the same finite work.
+[Work League](https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments),
+run the season for its mixed, throughput and sustainable fields and pick by
+value, completed jobs or waste: each ordering favours another field of
+workers competing for the same finite work.
 
 See [docs/EXAMPLE_REVIEW.md](docs/EXAMPLE_REVIEW.md) for the review of the existing suite
 and the next improvements that deepen each demonstration.
@@ -333,49 +328,50 @@ Each view below is derived from the same accounts, assets, rates, exchanges,
 receipts, and replay contract used by the engine—never from a parallel
 simulation model. They also serve as checked-in examples of the
 [Studio visual language](studio/VISUAL_LANGUAGE.md). Click any image for the
-full-resolution view; follow its title to open the exact live replay.
+full-resolution view; follow its title to open its package at the instance it
+shows, whose experiment replays each strategy's run.
 
 <table>
   <tr>
     <td colspan="2">
       <a href="assets/studio-gallery/maze.webp"><img src="assets/studio-gallery/maze.webp" alt="Axionomy Studio replaying the Vault District maze as the Explorer opens its gate"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=maze&amp;instance=showcase&amp;strategy=a-star&amp;document=a-star&amp;view=replay&amp;step=8&amp;seed=17&amp;budget=128">Key-door Maze · Vault District</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/maze.zip&amp;ref=maze/showcase&amp;view=experiments">Key-door Maze · Vault District</a></strong><br>
       The default onboarding graph: 15 rooms, cyclic alternatives, an explicit key transfer, a stateful gate, planned and traversed route evidence, and a replay-verified A* result.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/work_league.webp"><img src="assets/studio-gallery/work_league.webp" alt="Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=work-league&amp;instance=showcase&amp;strategy=mixed-field&amp;document=mixed-field&amp;view=replay&amp;step=0&amp;leaderboard=contract-value&amp;seed=17&amp;budget=128">Autonomous Work League</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/work-league.zip&amp;ref=work-league/showcase&amp;view=experiments">Autonomous Work League</a></strong><br>
       The canonical graph scene: four agents, finite jobs, shared facilities, resource costs, stable relationships, and several replay-derived rankings.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=logistics&amp;instance=showcase&amp;strategy=reliable&amp;document=reliable&amp;view=replay&amp;step=27&amp;seed=17&amp;budget=128">Stochastic logistics</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/logistics.zip&amp;ref=logistics/showcase&amp;view=experiments">Stochastic logistics</a></strong><br>
       Monte Carlo policy comparison, MCTS evidence, random travel events, and a replayed route through four deliveries.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/marketplace.webp"><img src="assets/studio-gallery/marketplace.webp" alt="Axionomy Studio replaying an atomic multi-party marketplace clearing"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=marketplace&amp;instance=showcase&amp;strategy=market-clearing&amp;document=market-clearing&amp;view=replay&amp;step=4&amp;seed=17&amp;budget=128">Multi-party marketplace</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/marketplace.zip&amp;ref=marketplace/showcase&amp;view=experiments">Multi-party marketplace</a></strong><br>
       Atomic settlement across buyers, sellers, carriers, platform, and tax, with exact Pareto utility tradeoffs.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/sokoban.webp"><img src="assets/studio-gallery/sokoban.webp" alt="Axionomy Studio replaying stable crates and a player moving through a Sokoban warehouse"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=sokoban&amp;instance=showcase&amp;strategy=a-star&amp;document=a-star&amp;view=replay&amp;step=8&amp;seed=17&amp;budget=128">Sokoban</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/sokoban.zip&amp;ref=sokoban/showcase&amp;view=experiments">Sokoban</a></strong><br>
       The canonical grid scene: stable terrain, independently animated entities, exact cell anchoring, dead squares, and atomic multi-cell pushes.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/mission.webp"><img src="assets/studio-gallery/mission.webp" alt="Axionomy Studio replaying a hidden-information multi-agent mission"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=mission&amp;instance=showcase&amp;view=replay&amp;step=3&amp;seed=17&amp;budget=128">Hidden-information mission</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/mission.zip&amp;ref=mission/showcase&amp;view=experiments">Hidden-information mission</a></strong><br>
       Private observations, shared beliefs, random hazards, and information-set search across cooperating agents.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/perishables.webp"><img src="assets/studio-gallery/perishables.webp" alt="Axionomy Studio replaying perishable inventory decay during a power outage"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=perishables&amp;instance=showcase&amp;view=replay&amp;step=4&amp;seed=17&amp;budget=128">Perishable inventory</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/perishables.zip&amp;ref=perishables/showcase&amp;view=experiments">Perishable inventory</a></strong><br>
       Ten thousand fungible claims, cohort-level decay, cooling energy, timed effects, and exact inventory tradeoffs.
     </td>
   </tr>
@@ -569,14 +565,12 @@ the economy after its first `N` exchanges, positions of exchanges count from
 zero (`exchange_index`), and failures are structured: a stable code, a message
 that names what to fix, and for a malformed argument its JSON pointer.
 
-Studies are explorable. `axionomy_problem_study` studies a built-in problem as
-an MCP task, and each of its documents (the requested strategy's run beside
-the problem's other outcomes) is two ordinary economies: `initial_economy_id`,
-where it starts, and `final_economy_id`, where its exchanges reach. Each frame
-carries its exchange in the economy's own paths, so a client can step into the
-final economy at any step, apply the frame's exchange or another one, and diff
-its branch against the study's next step. The server's instructions walk a
-first-time client from `axionomy_problem_catalog` through that loop.
+Experiments are explorable. A server started with packages lists them with
+`axionomy_package_list`, and `axionomy_experiment_run` names every trial's end
+by an ordinary economy, made by the trial's exchanges from its arm's start, so
+a client can step into it at any step, apply its next exchange or another one,
+and diff its branch against the trial's next step. The server's instructions
+walk a first-time client from `axionomy_package_list` through that loop.
 
 The server accepts only MCP `2026-07-28`, disables legacy sessions, and
 requires the revision's request metadata and standard HTTP routing headers.

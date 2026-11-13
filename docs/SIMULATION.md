@@ -1,9 +1,10 @@
 # Simulation: primitives, scripts and packages
 
-Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 and P10 to
-P13 are done; P9 is under way, its study machinery retiring now that Studio
-runs on packages.
+Status: steps 1 to 5 below are built (step 2 for MCP), and the
+[plan](#plan-axionomy-on-primitives) that follows them is done, P1 to P13.
+P9 finished by retiring the study machinery once every sample was a package
+and Studio ran on packages alone: what the samples are, and are checked
+against, is told under P9.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -73,7 +74,7 @@ is that overlaps stay few and no Axionomy term means two things.
 | Script | Rhai source a package carries for anything a generic algorithm cannot know: candidates, policies, Nature responses, heuristics, objectives, view logic |
 | Package | A redb file, zipped optionally, holding everything above for an ontology; loaded, it is what an engine continues from |
 | Engine | `axionomy-engine`: the work every front end shares, natively and in the browser, with nothing registered |
-| Study | Retiring in P9: today's request to study a problem, replaced by an experiment on a package |
+| Study | Retired with P9: the request to study a sample problem, which experiments on packages replaced. The word remains below only in the history of steps 2 and 3 and of the plan |
 | Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
 An experiment is named for what it is: the same start, goal and effort,
@@ -150,8 +151,8 @@ Built for MCP, which needed nothing new in the store for it:
   recorded by another version is refused and studied again. Work-league's
   showcase study took a 135 MB store file as JSON and takes 8.4 MB as runs.
 
-The Studio server's store comes with the engine (P2); studies themselves are
-replaced by experiments on packages (P9).
+The Studio server's store comes with the engine (P2); studies themselves were
+replaced by experiments on packages, and retired with P9.
 
 ## Step 3: studies are named studies (done)
 
@@ -162,7 +163,8 @@ its `StudyKey` and controlled and observed through `StudyControl` and
 `StudioStudyId`s (`study-7`) and streams `study_started` … `study_failed`
 events; MCP's `axionomy_problem_study` returns a `StudySummary` whose `stu-`
 handle is read under `axionomy://study/{study_id}`; the CLI's command is
-`axionomy study`. "Run" means a trajectory everywhere.
+`axionomy study`. "Run" means a trajectory everywhere. All of these retired
+with P9.
 
 ## Step 4: replay is all or nothing
 
@@ -225,7 +227,7 @@ engine loads and continues from. The samples become packages like any user's.
 | Transports (`axionomy-mcp`, `axionomy-studio-server`) | Protocols over the engine | No package |
 | Applications (the `axionomy` binary, Studio's browser Worker) | Open stores, load packages, serve | The packages they are given |
 
-Retired as the plan completes (P9): `Problem`, `Registry`, `Study` and
+Retired as the plan completed (P9): `Problem`, `Registry`, `Study` and
 Studio's study events, and with them `axionomy-study`.
 
 ### Rules
@@ -332,8 +334,8 @@ values, records and receipt digests in postcard, and records its format (1),
 refusing any other; MCP's handle tables and the operations its handles are
 minted from are postcard too. JSON is left only in protocols.
 
-**P2. One engine, no registry (done).** `Engine::new(store)`. MCP takes the
-registry its study tools use beside its engine until P9 replaces them. The
+**P2. One engine, no registry (done).** `Engine::new(store)`. MCP took the
+registry its study tools used beside its engine until P9 retired them. The
 CLI and the Studio server hold an engine as soon as they use one: the CLI for
 packages (P8), the Studio server for points and refs (P10, P12).
 
@@ -456,8 +458,8 @@ own, so a policy or search never compiles them. `draw(point)` draws a
 point's history as a document with the view of its run's ontology, or with
 its paths. The store reads any run as `Paths`, and a fork written as paths
 keeps the ontology of the run it forked from. Maze's view, written as a
-script, draws every document of every maze study exactly as its Rust view
-does.
+script, drew every document of every maze study exactly as its Rust view
+did, until P9 retired the Rust views with the studies.
 
 Drawing maze from the store found that an economy iterated its accounts and
 rates in creation order while the store reads them back in identifier order,
@@ -516,15 +518,15 @@ size: a strategy is how to choose, and each run names its start, its goal
 and its effort, so an instance's own goal and turn limit are its
 experiment's, never a strategy's, and what a strategy keeps of its own,
 such as how many iterations a player searches, is named in its key
-(D-052). Done when every experiment reproduces today's study outcomes
+(D-052). Done when every experiment reproduced the study outcomes
 (objectives and traces) from its package alone; then `Problem`, `Registry`,
-`Study`, `axionomy-study` and `export-studies` go, MCP's problem tools become
-package and experiment tools, Studio's catalog lists the loaded packages, and
-Pages ships the sample packages, built in CI and never committed. Studio
-plays studies until it runs on packages, so the study machinery retires with
-P12, once nothing reads it.
+`Study`, `axionomy-study` and `export-studies` went, MCP's problem tools
+gave way to its package and experiment tools, Studio's catalog lists the
+loaded packages, and Pages ships the sample packages, built in CI and never
+committed. Studio played studies until it ran on packages (P12), so the
+study machinery retired last, once nothing read it.
 
-Built so far: each sample's builder (`<sample>::package::write`, behind
+Built: each sample's builder (`<sample>::package::write`, behind
 `axionomy-problems`' `packages` feature) writes its package into an engine's
 store, and `axionomy package samples <directory>` writes every one, zipped.
 Maze's package (its three instances as maze runs, its search and view
@@ -630,11 +632,36 @@ MCP serves packages it loads when it starts (`axionomy mcp --package`):
 point each names, and its experiments and strategies, and
 `axionomy_experiment_run` and `axionomy_experiment_results` give every
 trial's seed, outcome, exact objective values and an `eco-` handle for its
-end, which every other tool takes, beside the problem tools until P12. The
+end, which every other tool takes. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.
+
+Retired, once all of that held: the study machinery. Before it went, the
+package tests stopped comparing packages with the studies' documents and
+compared them with what each sample's Rust code gives, the same functions
+the studies called with the same seed (17) and effort (128): its solvers,
+policies, planners and games, the plans it keeps beside them from the
+economies it starts at, every objective's value, and the totals its Monte
+Carlo fronts average, every comparison exact at every instance; a test
+proved, while the studies remained, that these outcomes were the studies'
+documents, trace for trace and value for value. The view tests stopped
+comparing each package's view with the sample's Rust view: every view draws
+every run of every experiment into documents with a frame for every step,
+each explained, scenes that pass `Scene::validate` and `validate_evidence`,
+the formats of exactly the assets the view reads in units, and Showcase
+runs as big as the studies' were. Then `axionomy-study` went, with each
+sample's `study.rs` and Rust view, `support.rs` and `registry()`; the CLI's
+`catalog`, `describe`, `study` and `export-studies`; MCP's
+`axionomy_problem_catalog` and `axionomy_problem_study`, the `stu-` handles,
+the `axionomy://study/…` resources and the `mcp-studies` table; the Studio
+server's `/api/problems` and `/api/studies` and the Worker's `catalog` and
+`study`; and Studio's study workspace, its `?studies` and study links, its
+static studies on Pages and its study tests. Each sample keeps its typed
+ontology, its economy builders and its Rust solvers, the oracles its
+package is checked against; the view types stay, which the engine draws
+into. A transport, the CLI and Studio know packages only.
 
 **P10. Live refs (done).** The store's refs gain compare-and-set and an index of each
 run's branches; the engine gains `refer`, `advance`, `watch` and
@@ -710,8 +737,7 @@ leaves it no clock to ask for. The store, the engine and zip build for
 store format as well as its host API before it merges, and
 `Engine::experiments` lists the experiments a store keeps.
 
-Built in Studio's Worker (`axionomy-studio-wasm`, beside the studies P12
-retires): an `Engine` over the Worker's store, on a redb backend over a
+Built in Studio's Worker (`axionomy-studio-wasm`): an `Engine` over the Worker's store, on a redb backend over a
 `FileSystemSyncAccessHandle` to `axionomy.redb` in the origin private file
 system, or in memory, saying why, where that is unavailable, the saved
 store cannot be opened (it is left as it is) or another tab holds it; the
@@ -722,7 +748,7 @@ merged), lists the store's packages and experiments, runs an experiment,
 reporting its searches' progress, reads its results and draws a point.
 Paths and points are parsed where they cross from JavaScript, and results
 come back as the engine's JSON. Cancelling terminates the Worker, as
-cancelling a study does.
+cancelling a study did.
 
 A run cannot be stopped any other way. A synchronous WebAssembly call reads
 no message until it returns; a flag in shared memory needs cross-origin
@@ -804,12 +830,11 @@ instead of recording its stopped searches as trials that ran out.
 `axionomy mcp --package` does, and `axionomy package samples` writes
 `index.json` naming the samples, which Studio lists them by.
 
-Studio opens on packages; the studies stay one switch away, and every study
-link still opens them, until their machinery retires. A package loads from
+Studio opens on packages, and since P9 on nothing else. A package loads from
 a file, from a sample's URL, or from `?package=<url>`; the link keeps the
 URL, the ref or point, the step and the view, so reloading opens them again.
 Opening a ref draws its point's history with the package's view, in the
-playback, scene and inspectors studies use. Act offers the candidates at
+playback, scene and inspectors the studies used. Act offers the candidates at
 the step on screen, each assessed, and an exchange written as JSON, assessed
 before it can be applied: at the point a ref of one's own is on, applying
 moves the ref over the new step, refused with where it went when another
