@@ -98,7 +98,11 @@ needs a name: Rhai refuses `for _ in ...`. A view's script builds its scene on
 the `scene` module (`scene::graph(title, nodes, edges, focus)`, `grid`,
 `matrix`, `timeline`), which infers entities, paths and legend from the
 surface; Rhai functions do not see a script's top-level constants, so a
-table a function needs is itself a function.
+table a function needs is itself a function. Inside a closure, a variable
+named like one of the script's functions reads as a pointer to that
+function: name variables apart from functions. `array.sort(comparer)`
+treats a comparer that fails as finding its two items equal, so a broken
+comparer sorts wrongly rather than failing.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so will the Studio server, the CLI and Studio's browser Worker
