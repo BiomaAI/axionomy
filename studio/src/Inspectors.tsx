@@ -133,7 +133,7 @@ export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) 
   </div>;
 }
 
-function Assessment({ assessment, expectedRejection = false }: { assessment: ExchangeFrame["assessment"]; expectedRejection?: boolean }) {
+export function Assessment({ assessment, expectedRejection = false }: { assessment: ExchangeFrame["assessment"]; expectedRejection?: boolean }) {
   const quantity = useQuantity();
   return <div className={`assessment assessment-${assessment.status} ${expectedRejection ? "expected-rejection" : ""}`}>
     <strong>{expectedRejection ? `expected rejection · ${assessment.status}` : assessment.status}</strong>

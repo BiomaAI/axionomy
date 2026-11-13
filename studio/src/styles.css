@@ -755,3 +755,74 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
 .observation-balance { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0 0 12px; font-size: 10px; }
 .observation-balance > span { color: var(--muted); }
 .observation-balance > strong { font-variant-numeric: tabular-nums; }
+
+/* Packages (P12): the workspace switch, a point's actions, experiments. */
+.workspace-switch { display: flex; gap: 0; margin-left: auto; margin-right: 22px; }
+.workspace-switch button { min-height: 32px; padding: 0 14px; color: var(--muted); font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.workspace-switch button + button { border-left: 0; }
+.workspace-switch button[aria-current="page"] { color: var(--accent-contrast); background: var(--accent); border-color: var(--accent); }
+input[type="text"], textarea { border: 1px solid var(--line); color: var(--text); background: var(--surface-2); border-radius: 0; min-height: 38px; padding: 0 11px; }
+textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var(--mono); resize: vertical; }
+.package-field { min-width: 210px; }
+.ref-field { min-width: 260px; }
+.sample-field { min-width: 170px; }
+.packages-workspace .error-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.packages-workspace .error-banner button { min-height: 28px; font-size: 10px; }
+.empty-catalog { display: grid; gap: 8px; max-width: 720px; margin: 60px auto; padding: 22px 24px; border: 1px solid var(--line); background: var(--surface); }
+.empty-catalog strong { font: 400 18px var(--serif); }
+.empty-catalog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.empty-catalog code, .experiment-card code { font: 11px var(--mono); color: var(--text); }
+.keep-ref { display: flex; align-items: end; gap: 7px; }
+.keep-ref .field { min-width: 280px; }
+.act-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); height: auto; min-height: 360px; }
+.packages-workspace .command-bar button { white-space: nowrap; }
+.act-grid > .panel { max-height: clamp(520px, 80vh, 900px); }
+.action-panel { display: flex; flex-direction: column; }
+.action-tabs { display: flex; gap: 5px; padding: 10px 15px 0; }
+.action-tabs button { min-height: 30px; padding: 0 10px; color: var(--muted); font-size: 11px; }
+.action-tabs button[aria-selected="true"], .candidate[aria-pressed="true"] { color: var(--accent-contrast); background: var(--accent); border-color: var(--accent); }
+.act, .continue, .follow { display: grid; align-content: start; gap: 11px; padding: 12px 15px 15px; overflow: auto; min-height: 0; }
+.candidate-list { display: grid; gap: 5px; max-height: 260px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.candidate { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; align-items: baseline; gap: 10px; width: 100%; min-height: 34px; text-align: left; font-size: 11px; }
+.candidate span { overflow: hidden; color: var(--muted); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.candidate small { font: 10px var(--mono); text-transform: uppercase; }
+.candidate-applicable small { color: var(--credit); }
+.candidate-infeasible small { color: var(--hold); }
+.candidate-invalid small { color: var(--debit); }
+.candidate[aria-pressed="true"] span, .candidate[aria-pressed="true"] small { color: inherit; }
+.candidate-detail { display: grid; gap: 8px; }
+.candidate-detail > button, .editor-actions > button { justify-self: start; }
+.exchange-editor { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.exchange-editor summary { cursor: pointer; color: var(--brass); font: 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.continue-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.continue-controls .numeric-field { width: 130px; }
+.ran-summary { display: grid; gap: 10px; border: 1px solid var(--line); }
+.ran-summary .editor-actions { padding: 0 12px 10px; }
+.ran-summary .muted { margin: 0 12px; }
+.thinking-counters { display: flex; flex-wrap: wrap; gap: 7px 18px; padding: 0 12px; }
+.thinking-counters span { display: grid; gap: 3px; }
+.thinking-counters small { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
+.thinking-counters b { color: var(--brass); font: 12px var(--mono); }
+.delivered-frames { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.delivered-frames li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; padding: 6px 9px; border: 1px solid var(--line); font: 10px var(--mono); }
+.delivered-frames strong { color: var(--brass); }
+.delivered-frames small { color: var(--muted); font-size: 10px; }
+.experiments { display: grid; gap: 14px; margin-bottom: 14px; }
+.experiment-body { display: grid; gap: 10px; padding: 12px; }
+.experiment-body .study-key, .experiment-body > .muted { margin: 0; }
+.pick-field { min-width: 200px; margin-left: auto; }
+.experiment-card td small.outcome-note { margin-left: 8px; }
+@media (max-width: 1180px) {
+  .act-grid { grid-template-columns: minmax(0, 1fr); }
+  .workspace-switch { margin-right: 12px; }
+}
+@media (max-width: 880px) {
+  .topbar { flex-wrap: wrap; gap: 8px 12px; }
+}
+@media (max-width: 520px) {
+  .workspace-switch { order: 3; width: 100%; margin: 0; }
+  .workspace-switch button { flex: 1; }
+  .keep-ref { flex-direction: column; align-items: stretch; }
+  .keep-ref .field { min-width: 0; }
+}
