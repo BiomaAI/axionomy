@@ -8,22 +8,25 @@
 //! `perishables/cold-chain`: the four daily policies on the study's outage
 //! schedule, each a plan for every day, with food saved, delivered, revenue,
 //! energy, fuel and missed obligations as objectives. Each instance has an
-//! experiment comparing its strategies.
+//! experiment comparing its strategies, and each ontology a view of its own.
 
 use crate::{
     package::{call, written},
     perishables::{self, cold_chain},
 };
-use axionomy::{Economy, path};
+use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Recordable};
 
 const SCRIPT: &str = include_str!("../../scripts/perishables.rhai");
 const COLD_CHAIN: &str = include_str!("../../scripts/cold-chain.rhai");
+/// The views of Micro's inventory and of the cold chains.
+const VIEW: &str = include_str!("../../scripts/perishables-view.rhai");
+const COLD_CHAIN_VIEW: &str = include_str!("../../scripts/cold-chain-view.rhai");
 
 /// The seed of the study's default request, which picks the day the cold
 /// chain's outage begins.
@@ -39,6 +42,34 @@ const OUTAGE_TURNS: u64 = 1 + 3 + 3 + 1 + 1;
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     engine.keep_script(&path!("perishables"), SCRIPT)?;
     engine.keep_script(&path!("perishables/cold-chain"), COLD_CHAIN)?;
+    for (ontology, script, source, title) in [
+        (
+            OntologyPath::of::<perishables::Ontology>(),
+            "perishables/view",
+            VIEW,
+            "Perishable inventory",
+        ),
+        (
+            OntologyPath::of::<cold_chain::Ontology>(),
+            "perishables/cold-chain/view",
+            COLD_CHAIN_VIEW,
+            "Cold-chain operations",
+        ),
+    ] {
+        let view = |function| Some(call(script, function));
+        engine.keep_script(&script.parse().expect("a path"), source)?;
+        engine.keep_view(
+            &ontology,
+            &View {
+                title: title.into(),
+                labels: view("label"),
+                formats: view("format"),
+                carry: None,
+                scene: view("scene"),
+                leaderboards: None,
+            },
+        )?;
+    }
     micro(engine)?;
     cold_chain(engine)
 }
