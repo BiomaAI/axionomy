@@ -2155,7 +2155,7 @@ the engine has, and knows no package.
 
 ### D-046: Every step is an apply at a point; a ref says which steps count
 
-Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P10).
+Built ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P10).
 A point is one saved state of the economy: the economy after a given step of
 a recorded run, named by the run and the step. Every point has one history,
 the exchanges that led to it. `apply(point, exchanges)` applies all of them or

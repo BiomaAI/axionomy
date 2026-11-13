@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 are done and
-P9 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 and P10 are
+done; P9 is under way, and P11 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -544,7 +544,7 @@ every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.
 
-**P10. Live refs.** The store's refs gain compare-and-set and an index of each
+**P10. Live refs (done).** The store's refs gain compare-and-set and an index of each
 run's branches; the engine gains `refer`, `advance`, `watch` and
 `frames(after)`, which pulls from the last point a reader handled. Every
 transport offers them; MCP mints a handle for a ref as it does for a point.
@@ -573,6 +573,9 @@ file (`axionomy studio --store`), and serves refs by their paths and points
 as `PointId`s (`run-…:step`): `POST /api/refs`, `GET /api/refs/{name}`,
 `POST /api/refs/{name}/advance` (409 with where the ref is) and
 `GET /api/refs/{name}/frames` with a goal, objectives and a long poll.
+`watch` is that long poll: a follower asks for the frames after the point
+it last handled and waits until there are some, so a pushed stream adds
+nothing a transport needs yet.
 
 **P11. The engine in the browser.** The store's writer runs inline where
 there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,
