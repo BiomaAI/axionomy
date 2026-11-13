@@ -468,7 +468,9 @@ size. Done when every experiment reproduces today's study outcomes
 (objectives and traces) from its package alone; then `Problem`, `Registry`,
 `Study`, `axionomy-study` and `export-studies` go, MCP's problem tools become
 package and experiment tools, Studio's catalog lists the loaded packages, and
-Pages ships the sample packages, built in CI and never committed.
+Pages ships the sample packages, built in CI and never committed. Studio
+plays studies until it runs on packages, so the study machinery retires with
+P12, once nothing reads it.
 
 Built so far: each sample's builder (`<sample>::package::write`, behind
 `axionomy-problems`' `packages` feature) writes its package into an engine's
