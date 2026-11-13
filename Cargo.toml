@@ -66,8 +66,9 @@ rand_chacha = "0.10.0"
 redb = "4.5.0"
 # Without its default `ahash/runtime-rng` Rhai seeds its hashes when compiling,
 # and with `no_time` it has no clock to read, so it builds for wasm32 without
-# its `wasm-bindgen` feature.
-rhai = { version = "1.27.0", default-features = false, features = ["std", "sync", "no_time", "serde"] }
+# its `wasm-bindgen` feature. `internals` lets the engine walk a script's
+# syntax tree for the scripts it imports, which a package carries with it.
+rhai = { version = "1.27.0", default-features = false, features = ["std", "sync", "no_time", "serde", "internals"] }
 ruint = { version = "1.21.1", default-features = false, features = ["std"] }
 rmcp = { version = "3.9.0", default-features = false, features = [
     "macros",

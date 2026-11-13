@@ -324,3 +324,118 @@ fn loading_checks_the_package() {
         Err(EngineError::Package(PackageError::Archive(_)))
     ));
 }
+
+#[test]
+fn a_package_carries_the_scripts_its_scripts_import() {
+    let scratch = Scratch::new("imports");
+    let source = Engine::new(Store::memory().unwrap()).unwrap();
+    // The bank's script imports its amounts, which import its limits.
+    for (script, text) in [
+        ("bank/limits", "fn ceiling() { 3 }"),
+        (
+            "bank/amounts",
+            r#"
+            import "bank/limits" as limits;
+            fn amounts() {
+                let found = [];
+                for units in 1..=limits::ceiling() { found.push(units); }
+                found
+            }
+            "#,
+        ),
+        (
+            "bank",
+            r#"
+            import "bank/amounts" as amounts;
+            fn payments(state) {
+                amounts::amounts()
+                    .map(|units| exchange("pay", #{ from: "bank", to: "alice" }, units))
+                    .filter(|payment| state.applicable(payment))
+            }
+            fn paid(state) { state.balance("alice", "cash") * amounts::limits::ceiling() }
+            "#,
+        ),
+        ("bank/unused", "fn nothing() { () }"),
+    ] {
+        source.keep_script(&path(script), text).unwrap();
+    }
+    source
+        .keep_candidates(
+            &path("bank/payments"),
+            &CandidateSet::Script(call("payments")),
+        )
+        .unwrap();
+    source
+        .keep_objective(
+            &path("bank/paid"),
+            &Objective {
+                measure: Measure::State(call("paid")),
+                direction: ObjectiveDirection::Maximize,
+            },
+        )
+        .unwrap();
+    let economy = paths::EconomyBuilder::new()
+        .account(path("bank"), basket([(path("cash"), 2)]).into())
+        .account(path("alice"), basket([(path("cash"), 2)]).into())
+        .rate(
+            path("pay"),
+            Rate::new()
+                .consume(path("from"), basket([(path("cash"), 1)]))
+                .produce(path("to"), basket([(path("cash"), 1)])),
+        )
+        .build()
+        .unwrap();
+    source
+        .refer(&path("bank/start"), source.author(economy).unwrap())
+        .unwrap();
+
+    let file = scratch.file("bank.redb");
+    let manifest = source
+        .export(
+            &path("bank"),
+            version(),
+            Contents {
+                refs: vec![path("bank/start")],
+                definitions: vec![
+                    path("candidates/bank/payments"),
+                    path("objective/bank/paid"),
+                ],
+            },
+            &Store::open(&file).unwrap(),
+        )
+        .unwrap();
+    let carried: Vec<&str> = manifest
+        .definitions
+        .iter()
+        .map(|definition| definition.as_str())
+        .collect();
+    assert_eq!(
+        carried,
+        [
+            "candidates/bank/payments",
+            "objective/bank/paid",
+            "script/bank",
+            "script/bank/amounts",
+            "script/bank/limits",
+        ]
+    );
+    Store::compact(&file).unwrap();
+    let bytes = std::fs::read(&file).unwrap();
+
+    let answers = |engine: &Engine| {
+        let start = engine.referred(&path("bank/start")).unwrap();
+        (
+            engine.candidates(start, &path("bank/payments")).unwrap(),
+            engine.measure(start, &path("bank/paid")).unwrap(),
+        )
+    };
+    let (payments, paid) = answers(&source);
+    assert_eq!(payments.len(), 2);
+    assert_eq!(paid, Quantity::new(6));
+    for file in [bytes.clone(), zipped(&bytes).unwrap()] {
+        let loaded = Engine::new(Store::memory().unwrap()).unwrap();
+        loaded.load(&package(&file).unwrap()).unwrap();
+        assert_eq!(answers(&loaded), (payments.clone(), paid));
+        assert!(loaded.script(&path("bank/unused")).unwrap().is_none());
+    }
+}

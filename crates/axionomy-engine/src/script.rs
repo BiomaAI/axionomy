@@ -7,8 +7,14 @@
 //! arithmetic), and the only randomness is a [`Random`] the host seeds, so a
 //! script gives the same answer for the same arguments everywhere. Rhai's
 //! maps iterate in key order, and scripts have no clock.
+//!
+//! A script imports another the store keeps by its path,
+//! `import "maze/routes" as routes;`, and calls its functions as
+//! `routes::shortest(...)`. Imports resolve over kept scripts only, never a
+//! file or the network; each imported script is compiled and evaluated once,
+//! as a module, and sees the same host API.
 
-use crate::EngineError;
+use crate::{EngineError, ScriptFunction, cache::Cache, definitions::definition};
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, ObservationKey, PathKind, Quantity, RatePath,
     RolePath, Rounding,
@@ -16,9 +22,12 @@ use axionomy::{
     paths::{self, Paths},
 };
 use axionomy_search::sampling::{self, SeededSampler, WeightedExchange, splitmix};
-use rhai::{Array, Dynamic, EvalAltResult, ImmutableString, Map};
+use axionomy_store::{Store, StoreError};
+use rhai::{
+    ASTNode, Array, Dynamic, EvalAltResult, Expr, ImmutableString, Map, Module, Position, Stmt,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque, btree_map::Entry},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -33,9 +42,15 @@ pub const HOST_API: u64 = 1;
 
 /// The most operations one call of a script may run before it is stopped.
 const MAX_OPERATIONS: u64 = 50_000_000;
+/// Scripts kept compiled in memory, and imported scripts kept evaluated.
+const COMPILED: usize = 32;
 /// The deepest a script's expressions may nest at its top level; half that
 /// inside its functions.
 const MAX_DEPTH: usize = 256;
+/// The deepest function calls may nest, a call into an imported script among
+/// them. Rhai's default is 8 in a debug build and 64 in a release one; a
+/// script runs alike in both.
+const MAX_CALL_LEVELS: usize = 64;
 
 /// The kind of path a script is named by.
 pub mod kind {
@@ -213,12 +228,15 @@ fn effect(
         .collect())
 }
 
-/// The Rhai engine with the host API registered, shared by every call.
-pub(crate) fn host() -> rhai::Engine {
+/// The Rhai engine with the host API registered, shared by every call,
+/// whose scripts import the scripts `scripts` keeps.
+pub(crate) fn host(scripts: Scripts) -> rhai::Engine {
     let mut rhai = rhai::Engine::new();
+    rhai.set_module_resolver(Imports(scripts));
     rhai.set_max_operations(MAX_OPERATIONS);
     // Rhai's defaults reject the nesting an ordinary policy reaches.
     rhai.set_max_expr_depths(MAX_DEPTH, MAX_DEPTH / 2);
+    rhai.set_max_call_levels(MAX_CALL_LEVELS);
     rhai.on_print(|_| {});
     rhai.on_debug(|_, _, _| {});
     quantities(&mut rhai);
@@ -251,6 +269,254 @@ pub(crate) fn host() -> rhai::Engine {
         });
     rhai.register_fn("distances", distances);
     rhai
+}
+
+/// A kept script, compiled, and the scripts it imports.
+pub(crate) struct Compiled {
+    pub(crate) ast: rhai::AST,
+    /// The scripts its `import` statements name, each once, in the order
+    /// they first appear.
+    pub(crate) imports: Vec<ScriptPath>,
+}
+
+/// The scripts a store keeps, each compiled once, its imports checked, and
+/// evaluated once as a module when a script imports it. Clones share both.
+#[derive(Clone)]
+pub(crate) struct Scripts {
+    store: Store,
+    compiled: Cache<ScriptPath, Compiled>,
+    modules: Cache<ScriptPath, Module>,
+}
+
+/// What checking a script's imports has visited so far.
+#[derive(Default)]
+struct Walk {
+    /// The scripts from the one checked to the one being visited.
+    trail: Vec<ScriptPath>,
+    /// The scripts whose imports were all visited.
+    finished: BTreeSet<ScriptPath>,
+    /// Each function a visited script defines, by its name and number of
+    /// parameters, with that script.
+    functions: BTreeMap<(ScriptFunction, usize), ScriptPath>,
+}
+
+impl Scripts {
+    pub(crate) fn new(store: Store) -> Self {
+        Self {
+            store,
+            compiled: Cache::new(COMPILED),
+            modules: Cache::new(COMPILED),
+        }
+    }
+
+    /// The source of the script at `path`.
+    pub(crate) fn source(&self, path: &ScriptPath) -> Result<Option<String>, EngineError> {
+        let bytes = self.store.read()?.definition(&definition(path))?;
+        bytes
+            .map(|bytes| {
+                String::from_utf8(bytes).map_err(|_| {
+                    EngineError::Store(StoreError::Malformed("a script that is not text"))
+                })
+            })
+            .transpose()
+    }
+
+    /// `source` compiled by `rhai` as the script at `path`, refusing it
+    /// unless its imports check out: each names a script by a literal path,
+    /// the store keeps every script they reach, none of those imports itself
+    /// through others, and no two of them, nor the script and one of them,
+    /// define a function of the same name and number of parameters. Rhai
+    /// resolves a function by its name and number of parameters once per
+    /// call, for the script called and every script it imports alike, so two
+    /// such functions could be called one for the other.
+    pub(crate) fn checked(
+        &self,
+        rhai: &rhai::Engine,
+        path: &ScriptPath,
+        source: &str,
+    ) -> Result<Compiled, EngineError> {
+        let compiled = self.compile(rhai, path, source)?;
+        self.visit(rhai, path, &compiled, &mut Walk::default())?;
+        Ok(compiled)
+    }
+
+    /// The script at `path`, compiled by `rhai` and its imports checked.
+    pub(crate) fn compiled(
+        &self,
+        rhai: &rhai::Engine,
+        path: &ScriptPath,
+    ) -> Result<Arc<Compiled>, EngineError> {
+        if let Some(compiled) = self.compiled.get(path) {
+            return Ok(compiled);
+        }
+        let source = self
+            .source(path)?
+            .ok_or_else(|| EngineError::UnknownScript(path.clone()))?;
+        let compiled = self.checked(rhai, path, &source)?;
+        Ok(self.compiled.insert(path.clone(), compiled))
+    }
+
+    /// Remembers `compiled` as the script the store now keeps at `path`.
+    /// Every other script compiled and module evaluated is forgotten: any of
+    /// them may import the script replaced, and is checked again with the
+    /// new one when next called.
+    pub(crate) fn kept(&self, path: &ScriptPath, compiled: Compiled) {
+        self.compiled.clear();
+        self.modules.clear();
+        self.compiled.insert(path.clone(), compiled);
+    }
+
+    /// `source` compiled by `rhai` as the script at `path`, refusing an
+    /// import that does not name its script by a literal path.
+    fn compile(
+        &self,
+        rhai: &rhai::Engine,
+        path: &ScriptPath,
+        source: &str,
+    ) -> Result<Compiled, EngineError> {
+        let failed = |message| EngineError::Script {
+            path: path.clone(),
+            message,
+        };
+        let ast = rhai
+            .compile(source)
+            .map_err(|error| failed(error.to_string()))?;
+        let imports = imports(&ast).map_err(failed)?;
+        Ok(Compiled { ast, imports })
+    }
+
+    /// Visits `compiled`, the script at `script`, and then the scripts it
+    /// imports, depth first.
+    fn visit(
+        &self,
+        rhai: &rhai::Engine,
+        script: &ScriptPath,
+        compiled: &Compiled,
+        walk: &mut Walk,
+    ) -> Result<(), EngineError> {
+        // Closures, which Rhai names after what they are, are left out.
+        let functions = compiled.ast.iter_functions().filter_map(|function| {
+            let name = function.name.parse::<ScriptFunction>().ok()?;
+            Some((name, function.params.len()))
+        });
+        for (function, parameters) in functions {
+            match walk.functions.entry((function, parameters)) {
+                Entry::Vacant(vacant) => {
+                    vacant.insert(script.clone());
+                }
+                Entry::Occupied(occupied) => {
+                    let ((function, parameters), first) = occupied.remove_entry();
+                    return Err(EngineError::SameFunction {
+                        function,
+                        parameters,
+                        first,
+                        second: script.clone(),
+                    });
+                }
+            }
+        }
+        walk.trail.push(script.clone());
+        for import in &compiled.imports {
+            if let Some(start) = walk.trail.iter().position(|on| on == import) {
+                let mut cycle = walk.trail.split_off(start);
+                cycle.push(import.clone());
+                return Err(EngineError::ImportCycle(cycle));
+            }
+            if walk.finished.contains(import) {
+                continue;
+            }
+            match self.compiled.get(import) {
+                Some(cached) => self.visit(rhai, import, &cached, walk)?,
+                None => {
+                    let source =
+                        self.source(import)?
+                            .ok_or_else(|| EngineError::UnknownImport {
+                                script: script.clone(),
+                                import: import.clone(),
+                            })?;
+                    let compiled = self.compile(rhai, import, &source)?;
+                    self.visit(rhai, import, &compiled, walk)?;
+                }
+            }
+        }
+        walk.trail.pop();
+        walk.finished.insert(script.clone());
+        Ok(())
+    }
+
+    /// The script at `path` evaluated by `rhai` as a module.
+    fn module(&self, rhai: &rhai::Engine, path: &ScriptPath) -> Result<Arc<Module>, EngineError> {
+        if let Some(module) = self.modules.get(path) {
+            return Ok(module);
+        }
+        let compiled = self.compiled(rhai, path)?;
+        let module =
+            Module::eval_ast_as_new(rhai::Scope::new(), &compiled.ast, rhai).map_err(|error| {
+                EngineError::Script {
+                    path: path.clone(),
+                    message: error.to_string(),
+                }
+            })?;
+        Ok(self.modules.insert(path.clone(), module))
+    }
+}
+
+/// How the host resolves an import: as the script the store keeps at that
+/// path, and nothing else, neither a file nor anything on a network.
+struct Imports(Scripts);
+
+impl rhai::ModuleResolver for Imports {
+    fn resolve(
+        &self,
+        rhai: &rhai::Engine,
+        _: Option<&str>,
+        path: &str,
+        position: Position,
+    ) -> Result<Arc<Module>, Failure> {
+        let script: ScriptPath = path
+            .parse()
+            .map_err(|_| EvalAltResult::ErrorModuleNotFound(path.to_owned(), position))?;
+        self.0
+            .module(rhai, &script)
+            .map_err(|error| EvalAltResult::ErrorRuntime(error.to_string().into(), position).into())
+    }
+}
+
+/// The scripts `ast` imports, each once, in the order they first appear. An
+/// import names its script by a literal path: a package carries the scripts
+/// its scripts import, so each must be known before any of them runs.
+fn imports(ast: &rhai::AST) -> Result<Vec<ScriptPath>, String> {
+    let mut imports: Vec<ScriptPath> = Vec::new();
+    let mut refused = None;
+    ast.walk(&mut |nodes: &[ASTNode]| {
+        let Some(ASTNode::Stmt(Stmt::Import(import, position))) = nodes.last() else {
+            return true;
+        };
+        let named = match &import.0 {
+            Expr::StringConstant(text, _) => text.parse::<ScriptPath>().map_err(|_| {
+                format!(
+                    "`{text}` is not a {} ({position})",
+                    <kind::Script as PathKind>::SCHEMA
+                )
+            }),
+            _ => Err(format!(
+                "an import names its script by a literal path ({position})"
+            )),
+        };
+        match named {
+            Ok(path) => {
+                if !imports.contains(&path) {
+                    imports.push(path);
+                }
+                true
+            }
+            Err(message) => {
+                refused = Some(message);
+                false
+            }
+        }
+    });
+    refused.map_or(Ok(imports), Err)
 }
 
 fn quantity_of(value: i64) -> Result<Quantity, Failure> {

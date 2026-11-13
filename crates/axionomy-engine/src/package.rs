@@ -6,7 +6,7 @@
 
 use crate::{
     CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, Results,
-    ScriptCall, Strategy, View, definitions::kind, script::HOST_API,
+    ScriptCall, ScriptPath, Strategy, View, definitions::kind, script::HOST_API,
 };
 use axionomy::{OntologyPath, path::Path};
 use axionomy_store::{
@@ -81,9 +81,9 @@ pub struct Manifest {
 }
 
 /// What to put in a package: refs and definitions. Everything they reach
-/// comes with them: the definitions they use, the refs an experiment starts
-/// from, the views of their runs' ontologies, and the points and runs an
-/// experiment's results name.
+/// comes with them: the definitions they use, the scripts their scripts
+/// import, the refs an experiment starts from, the views of their runs'
+/// ontologies, and the points and runs an experiment's results name.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Contents {
     pub refs: Vec<RefPath>,
@@ -328,7 +328,20 @@ impl Engine {
             .ok_or_else(|| PackageError::UnknownKind(definition.clone()))?;
         let mut calls = Vec::new();
         match category {
-            "script" | "goal" | "package" => {}
+            "goal" | "package" => {}
+            // A script comes with every script it imports, which come with
+            // theirs.
+            "script" => {
+                let script: ScriptPath = path
+                    .parse()
+                    .map_err(|_| PackageError::UnknownKind(definition.clone()))?;
+                closure.queue.extend(
+                    self.compiled(&script)?
+                        .imports
+                        .iter()
+                        .map(crate::definitions::definition),
+                );
+            }
             "objective" => {
                 let Objective { measure, .. } = decoded(&bytes)?;
                 let (Measure::State(call) | Measure::Steps(call)) = measure;

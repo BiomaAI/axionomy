@@ -278,3 +278,244 @@ fn scripts_are_kept_compiled_bounded_and_read_back() {
         Err(EngineError::Returned { .. })
     ));
 }
+
+/// Keeps `source` as the script at `script` straight in `store`, as merging
+/// a package into it would, without the checks keeping it through an engine
+/// makes.
+fn define(store: &Store, script: &str, source: &str) {
+    let name: axionomy_store::DefinitionPath = path(&format!("script/{script}"));
+    let bytes = source.as_bytes().to_vec();
+    store
+        .transact(axionomy_store::Durability::Immediate, move |txn| {
+            txn.define(&name, Some(&bytes))
+        })
+        .wait()
+        .unwrap();
+}
+
+#[test]
+fn scripts_import_kept_scripts_with_the_host_api() {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    engine
+        .keep_script(&path("bank/units"), "fn tens(quantity) { quantity * 10 }")
+        .unwrap();
+    // A script imported that imports another, recurses, closes over its
+    // arguments and reads the economy and draws through the host.
+    let library: ScriptPath = path("bank/library");
+    engine
+        .keep_script(
+            &library,
+            r#"
+            import "bank/units" as units;
+
+            fn fib(n) { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }
+            fn above(values, floor) { values.filter(|value| value > floor) }
+            fn wealth(state) { units::tens(state.balance("bank", "cash")) }
+            fn drawn(random) { [random.next(1000), random.sample([1, 2, 3])] }
+            "#,
+        )
+        .unwrap();
+    let script: ScriptPath = path("bank/importer");
+    engine
+        .keep_script(
+            &script,
+            r#"
+            import "bank/library" as library;
+
+            fn fibonacci(n) { library::fib(n) }
+            fn above_four(values) { library::above(values, 4) }
+            fn bank_wealth(state) { library::wealth(state) }
+            fn draws(random) { library::drawn(random) }
+            fn units_of(quantity) { library::units::tens(quantity) }
+            "#,
+        )
+        .unwrap();
+
+    // Calls nest as deep in a debug build as in a release one, where Rhai's
+    // own limits differ.
+    assert_eq!(
+        engine.call::<i64>(&script, "fibonacci", (15_i64,)).unwrap(),
+        610
+    );
+    let values: rhai::Array = vec![1_i64.into(), 5_i64.into(), 9_i64.into()];
+    let above: rhai::Array = engine.call(&script, "above_four", (values,)).unwrap();
+    let above: Vec<i64> = above.iter().map(|value| value.as_int().unwrap()).collect();
+    assert_eq!(above, [5, 9]);
+    let wealth: Quantity = engine
+        .call(&script, "bank_wealth", (ScriptState::new(economy()),))
+        .unwrap();
+    assert_eq!(wealth, Quantity::new(1000));
+    let units: Quantity = engine
+        .call(&script, "units_of", (Quantity::new(3),))
+        .unwrap();
+    assert_eq!(units, Quantity::new(30));
+
+    // An imported script draws what it draws when called itself with the
+    // same seed.
+    let drawn = |script: &ScriptPath, function: &str| {
+        let drawn: rhai::Array = engine.call(script, function, (Random::new(7),)).unwrap();
+        drawn
+            .iter()
+            .map(|value| value.as_int().unwrap())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(drawn(&script, "draws"), drawn(&library, "drawn"));
+
+    // Replacing an imported script changes what its importers call.
+    engine
+        .keep_script(&path("bank/units"), "fn tens(quantity) { quantity * 100 }")
+        .unwrap();
+    let units: Quantity = engine
+        .call(&script, "units_of", (Quantity::new(3),))
+        .unwrap();
+    assert_eq!(units, Quantity::new(300));
+}
+
+#[test]
+fn a_script_and_those_it_imports_name_their_functions_apart() {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    engine
+        .keep_script(&path("bank/units"), "fn tens(quantity) { quantity * 10 }")
+        .unwrap();
+    engine
+        .keep_script(
+            &path("bank/scales"),
+            "fn tens(quantity) { quantity * 10 } fn hundreds(quantity) { tens(tens(quantity)) }",
+        )
+        .unwrap();
+    // Rhai resolves a function by its name and number of parameters once per
+    // call, the script called and those it imports alike, so a function of
+    // either could be called for the other's: a script defining one of the
+    // same name and number of parameters as one it imports is refused, ...
+    let refused = engine.keep_script(
+        &path("bank/importer"),
+        r#"import "bank/units" as units; fn tens(quantity) { units::tens(quantity) }"#,
+    );
+    assert_eq!(
+        refused.as_ref().unwrap_err().to_string(),
+        "scripts `bank/importer` and `bank/units` both define `tens` with 1 parameters: \
+         a script and those it imports name their functions apart"
+    );
+    // ... and so is one importing two scripts that do, ...
+    assert!(matches!(
+        engine.keep_script(
+            &path("bank/importer"),
+            r#"import "bank/units" as units; import "bank/scales" as scales;"#,
+        ),
+        Err(EngineError::SameFunction { function, parameters: 1, .. })
+            if function.as_str() == "tens"
+    ));
+    // ... while one of another number of parameters is the script's own.
+    engine
+        .keep_script(
+            &path("bank/importer"),
+            r#"import "bank/scales" as scales; fn tens() { scales::hundreds(quantity(3)) }"#,
+        )
+        .unwrap();
+    let hundreds: Quantity = engine.call(&path("bank/importer"), "tens", ()).unwrap();
+    assert_eq!(hundreds, Quantity::new(300));
+}
+
+#[test]
+fn an_import_names_a_kept_script_by_its_path() {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let store = engine.store().clone();
+    // A script importing one the store does not keep is refused, naming it,
+    // and is not kept.
+    let refused = engine.keep_script(
+        &path("bank/importer"),
+        r#"import "bank/missing" as missing; fn f() { missing::g() }"#,
+    );
+    assert_eq!(
+        refused.as_ref().unwrap_err().to_string(),
+        "script `bank/importer` imports `bank/missing`, which the store does not keep"
+    );
+    assert!(matches!(refused, Err(EngineError::UnknownImport { .. })));
+    assert!(engine.script(&path("bank/importer")).unwrap().is_none());
+
+    // So is one importing a script whose own import is not kept.
+    define(&store, "bank/broken", r#"import "bank/gone" as gone;"#);
+    assert!(matches!(
+        engine.keep_script(&path("bank/importer"), r#"import "bank/broken" as broken;"#),
+        Err(EngineError::UnknownImport { script, import })
+            if script.as_str() == "bank/broken" && import.as_str() == "bank/gone"
+    ));
+
+    // An import names its script literally, by a path.
+    for (source, refusal) in [
+        (
+            r#"let name = "bank/units"; import name as units;"#,
+            "an import names its script by a literal path",
+        ),
+        (
+            r#"import "Not a path" as units;"#,
+            "`Not a path` is not a ScriptPath",
+        ),
+    ] {
+        assert!(matches!(
+            engine.keep_script(&path("bank/computed"), source),
+            Err(EngineError::Script { message, .. }) if message.starts_with(refusal)
+        ));
+    }
+
+    // A script importing one the store does not keep, merged in without the
+    // engine's checks, is refused when it is called.
+    define(
+        &store,
+        "bank/unchecked",
+        r#"import "bank/missing" as missing; fn f() { missing::g() }"#,
+    );
+    assert!(matches!(
+        engine.call::<i64>(&path("bank/unchecked"), "f", ()),
+        Err(EngineError::UnknownImport { script, import })
+            if script.as_str() == "bank/unchecked" && import.as_str() == "bank/missing"
+    ));
+}
+
+#[test]
+fn scripts_that_import_one_another_are_refused() {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let cycle = |kept: Result<(), EngineError>| match kept {
+        Err(EngineError::ImportCycle(scripts)) => scripts
+            .iter()
+            .map(|script| script.as_str().to_owned())
+            .collect::<Vec<_>>(),
+        other => panic!("expected a cycle, found {other:?}"),
+    };
+    assert_eq!(
+        cycle(engine.keep_script(&path("bank/itself"), r#"import "bank/itself" as itself;"#)),
+        ["bank/itself", "bank/itself"]
+    );
+
+    engine
+        .keep_script(&path("bank/a"), "fn one() { 1 }")
+        .unwrap();
+    engine
+        .keep_script(
+            &path("bank/b"),
+            r#"import "bank/a" as a; fn two() { a::one() + 1 }"#,
+        )
+        .unwrap();
+    let refused = engine.keep_script(&path("bank/a"), r#"import "bank/b" as b; fn one() { 1 }"#);
+    assert_eq!(
+        refused.as_ref().unwrap_err().to_string(),
+        "scripts import one another in a cycle: `bank/a` → `bank/b` → `bank/a`"
+    );
+    assert_eq!(cycle(refused), ["bank/a", "bank/b", "bank/a"]);
+    // The script refused is not kept: the one before it still is.
+    assert_eq!(engine.call::<i64>(&path("bank/b"), "two", ()).unwrap(), 2);
+
+    // Scripts importing one another, merged in without the engine's checks,
+    // are refused when called, rather than importing forever.
+    let store = engine.store().clone();
+    define(
+        &store,
+        "bank/c",
+        r#"import "bank/d" as d; fn f() { d::g() }"#,
+    );
+    define(&store, "bank/d", r#"import "bank/c" as c; fn g() { 1 }"#);
+    assert_eq!(
+        cycle(engine.call::<i64>(&path("bank/c"), "f", ()).map(|_| ())),
+        ["bank/c", "bank/d", "bank/c"]
+    );
+}

@@ -33,6 +33,7 @@ use axionomy_store::{
 };
 use cache::Cache;
 use definitions::definition;
+use script::Scripts;
 use serde::{Serialize, de::DeserializeOwned};
 use std::{num::NonZeroU64, sync::Arc};
 use thiserror::Error;
@@ -65,6 +66,28 @@ pub enum EngineError {
     },
     #[error("the store has no script `{0}`")]
     UnknownScript(ScriptPath),
+    /// A script imports one the store does not keep.
+    #[error("script `{script}` imports `{import}`, which the store does not keep")]
+    UnknownImport {
+        script: ScriptPath,
+        import: ScriptPath,
+    },
+    /// Scripts that import one another in a cycle: each imports the next,
+    /// and the last is the first.
+    #[error("scripts import one another in a cycle: {}", cycle(.0))]
+    ImportCycle(Vec<ScriptPath>),
+    /// Two scripts, one importing the other or both imported by a script,
+    /// directly or through others, that define a function of the same name
+    /// and number of parameters, which Rhai could call one for the other.
+    #[error(
+        "scripts `{first}` and `{second}` both define `{function}` with {parameters} parameters: a script and those it imports name their functions apart"
+    )]
+    SameFunction {
+        function: ScriptFunction,
+        parameters: usize,
+        first: ScriptPath,
+        second: ScriptPath,
+    },
     #[error("no ref `{0}` names a point")]
     UnknownRef(RefPath),
     /// A script that does not compile, or failed while it ran; `message` is
@@ -120,7 +143,7 @@ pub struct Engine {
     store: Store,
     reached: Cache<Point, Reached>,
     host: Arc<rhai::Engine>,
-    scripts: Cache<ScriptPath, rhai::AST>,
+    scripts: Scripts,
     /// Told each time a ref moves, so a follower waiting on one wakes.
     moved: Arc<refs::Moves>,
 }
@@ -128,34 +151,32 @@ pub struct Engine {
 impl Engine {
     /// An engine keeping what it records in `store`.
     pub fn new(store: Store) -> Result<Self, EngineError> {
+        let scripts = Scripts::new(store.clone());
         Ok(Self {
             store,
             reached: Cache::new(CACHED),
-            host: Arc::new(script::host()),
-            scripts: Cache::new(CACHED),
+            host: Arc::new(script::host(scripts.clone())),
+            scripts,
             moved: Arc::default(),
         })
     }
 
-    /// Keeps `source` as the script at `path`, replacing any script there,
-    /// and refuses one that does not compile.
+    /// Keeps `source` as the script at `path`, replacing any script there.
+    /// Refuses one that does not compile, or whose imports do not check out:
+    /// each names by a literal path a script the store keeps, so a script is
+    /// kept after those it imports; none imports it back, directly or
+    /// through others; and no two of them, nor it and one of them, define a
+    /// function of the same name and number of parameters.
     pub fn keep_script(&self, path: &ScriptPath, source: &str) -> Result<(), EngineError> {
-        let ast = self.compile(path, source)?;
+        let compiled = self.scripts.checked(&self.host, path, source)?;
         self.keep(definition(path), source.as_bytes().to_vec())?;
-        self.scripts.insert(path.clone(), ast);
+        self.scripts.kept(path, compiled);
         Ok(())
     }
 
     /// The source of the script at `path`.
     pub fn script(&self, path: &ScriptPath) -> Result<Option<String>, EngineError> {
-        let bytes = self.store.read()?.definition(&definition(path))?;
-        bytes
-            .map(|bytes| {
-                String::from_utf8(bytes).map_err(|_| {
-                    EngineError::Store(StoreError::Malformed("a script that is not text"))
-                })
-            })
-            .transpose()
+        self.scripts.source(path)
     }
 
     /// Calls `function` of the script at `path` with `arguments`, Rhai values
@@ -167,10 +188,10 @@ impl Engine {
         function: &str,
         arguments: impl rhai::FuncArgs,
     ) -> Result<T, EngineError> {
-        let ast = self.compiled(path)?;
+        let compiled = self.compiled(path)?;
         let returned: rhai::Dynamic = self
             .host
-            .call_fn(&mut rhai::Scope::new(), &ast, function, arguments)
+            .call_fn(&mut rhai::Scope::new(), &compiled.ast, function, arguments)
             .map_err(|error| EngineError::Script {
                 path: path.clone(),
                 message: error.to_string(),
@@ -520,25 +541,9 @@ impl Engine {
         Ok(())
     }
 
-    fn compile(&self, path: &ScriptPath, source: &str) -> Result<rhai::AST, EngineError> {
-        self.host
-            .compile(source)
-            .map_err(|error| EngineError::Script {
-                path: path.clone(),
-                message: error.to_string(),
-            })
-    }
-
     /// The script at `path`, compiled.
-    fn compiled(&self, path: &ScriptPath) -> Result<Arc<rhai::AST>, EngineError> {
-        if let Some(ast) = self.scripts.get(path) {
-            return Ok(ast);
-        }
-        let source = self
-            .script(path)?
-            .ok_or_else(|| EngineError::UnknownScript(path.clone()))?;
-        let ast = self.compile(path, &source)?;
-        Ok(self.scripts.insert(path.clone(), ast))
+    fn compiled(&self, path: &ScriptPath) -> Result<Arc<script::Compiled>, EngineError> {
+        self.scripts.compiled(&self.host, path)
     }
 
     /// Whether the script at `path` defines `function` with `parameters`
@@ -551,6 +556,7 @@ impl Engine {
     ) -> Result<bool, EngineError> {
         Ok(self
             .compiled(path)?
+            .ast
             .iter_functions()
             .any(|defined| defined.name == function && defined.params.len() == parameters))
     }
@@ -779,6 +785,15 @@ fn quantity(returned: rhai::Dynamic) -> Result<Quantity, EngineError> {
             expected: "a quantity",
             found: found.to_owned(),
         })
+}
+
+/// Scripts importing one another in a cycle, as `a` → `b` → `a`.
+fn cycle(scripts: &[ScriptPath]) -> String {
+    scripts
+        .iter()
+        .map(|script| format!("`{script}`"))
+        .collect::<Vec<_>>()
+        .join(" → ")
 }
 
 /// Whether a run of applied exchanges stores the state after step `step`

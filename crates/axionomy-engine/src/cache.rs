@@ -65,4 +65,9 @@ impl<K: Eq + Hash + Clone, V> Cache<K, V> {
         entries.values.insert(key, (Arc::clone(&value), clock));
         value
     }
+
+    /// Forgets every value.
+    pub(crate) fn clear(&self) {
+        self.entries.lock().expect("cache lock").values.clear();
+    }
 }
