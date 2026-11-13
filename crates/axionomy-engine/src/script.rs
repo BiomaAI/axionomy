@@ -362,6 +362,17 @@ fn exchanges(rhai: &mut rhai::Engine) {
         .register_fn("rate", |exchange: &mut paths::Exchange| {
             ImmutableString::from(exchange.rate().as_str())
         })
+        .register_fn("units", |exchange: &mut paths::Exchange| exchange.units())
+        .register_fn(
+            "account",
+            |exchange: &mut paths::Exchange, role: &str| -> Result<Dynamic, Failure> {
+                let role: RolePath = parsed(role)?;
+                Ok(exchange
+                    .bindings()
+                    .get(&role)
+                    .map_or(Dynamic::UNIT, |account| account.to_string().into()))
+            },
+        )
         .register_fn("to_string", |exchange: &mut paths::Exchange| {
             exchange.rate().to_string()
         })

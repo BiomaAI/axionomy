@@ -1,14 +1,24 @@
 #![doc = include_str!("../README.md")]
 
 mod cache;
+pub mod definitions;
 pub mod script;
 
+pub use definitions::{
+    CandidatesPath, GoalPath, Measure, Objective, ObjectivePath, ScriptCall, ScriptFunction,
+};
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 
-use axionomy::paths::{self, Paths};
+use axionomy::{
+    PathKind, Quantity,
+    path::Path,
+    paths::{self, Paths},
+};
 use axionomy_store::{Checkpoints, DefinitionPath, Durability, Point, Reader, Store, StoreError};
 use cache::Cache;
+use definitions::definition;
+use serde::{Serialize, de::DeserializeOwned};
 use std::{num::NonZeroU64, sync::Arc};
 use thiserror::Error;
 
@@ -49,6 +59,11 @@ pub enum EngineError {
         expected: &'static str,
         found: String,
     },
+    #[error("the store defines no `{0}`")]
+    Undefined(DefinitionPath),
+    /// An objective summed over a history, asked of an economy without one.
+    #[error("objective `{0}` is measured over a history, so it needs a point")]
+    NeedsHistory(ObjectivePath),
 }
 
 /// A point as the engine serves it: the state there, the point its run
@@ -88,20 +103,14 @@ impl Engine {
     /// and refuses one that does not compile.
     pub fn keep_script(&self, path: &ScriptPath, source: &str) -> Result<(), EngineError> {
         let ast = self.compile(path, source)?;
-        let name = definition("script", path);
-        let bytes = source.as_bytes().to_vec();
-        self.store
-            .transact(Durability::Immediate, move |txn| {
-                txn.define(&name, Some(&bytes))
-            })
-            .wait()?;
+        self.keep(definition(path), source.as_bytes().to_vec())?;
         self.scripts.insert(path.clone(), ast);
         Ok(())
     }
 
     /// The source of the script at `path`.
     pub fn script(&self, path: &ScriptPath) -> Result<Option<String>, EngineError> {
-        let bytes = self.store.read()?.definition(&definition("script", path))?;
+        let bytes = self.store.read()?.definition(&definition(path))?;
         bytes
             .map(|bytes| {
                 String::from_utf8(bytes).map_err(|_| {
@@ -144,6 +153,216 @@ impl Engine {
                 expected: std::any::type_name::<T>(),
                 found: found.to_owned(),
             })
+    }
+
+    /// Keeps `goal` at `path`, replacing any goal there.
+    pub fn keep_goal(&self, path: &GoalPath, goal: &paths::Goal) -> Result<(), EngineError> {
+        self.define(path, goal)
+    }
+
+    pub fn goal(&self, path: &GoalPath) -> Result<paths::Goal, EngineError> {
+        self.defined(path)
+    }
+
+    /// Whether the economy at `at` holds the goal at `goal`.
+    pub fn holds(&self, at: Point, goal: &GoalPath) -> Result<bool, EngineError> {
+        Ok(self.reach(at)?.state.economy.matches(&self.goal(goal)?))
+    }
+
+    /// Keeps `objective` at `path`, refusing one whose script is not kept.
+    pub fn keep_objective(
+        &self,
+        path: &ObjectivePath,
+        objective: &Objective,
+    ) -> Result<(), EngineError> {
+        let (Measure::State(call) | Measure::Steps(call)) = &objective.measure;
+        self.require_script(&call.script)?;
+        self.define(path, objective)
+    }
+
+    pub fn objective(&self, path: &ObjectivePath) -> Result<Objective, EngineError> {
+        self.defined(path)
+    }
+
+    /// The value of the objective at `objective` at `at`: its measure of the
+    /// state there, or the sum of its step costs over every exchange of the
+    /// history that reached it.
+    pub fn measure(&self, at: Point, objective: &ObjectivePath) -> Result<Quantity, EngineError> {
+        match self.objective(objective)?.measure {
+            Measure::State(call) => self.measure_state(&call, &self.reach(at)?.state.economy),
+            Measure::Steps(call) => {
+                let (mut economy, exchanges) = self.history(at)?;
+                let mut total = Quantity::ZERO;
+                for exchange in exchanges {
+                    let before = economy.clone();
+                    economy.apply(exchange.clone()).map_err(|_| {
+                        EngineError::Store(StoreError::Malformed("a history that does not replay"))
+                    })?;
+                    let cost = self.step_cost(&call, &before, &exchange, &economy)?;
+                    total = total.checked_add(cost).ok_or(EngineError::Returned {
+                        expected: "step costs whose sum is a quantity",
+                        found: "a sum out of range".to_owned(),
+                    })?;
+                }
+                Ok(total)
+            }
+        }
+    }
+
+    /// The value of the objective at `objective` for an economy alone, which
+    /// only an objective measuring a state has.
+    pub fn measure_economy(
+        &self,
+        objective: &ObjectivePath,
+        economy: &paths::Economy,
+    ) -> Result<Quantity, EngineError> {
+        match self.objective(objective)?.measure {
+            Measure::State(call) => self.measure_state(&call, economy),
+            Measure::Steps(_) => Err(EngineError::NeedsHistory(objective.clone())),
+        }
+    }
+
+    /// What `call` measures of `economy`: `fn(state)`.
+    pub fn measure_state(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+    ) -> Result<Quantity, EngineError> {
+        let measured: rhai::Dynamic = self.call(
+            &call.script,
+            call.function.as_str(),
+            (ScriptState::new(economy.clone()),),
+        )?;
+        quantity(measured)
+    }
+
+    /// What `call` charges for `exchange` taking `before` to `after`:
+    /// `fn(before, exchange, after)`.
+    pub fn step_cost(
+        &self,
+        call: &ScriptCall,
+        before: &paths::Economy,
+        exchange: &paths::Exchange,
+        after: &paths::Economy,
+    ) -> Result<Quantity, EngineError> {
+        let cost: rhai::Dynamic = self.call(
+            &call.script,
+            call.function.as_str(),
+            (
+                ScriptState::new(before.clone()),
+                exchange.clone(),
+                ScriptState::new(after.clone()),
+            ),
+        )?;
+        quantity(cost)
+    }
+
+    /// Keeps the candidate set at `path`, the exchanges `call` proposes,
+    /// refusing one whose script is not kept.
+    pub fn keep_candidates(
+        &self,
+        path: &CandidatesPath,
+        call: &ScriptCall,
+    ) -> Result<(), EngineError> {
+        self.require_script(&call.script)?;
+        self.define(path, call)
+    }
+
+    /// The exchanges the candidate set at `set` proposes at `at`.
+    pub fn candidates(
+        &self,
+        at: Point,
+        set: &CandidatesPath,
+    ) -> Result<Vec<paths::Exchange>, EngineError> {
+        let call: ScriptCall = self.defined(set)?;
+        self.propose(&call, &self.reach(at)?.state.economy)
+    }
+
+    /// The exchanges `call` proposes for `economy`: `fn(state)`, returning
+    /// an array of exchanges.
+    pub fn propose(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+    ) -> Result<Vec<paths::Exchange>, EngineError> {
+        let proposed: rhai::Array = self.call(
+            &call.script,
+            call.function.as_str(),
+            (ScriptState::new(economy.clone()),),
+        )?;
+        exchanges_of(proposed)
+    }
+
+    /// The economy a point's history starts from, and the exchanges that
+    /// take it to the point, across the runs it forked from.
+    pub fn history(
+        &self,
+        at: Point,
+    ) -> Result<(paths::Economy, Vec<paths::Exchange>), EngineError> {
+        let reader = self.store.read()?;
+        let mut segments = Vec::new();
+        let mut on = at;
+        let root = loop {
+            let run = reader
+                .run_of::<Paths>(on.run)?
+                .ok_or(EngineError::UnknownPoint(on))?;
+            segments.push((on.run, run.first, on.step));
+            match run.from {
+                Some(from) => on = from,
+                None => {
+                    break Point {
+                        run: on.run,
+                        step: run.first,
+                    };
+                }
+            }
+        };
+        let economy = first_state(&reader, root, root.step)?.economy;
+        let mut exchanges = Vec::new();
+        for (run, first, last) in segments.into_iter().rev() {
+            let count = usize::try_from(last - first).unwrap_or(usize::MAX);
+            for (_, step) in reader.steps::<Paths>(run, first + 1, count)? {
+                exchanges.push(step.exchange);
+            }
+        }
+        Ok((economy, exchanges))
+    }
+
+    fn require_script(&self, path: &ScriptPath) -> Result<(), EngineError> {
+        match self.script(path)? {
+            Some(_) => Ok(()),
+            None => Err(EngineError::UnknownScript(path.clone())),
+        }
+    }
+
+    /// Keeps `value`, in postcard, as what `path` defines.
+    fn define<K: PathKind, T: Serialize>(
+        &self,
+        path: &Path<K>,
+        value: &T,
+    ) -> Result<(), EngineError> {
+        let bytes = postcard::to_allocvec(value).expect("definitions encode");
+        self.keep(definition(path), bytes)
+    }
+
+    fn defined<K: PathKind, T: DeserializeOwned>(&self, path: &Path<K>) -> Result<T, EngineError> {
+        let name = definition(path);
+        let bytes = self
+            .store
+            .read()?
+            .definition(&name)?
+            .ok_or(EngineError::Undefined(name))?;
+        postcard::from_bytes(&bytes)
+            .map_err(|_| EngineError::Store(StoreError::Malformed("a definition")))
+    }
+
+    fn keep(&self, name: DefinitionPath, bytes: Vec<u8>) -> Result<(), EngineError> {
+        self.store
+            .transact(Durability::Immediate, move |txn| {
+                txn.define(&name, Some(&bytes))
+            })
+            .wait()?;
+        Ok(())
     }
 
     fn compile(&self, path: &ScriptPath, source: &str) -> Result<rhai::AST, EngineError> {
@@ -335,12 +554,22 @@ fn first_state(reader: &Reader, at: Point, first: u64) -> Result<State, EngineEr
         .ok_or(EngineError::UnknownPoint(point))
 }
 
-/// The name a definition of `kind` at `path` is kept under, such as
-/// `script/maze/heuristic`.
-fn definition<K>(kind: &str, path: &axionomy::path::Path<K>) -> DefinitionPath {
-    format!("{kind}/{path}")
-        .parse()
-        .expect("a kind and a path make a path")
+/// A quantity a script returned: a quantity, or an integer that is not
+/// negative.
+fn quantity(returned: rhai::Dynamic) -> Result<Quantity, EngineError> {
+    let found = returned.type_name();
+    if returned.is::<Quantity>() {
+        return Ok(returned.cast());
+    }
+    returned
+        .as_int()
+        .ok()
+        .and_then(|value| u64::try_from(value).ok())
+        .map(Quantity::new)
+        .ok_or_else(|| EngineError::Returned {
+            expected: "a quantity",
+            found: found.to_owned(),
+        })
 }
 
 /// Whether a run of applied exchanges stores the state after step `step`

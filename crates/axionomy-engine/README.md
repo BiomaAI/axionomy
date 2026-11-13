@@ -18,6 +18,11 @@ goes.
 - `assess` explains whether an exchange would apply at a point.
 - `keep_script` keeps a Rhai script by its path, refusing one that does not
   compile, and `call` runs one of its functions (D-049).
+- `keep_goal`, `keep_objective` and `keep_candidates` keep a goal, an
+  objective (a script's measure of a state, or its step costs summed over a
+  history, with a direction) and a candidate set (a script function returning
+  exchanges); `holds`, `measure` and `candidates` evaluate them at a point, and
+  `measure_state`, `step_cost` and `propose` on an economy in memory.
 
 Scripts are how a package says what a generic algorithm cannot know. They
 read a `ScriptState`, the whole economy or a view of the accounts an actor may

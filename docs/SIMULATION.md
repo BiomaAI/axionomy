@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P3 are done and
-P4 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P4 are done and
+P5 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -334,10 +334,15 @@ heuristic 3.6 µs against 1.4 µs, sokoban's candidates 283 µs against 87 µs,
 an incident turn 340 µs against 65 µs), since most of a call is the host
 API's kernel work; `examples/script_speed.rs` measures it.
 
-**P4. Goals, objectives and candidates.** Goals are kernel data stored by
-path; objectives are script expressions with a direction, including sums of
-step costs along a path; candidates come from script generators. All can be
-evaluated at any point through every transport.
+**P4. Goals, objectives and candidates (done).** Goals are kernel data kept
+by path (`goal/<path>`); an objective is a script measure with a direction,
+of the state (`fn(state)`) or summed over a point's whole history, across
+the runs it forked through (`fn(before, exchange, after)`, such as interest
+accrued); a candidate set is a script function returning exchanges. The
+engine evaluates them at any point (`holds`, `measure`, `candidates`) and on
+any economy in memory, as searches need (`measure_state`, `step_cost`,
+`propose`). Transports expose them with packages and experiments (P9) and
+Studio (P12).
 
 **P5. Strategies.** A strategy is a built-in algorithm (priority, BFS,
 Dijkstra, A*, best-first, rollout, Monte Carlo, MCTS, ISMCTS, Pareto search,

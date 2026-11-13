@@ -483,7 +483,9 @@ dependencies = [
  "axionomy",
  "axionomy-search",
  "axionomy-store",
+ "postcard",
  "rhai",
+ "serde",
  "thiserror",
 ]
 
