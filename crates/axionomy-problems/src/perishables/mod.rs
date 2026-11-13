@@ -10,6 +10,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap};
 
 pub mod cold_chain;
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

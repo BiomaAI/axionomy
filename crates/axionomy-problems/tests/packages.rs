@@ -607,6 +607,28 @@ fn logistics_beyond_the_study(engine: &Engine) {
     assert_eq!(ran("mcts"), trace, "logistics mcts");
 }
 
+fn perishables(engine: &Engine, instance: &str) {
+    // Micro plays its outage and picks from its exact storage front; the
+    // cold chains plan each of their four daily policies over the outage
+    // schedule, the storage buffer among them.
+    let compared = reproduces(
+        engine,
+        "perishables",
+        instance,
+        &[
+            "outage",
+            "pareto-inventory",
+            "pareto-energy",
+            "storage-buffer",
+        ],
+    );
+    assert_eq!(
+        compared,
+        if instance == "micro" { 3 } else { 4 },
+        "{instance}"
+    );
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -614,7 +636,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 11] = [
+const SAMPLES: [Sample; 12] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -653,6 +675,11 @@ const SAMPLES: [Sample; 11] = [
         "logistics",
         axionomy_problems::logistics::package::write,
         logistics,
+    ),
+    (
+        "perishables",
+        axionomy_problems::perishables::package::write,
+        perishables,
     ),
 ];
 

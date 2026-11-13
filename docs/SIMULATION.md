@@ -531,7 +531,14 @@ reproduces every document, and the planner the Rust run's thirteen
 decisions on the four-order economy; it needed tree search to draw
 Nature's weighted outcomes as chance in its tree, simulate by a rollout
 script, choose nothing with no candidates, and seed the game's `k`th
-choice with its seed XOR a salt, plus `k`. The
+choice with its seed XOR a salt, plus `k`. Perishables'
+(Micro's outage played turn by turn, each timed condition spoiling its
+cohort once its moment comes, and exact Pareto picks from its storage plans
+for usable stock or cooling energy; the cold chains, an ontology of their
+own named under `perishables/cold-chain`, whose four daily policies are
+plans for every day of the outage schedule, made whole on a shadow of the
+balances each decision reads) reproduces every document and needed nothing
+new. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package
