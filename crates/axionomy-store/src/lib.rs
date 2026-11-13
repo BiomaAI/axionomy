@@ -9,12 +9,16 @@ pub mod state;
 mod transaction;
 mod writer;
 
-pub use ids::{GroupId, GroupKindPath, IdError, MetricPath, Point, RefPath, RunId, TagPath, kind};
+pub use ids::{
+    DefinitionPath, GroupId, GroupKindPath, IdError, MetricPath, Point, RefPath, RunId, TagPath,
+    kind,
+};
 pub use ontology::{Id, Recordable};
 pub use read::{Reader, State, Transition};
 pub use recorder::{GroupRecorder, Recorder};
 pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, Summary, Target};
 pub use state::StateError;
+pub use transaction::Merged;
 pub use writer::{Pending, Transaction};
 
 use axionomy::{Economy, OntologyPath};
@@ -255,9 +259,10 @@ impl Store {
 
     /// Copies everything `other` holds that this store lacks. Run and group
     /// IDs are unique across stores and nodes are content addressed, so
-    /// nothing conflicts but refs: returns the refs `other` points elsewhere,
-    /// which keep their targets here.
-    pub fn merge(&self, other: &Store) -> Pending<Vec<RefPath>> {
+    /// nothing conflicts but names: returns the refs `other` points elsewhere
+    /// and the definitions it defines otherwise, which keep what they are
+    /// here.
+    pub fn merge(&self, other: &Store) -> Pending<Merged> {
         match other.read() {
             Ok(reader) => self.transact(Durability::Immediate, move |txn| {
                 transaction::merge(txn, reader.redb())

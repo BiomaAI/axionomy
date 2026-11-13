@@ -1,9 +1,13 @@
 #![doc = include_str!("../README.md")]
 
 mod cache;
+pub mod script;
+
+pub use rhai;
+pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 
 use axionomy::paths::{self, Paths};
-use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
+use axionomy_store::{Checkpoints, DefinitionPath, Durability, Point, Reader, Store, StoreError};
 use cache::Cache;
 use std::{num::NonZeroU64, sync::Arc};
 use thiserror::Error;
@@ -34,6 +38,17 @@ pub enum EngineError {
         index: usize,
         assessment: Box<paths::Assessment>,
     },
+    #[error("the store has no script `{0}`")]
+    UnknownScript(ScriptPath),
+    /// A script that does not compile, or failed while it ran; `message` is
+    /// Rhai's, with the position it names.
+    #[error("script `{path}`: {message}")]
+    Script { path: ScriptPath, message: String },
+    #[error("a script returned {found} where {expected} was expected")]
+    Returned {
+        expected: &'static str,
+        found: String,
+    },
 }
 
 /// A point as the engine serves it: the state there, the point its run
@@ -54,6 +69,8 @@ pub struct Reached {
 pub struct Engine {
     store: Store,
     reached: Cache<Point, Reached>,
+    host: Arc<rhai::Engine>,
+    scripts: Cache<ScriptPath, rhai::AST>,
 }
 
 impl Engine {
@@ -62,7 +79,80 @@ impl Engine {
         Ok(Self {
             store,
             reached: Cache::new(CACHED),
+            host: Arc::new(script::host()),
+            scripts: Cache::new(CACHED),
         })
+    }
+
+    /// Keeps `source` as the script at `path`, replacing any script there,
+    /// and refuses one that does not compile.
+    pub fn keep_script(&self, path: &ScriptPath, source: &str) -> Result<(), EngineError> {
+        let ast = self.compile(path, source)?;
+        let name = definition("script", path);
+        let bytes = source.as_bytes().to_vec();
+        self.store
+            .transact(Durability::Immediate, move |txn| {
+                txn.define(&name, Some(&bytes))
+            })
+            .wait()?;
+        self.scripts.insert(path.clone(), ast);
+        Ok(())
+    }
+
+    /// The source of the script at `path`.
+    pub fn script(&self, path: &ScriptPath) -> Result<Option<String>, EngineError> {
+        let bytes = self.store.read()?.definition(&definition("script", path))?;
+        bytes
+            .map(|bytes| {
+                String::from_utf8(bytes).map_err(|_| {
+                    EngineError::Store(StoreError::Malformed("a script that is not text"))
+                })
+            })
+            .transpose()
+    }
+
+    /// Calls `function` of the script at `path` with `arguments`, Rhai values
+    /// such as a [`ScriptState`], a [`Random`] or a [`axionomy::Quantity`],
+    /// and returns what it returns, which must be a `T`.
+    pub fn call<T: Clone + Send + Sync + 'static>(
+        &self,
+        path: &ScriptPath,
+        function: &str,
+        arguments: impl rhai::FuncArgs,
+    ) -> Result<T, EngineError> {
+        let ast = match self.scripts.get(path) {
+            Some(ast) => ast,
+            None => {
+                let source = self
+                    .script(path)?
+                    .ok_or_else(|| EngineError::UnknownScript(path.clone()))?;
+                let ast = self.compile(path, &source)?;
+                self.scripts.insert(path.clone(), ast)
+            }
+        };
+        let returned: rhai::Dynamic = self
+            .host
+            .call_fn(&mut rhai::Scope::new(), &ast, function, arguments)
+            .map_err(|error| EngineError::Script {
+                path: path.clone(),
+                message: error.to_string(),
+            })?;
+        let found = returned.type_name();
+        returned
+            .try_cast::<T>()
+            .ok_or_else(|| EngineError::Returned {
+                expected: std::any::type_name::<T>(),
+                found: found.to_owned(),
+            })
+    }
+
+    fn compile(&self, path: &ScriptPath, source: &str) -> Result<rhai::AST, EngineError> {
+        self.host
+            .compile(source)
+            .map_err(|error| EngineError::Script {
+                path: path.clone(),
+                message: error.to_string(),
+            })
     }
 
     pub fn store(&self) -> &Store {
@@ -243,6 +333,14 @@ fn first_state(reader: &Reader, at: Point, first: u64) -> Result<State, EngineEr
     reader
         .state::<Paths>(point)?
         .ok_or(EngineError::UnknownPoint(point))
+}
+
+/// The name a definition of `kind` at `path` is kept under, such as
+/// `script/maze/heuristic`.
+fn definition<K>(kind: &str, path: &axionomy::path::Path<K>) -> DefinitionPath {
+    format!("{kind}/{path}")
+        .parse()
+        .expect("a kind and a path make a path")
 }
 
 /// Whether a run of applied exchanges stores the state after step `step`

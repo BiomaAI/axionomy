@@ -112,6 +112,7 @@ pub mod kind {
     pub enum Metric {}
     pub enum Ref {}
     pub enum Group {}
+    pub enum Definition {}
 
     impl PathKind for Tag {
         const SCHEMA: &'static str = "TagPath";
@@ -125,6 +126,10 @@ pub mod kind {
     impl PathKind for Group {
         const SCHEMA: &'static str = "GroupKindPath";
     }
+    impl PathKind for Definition {
+        const SCHEMA: &'static str = "DefinitionPath";
+        const EXAMPLE: &'static str = "script/maze/heuristic";
+    }
 }
 
 /// A tag's key, such as `experiment` or `split`.
@@ -135,6 +140,9 @@ pub type MetricPath = Path<kind::Metric>;
 pub type RefPath = Path<kind::Ref>;
 /// What produced a group, such as `monte-carlo`, `mppi` or `eval-suite`.
 pub type GroupKindPath = Path<kind::Group>;
+/// Something a package defines, under the kind of thing it is, such as
+/// `script/maze/heuristic` or `strategy/maze/a-star`.
+pub type DefinitionPath = Path<kind::Definition>;
 
 #[cfg(test)]
 mod tests {

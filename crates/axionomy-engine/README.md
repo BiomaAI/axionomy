@@ -16,6 +16,18 @@ goes.
   reach it.
 - `ancestor` names the point at an earlier step of a point's history.
 - `assess` explains whether an exchange would apply at a point.
+- `keep_script` keeps a Rhai script by its path, refusing one that does not
+  compile, and `call` runs one of its functions (D-049).
+
+Scripts are how a package says what a generic algorithm cannot know. They
+read a `ScriptState`, the whole economy or a view of the accounts an actor may
+see, through the host API (balances, accounts and rates by prefix, a rate's
+roles, `exchange(...)`, `applicable`, `assess`, `distances` over a list of
+edges), and propose exchanges; they never change an economy. Quantities are
+exact, with checked arithmetic and `mul_div` that names its rounding;
+randomness is only a `Random` the host seeds; scripts have no clock; and a
+call stops after a bounded number of operations. Scripts are kept in the
+store as definitions (`script/<path>`), so they travel with a package.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so will the Studio server, the CLI and Studio's browser Worker

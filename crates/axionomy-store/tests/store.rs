@@ -398,7 +398,7 @@ fn stores_written_apart_merge_into_one() {
             .unwrap();
     }
     let kept = left.merge(&right).wait().unwrap();
-    assert_eq!(kept, vec![path("latest")]);
+    assert_eq!(kept.refs, vec![path("latest")]);
     let reader = left.read().unwrap();
     reader.verify::<Paths>(ours.run).unwrap();
     reader.verify::<Paths>(theirs.run).unwrap();
@@ -406,7 +406,10 @@ fn stores_written_apart_merge_into_one() {
         reader.reference(&path("latest")).unwrap(),
         Some(Target::Step(ours))
     );
-    assert_eq!(left.merge(&right).wait().unwrap(), vec![path("latest")]);
+    assert_eq!(
+        left.merge(&right).wait().unwrap().refs,
+        vec![path("latest")]
+    );
 }
 
 #[test]
@@ -686,4 +689,44 @@ fn a_store_in_another_format_is_refused() {
     drop(Store::open(&fresh).unwrap());
     assert!(Store::open(&fresh).is_ok());
     std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn definitions_are_kept_by_name_and_merged_like_refs() {
+    let define = |store: &Store, name: &'static str, value: &'static [u8]| {
+        store
+            .transact(Durability::Immediate, move |txn| {
+                txn.define(&path(name), Some(value))
+            })
+            .wait()
+            .unwrap();
+    };
+    let (left, right) = (Store::memory().unwrap(), Store::memory().unwrap());
+    define(&left, "script/maze/heuristic", b"ours");
+    define(&left, "goal/maze/solved", b"same");
+    define(&right, "script/maze/heuristic", b"theirs");
+    define(&right, "goal/maze/solved", b"same");
+    define(&right, "script/sokoban/candidates", b"new");
+
+    let merged = left.merge(&right).wait().unwrap();
+    assert_eq!(merged.definitions, vec![path("script/maze/heuristic")]);
+    assert!(merged.refs.is_empty());
+    let reader = left.read().unwrap();
+    assert_eq!(
+        reader.definition(&path("script/maze/heuristic")).unwrap(),
+        Some(b"ours".to_vec())
+    );
+    let scripts: Vec<_> = reader
+        .definitions("script/", 10)
+        .unwrap()
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
+        .collect();
+    assert_eq!(
+        scripts,
+        vec![
+            ("script/maze/heuristic".to_owned(), b"ours".to_vec()),
+            ("script/sokoban/candidates".to_owned(), b"new".to_vec()),
+        ]
+    );
 }

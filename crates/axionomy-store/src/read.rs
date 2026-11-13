@@ -1,11 +1,11 @@
 //! Reading one consistent committed view of the store.
 
 use crate::{
-    GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
+    DefinitionPath, GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
     ontology::Recordable,
     records::{
-        GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS, Run, STATES,
-        STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
+        DEFINITIONS, GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS, Run,
+        STATES, STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
     },
     state,
     transaction::{decode, receipt_digest},
@@ -500,6 +500,36 @@ impl Reader {
             .get(name.as_str())?
             .map(|target| decode(target.value()))
             .transpose()
+    }
+
+    /// What `name` defines, as its owner encoded it.
+    pub fn definition(&self, name: &DefinitionPath) -> Result<Option<Vec<u8>>, StoreError> {
+        Ok(self
+            .txn
+            .open_table(DEFINITIONS)?
+            .get(name.as_str())?
+            .map(|value| value.value().to_vec()))
+    }
+
+    /// Definitions whose names start with `prefix`, in name order, at most
+    /// `limit`.
+    pub fn definitions(
+        &self,
+        prefix: &str,
+        limit: usize,
+    ) -> Result<Vec<(DefinitionPath, Vec<u8>)>, StoreError> {
+        self.txn
+            .open_table(DEFINITIONS)?
+            .range(prefix..)?
+            .map_while(|entry| match entry {
+                Ok((name, value)) => name
+                    .value()
+                    .starts_with(prefix)
+                    .then(|| Ok((path(name.value())?, value.value().to_vec()))),
+                Err(error) => Some(Err(error.into())),
+            })
+            .take(limit)
+            .collect()
     }
 
     /// Refs whose names start with `prefix`, in name order, at most `limit`.

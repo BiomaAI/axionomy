@@ -2,11 +2,12 @@
 //! deleting, collecting and merging.
 
 use crate::{
-    GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath, Transaction,
+    DefinitionPath, GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
+    Transaction,
     ontology::Recordable,
     records::{
-        Checkpoints, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS,
-        Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
+        Checkpoints, DEFINITIONS, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS,
+        RUN_METRICS, RUNS, Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
     },
 };
 use axionomy::{OntologyPath, Receipt};
@@ -226,6 +227,21 @@ impl Transaction<'_> {
         Ok(())
     }
 
+    /// Keeps `value` as what `name` defines, or removes the definition with
+    /// `None`. The store keeps the bytes as given; their owner encodes them.
+    pub fn define(
+        &mut self,
+        name: &DefinitionPath,
+        value: Option<&[u8]>,
+    ) -> Result<(), StoreError> {
+        let mut definitions = self.redb().open_table(DEFINITIONS)?;
+        match value {
+            Some(value) => definitions.insert(name.as_str(), value)?,
+            None => definitions.remove(name.as_str())?,
+        };
+        Ok(())
+    }
+
     /// Deletes a run with its steps, states, tags and metrics, unless one of
     /// its points is pinned or a ref names it. Returns whether it was deleted.
     /// Its nodes stay until [`collect`](Self::collect) finds them unreachable.
@@ -318,10 +334,18 @@ impl Transaction<'_> {
 /// Copies what `other` holds and this store lacks. Identifiers are unique
 /// across stores, so nothing conflicts but refs, where this store's wins.
 /// Returns the refs left as they were.
+/// The names a merge kept as they were, because the other store gives them
+/// something else.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Merged {
+    pub refs: Vec<RefPath>,
+    pub definitions: Vec<DefinitionPath>,
+}
+
 pub(crate) fn merge(
     txn: &mut Transaction<'_>,
     other: &redb::ReadTransaction,
-) -> Result<Vec<RefPath>, StoreError> {
+) -> Result<Merged, StoreError> {
     copy(txn, other, NODES)?;
     copy(txn, other, RUNS)?;
     copy(txn, other, STEPS)?;
@@ -333,22 +357,33 @@ pub(crate) fn merge(
     copy(txn, other, STEP_METRICS)?;
     copy(txn, other, GROUPS)?;
     copy(txn, other, MEMBERS)?;
+    Ok(Merged {
+        refs: merge_names(txn, other, REFS)?,
+        definitions: merge_names(txn, other, DEFINITIONS)?,
+    })
+}
+
+/// Copies the names `other` gives that this store lacks, and returns those it
+/// gives something else, which keep what they are here.
+fn merge_names<K>(
+    txn: &mut Transaction<'_>,
+    other: &redb::ReadTransaction,
+    table: TableDefinition<&str, &[u8]>,
+) -> Result<Vec<axionomy::path::Path<K>>, StoreError> {
     let mut kept = Vec::new();
-    let mut refs = txn.redb().open_table(REFS)?;
-    for entry in other.open_table(REFS)?.iter()? {
-        let (name, target) = entry?;
-        let ours = refs.get(name.value())?.map(|ours| ours.value().to_vec());
-        match ours {
-            Some(ours) if ours != target.value() => {
-                kept.push(
-                    name.value()
-                        .parse()
-                        .map_err(|_| StoreError::Malformed("a ref name"))?,
-                );
-            }
+    let mut ours = txn.redb().open_table(table)?;
+    for entry in other.open_table(table)?.iter()? {
+        let (name, value) = entry?;
+        let held = ours.get(name.value())?.map(|held| held.value().to_vec());
+        match held {
+            Some(held) if held != value.value() => kept.push(
+                name.value()
+                    .parse()
+                    .map_err(|_| StoreError::Malformed("a stored name"))?,
+            ),
             Some(_) => {}
             None => {
-                refs.insert(name.value(), target.value())?;
+                ours.insert(name.value(), value.value())?;
             }
         }
     }

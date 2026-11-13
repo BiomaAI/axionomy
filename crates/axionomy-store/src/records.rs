@@ -33,6 +33,9 @@ pub(crate) const STEP_METRICS: TableDefinition<(u128, u64, &str), f64> =
 pub(crate) const GROUPS: TableDefinition<u128, &[u8]> = TableDefinition::new("groups");
 pub(crate) const MEMBERS: TableDefinition<(u128, u64), &[u8]> = TableDefinition::new("members");
 pub(crate) const REFS: TableDefinition<&str, &[u8]> = TableDefinition::new("refs");
+/// What packages define, by name: scripts, goals, strategies and the rest, as
+/// the bytes their owner encodes.
+pub(crate) const DEFINITIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("definitions");
 
 /// Creates every table, so readers never meet a missing one.
 pub(crate) fn create_tables(txn: &redb::WriteTransaction) -> Result<(), redb::TableError> {
@@ -48,6 +51,7 @@ pub(crate) fn create_tables(txn: &redb::WriteTransaction) -> Result<(), redb::Ta
     txn.open_table(GROUPS)?;
     txn.open_table(MEMBERS)?;
     txn.open_table(REFS)?;
+    txn.open_table(DEFINITIONS)?;
     Ok(())
 }
 
