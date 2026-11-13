@@ -7,6 +7,8 @@ use axionomy::{
 };
 
 mod continuous;
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

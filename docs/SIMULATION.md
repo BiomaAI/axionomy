@@ -538,7 +538,16 @@ for usable stock or cooling energy; the cold chains, an ontology of their
 own named under `perishables/cold-chain`, whose four daily policies are
 plans for every day of the outage schedule, made whole on a shadow of the
 balances each decision reads) reproduces every document and needed nothing
-new. The
+new. The work league's (each field an economy of its own, since workers hold
+their policies, so the throughput and sustainable fields' arms start from
+refs of their own; Micro's serial match as plans, its attempt count not
+being in the economy and a steward recycling after the last job completes,
+and the seasons played turn by turn, events, services ending, the season's
+end, then each worker's decision in the clock's rotation, then the tick)
+reproduces every document, and every field's match on four more seeds; it
+needed scripts to draw a ticket keyed by what it is for,
+`random.keyed(key, bound)`, as the samples' common random numbers do, and a
+plan to draw chance from the run's seed when its function takes a random. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package

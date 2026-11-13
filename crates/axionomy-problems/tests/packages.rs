@@ -629,6 +629,60 @@ fn perishables(engine: &Engine, instance: &str) {
     );
 }
 
+fn work_league(engine: &Engine, instance: &str) {
+    // Each field from the economy its workers' policies make: Micro's
+    // serial match planned whole, the seasons played turn by turn.
+    let documents = ["mixed-field", "throughput-field", "sustainable-field"];
+    assert_eq!(
+        reproduces(engine, "work-league", instance, &documents),
+        documents.len(),
+        "{instance}"
+    );
+    work_league_beyond_the_study(engine, instance);
+}
+
+/// Beyond the study's seed: with the seeds below four, which bring more
+/// failed attempts, maintenance, voluntary releases and handoffs, each
+/// arm of the instance's experiment runs the Rust league's match.
+fn work_league_beyond_the_study(engine: &Engine, instance: &str) {
+    use axionomy_problems::work_league::{self, Profile};
+    let profile = match instance {
+        "micro" => Profile::Micro,
+        "showcase" => Profile::Showcase,
+        _ => Profile::Stress,
+    };
+    let experiment = engine
+        .experiment(&format!("work-league/{instance}").parse().unwrap())
+        .unwrap();
+    for arm in &experiment.arms {
+        let lineup = match last(arm.strategy.as_str()) {
+            "mixed-field" => work_league::mixed_lineup(),
+            "throughput-field" => work_league::throughput_lineup(),
+            _ => work_league::sustainable_lineup(),
+        };
+        let league = work_league::league(profile, lineup);
+        let start = engine
+            .referred(arm.start.as_ref().unwrap_or(&experiment.start))
+            .unwrap();
+        let strategy = engine.strategy(&arm.strategy).unwrap();
+        for seed in 0..4 {
+            let effort = Effort { seed, budget: 1 };
+            let ran = engine
+                .run_strategy(start, &strategy, effort, &mut |_| ControlFlow::Continue(()))
+                .unwrap();
+            let rust = work_league::run(&league, seed).unwrap();
+            let trace: Vec<paths::Exchange> =
+                rust.trace().exchanges().iter().map(written).collect();
+            assert_eq!(
+                engine.history(ran.end).unwrap().1,
+                trace,
+                "work-league {instance} {}: seed {seed}",
+                arm.strategy
+            );
+        }
+    }
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -636,7 +690,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 12] = [
+const SAMPLES: [Sample; 13] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -675,6 +729,11 @@ const SAMPLES: [Sample; 12] = [
         "logistics",
         axionomy_problems::logistics::package::write,
         logistics,
+    ),
+    (
+        "work-league",
+        axionomy_problems::work_league::package::write,
+        work_league,
     ),
     (
         "perishables",

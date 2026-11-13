@@ -1,0 +1,150 @@
+//! The Autonomous Work League as a package. Every worker holds its policy,
+//! so each field the study plays is an economy of its own: an instance's
+//! ref, `work-league/<instance>`, holds the mixed field, the catalog's
+//! default, and `work-league/<instance>/<document>` the throughput and
+//! sustainable fields, from which those documents' arms start. Contract
+//! value, jobs completed and residual waste, summed over the workers, are
+//! the objectives, and each instance has an experiment comparing its fields.
+//!
+//! Micro is the serial fixture: each turn runs until its job is done, which
+//! takes a count of attempts the economy does not hold, and a steward's
+//! recycling comes after the last job's completion, its goal. So its
+//! strategies are plans, `work-league/serial/<document>`, made whole with
+//! Nature's tickets drawn from the run's seed, keyed by job, worker, mode
+//! and attempt. Showcase and Stress are seasons on a shared clock, played
+//! turn by turn by `work-league/<document>` until the season ends, Nature
+//! settling each attempt from the ticket keyed by its job and attempt.
+
+use crate::{
+    package::{call, written},
+    work_league::{self, Ontology, Policy, Profile},
+};
+use axionomy::path;
+use axionomy_engine::{
+    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy, StrategyPath,
+};
+use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
+use axionomy_store::{Checkpoints, RefPath};
+
+const SCRIPT: &str = include_str!("../../scripts/work-league.rhai");
+
+/// The seed of the study's default request, which keys Nature's tickets.
+const SEED: u64 = 17;
+
+/// The most turns a season takes: at each of Stress's 79 clock readings,
+/// an event for each of its 24 contracts, four services ending, four
+/// decisions and the tick, and then the season's end.
+const HORIZON: u64 = 79 * (24 + 4 + 4 + 1) + 1;
+
+/// The documents the study gives, each the field its workers hold.
+fn fields() -> [(&'static str, [Policy; 4]); 3] {
+    [
+        ("mixed-field", work_league::mixed_lineup()),
+        ("throughput-field", work_league::throughput_lineup()),
+        ("sustainable-field", work_league::sustainable_lineup()),
+    ]
+}
+
+/// The strategy giving `document` at `profile`: Micro's plan or a season's
+/// policy.
+fn strategy(profile: Profile, document: &str) -> StrategyPath {
+    match profile {
+        Profile::Micro => format!("work-league/serial/{document}"),
+        Profile::Showcase | Profile::Stress => format!("work-league/{document}"),
+    }
+    .parse()
+    .expect("a path")
+}
+
+/// Writes the work league's package into `engine`'s store, everything
+/// named under `work-league`.
+pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let call = |function| call("work-league", function);
+    engine.keep_script(&path!("work-league"), SCRIPT)?;
+    let micro = work_league::league(Profile::Micro, work_league::mixed_lineup());
+    let season = work_league::league(Profile::Showcase, work_league::mixed_lineup());
+    engine.keep_goal(
+        &path!("work-league/serial/completed"),
+        &written(micro.goal()),
+    )?;
+    engine.keep_goal(&path!("work-league/season-ended"), &written(season.goal()))?;
+    // Named by the keys the study's documents report them under.
+    let mut objectives: Vec<ObjectivePath> = Vec::new();
+    for (key, function, direction) in [
+        ("value", "contract_value", Maximize),
+        ("completed", "completed", Maximize),
+        ("waste", "residual_waste", Minimize),
+    ] {
+        let objective: ObjectivePath = format!("work-league/{key}").parse().expect("a path");
+        engine.keep_objective(
+            &objective,
+            &Objective {
+                measure: Measure::State(call(function)),
+                direction,
+            },
+        )?;
+        objectives.push(objective);
+    }
+    // One script plays every field, which its workers hold: each document's
+    // strategy is the same play under the document's name.
+    for (document, _) in fields() {
+        engine.keep_strategy(
+            &strategy(Profile::Micro, document),
+            &Strategy::Plan {
+                plan: call("serial"),
+                goal: path!("work-league/serial/completed"),
+            },
+        )?;
+        engine.keep_strategy(
+            &strategy(Profile::Showcase, document),
+            &Strategy::Policy {
+                policy: call("season"),
+                goal: path!("work-league/season-ended"),
+                horizon: HORIZON,
+            },
+        )?;
+    }
+    for (instance, profile) in [
+        ("micro", Profile::Micro),
+        ("showcase", Profile::Showcase),
+        ("stress", Profile::Stress),
+    ] {
+        let name = format!("work-league/{instance}");
+        let mut arms = Vec::new();
+        for (index, (document, lineup)) in fields().into_iter().enumerate() {
+            // The default field is the instance's ref; the others start
+            // from refs of their own.
+            let reference: RefPath = if index == 0 {
+                name.clone()
+            } else {
+                format!("{name}/{document}")
+            }
+            .parse()
+            .expect("a path");
+            let start = engine
+                .store()
+                .record::<Ontology>(
+                    work_league::league(profile, lineup).initial().clone(),
+                    Checkpoints::Ends,
+                )
+                .finish()?;
+            engine.refer(&reference, start)?;
+            arms.push(Arm {
+                strategy: strategy(profile, document),
+                start: (index > 0).then_some(reference),
+            });
+        }
+        engine.keep_experiment(
+            &name.parse().expect("a path"),
+            &Experiment {
+                start: name.parse().expect("a path"),
+                arms,
+                objectives: objectives.clone(),
+                seed: SEED,
+                budget: 10_000_000,
+                trials: 1,
+            },
+        )?;
+    }
+    Ok(())
+}
