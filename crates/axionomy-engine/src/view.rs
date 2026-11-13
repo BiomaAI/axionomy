@@ -135,7 +135,7 @@ impl Engine {
     }
 }
 
-fn view_path(ontology: &OntologyPath) -> ViewPath {
+pub(crate) fn view_path(ontology: &OntologyPath) -> ViewPath {
     ontology.as_str().parse().expect("an ontology is a path")
 }
 

@@ -334,6 +334,155 @@ impl Transaction<'_> {
     }
 }
 
+/// What an export copies (see [`Store::export`](crate::Store::export)).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Selection {
+    pub refs: Vec<RefPath>,
+    pub definitions: Vec<DefinitionPath>,
+    pub points: Vec<Point>,
+    pub groups: Vec<GroupId>,
+}
+
+pub(crate) fn export(
+    txn: &mut Transaction<'_>,
+    other: &redb::ReadTransaction,
+    selection: &Selection,
+) -> Result<(), StoreError> {
+    let mut runs: Vec<RunId> = selection.points.iter().map(|point| point.run).collect();
+    let mut groups = selection.groups.clone();
+    {
+        let mut ours = txn.redb().open_table(REFS)?;
+        let theirs = other.open_table(REFS)?;
+        for name in &selection.refs {
+            let target = theirs
+                .get(name.as_str())?
+                .ok_or_else(|| StoreError::UnknownRef(name.clone()))?;
+            match decode::<Target>(target.value())? {
+                Target::Run(run) => runs.push(run),
+                Target::Step(point) => runs.push(point.run),
+                Target::Group(group) => groups.push(group),
+            }
+            ours.insert(name.as_str(), target.value())?;
+        }
+    }
+    {
+        let mut ours = txn.redb().open_table(DEFINITIONS)?;
+        let theirs = other.open_table(DEFINITIONS)?;
+        for name in &selection.definitions {
+            let value = theirs
+                .get(name.as_str())?
+                .ok_or_else(|| StoreError::Undefined(name.clone()))?;
+            ours.insert(name.as_str(), value.value())?;
+        }
+    }
+    {
+        let mut ours = txn.redb().open_table(GROUPS)?;
+        let mut members = txn.redb().open_table(MEMBERS)?;
+        let theirs = other.open_table(GROUPS)?;
+        let their_members = other.open_table(MEMBERS)?;
+        groups.sort_unstable();
+        groups.dedup();
+        for group in &groups {
+            let record = theirs
+                .get(group.key())?
+                .ok_or(StoreError::UnknownGroup(*group))?;
+            ours.insert(group.key(), record.value())?;
+            for entry in their_members.range((group.key(), 0)..=(group.key(), u64::MAX))? {
+                let (key, member) = entry?;
+                let member_record: Member = decode(member.value())?;
+                runs.extend(member_record.run);
+                members.insert(key.value(), member.value())?;
+            }
+        }
+    }
+    // Every run a selected run forked from, back to the first.
+    let their_runs = other.open_table(RUNS)?;
+    let mut kept = HashSet::new();
+    while let Some(run) = runs.pop() {
+        if !kept.insert(run) {
+            continue;
+        }
+        let record = their_runs
+            .get(run.key())?
+            .ok_or(StoreError::UnknownRun(run))?;
+        let decoded: Run = decode(record.value())?;
+        runs.extend(decoded.from.map(|from| from.run));
+        txn.redb()
+            .open_table(RUNS)?
+            .insert(run.key(), record.value())?;
+    }
+    let mut roots = Vec::new();
+    for run in &kept {
+        let (this, next) = (run.key(), run.key() + 1);
+        copy_range(txn, other, STEPS, (this, 0)..=(this, u64::MAX))?;
+        copy_range(txn, other, PINS, (this, 0)..=(this, u64::MAX))?;
+        copy_range(txn, other, TAGS, (this, "")..(next, ""))?;
+        copy_range(txn, other, RUN_METRICS, (this, "")..(next, ""))?;
+        copy_range(txn, other, STEP_METRICS, (this, 0, "")..(next, 0, ""))?;
+        let mut states = txn.redb().open_table(STATES)?;
+        for entry in other
+            .open_table(STATES)?
+            .range((this, 0)..=(this, u64::MAX))?
+        {
+            let (key, root) = entry?;
+            roots.push(Hash::from_bytes(*root.value()));
+            states.insert(key.value(), root.value())?;
+        }
+    }
+    {
+        let mut tagged = txn.redb().open_table(TAGGED)?;
+        for entry in other.open_table(TAGGED)?.iter()? {
+            let (key, _) = entry?;
+            let (name, value, run) = key.value();
+            if kept.contains(&RunId::from_key(run)) {
+                tagged.insert((name, value, run), ())?;
+            }
+        }
+    }
+    // Every node under a kept state; nodes are content addressed, so one
+    // shared by many states is copied once.
+    let mut nodes = txn.redb().open_table(NODES)?;
+    let theirs = other.open_table(NODES)?;
+    let mut seen = HashSet::new();
+    while let Some(hash) = roots.pop() {
+        if !seen.insert(hash) {
+            continue;
+        }
+        let encoding = theirs
+            .get(hash.as_bytes())?
+            .ok_or(StoreError::MissingNode(hash))?;
+        roots.extend(
+            axionomy_tree::children(encoding.value())
+                .map_err(|_| StoreError::MalformedNode(hash))?,
+        );
+        nodes.insert(hash.as_bytes(), encoding.value())?;
+    }
+    Ok(())
+}
+
+/// Copies the entries of `table` in `range` from `other`.
+fn copy_range<K, V, R>(
+    txn: &mut Transaction<'_>,
+    other: &redb::ReadTransaction,
+    table: TableDefinition<K, V>,
+    range: R,
+) -> Result<(), StoreError>
+where
+    K: redb::Key + 'static,
+    V: redb::Value + 'static,
+    R: std::ops::RangeBounds<K::SelfType<'static>>,
+{
+    let mut ours = txn.redb().open_table(table)?;
+    for entry in other
+        .open_table(table)?
+        .range::<K::SelfType<'static>>(range)?
+    {
+        let (key, value) = entry?;
+        ours.insert(key.value(), value.value())?;
+    }
+    Ok(())
+}
+
 /// Copies what `other` holds and this store lacks. Identifiers are unique
 /// across stores, so nothing conflicts but refs, where this store's wins.
 /// Returns the refs left as they were.

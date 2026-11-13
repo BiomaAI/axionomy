@@ -38,6 +38,11 @@ goes.
   `experiment` and keeps the results, which `results` reads back.
 - `compare` gives points' objective vectors and the front no other point
   dominates; `pick` the best point by objectives in order.
+- `export` copies a package (refs and definitions and everything they reach)
+  into a new store with a manifest; `load` merges one into the engine's store
+  after checking it; `manifests` lists those the store holds; `package`
+  opens a package file's bytes, a redb file or a zip of one, and `zipped`
+  zips one.
 - `keep_view` keeps how people read an ontology's runs: script functions that
   label its identifiers, format its quantities, carry what the view needs
   from frame to frame, draw a scene and give leaderboard scores. `draw`

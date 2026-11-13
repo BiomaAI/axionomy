@@ -17,7 +17,16 @@ cargo run -p axionomy-cli -- study marketplace --instance micro --format json > 
 cargo run -p axionomy-cli -- export-studies studio/public/studies
 cargo run -p axionomy-cli -- mcp --bind 127.0.0.1:8000 --store economies.redb
 cargo run -p axionomy-cli -- studio --bind 127.0.0.1:3000
+cargo run -p axionomy-cli -- package export work.redb maze.zip --name maze --version 1.0.0
+cargo run -p axionomy-cli -- package inspect maze.zip
+cargo run -p axionomy-cli -- package load mine.redb maze.zip
 ```
+
+`package export` writes a package of everything a store names under
+`--name`, or of the `--ref` and `--definition` given, with all they reach,
+to a new file, zipped when its name ends in `.zip`; `package load` merges
+one into a store file, creating it if needed; `package inspect` lists a
+package's manifest, refs and definitions.
 
 `mcp` serves MCP over Streamable HTTP at `/mcp` with `/health`, keeping
 economies in a store file when `--store` names one and in memory otherwise.

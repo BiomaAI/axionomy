@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod package;
 mod serve;
 
 use axionomy_engine::EngineError;
@@ -43,6 +44,12 @@ enum Command {
         /// restarts; in memory, until the server stops, when omitted.
         #[arg(long, env = "AXIONOMY_MCP_STORE")]
         store: Option<PathBuf>,
+    },
+    /// Make, load and look into packages: store files holding economies,
+    /// refs and what uses them, zipped when the file name ends in `.zip`.
+    Package {
+        #[command(subcommand)]
+        action: package::Action,
     },
     /// Serve Studio's API, and its built frontend when there is one.
     Studio {
@@ -115,6 +122,13 @@ pub enum CliError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("could not read `{path}`: {source}")]
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("`{0}` exists; a package is written to a new file")]
+    Exists(PathBuf),
 }
 
 struct CliOutput {
@@ -131,6 +145,7 @@ pub fn run(registry: Registry, cli: Cli) -> Result<Option<String>, CliError> {
             export_studies(&registry, problem, &directory).map(Some)
         }
         Command::Mcp { bind, store } => serve::mcp(registry, bind, store).map(|()| None),
+        Command::Package { action } => package::run(action).map(Some),
         Command::Studio { bind, frontend } => {
             serve::studio(registry, bind, &frontend).map(|()| None)
         }

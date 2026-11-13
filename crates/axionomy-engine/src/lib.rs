@@ -3,6 +3,7 @@
 mod cache;
 pub mod definitions;
 mod experiment;
+mod package;
 pub mod script;
 mod strategy;
 mod view;
@@ -12,6 +13,9 @@ pub use definitions::{
     ScriptCall, ScriptFunction, StrategyPath,
 };
 pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Trial};
+pub use package::{
+    Contents, Loaded, Manifest, PackageError, PackagePath, Version, VersionError, package, zipped,
+};
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
@@ -78,6 +82,8 @@ pub enum EngineError {
     /// A tree search could not decide, with the reason it gives.
     #[error("no decision: {0}")]
     Undecided(String),
+    #[error(transparent)]
+    Package(#[from] PackageError),
 }
 
 /// A point as the engine serves it: the state there, the point its run

@@ -15,7 +15,8 @@ pub(crate) const STORE_PREFIX: &str = "store-prefix";
 pub(crate) const FORMAT: &str = "format";
 /// The format this version writes and reads: records, tree values and receipt
 /// digests in postcard, identifiers in keys as their paths.
-pub(crate) const FORMAT_VERSION: u64 = 1;
+/// The format this version writes and reads, which a package records.
+pub const FORMAT_VERSION: u64 = 1;
 /// Tree nodes by hash.
 pub(crate) const NODES: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("nodes");
 pub(crate) const RUNS: TableDefinition<u128, &[u8]> = TableDefinition::new("runs");

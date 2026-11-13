@@ -18,3 +18,4 @@ postcard.workspace = true
 rhai.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+zip.workspace = true

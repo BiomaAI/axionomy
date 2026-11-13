@@ -27,6 +27,8 @@ pub mod kind {
     pub enum Results {}
     /// A view: how people read an ontology's runs, named by the ontology.
     pub enum View {}
+    /// A package's manifest, named by the package.
+    pub enum Package {}
 
     impl PathKind for Goal {
         const SCHEMA: &'static str = "GoalPath";
@@ -54,6 +56,10 @@ pub mod kind {
     }
     impl PathKind for View {
         const SCHEMA: &'static str = "ViewPath";
+        const EXAMPLE: &'static str = "maze";
+    }
+    impl PathKind for Package {
+        const SCHEMA: &'static str = "PackagePath";
         const EXAMPLE: &'static str = "maze";
     }
 }

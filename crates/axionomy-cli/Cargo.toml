@@ -29,3 +29,6 @@ tracing-subscriber.workspace = true
 name = "axionomy"
 path = "src/main.rs"
 doc = false
+
+[dev-dependencies]
+axionomy.workspace = true

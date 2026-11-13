@@ -2191,7 +2191,7 @@ second tab opens a store in memory and says so.
 
 ### D-048: A package is a redb file
 
-Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P1
+Built ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P1
 and P8). Everything a package holds lives in a store: economies as runs and
 points, refs naming them, goals, scripts, strategies, experiments with their
 results, views and a manifest (name, version, format version, host API

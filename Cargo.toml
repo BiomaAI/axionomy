@@ -93,6 +93,7 @@ uom = { version = "0.38.0", default-features = false, features = [
     "std",
 ] }
 wasm-bindgen = "0.2.130"
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [package]
 name = "axionomy"

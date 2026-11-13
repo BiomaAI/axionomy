@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P7 are done and
-P8 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 are done and
+P9 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -432,7 +432,7 @@ so a strategy could decide differently from the same point depending on
 whether it was in memory. An economy now keeps both in identifier order,
 specified and proved in Lean (D-051).
 
-**P8. Packages.** A manifest (name, version, format version, host API
+**P8. Packages (done).** A manifest (name, version, format version, host API
 version, contents). Export copies what is reachable from chosen refs (the
 points, the runs they come from, the tree nodes under their states, the
 definitions they use) into a new store file, which redb compacts. Load
@@ -440,6 +440,26 @@ merges a file into the engine's store, its refs under the package's name.
 Zip is optional both ways. `axionomy package export`, `load` and `inspect`.
 Done when an exported package, loaded into a fresh store, re-runs its
 experiments with identical results.
+
+Built: `export(name, version, contents, to)` takes refs and definitions,
+everything named under the package's name when nothing narrower is chosen,
+and closes over what they reach: the definitions they use (an experiment's
+strategies, objectives and results; a strategy's goal, candidates and
+scripts; a view's scripts), the refs an experiment starts from, the view of
+every ontology whose runs come along, and the points an experiment's
+results name. The store copies those refs, definitions and groups, every run
+they name back through the runs they forked from, with steps, states, pins,
+tags and metrics, and every tree node under those states; nothing else.
+Every ref must be named under the package's name, so loading never moves
+anyone else's refs. The manifest is a definition (`package/<name>`) naming
+the package, its version, the store format, the script host API and what it
+carries. `load` refuses a package whose scripts need a newer host API, then
+merges it; names the store already gives something else keep what they are
+and are reported. A package file is a redb file or a zip holding one, told
+apart by its first bytes, so `package(bytes)` opens either in memory, as
+the browser will. A package exported, compacted, zipped and loaded into a
+fresh store carries its experiment's results and re-runs the experiment to
+the same trials.
 
 **P9. The samples become packages.** The 15 samples' builders write their
 packages: economies for each instance and each seed shipped, goals, scripts,

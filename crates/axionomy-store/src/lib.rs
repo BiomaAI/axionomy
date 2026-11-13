@@ -16,14 +16,16 @@ pub use ids::{
 pub use ontology::{Id, Recordable};
 pub use read::{Reader, State, Transition};
 pub use recorder::{GroupRecorder, Recorder};
-pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, Summary, Target};
+pub use records::{
+    Checkpoints, FORMAT_VERSION, Group, GroupRecord, Member, Run, Step, Summary, Target,
+};
 pub use state::StateError;
-pub use transaction::Merged;
+pub use transaction::{Merged, Selection};
 pub use writer::{Pending, Transaction};
 
 use axionomy::{Economy, OntologyPath};
 use axionomy_tree::Hash;
-use records::{FORMAT, FORMAT_VERSION, GROUPS, META, RUNS, STORE_PREFIX};
+use records::{FORMAT, GROUPS, META, RUNS, STORE_PREFIX};
 use redb::{Database, ReadableDatabase, ReadableTable, backends::InMemoryBackend};
 use std::{
     path::Path,
@@ -63,6 +65,12 @@ pub enum StoreError {
     Diverged(Point),
     #[error("{0} is not a run of this store")]
     UnknownRun(RunId),
+    #[error("{0} is not a group of this store")]
+    UnknownGroup(GroupId),
+    #[error("no ref `{0}` is kept")]
+    UnknownRef(RefPath),
+    #[error("nothing defines `{0}`")]
+    Undefined(DefinitionPath),
     #[error("{run} records {recorded} economies, not {read}")]
     OtherOntology {
         run: RunId,
@@ -106,7 +114,8 @@ storage_errors!(
     redb::TableError,
     redb::StorageError,
     redb::CommitError,
-    redb::SetDurabilityError
+    redb::SetDurabilityError,
+    redb::CompactionError
 );
 
 /// Runs, their states and what organizes them, in one redb database.
@@ -136,6 +145,25 @@ impl Store {
     /// randomness for its identifier prefix.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         Self::with(Database::create(path)?, false)
+    }
+
+    /// A store kept in memory holding the store file `bytes`, such as a
+    /// package fetched or unzipped: changes stay in memory.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, StoreError> {
+        use redb::StorageBackend;
+        let backend = InMemoryBackend::new();
+        let length = u64::try_from(bytes.len()).expect("a length fits in 64 bits");
+        backend
+            .set_len(length)
+            .and_then(|()| backend.write(0, bytes))
+            .map_err(redb::StorageError::from)?;
+        Self::with(Database::builder().create_with_backend(backend)?, true)
+    }
+
+    /// Compacts the store file at `path`, which no store may have open, so
+    /// it takes no more space than what it holds; returns whether it shrank.
+    pub fn compact(path: impl AsRef<Path>) -> Result<bool, StoreError> {
+        Ok(Database::open(path)?.compact()?)
     }
 
     /// A store kept in memory: the same store, gone when dropped.
@@ -255,6 +283,21 @@ impl Store {
     /// rollouts.
     pub fn group(&self, group: Group) -> GroupRecorder {
         GroupRecorder::new(self.clone(), group)
+    }
+
+    /// Copies `selection` from this store into `to`: its refs and
+    /// definitions as they are, its groups with their members, and every run
+    /// its refs, points and groups name, back through the runs they forked
+    /// from, with their steps, states, pins, tags and metrics and every tree
+    /// node under their states. `to` gets what a package of the selection
+    /// needs and nothing else.
+    pub fn export(&self, selection: Selection, to: &Store) -> Pending<()> {
+        match self.read() {
+            Ok(reader) => to.transact(Durability::Immediate, move |txn| {
+                transaction::export(txn, reader.redb(), &selection)
+            }),
+            Err(error) => to.transact(Durability::Eventual, move |_| Err(error)),
+        }
     }
 
     /// Copies everything `other` holds that this store lacks. Run and group

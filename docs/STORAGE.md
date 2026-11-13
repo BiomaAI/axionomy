@@ -285,11 +285,18 @@ exists if and only if its transaction committed.
 - **Idempotent writes.** Nodes are inserted by hash, so retries and duplicates
   are harmless, and the initial state of ten thousand runs is stored once.
 - **Merge later.** Any writer, a thread, a process, a machine or a server,
-  may write its own store and never coordinate with others. Merging two stores is a union of nodes plus
-  run records with globally unique run IDs (the store's random 64-bit prefix
-  and a 64-bit counter), which cannot conflict. Refs are the one mutable
-  name: when both stores name something different, the merging store keeps
-  its own and reports the name.
+  may write its own store and never coordinate with others. Merging two
+  stores is a union of nodes plus run records with globally unique run IDs
+  (the store's random 64-bit prefix and a 64-bit counter), which cannot
+  conflict. Refs and definitions are the mutable names: when both stores
+  name something different, the merging store keeps its own and reports the
+  name.
+- **Export a part.** `Store::export` copies a selection into another store:
+  refs and definitions as they are, groups with their members, and every run
+  they name back through the runs it forked from, with its steps, states,
+  pins, tags and metrics and every node under its states. A package is such
+  a store, compacted (`Store::compact`), and `Store::from_bytes` opens a
+  store file held in memory, such as a package fetched or unzipped.
 - **Tests** use `InMemoryBackend`: the same code, with storage in memory. The
   browser does not use the store yet; it is planned to, in memory or on the
   origin private file system (D-047).
