@@ -331,7 +331,7 @@ mod tests {
     use super::*;
     use axionomy_problems::registry;
 
-    /// What running `arguments` over the canonical problems prints.
+    /// What running `arguments` over the sample problems prints.
     fn printed<const N: usize>(arguments: [&str; N]) -> Result<String, CliError> {
         run_from(registry(), arguments).map(|text| text.expect("a report prints"))
     }

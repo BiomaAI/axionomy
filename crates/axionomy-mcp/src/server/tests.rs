@@ -1,7 +1,7 @@
 use super::*;
 use axionomy_store::Store;
 
-/// A server that studies every canonical problem and keeps its economies in
+/// A server that studies every sample problem and keeps its economies in
 /// memory.
 fn server() -> AxionomyMcp {
     let engine = Engine::new(axionomy_problems::registry(), Store::memory().unwrap()).unwrap();

@@ -16,7 +16,7 @@ runs, and serves points and refs: frames, candidate exchanges, assess and
 apply at a point, and refs to create, advance and follow
 ([plan](../../docs/SIMULATION.md#interactive-execution), D-045, D-046).
 
-The `axionomy` application (`axionomy-cli`) serves the canonical problems with
+The `axionomy` application (`axionomy-cli`) serves the sample problems with
 it, the API and the optional built Studio frontend:
 
 ```sh
@@ -37,4 +37,4 @@ cargo run -p axionomy-cli -- export-studies studio/public/studies
 ```
 
 The contract does not depend on which problems are registered; the studies
-are the canonical problems'.
+are the sample problems'.

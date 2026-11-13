@@ -4,7 +4,7 @@
 //! observations, replay validation, and studies all cross the boundary as
 //! Rust-owned contracts. The JavaScript Worker only schedules and transports.
 //!
-//! The Worker's exports study every canonical problem. [`catalog_of`] and
+//! The Worker's exports study every sample problem. [`catalog_of`] and
 //! [`study_in`] serve any [`Registry`], for a Worker built over other
 //! problems.
 
@@ -20,13 +20,13 @@ pub fn protocol() -> String {
     "axionomy-studio-worker/1".into()
 }
 
-/// The catalog of every canonical problem, as JSON.
+/// The catalog of every sample problem, as JSON.
 #[wasm_bindgen]
 pub fn catalog() -> Result<String, JsValue> {
     catalog_of(&axionomy_problems::registry())
 }
 
-/// Studies a request for a canonical problem, emitting its events as JSON,
+/// Studies a request for a sample problem, emitting its events as JSON,
 /// and gives the study as JSON.
 #[wasm_bindgen]
 pub fn study(request_json: &str, study_id: &str, emit: &Function) -> Result<String, JsValue> {

@@ -390,7 +390,7 @@ survive the members they summarize.
   record their runs in the store, and scrubbing renders frames from stored
   roots instead of loading whole studies; in the browser the store runs in
   Studio's Worker (D-047).
-- **Problems** (done): every canonical problem's `World` has an `Ontology`,
+- **Problems** (done): every sample problem's `World` has an `Ontology`,
   and its runs are stored and read back unchanged.
 - **Producers of runs**: kept search branches and solutions, rollouts,
   simulations, sessions and episodes record as runs with checkpoint rules;
@@ -423,7 +423,7 @@ Each phase is a validated commit or series of commits.
 4. **Recording and debugging:** typed ontologies in the store (done: every
    identifier is stored as its JSON, and a run is read back only as the
    ontology that recorded it); replay-buffer transitions by root, bisection
-   and the time index it gives; every canonical problem recordable, with
+   and the time index it gives; every sample problem recordable, with
    rollouts recorded as runs in a Monte Carlo group (done); rollouts and Monte
    Carlo episodes recording where they run, through `Apply` and `Episodes`
    (done); studies recording their runs in the store (done for MCP; the Studio

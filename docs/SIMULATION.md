@@ -274,7 +274,7 @@ Studio's controls then act on a selected point and ref.
 | `axionomy-study` | Problems, the `Registry` and studies |
 | `axionomy-engine` | All work on studies, economies and runs, shared by every front end |
 | `axionomy-mcp`, `axionomy-studio-server` | Transports: libraries that know no problem |
-| `axionomy-cli` (the `axionomy` binary), `axionomy-studio-wasm` | Applications: they register the canonical problems and serve them (`axionomy mcp`, `axionomy studio`, the browser Worker) |
+| `axionomy-cli` (the `axionomy` binary), `axionomy-studio-wasm` | Applications: they register the sample problems and serve them (`axionomy mcp`, `axionomy studio`, the browser Worker) |
 
 Today the work on economies and runs lives in MCP
 (`crates/axionomy-mcp/src/{store,authoring,studies,read}.rs` and the apply
@@ -350,7 +350,7 @@ Studio server has a store: in memory, or a file when one is given.
 
 Done so far: the engine records points (author, apply, reach, ancestor,
 assess) and MCP keeps only its handles; the transports know no problem, and
-the `axionomy` application registers the canonical problems and serves them
+the `axionomy` application registers the sample problems and serves them
 (`axionomy mcp`, `axionomy studio`, `axionomy export-studies`). Next: studies
 recorded as runs, find and search, then the Studio server and the CLI on the
 engine.

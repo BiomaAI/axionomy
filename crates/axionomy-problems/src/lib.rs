@@ -22,13 +22,13 @@ use axionomy::{ApplyError, Ontology, ReplayError};
 use axionomy_search::{sampling::SamplingError, tree::TreeSearchError};
 use axionomy_study::{DuplicateProblem, Registry};
 
-/// Every canonical problem, in catalog order: the registry Axionomy's
+/// Every sample problem, in catalog order: the registry Axionomy's
 /// front ends study by default.
 pub fn registry() -> Registry {
-    canonical().expect("the canonical problems have distinct keys")
+    samples().expect("the sample problems have distinct keys")
 }
 
-fn canonical() -> Result<Registry, DuplicateProblem> {
+fn samples() -> Result<Registry, DuplicateProblem> {
     let mut registry = Registry::new();
     registry
         .register(maze::Maze::default())?

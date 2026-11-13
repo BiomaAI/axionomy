@@ -11,7 +11,7 @@ and honest about what the engine actually proved.
 
 ## Canonical references
 
-| Surface | Canonical problem | What it establishes |
+| Surface | Sample problem | What it establishes |
 | --- | --- | --- |
 | Graph | **Autonomous Work League** | Topology, mobile agents, attached work queues, shared facilities, relationship lines, dense replay state, and live comparative outcomes |
 | Reserves | **The Living Market** | Central pool dominance, exact reserves, ratio history, constant-product curve position, participant flows, liquidity depth, and causal attribution |
@@ -34,7 +34,7 @@ knowledge. Because it is first in the catalog, Studio opens it by default, so
 regressions in any replay frame are release-blocking even when another graph
 scene still looks correct.
 
-The other canonical problems are equally normative for their surface types.
+The other sample problems are equally normative for their surface types.
 Graph conventions must not be forced onto a grid, matrix, or timeline when the
 surface itself communicates the problem more clearly.
 
@@ -42,7 +42,7 @@ surface itself communicates the problem more clearly.
 
 The reserves surface draws a pool of two reserves one account holds, the ratio
 between them, and the participants who exchange against it; The Living Market is
-its canonical problem. It belongs to no problem: the problem writes every
+its sample problem. It belongs to no problem: the problem writes every
 caption (the pool's caption, its reserves' labels and symbols, the ratio's name
 and unit, the curve's name), and Studio draws only the shape. A reserves scene
 explains how replay-verified exchanges change one public reserve ratio; it

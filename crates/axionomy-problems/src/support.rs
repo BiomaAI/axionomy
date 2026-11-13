@@ -27,7 +27,7 @@ pub(crate) struct StrategyCopy<'a> {
     pub algorithm: &'a str,
 }
 
-/// The sizes every canonical problem comes in, each one of its instances:
+/// The sizes every sample problem comes in, each one of its instances:
 /// `micro`, `showcase` and `stress`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 pub(crate) enum Size {
@@ -52,12 +52,12 @@ impl Size {
     }
 }
 
-/// The size of the instance a study of a canonical problem asks for.
+/// The size of the instance a study of a sample problem asks for.
 pub(crate) fn size(study: &StudyKey) -> Result<Size, StudyError> {
     axionomy_study::instance(study)
 }
 
-/// The families the canonical problems belong to.
+/// The families the sample problems belong to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 pub(crate) enum Family {
     Pathfinding,
@@ -92,7 +92,7 @@ impl From<Family> for axionomy_study::ProblemFamily {
     }
 }
 
-/// What the canonical problems exercise.
+/// What the sample problems exercise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 pub(crate) enum Capability {
     DeterministicSearch,

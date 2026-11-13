@@ -299,7 +299,7 @@ used economies and studies stay in memory.
 
 `AxionomyMcp::new` takes the `Engine` it serves (`axionomy-engine`), which
 holds the `Registry` of problems the server studies and the store it keeps
-economies in; `axionomy_problems::registry()` holds every canonical problem.
+economies in; `axionomy_problems::registry()` holds every sample problem.
 
 ```rust
 use axionomy_engine::Engine;
@@ -337,7 +337,7 @@ application, so a solution is a trace the kernel replays.
 ## Running
 
 This crate is a library and knows no problem; the `axionomy` application
-(`axionomy-cli`) serves the canonical problems with it:
+(`axionomy-cli`) serves the sample problems with it:
 
 ```console
 AXIONOMY_MCP_BIND=127.0.0.1:8000 \

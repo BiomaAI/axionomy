@@ -1,4 +1,4 @@
-//! Every canonical problem studied through the registry: catalog entries,
+//! Every sample problem studied through the registry: catalog entries,
 //! replayable documents, readable labels, trajectories, showcase pressure,
 //! and cooperative control mid-study.
 
@@ -68,7 +68,7 @@ fn catalog_covers_every_canonical_problem() {
     let catalog = registry().catalog();
     assert_eq!(catalog.len(), 15);
     assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
-    // The canonical problems keep the instance keys links already name.
+    // The sample problems keep the instance keys links already name.
     assert!(catalog.iter().all(|problem| {
         problem.default_instance == path!("showcase")
             && problem

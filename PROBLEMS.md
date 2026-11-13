@@ -115,7 +115,7 @@ cargo bench -p axionomy-problems --bench rollout_throughput
 
 ## Instance profiles and anti-toy pressure
 
-Every canonical problem declares the same three instances, under the keys
+Every sample problem declares the same three instances, under the keys
 links, the CLI's `--instance` and MCP's `instance` take:
 
 - **Micro** preserves the compact exact fixtures and independent oracles used

@@ -53,7 +53,7 @@ describe("graphEdgeSides", () => {
 });
 
 describe("reserves scene", () => {
-  // A pool no canonical problem has: every caption comes from the scene.
+  // A pool no sample problem has: every caption comes from the scene.
   const pool = (water: string, grain: string, ratio: string) => ({
     id: { key: "mill/pool", label: "Water / grain mill" },
     account: "mill/account/pool",

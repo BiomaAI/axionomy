@@ -118,7 +118,7 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
-| `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests; beside each model, its README, `Problem` and presentation, all in `registry()` |
+| `axionomy-problems` | Sample problem encodings, specialized proposers, and conformance tests; beside each model, its README, `Problem` and presentation, all in `registry()` |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
@@ -127,7 +127,7 @@ models into one-way workspace dependencies:
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 transport over the engine, with stored, steppable, diffable economies, explorable studies, and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts, and the labels, formats, scene helpers and Pareto front views problems present themselves with |
 | `axionomy-study` | Generic study runtime: the `Problem` trait and `Registry`, study requests and control, progress reporting, and replay-derived studies of any registered problem |
-| `axionomy-cli` | The `axionomy` application: registers the canonical problems, studies them, and serves them over MCP (`axionomy mcp`) and to Studio (`axionomy studio`) |
+| `axionomy-cli` | The `axionomy` application: registers the sample problems, studies them, and serves them over MCP (`axionomy mcp`) and to Studio (`axionomy studio`) |
 | `axionomy-studio-server` | Native OpenAPI/SSE backend for Axionomy Studio, over any registry of problems |
 | `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust study runtime and problems in a browser |
 

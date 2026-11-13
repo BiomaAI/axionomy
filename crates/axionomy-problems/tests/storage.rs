@@ -1,4 +1,4 @@
-//! Every canonical problem's economies can be stored and read back as they
+//! Every sample problem's economies can be stored and read back as they
 //! were: each identifier type has one JSON encoding, its path, which the store
 //! checks, and which reads as the `paths` ontology too.
 
@@ -196,7 +196,7 @@ impl Episodes<logistics::Ontology, logistics::Policy, logistics::MissionRollout>
     }
 }
 
-/// A canonical problem's Monte Carlo estimate records its rollouts where it
+/// A sample problem's Monte Carlo estimate records its rollouts where it
 /// runs them: recording changes nothing it observes, every rollout is a run
 /// that replays, each policy's group summarizes its samples, and a run's
 /// stored states answer the questions asked of it afterwards.

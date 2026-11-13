@@ -791,7 +791,7 @@ pub fn shapley_price_contributions(initial: &World) -> Vec<ShapleyContribution> 
         let trace = market_day_with_actors(initial, &included);
         let final_world = initial
             .replayed(&trace)
-            .expect("every canonical actor coalition is replayable");
+            .expect("every actor coalition is replayable");
         *value = i128::from(pool_state(&final_world).price_milli);
     }
 

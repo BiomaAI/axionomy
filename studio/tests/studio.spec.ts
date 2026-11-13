@@ -199,7 +199,7 @@ test("shows an executed adaptive Logistics journey instead of a two-step prefix"
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
 });
 
-test("renders the generic cockpit for every canonical problem without browser errors", async ({ page }) => {
+test("renders the generic cockpit for every sample problem without browser errors", async ({ page }) => {
   test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));

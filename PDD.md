@@ -834,7 +834,7 @@ stale. This repository pins the
 Schemars-1-native Aide line because duplicating the entire DTO graph for an old
 schema-trait release would create two contract systems.
 
-The native server exposes the canonical catalog, starts studies, reports their
+The native server exposes the catalog, starts studies, reports their
 state, pauses, resumes, or cancels them cooperatively, serves each published
 study, its documents, and paginated frames under the study's minted ID
 (`study-7`), and streams tagged `StudioEvent` values through Server-Sent Events.
@@ -871,7 +871,7 @@ The React application uses one `EngineClient` boundary for native HTTP/SSE,
 the browser Worker, and static playback. The native connection badge is backed
 by a periodic health check; a catalog loaded before a server stopped cannot
 claim that the engine is still connected. The browser adapter runs
-`axionomy-study` and the canonical problems compiled to Rust/Wasm inside a
+`axionomy-study` and the sample problems compiled to Rust/Wasm inside a
 dedicated Worker, and static
 playback advertises that it cannot execute. Local playback position and play/pause state
 stay in a component reducer/state boundary rather than becoming server or
@@ -1956,7 +1956,7 @@ models or forced traces.
 
 The browser does not maintain a TypeScript economy or a second set of problem
 solvers. `axionomy-studio-wasm` compiles the interface-neutral study runtime and
-the canonical problems to
+the sample problems to
 `wasm32-unknown-unknown`; a dedicated Worker transports Rust-owned requests,
 observations, and studies. Native HTTP/SSE remains preferable when present,
 the Worker is the first-class GitHub Pages engine, and pre-built studies are
@@ -2149,7 +2149,7 @@ has no async runtime or protocol types, and builds natively and for
 Worker are its transports; MCP keeps its protocol and its table from handles
 to points. A transport never implements an operation the engine has, and knows
 no problem: an application registers the problems it serves, as the `axionomy`
-binary registers the canonical ones.
+binary registers the samples.
 
 ### D-046: Every step is an apply at a point; a ref says which steps count
 
@@ -2208,7 +2208,7 @@ Axionomy succeeds when:
   run the same Rust study runtime in a Worker; they can inspect a study's thinking,
   scrub every accepted exchange, and inspect exact balances and deltas without
   a parallel mutable world model or handwritten cross-language contract.
-- Every canonical problem can be discovered, studied, replayed, and
+- Every sample problem can be discovered, studied, replayed, and
   meaningfully inspected through Studio and static Showcase studies, with
   explicit Micro and Stress selection on live interfaces.
 - CLI, HTTP, MCP, and the browser Worker serve the same semantic studies for

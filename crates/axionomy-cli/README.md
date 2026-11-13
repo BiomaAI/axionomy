@@ -1,6 +1,6 @@
 # axionomy-cli
 
-The `axionomy` application. It registers the canonical problems
+The `axionomy` application. It registers the sample problems
 (`axionomy_problems::registry()`) and studies them, or serves them: over MCP
 with `axionomy mcp`, and to Studio with `axionomy studio`. The transports are
 libraries that know no problem; this is where problems meet them. `run` and
@@ -29,7 +29,7 @@ economies in a store file when `--store` names one and in memory otherwise.
 Every problem declares its instances, and `describe` lists them with its
 family and capabilities in the words the problem gives them; the canonical
 problems declare `micro`, `showcase` and `stress`. Omitting `--instance`
-selects the problem's default, Showcase for the canonical ones, and the study
+selects the problem's default, Showcase for the samples, and the study
 records its key: the problem, instance, strategy, seed and budget it was
 computed from. Problems, instances and strategies are written in kebab-case
 (`work-league`, `showcase`, `a-star`), and the CLI refuses any other spelling

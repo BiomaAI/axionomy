@@ -15,7 +15,7 @@ The ontology is the problem's model. The kernel owns everything else: balances,
 the laws' effects, validation, conservation and history (D-003). Building a
 problem in Axionomy therefore means designing its ontology and writing its
 rates. This guide covers what the kernel requires, how to build an ontology
-step by step, and the modeling choices the canonical problems settled on.
+step by step, and the modeling choices the sample problems settled on.
 
 ## The four kinds
 
@@ -107,7 +107,7 @@ enum Good {
 }
 ```
 
-Assets carry far more than goods, and the canonical problems lean on this:
+Assets carry far more than goods, and the sample problems lean on this:
 
 - **Facts are assets.** Location (`At(Room)`), a phase of play (`Planning`,
   `AwaitingObservation`), an unresolved chance outcome (`Unresolved`), and a

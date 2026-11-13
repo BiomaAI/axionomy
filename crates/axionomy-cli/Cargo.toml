@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-cli"
-description = "The axionomy application: studies the canonical problems, and serves them over MCP and to Studio"
+description = "The axionomy application: studies the sample problems, and serves them over MCP and to Studio"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
