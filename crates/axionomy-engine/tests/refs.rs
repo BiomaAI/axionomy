@@ -4,8 +4,12 @@
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError, Following, Measure, Objective, ScriptCall};
 use axionomy_search::pareto::ObjectiveDirection;
-use axionomy_store::{Point, Store};
-use std::{sync::Arc, thread, time::Duration};
+use axionomy_store::{Durability, Point, Store};
+use std::{
+    sync::{Arc, mpsc},
+    thread,
+    time::Duration,
+};
 
 fn path<K>(text: &str) -> Path<K> {
     text.parse().unwrap()
@@ -100,6 +104,54 @@ fn a_ref_moves_only_forward_from_where_its_mover_expects() {
         Err(EngineError::Backward { .. })
     ));
     assert_eq!(engine.referred(&live).unwrap(), first);
+}
+
+#[test]
+fn of_two_moves_committed_together_one_counts() {
+    let (engine, start) = bank();
+    let live = path("live");
+    engine.refer(&live, start).unwrap();
+    let rivals = [
+        engine.apply(start, &[pay(5)]).unwrap(),
+        engine.apply(start, &[pay(3)]).unwrap(),
+    ];
+    // The store's writer held while both movers queue their moves, so that
+    // one transaction commits them together.
+    let (release, held) = mpsc::channel::<()>();
+    let gate = engine.store().transact(Durability::Immediate, move |_| {
+        let _ = held.recv();
+        Ok(())
+    });
+    let movers: Vec<_> = rivals
+        .iter()
+        .map(|&to| {
+            let engine = engine.clone();
+            let live = live.clone();
+            thread::spawn(move || engine.advance(&live, start, to))
+        })
+        .collect();
+    thread::sleep(Duration::from_millis(100));
+    release.send(()).unwrap();
+    gate.wait().unwrap();
+    let moved: Vec<_> = movers
+        .into_iter()
+        .map(|mover| mover.join().unwrap())
+        .collect();
+
+    // The ref is where the move that counted took it, and the other mover
+    // was told so.
+    let at = engine.referred(&live).unwrap();
+    for (to, moved) in rivals.into_iter().zip(moved) {
+        if to == at {
+            moved.unwrap();
+        } else {
+            assert!(matches!(
+                moved,
+                Err(EngineError::Moved { current: Some(current), .. }) if current == at
+            ));
+        }
+    }
+    assert_ne!(at, start);
 }
 
 #[test]

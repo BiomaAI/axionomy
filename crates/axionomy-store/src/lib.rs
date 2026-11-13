@@ -251,7 +251,10 @@ impl Store {
     }
 
     /// Queues `work` for the writer, which runs it in a transaction with
-    /// other queued work and commits them together.
+    /// other queued work and commits them together. Work that fails fails
+    /// all of it, so work refused as its caller expects, such as a
+    /// [`compare_and_set_ref`](Transaction::compare_and_set_ref) that finds
+    /// the ref moved, returns the refusal instead of failing.
     pub fn transact<T: Send + 'static>(
         &self,
         durability: Durability,

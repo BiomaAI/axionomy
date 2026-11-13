@@ -165,18 +165,29 @@ impl Engine {
         to: Point,
     ) -> Result<(), EngineError> {
         let named = name.clone();
+        // A move refused is what this write gives, not a failed write: the
+        // writer commits other callers' writes in the same transaction, and
+        // one that fails fails them all, a rival's move among them.
         let moved = self
             .store
             .transact(Durability::Immediate, move |txn| {
-                txn.compare_and_set_ref(&named, expected.map(Target::Step), Some(Target::Step(to)))
+                match txn.compare_and_set_ref(
+                    &named,
+                    expected.map(Target::Step),
+                    Some(Target::Step(to)),
+                ) {
+                    Ok(()) => Ok(None),
+                    Err(StoreError::Moved { current, .. }) => Ok(Some(current)),
+                    Err(error) => Err(error),
+                }
             })
             .wait();
         match moved {
-            Ok(()) => {
+            Ok(None) => {
                 self.moved.tell();
                 Ok(())
             }
-            Err(StoreError::Moved { current, .. }) => Err(EngineError::Moved {
+            Ok(Some(current)) => Err(EngineError::Moved {
                 name: name.clone(),
                 current: match current {
                     Some(Target::Step(point)) => Some(point),
