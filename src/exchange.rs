@@ -1,7 +1,8 @@
 use crate::Ontology;
 use crate::{Basket, ParameterPath, Quantity};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
 
 /// A typed proposal keeps roles and account identities separate.
@@ -13,9 +14,8 @@ use std::collections::BTreeMap;
 /// let proposal = Exchange::new("pay".parse().unwrap(), Quantity::new(1));
 /// let _ = proposal.bind(source, payer);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "O::Rate: Serialize, O::Role: Serialize, O::Account: Serialize",
     deserialize = "O::Rate: Deserialize<'de>, O::Role: Deserialize<'de>, O::Account: Deserialize<'de>",
 ))]
 #[schemars(
@@ -34,8 +34,31 @@ pub struct Exchange<O: Ontology> {
     units: Quantity,
     /// The values of the parameters the rate's computed amounts and
     /// conditions read, by name.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     parameters: BTreeMap<ParameterPath, Quantity>,
+}
+
+/// JSON leaves out an exchange's parameters when it has none; formats that are
+/// not read by people write every field.
+impl<O: Ontology> Serialize for Exchange<O>
+where
+    O::Rate: Serialize,
+    O::Role: Serialize,
+    O::Account: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let omit_parameters = serializer.is_human_readable() && self.parameters.is_empty();
+        let mut state = serializer.serialize_struct("Exchange", 4)?;
+        state.serialize_field("rate", &self.rate)?;
+        state.serialize_field("bindings", &self.bindings)?;
+        state.serialize_field("units", &self.units)?;
+        if omit_parameters {
+            state.skip_field("parameters")?;
+        } else {
+            state.serialize_field("parameters", &self.parameters)?;
+        }
+        state.end()
+    }
 }
 
 impl<O: Ontology> Exchange<O> {
@@ -126,9 +149,8 @@ impl<O: Ontology> AccountDelta<O> {
 }
 
 /// An applied exchange and the balance change it made to every account.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "O::Rate: Serialize, O::Role: Serialize, O::Account: Serialize, O::Asset: Serialize",
     deserialize = "O::Rate: Deserialize<'de>, O::Role: Deserialize<'de>, O::Account: Deserialize<'de>, O::Asset: Deserialize<'de>",
 ))]
 #[schemars(
@@ -138,11 +160,36 @@ pub struct Receipt<O: Ontology> {
     exchange: Exchange<O>,
     deltas: Vec<AccountDelta<O>>,
     /// Accounts the exchange created, in role order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     opened: Vec<O::Account>,
     /// Accounts the exchange removed, in role order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     closed: Vec<O::Account>,
+}
+
+/// JSON leaves out the accounts a receipt neither opened nor closed; formats
+/// that are not read by people write every field.
+impl<O: Ontology> Serialize for Receipt<O>
+where
+    O::Rate: Serialize,
+    O::Role: Serialize,
+    O::Account: Serialize,
+    O::Asset: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let readable = serializer.is_human_readable();
+        let mut state = serializer.serialize_struct("Receipt", 4)?;
+        state.serialize_field("exchange", &self.exchange)?;
+        state.serialize_field("deltas", &self.deltas)?;
+        for (name, accounts) in [("opened", &self.opened), ("closed", &self.closed)] {
+            if readable && accounts.is_empty() {
+                state.skip_field(name)?;
+            } else {
+                state.serialize_field(name, accounts)?;
+            }
+        }
+        state.end()
+    }
 }
 
 impl<O: Ontology> Receipt<O> {

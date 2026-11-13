@@ -24,11 +24,7 @@ use thiserror::Error;
 /// intermediate product and nothing rounds implicitly. Round amounts a
 /// participant pays up and amounts a participant receives down, so rounding
 /// dust stays with the counterparty.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(bound(
-    serialize = "O::Role: Serialize, O::Asset: Serialize",
-    deserialize = "O::Role: Deserialize<'de>, O::Asset: Deserialize<'de>",
-))]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(
     bound = "O::Role: JsonSchema, O::Asset: JsonSchema",
     description = "An exact quantity computed from the economy before the exchange, as an object whose `kind` is `constant` (a `value`), `units` (the exchange's units), `parameter` (one of the exchange's parameters, by `name`), `balance` (a `role`'s balance of an `asset`), `add`, `subtract`, `multiply`, `minimum` or `maximum` (of a `left` and a `right` expression), or `mul_div`: `left` × `right` ÷ `denominator` from a full-width product, the only division, with an inexact quotient rounded as its `rounding` says, `floor` or `ceil`. Round what a participant pays up and what it receives down, so rounding dust stays with the counterparty."
@@ -74,6 +70,111 @@ pub enum QuantityExpression<O: Ontology> {
         denominator: Box<Self>,
         rounding: Rounding,
     },
+}
+
+/// An expression is written tagged by `kind` where people read the format, as
+/// JSON, and tagged by variant otherwise, as the store's binary records are. A
+/// child expression writes itself, so each form holds at every depth.
+impl<O: Ontology> Serialize for QuantityExpression<O>
+where
+    O::Role: Serialize,
+    O::Asset: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            expression_forms::TaggedRef::from(self).serialize(serializer)
+        } else {
+            expression_forms::CompactRef::from(self).serialize(serializer)
+        }
+    }
+}
+
+impl<'de, O: Ontology> Deserialize<'de> for QuantityExpression<O>
+where
+    O::Role: Deserialize<'de>,
+    O::Asset: Deserialize<'de>,
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if deserializer.is_human_readable() {
+            expression_forms::Tagged::deserialize(deserializer).map(Self::from)
+        } else {
+            expression_forms::Compact::deserialize(deserializer).map(Self::from)
+        }
+    }
+}
+
+/// The two written forms of [`QuantityExpression`], each as a borrowed form to
+/// write and an owned form to read.
+mod expression_forms {
+    use super::{Ontology, ParameterPath, Quantity, QuantityExpression, Rounding};
+    use serde::{Deserialize, Serialize};
+
+    macro_rules! form {
+        (
+            $by_ref:ident, $owned:ident, [$($attribute:meta),*],
+            $($variant:ident $({ $($field:ident: $ty:ty),* $(,)? })?),* $(,)?
+        ) => {
+            #[derive(Serialize)]
+            #[serde(bound(serialize = "O::Role: Serialize, O::Asset: Serialize"), $($attribute),*)]
+            pub(super) enum $by_ref<'a, O: Ontology> {
+                $($variant $({ $($field: &'a $ty),* })?),*
+            }
+
+            impl<'a, O: Ontology> From<&'a QuantityExpression<O>> for $by_ref<'a, O> {
+                fn from(expression: &'a QuantityExpression<O>) -> Self {
+                    match expression {
+                        $(QuantityExpression::$variant $({ $($field),* })? => {
+                            Self::$variant $({ $($field),* })?
+                        })*
+                    }
+                }
+            }
+
+            #[derive(Deserialize)]
+            #[serde(
+                bound(deserialize = "O::Role: Deserialize<'de>, O::Asset: Deserialize<'de>"),
+                $($attribute),*
+            )]
+            pub(super) enum $owned<O: Ontology> {
+                $($variant $({ $($field: $ty),* })?),*
+            }
+
+            impl<O: Ontology> From<$owned<O>> for QuantityExpression<O> {
+                fn from(form: $owned<O>) -> Self {
+                    match form {
+                        $($owned::$variant $({ $($field),* })? => {
+                            Self::$variant $({ $($field),* })?
+                        })*
+                    }
+                }
+            }
+        };
+    }
+
+    macro_rules! forms {
+        ($($variants:tt)*) => {
+            form!(TaggedRef, Tagged, [tag = "kind", rename_all = "snake_case"], $($variants)*);
+            form!(CompactRef, Compact, [rename_all = "snake_case"], $($variants)*);
+        };
+    }
+
+    forms! {
+        Constant { value: Quantity },
+        Units,
+        Parameter { name: ParameterPath },
+        Balance { role: O::Role, asset: O::Asset },
+        Add { left: Box<QuantityExpression<O>>, right: Box<QuantityExpression<O>> },
+        Subtract { left: Box<QuantityExpression<O>>, right: Box<QuantityExpression<O>> },
+        Multiply { left: Box<QuantityExpression<O>>, right: Box<QuantityExpression<O>> },
+        Minimum { left: Box<QuantityExpression<O>>, right: Box<QuantityExpression<O>> },
+        Maximum { left: Box<QuantityExpression<O>>, right: Box<QuantityExpression<O>> },
+        MulDiv {
+            left: Box<QuantityExpression<O>>,
+            right: Box<QuantityExpression<O>>,
+            denominator: Box<QuantityExpression<O>>,
+            rounding: Rounding,
+        },
+    }
 }
 
 impl<O: Ontology> QuantityExpression<O> {
@@ -566,6 +667,7 @@ where
     O::Asset: Serialize,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let readable = serializer.is_human_readable();
         let mut state = serializer.serialize_struct("Rate", 10)?;
         state.serialize_field("consume", &self.consume.iter().collect::<Vec<_>>())?;
         state.serialize_field("produce", &self.produce.iter().collect::<Vec<_>>())?;
@@ -575,12 +677,14 @@ where
         state.serialize_field("computed_produce", &self.computed_produce)?;
         state.serialize_field("computed_preserve", &self.computed_preserve)?;
         state.serialize_field("conditions", &self.conditions)?;
-        if self.opens.is_empty() {
+        // JSON leaves out roles a rate neither opens nor closes; formats
+        // that are not read by people write every field.
+        if readable && self.opens.is_empty() {
             state.skip_field("opens")?;
         } else {
             state.serialize_field("opens", &self.opens)?;
         }
-        if self.closes.is_empty() {
+        if readable && self.closes.is_empty() {
             state.skip_field("closes")?;
         } else {
             state.serialize_field("closes", &self.closes)?;

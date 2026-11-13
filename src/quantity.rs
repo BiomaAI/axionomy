@@ -163,16 +163,47 @@ impl FromStr for Quantity {
     }
 }
 
+/// Written as decimal digits where people read the format, such as JSON, and
+/// otherwise as its big-endian bytes without leading zeros: zero is no bytes.
 impl Serialize for Quantity {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+        let bytes = self.to_be_bytes();
+        let first = bytes.iter().position(|byte| *byte != 0).unwrap_or(32);
+        serializer.serialize_bytes(&bytes[first..])
     }
 }
 
 impl<'de> Deserialize<'de> for Quantity {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = Cow::<str>::deserialize(deserializer)?;
-        text.parse().map_err(serde::de::Error::custom)
+        if deserializer.is_human_readable() {
+            let text = Cow::<str>::deserialize(deserializer)?;
+            return text.parse().map_err(serde::de::Error::custom);
+        }
+        deserializer.deserialize_bytes(QuantityBytes)
+    }
+}
+
+/// Reads a quantity's bytes, accepting only the form [`Quantity`] writes: at
+/// most 32 of them, the first not zero.
+struct QuantityBytes;
+
+impl serde::de::Visitor<'_> for QuantityBytes {
+    type Value = Quantity;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("at most 32 big-endian bytes without leading zeros")
+    }
+
+    fn visit_bytes<E: serde::de::Error>(self, value: &[u8]) -> Result<Quantity, E> {
+        if value.len() > 32 || value.first() == Some(&0) {
+            return Err(E::invalid_length(value.len(), &self));
+        }
+        let mut bytes = [0; 32];
+        bytes[32 - value.len()..].copy_from_slice(value);
+        Ok(Quantity::from_be_bytes(bytes))
     }
 }
 
