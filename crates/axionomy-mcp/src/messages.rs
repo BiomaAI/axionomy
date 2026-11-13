@@ -9,7 +9,9 @@ use axionomy::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Quantity,
     RatePath, RolePath, paths,
 };
-use axionomy_search::GraphSearchProgress;
+use axionomy_engine::{Ended, ExperimentPath, ObjectivePath, PackagePath, StrategyPath, Version};
+use axionomy_search::{GraphSearchProgress, pareto::ObjectiveDirection};
+use axionomy_store::RefPath;
 use axionomy_study::StudyKey;
 use axionomy_view::DocumentPath;
 use schemars::JsonSchema;
@@ -594,6 +596,168 @@ pub struct FrameReceipt {
     pub closed: Vec<AccountPath>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PackageListRequest {}
+
+/// The packages loaded into the server's store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PackageListResponse {
+    pub packages: Vec<PackageSummary>,
+}
+
+/// One loaded package: what its manifest says of it, the points its refs
+/// name, and the experiments and strategies it carries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PackageSummary {
+    pub name: PackagePath,
+    pub version: PackageVersion,
+    /// The store format the package is written in.
+    pub format: u64,
+    /// The script host API its scripts are written for.
+    pub host_api: u64,
+    /// Its refs that name a point, each with that point's economy.
+    pub refs: Vec<PackageRef>,
+    /// The experiments it carries, which axionomy_experiment_run runs.
+    pub experiments: Vec<ExperimentPath>,
+    /// The strategies its experiments run as arms.
+    pub strategies: Vec<StrategyPath>,
+}
+
+/// A package's name for a point, such as an instance it starts from, and
+/// the economy at that point. The name is the package's, not a `ref_id`:
+/// to follow an application from the economy, make a ref with
+/// `axionomy_ref_create`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PackageRef {
+    #[serde(rename = "ref")]
+    pub reference: RefPath,
+    pub economy_id: EconomyId,
+}
+
+/// A package's version, written `major.minor.patch`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PackageVersion(pub Version);
+
+impl Serialize for PackageVersion {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for PackageVersion {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        std::borrow::Cow::<str>::deserialize(deserializer)?
+            .parse()
+            .map(Self)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchema for PackageVersion {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "PackageVersion".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "A package's version: three whole numbers, `major.minor.patch`, such as `1.0.2`.",
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExperimentRequest {
+    /// An experiment of a loaded package, such as `maze/micro`;
+    /// `axionomy_package_list` lists them.
+    pub experiment: ExperimentPath,
+}
+
+/// What an experiment's trials did: every arm's, measured on the same
+/// objectives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ExperimentResults {
+    pub experiment: ExperimentPath,
+    /// The objectives every trial is measured on, in the experiment's order.
+    pub objectives: Vec<ExperimentObjective>,
+    pub arms: Vec<ArmResults>,
+}
+
+/// An objective and the direction that improves it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ExperimentObjective {
+    pub objective: ObjectivePath,
+    pub direction: ObjectiveDirection,
+}
+
+/// One arm: a strategy, from its start, over the experiment's trials.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ArmResults {
+    pub strategy: StrategyPath,
+    /// The package's ref the arm starts from: the experiment's start, or
+    /// the arm's own, such as a counterfactual start.
+    pub start: RefPath,
+    /// The economy every trial of the arm starts from.
+    pub start_economy_id: EconomyId,
+    pub trials: Vec<TrialResult>,
+}
+
+/// One trial: one seeded run of an arm's strategy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TrialResult {
+    /// The trial's seed, drawn from the experiment's seed and the trial's
+    /// position, so every arm meets the same chances.
+    pub seed: u64,
+    pub ended: TrialEnded,
+    /// The experiment's objectives where the trial ended, exactly.
+    pub values: BTreeMap<ObjectivePath, Quantity>,
+    /// The economy the trial reached, made by `exchanges` exchanges from
+    /// the arm's start: `axionomy_trace_step` names each step, and its
+    /// `exchanges` resource is the trace. The start itself when the trial
+    /// applied none.
+    pub economy_id: EconomyId,
+    pub exchanges: u64,
+}
+
+/// How a trial's run ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TrialEnded {
+    /// The strategy's goal holds where the run ends.
+    Reached,
+    /// The policy proposed nothing, or a plan ended short of the goal.
+    Stopped,
+    /// The policy used its every turn.
+    Horizon,
+    /// The policy proposed an exchange that does not apply on turn `turn`,
+    /// counting from zero; the run ends before it.
+    Refused { turn: u64 },
+    /// The search explored everything its candidates reach without the
+    /// goal.
+    Exhausted,
+    /// The search spent the experiment's budget first.
+    Spent,
+    /// The run was stopped before it ended.
+    Interrupted,
+}
+
+impl From<Ended> for TrialEnded {
+    fn from(ended: Ended) -> Self {
+        match ended {
+            Ended::Reached => Self::Reached,
+            Ended::Stopped => Self::Stopped,
+            Ended::Horizon => Self::Horizon,
+            Ended::Refused { turn } => Self::Refused { turn },
+            Ended::Exhausted => Self::Exhausted,
+            Ended::Spent => Self::Spent,
+            Ended::Interrupted => Self::Interrupted,
+        }
+    }
+}
+
 /// A failed tool call: a stable code, a message, and what the caller needs to
 /// correct it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -611,8 +775,9 @@ pub enum FailureCode {
     /// JSON pointer of the argument at fault.
     InvalidRequest,
     /// What a handle or path names does not exist: an economy, assessment,
-    /// study or ref this server's store does not hold, or an account no
-    /// economy of the trace has.
+    /// study or ref this server's store does not hold, an account no
+    /// economy of the trace has, an experiment no loaded package carries, or
+    /// results an experiment has not recorded.
     NotFound,
     /// An entry would replace one the economy already has.
     Conflict,

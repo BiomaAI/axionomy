@@ -14,7 +14,11 @@
 //! first handle that named it: a ref, which names a point, reads back as that
 //! handle, and a step the ref was moved over as the handle of the economy the
 //! step made. A step no handle names yet gets one minted from its point: the
-//! economy its exchange made from the step before.
+//! economy its exchange made from the step before. A point a package names,
+//! or an experiment reached, is named the same way: by the first handle that
+//! named it, or by one minted from it, the economy its run's exchanges made
+//! from where the run starts, or an authored one when its run starts from an
+//! economy of its own.
 
 use crate::{
     handles::{AssessmentId, EconomyId, RefId, StudyId},
@@ -22,7 +26,9 @@ use crate::{
     studies::Trajectory,
 };
 use axionomy::paths;
-use axionomy_engine::{Engine, EngineError, Following, Frame, GoalPath, Reached};
+use axionomy_engine::{
+    Engine, EngineError, ExperimentPath, Following, Frame, GoalPath, Reached, Results,
+};
 use axionomy_store::{Durability, Point, Reader, RefPath, StoreError};
 use axionomy_study::{Study, StudyKey};
 use axionomy_view::DocumentPath;
@@ -34,6 +40,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
     hash::Hash,
+    ops::ControlFlow,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -464,8 +471,7 @@ impl Archive {
                     {
                         return Err(StoreError::Malformed("a frame that is no step").into());
                     }
-                    let economy_id =
-                        EconomyId::from_digest(&self.keyed(&[b"point", &encode(&point)]));
+                    let economy_id = self.minted(point);
                     let record = EconomyRecord {
                         point,
                         parent: Some(previous),
@@ -481,6 +487,46 @@ impl Archive {
         drop(reader);
         self.keep_all(minted).await?;
         Ok((named_frames, self.handle_of(current)?))
+    }
+
+    /// The handle minted for `point`, an earliest name no handle named
+    /// first.
+    fn minted(&self, point: Point) -> EconomyId {
+        EconomyId::from_digest(&self.keyed(&[b"point", &encode(&point)]))
+    }
+
+    /// The handles of `points`, which this server did not make, such as
+    /// those a package's refs name and those an experiment reached: each
+    /// point's first handle, or one minted from it and recorded as the
+    /// economy its run's exchanges made from where the run starts, itself
+    /// named so; a run that starts from an economy of its own starts from
+    /// an authored one.
+    pub async fn names(&self, points: Vec<Point>) -> Result<Vec<EconomyId>, EngineError> {
+        let archive = self.clone();
+        let (names, minted) = blocking(move || {
+            let reader = archive.engine.store().read()?;
+            let mut naming = Naming {
+                archive: &archive,
+                reader: &reader,
+                minted: Vec::new(),
+                minted_at: HashMap::new(),
+            };
+            let names = points
+                .into_iter()
+                .map(|point| naming.name(point))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((names, naming.minted))
+        })
+        .await?;
+        self.keep_all(minted).await?;
+        Ok(names)
+    }
+
+    /// Runs the experiment at `path` where blocking is allowed, recording
+    /// its runs and results.
+    pub async fn run_experiment(&self, path: ExperimentPath) -> Result<Results, EngineError> {
+        let engine = self.engine.clone();
+        blocking(move || engine.run_experiment(&path, &mut |_| ControlFlow::Continue(()))).await
     }
 
     /// Indexes `point`, an earliest name, by `economy_id` unless a handle
@@ -746,6 +792,57 @@ impl Archive {
             })
             .await
             .unwrap();
+    }
+}
+
+/// Points named so far by one call to [`Archive::names`], and the records
+/// of the handles it minted.
+struct Naming<'a> {
+    archive: &'a Archive,
+    reader: &'a Reader,
+    minted: Vec<(EconomyId, EconomyRecord)>,
+    minted_at: HashMap<Point, EconomyId>,
+}
+
+impl Naming<'_> {
+    /// The handle of `point`: its first handle, or one minted for it.
+    fn name(&mut self, point: Point) -> Result<EconomyId, EngineError> {
+        let point = earliest(self.reader, point)?;
+        if let Some(named) = named(self.reader, point)? {
+            return Ok(named);
+        }
+        if let Some(minted) = self.minted_at.get(&point) {
+            return Ok(minted.clone());
+        }
+        let run = self
+            .reader
+            .run(point.run)?
+            .ok_or(StoreError::Malformed("a point of a run the store lacks"))?;
+        // An earliest name that starts its run starts from an economy of its
+        // own; any other is the economy its run's exchanges made from the
+        // point the run starts from.
+        let (parent, origin) = if point.step == run.first {
+            let reached = self.archive.engine.reach(point)?;
+            let entries = crate::authoring::entries(&reached.state.economy);
+            (None, Origin::Authored { entries })
+        } else {
+            let first = Point {
+                run: point.run,
+                step: run.first,
+            };
+            let exchanges = usize::try_from(point.step - run.first)
+                .map_err(|_| StoreError::Malformed("a run longer than memory"))?;
+            (Some(self.name(first)?), Origin::Exchanged { exchanges })
+        };
+        let economy_id = self.archive.minted(point);
+        let record = EconomyRecord {
+            point,
+            parent,
+            origin,
+        };
+        self.minted.push((economy_id.clone(), record));
+        self.minted_at.insert(point, economy_id.clone());
+        Ok(economy_id)
     }
 }
 

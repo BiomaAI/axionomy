@@ -3,22 +3,29 @@ use crate::{
     handles::{AssessmentId, EconomyId, Handle, RefId},
     issues,
     messages::{
-        Amounts, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
-        EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
-        FrameReceipt, Issue, LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine,
+        Amounts, ArmResults, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
+        EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse,
+        ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode, FrameReceipt,
+        Issue, LineKind, PackageListRequest, PackageListResponse, PackageRef, PackageSummary,
+        PackageVersion, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine,
         RefAdvanceRequest, RefCreateRequest, RefFrame, RefFramesRequest, RefFramesResponse,
         RefPosition, RefReadRequest, ReplayRequest, SearchOutcome, SearchRequest, SearchResponse,
         SearchSolved, StateRoot, StudySummary, ToolFailure, TraceFindRequest, TraceFindResponse,
-        TraceStepRequest, TraceStepResponse,
+        TraceStepRequest, TraceStepResponse, TrialResult,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
     store::{self, Archive, Assessed, Loaded, Origin, content_name},
     studies,
 };
-use axionomy::{AccountPath, AssessmentStatus, Quantity, QuantityComparison, paths};
-use axionomy_engine::{CandidateSet, Effort, Engine, EngineError, Outcome, Strategy};
+use axionomy::{
+    AccountPath, AssessmentStatus, PathKind, Quantity, QuantityComparison, path::Path, paths,
+};
+use axionomy_engine::{
+    CandidateSet, Effort, Engine, EngineError, Experiment, ExperimentPath, Outcome, Results,
+    Strategy,
+};
 use axionomy_search::GraphSearchProgress;
-use axionomy_store::StoreError;
+use axionomy_store::{DefinitionPath, StoreError};
 use axionomy_study::{Progress, Registry, StudyControl, StudyError, StudyRequest};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
@@ -41,7 +48,13 @@ use rmcp::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_path_to_error::Segment;
-use std::{borrow::Cow, collections::BTreeMap, ops::ControlFlow, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    ops::ControlFlow,
+    sync::Arc,
+    time::Duration,
+};
 
 #[cfg(test)]
 mod tests;
@@ -57,6 +70,8 @@ const MAX_CHUNK_SIZE: usize = 10_000;
 const MAX_FRAMES: usize = 100;
 /// The longest `axionomy_ref_frames` waits for a ref to move.
 const MAX_WAIT_SECONDS: u64 = 30;
+/// Trials over all its arms an experiment may run, or report, in one call.
+const MAX_TRIALS: u64 = 1_000;
 const SEARCH: &str = "axionomy_search";
 const PROBLEM_STUDY: &str = "axionomy_problem_study";
 
@@ -99,6 +114,14 @@ reach goal balances with axionomy_search. Read what an economy holds through axi
 resources: tool results link to them, paths appear in their URIs as is \
 (.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
 Economies with equal roots have equal contents, however they were made.
+
+Packages loaded when the server started carry economies, strategies and experiments. \
+axionomy_package_list lists them: each package's refs, each with the economy_id of the point it \
+names, and its experiments and strategies by path. axionomy_experiment_run runs an experiment, \
+such as `maze/micro`, and returns every arm's trials, each with its seed, how it ended, its \
+objective values and the economy_id it reached: step through that economy's trace with \
+axionomy_trace_step and branch from any step, as from a study's final economy. \
+axionomy_experiment_results gives the results an experiment last recorded.
 
 An application that moves through economies, such as a game or a simulation, keeps a ref on the \
 economy it is at. axionomy_ref_create makes one and axionomy_ref_read says where it is. \
@@ -432,6 +455,140 @@ impl AxionomyMcp {
     }
 
     #[tool(
+        name = "axionomy_package_list",
+        title = "List packages",
+        description = "List the packages loaded when the server started: each one's name, version, store format and script host API, its refs, each with the economy_id of the point it names (such as an instance an experiment starts from), and the experiments and strategies it carries, by path. axionomy_experiment_run runs an experiment. A ref's economy is an economy like any other: read, assess, apply and branch from it.",
+        output_schema = schema_for_output::<PackageListResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn package_list(
+        &self,
+        Parameters(_request): Parameters<PackageListRequest>,
+    ) -> Result<Linked<PackageListResponse>, ToolError> {
+        let engine = self.archive.engine();
+        let manifests = engine.manifests().map_err(ToolError::internal)?;
+        // The refs that name a point, and the points they name.
+        let mut named = Vec::with_capacity(manifests.len());
+        let mut points = Vec::new();
+        for manifest in &manifests {
+            let mut refs = Vec::with_capacity(manifest.refs.len());
+            for reference in &manifest.refs {
+                match engine.referred(reference) {
+                    Ok(point) => {
+                        refs.push(reference.clone());
+                        points.push(point);
+                    }
+                    Err(EngineError::UnknownRef(_)) => {}
+                    Err(error) => return Err(ToolError::internal(error)),
+                }
+            }
+            named.push(refs);
+        }
+        let mut economies = self
+            .archive
+            .names(points)
+            .await
+            .map_err(ToolError::internal)?
+            .into_iter();
+        let mut links = Vec::new();
+        let packages = manifests
+            .into_iter()
+            .zip(named)
+            .map(|(manifest, refs)| {
+                let refs: Vec<PackageRef> = refs
+                    .into_iter()
+                    .zip(economies.by_ref())
+                    .map(|(reference, economy_id)| PackageRef {
+                        reference,
+                        economy_id,
+                    })
+                    .collect();
+                links.extend(refs.iter().map(|named| {
+                    Target::Economy {
+                        economy_id: named.economy_id.clone(),
+                    }
+                    .link(
+                        "economy",
+                        format!("The economy ref `{}` names", named.reference),
+                    )
+                }));
+                PackageSummary {
+                    experiments: carried(&manifest.definitions),
+                    strategies: carried(&manifest.definitions),
+                    name: manifest.name,
+                    version: PackageVersion(manifest.version),
+                    format: manifest.format,
+                    host_api: manifest.host_api,
+                    refs,
+                }
+            })
+            .collect();
+        Ok(Linked::new(PackageListResponse { packages }, links))
+    }
+
+    #[tool(
+        name = "axionomy_experiment_run",
+        title = "Run an experiment",
+        description = "Run an experiment of a loaded package, such as `maze/micro` (axionomy_package_list lists them): every arm's strategy from its start, once per trial, trial i seeded from the experiment's seed and i so every arm meets the same chances, measured on the experiment's objectives; and record the results, which axionomy_experiment_results gives again. Returns each arm's strategy and start economy, and every trial's seed, how it ended, its objective values, exact, and the economy_id it reached: step through its trace with axionomy_trace_step, branch from any step, diff, assess and apply as with any economy. An experiment runs at most 1,000 trials over all its arms. Every call records runs of its own, so the economies it names get handles of their own; equal roots say they are equal.",
+        output_schema = schema_for_output::<ExperimentResults>(),
+        annotations(destructive_hint = false, idempotent_hint = false, open_world_hint = false)
+    )]
+    async fn experiment_run(
+        &self,
+        Parameters(request): Parameters<ExperimentRequest>,
+    ) -> Result<Linked<ExperimentResults>, ToolError> {
+        let experiment = self.experiment(&request.experiment)?;
+        let trials = experiment
+            .trials
+            .saturating_mul(experiment.arms.len() as u64);
+        within_trials(&request.experiment, trials)?;
+        let results = self
+            .archive
+            .run_experiment(request.experiment.clone())
+            .await
+            .map_err(|error| {
+                ToolError::internal(format!(
+                    "experiment `{}` failed: {error}",
+                    request.experiment
+                ))
+            })?;
+        self.reported(request.experiment, &experiment, results)
+            .await
+    }
+
+    #[tool(
+        name = "axionomy_experiment_results",
+        title = "Read an experiment's results",
+        description = "Give the results an experiment of a loaded package last recorded, by axionomy_experiment_run or in its package, in the shape axionomy_experiment_run returns them: each arm's strategy and start economy, and every trial's seed, how it ended, its objective values and the economy_id it reached. An experiment that has recorded none is `not_found`; run it first.",
+        output_schema = schema_for_output::<ExperimentResults>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn experiment_results(
+        &self,
+        Parameters(request): Parameters<ExperimentRequest>,
+    ) -> Result<Linked<ExperimentResults>, ToolError> {
+        let experiment = self.experiment(&request.experiment)?;
+        let results = match self.archive.engine().results(&request.experiment) {
+            Ok(results) => results,
+            Err(EngineError::Undefined(_)) => {
+                return Err(ToolError::new(
+                    FailureCode::NotFound,
+                    format!(
+                        "experiment `{}` has recorded no results; run it with axionomy_experiment_run",
+                        request.experiment
+                    ),
+                )
+                .at("/experiment"));
+            }
+            Err(error) => return Err(ToolError::internal(error)),
+        };
+        let trials = results.arms.iter().map(|arm| arm.trials.len() as u64).sum();
+        within_trials(&request.experiment, trials)?;
+        self.reported(request.experiment, &experiment, results)
+            .await
+    }
+
+    #[tool(
         name = "axionomy_ref_create",
         title = "Create a ref",
         description = "Make a new ref naming an economy: the economy an application, such as a game or a simulation, is at. Moving the ref forward with axionomy_ref_advance is what makes a step count, and axionomy_ref_frames delivers the steps it is moved over to whoever follows it. Every call makes a ref of its own, named by the `ref_id` it returns.",
@@ -603,6 +760,114 @@ impl AxionomyMcp {
             .await
             .map_err(ToolError::internal)?
             .ok_or_else(|| ToolError::new(FailureCode::NotFound, self.not_stored(economy_id)))
+    }
+
+    /// The experiment at `path`, which a loaded package carries.
+    fn experiment(&self, path: &ExperimentPath) -> Result<Experiment, ToolError> {
+        match self.archive.engine().experiment(path) {
+            Ok(experiment) => Ok(experiment),
+            Err(EngineError::Undefined(_)) => Err(ToolError::new(
+                FailureCode::NotFound,
+                format!(
+                    "no loaded package carries an experiment `{path}`; axionomy_package_list lists the experiments of every package this server loaded"
+                ),
+            )
+            .at("/experiment")),
+            Err(error) => Err(ToolError::internal(error)),
+        }
+    }
+
+    /// An experiment's `results`, every point they name written as the
+    /// handle of its economy.
+    async fn reported(
+        &self,
+        path: ExperimentPath,
+        experiment: &Experiment,
+        results: Results,
+    ) -> Result<Linked<ExperimentResults>, ToolError> {
+        let engine = self.archive.engine();
+        let objectives = experiment
+            .objectives
+            .iter()
+            .map(|objective| {
+                engine
+                    .objective(objective)
+                    .map(|defined| ExperimentObjective {
+                        objective: objective.clone(),
+                        direction: defined.direction,
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(ToolError::internal)?;
+        // Each arm's start, then its trials' ends, in order.
+        let points = results
+            .arms
+            .iter()
+            .flat_map(|arm| {
+                std::iter::once(arm.start).chain(arm.trials.iter().map(|trial| trial.end))
+            })
+            .collect();
+        let mut names = self
+            .archive
+            .names(points)
+            .await
+            .map_err(ToolError::internal)?
+            .into_iter();
+        let mut next = || {
+            names
+                .next()
+                .ok_or_else(|| ToolError::internal("a point the results name was not named"))
+        };
+        let mut links = Vec::new();
+        let mut linked = BTreeSet::new();
+        let mut arms = Vec::with_capacity(results.arms.len());
+        for arm in results.arms {
+            let start_economy_id = next()?;
+            if linked.insert(start_economy_id.clone()) {
+                links.push(
+                    Target::Economy {
+                        economy_id: start_economy_id.clone(),
+                    }
+                    .link("economy", "An economy the experiment's arms start from"),
+                );
+            }
+            let mut trials = Vec::with_capacity(arm.trials.len());
+            for trial in arm.trials {
+                if trial.values.len() != experiment.objectives.len() {
+                    return Err(ToolError::internal(format!(
+                        "experiment `{path}` recorded {} objective values for its {} objectives",
+                        trial.values.len(),
+                        experiment.objectives.len()
+                    )));
+                }
+                trials.push(TrialResult {
+                    seed: trial.seed,
+                    ended: trial.ended.into(),
+                    values: experiment
+                        .objectives
+                        .iter()
+                        .cloned()
+                        .zip(trial.values)
+                        .collect(),
+                    economy_id: next()?,
+                    exchanges: trial.end.step.saturating_sub(arm.start.step),
+                });
+            }
+            arms.push(ArmResults {
+                strategy: arm.arm.strategy,
+                start: arm.arm.start.unwrap_or_else(|| experiment.start.clone()),
+                start_economy_id,
+                trials,
+            });
+        }
+        Ok(Linked::new(
+            ExperimentResults {
+                experiment: path,
+                objectives,
+                arms,
+            },
+            links,
+        ))
     }
 
     /// The economy a ref is at.
@@ -1062,6 +1327,41 @@ fn goal_of(goal: &BTreeMap<AccountPath, Amounts>) -> Result<paths::Goal, ToolErr
         })
 }
 
+/// The definitions of one kind among a package's, by their paths: the
+/// definition `experiment/maze/micro` is the experiment `maze/micro`.
+fn carried<K: PathKind>(definitions: &[DefinitionPath]) -> Vec<Path<K>> {
+    let kind = K::SCHEMA
+        .strip_suffix("Path")
+        .unwrap_or(K::SCHEMA)
+        .to_ascii_lowercase();
+    definitions
+        .iter()
+        .filter_map(|definition| {
+            let (category, path) = definition.as_str().split_once('/')?;
+            if category == kind {
+                path.parse().ok()
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Refuses an experiment of more than [`MAX_TRIALS`] trials over all its
+/// arms, which one call neither runs nor reports.
+fn within_trials(experiment: &ExperimentPath, trials: u64) -> Result<(), ToolError> {
+    if trials <= MAX_TRIALS {
+        return Ok(());
+    }
+    Err(ToolError::new(
+        FailureCode::TooLarge,
+        format!(
+            "experiment `{experiment}` runs {trials} trials over all its arms; one call runs and reports at most {MAX_TRIALS}"
+        ),
+    )
+    .at("/experiment"))
+}
+
 fn tasks_required(tool: &str) -> ToolError {
     ToolError::new(
         FailureCode::TasksRequired,
@@ -1144,6 +1444,10 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         SEARCH => check::<SearchRequest>(arguments),
         "axionomy_problem_catalog" => check::<ProblemCatalogRequest>(arguments),
         PROBLEM_STUDY => check::<StudyRequest>(arguments),
+        "axionomy_package_list" => check::<PackageListRequest>(arguments),
+        "axionomy_experiment_run" | "axionomy_experiment_results" => {
+            check::<ExperimentRequest>(arguments)
+        }
         "axionomy_ref_create" => check::<RefCreateRequest>(arguments),
         "axionomy_ref_read" => check::<RefReadRequest>(arguments),
         "axionomy_ref_advance" => check::<RefAdvanceRequest>(arguments),

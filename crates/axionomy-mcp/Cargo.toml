@@ -32,4 +32,4 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "ti
 tokio-util.workspace = true
 
 [dev-dependencies]
-axionomy-problems.workspace = true
+axionomy-problems = { workspace = true, features = ["packages"] }

@@ -162,7 +162,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = server().tool_router.list_all();
-    assert_eq!(tools.len(), 14);
+    assert_eq!(tools.len(), 17);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -182,8 +182,11 @@ fn tools_declare_schemas_and_behavior_hints() {
         );
         if !read_only {
             assert_eq!(hints.destructive_hint, Some(false), "{}", tool.name);
-            // Every call makes a ref of its own.
-            let idempotent = tool.name != "axionomy_ref_create";
+            // Every call makes a ref, or records runs, of its own.
+            let idempotent = !matches!(
+                tool.name.as_ref(),
+                "axionomy_ref_create" | "axionomy_experiment_run"
+            );
             assert_eq!(hints.idempotent_hint, Some(idempotent), "{}", tool.name);
         }
     }
@@ -1642,4 +1645,256 @@ async fn a_follower_waits_for_the_ref_to_move() {
     let next = mover.await.unwrap();
     assert_eq!(id(&moved), next);
     assert_eq!(delivered(&moved), [next]);
+}
+
+/// The maze's package, exported from the store it was written in.
+fn maze_package() -> Store {
+    let source = Engine::new(Store::memory().unwrap()).unwrap();
+    axionomy_problems::maze::package::write(&source).unwrap();
+    let name = "maze".parse().unwrap();
+    let package = Store::memory().unwrap();
+    source
+        .export(
+            &name,
+            "0.1.0".parse().unwrap(),
+            source.named_under(&name).unwrap(),
+            &package,
+        )
+        .unwrap();
+    package
+}
+
+/// A server whose store the maze's package was loaded into, as
+/// `axionomy mcp --package maze.zip` loads it.
+fn maze_server() -> AxionomyMcp {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    engine.load(&maze_package()).unwrap();
+    AxionomyMcp::new(engine, axionomy_problems::registry()).unwrap()
+}
+
+async fn packages(server: &AxionomyMcp) -> Outcome {
+    outcome(
+        server
+            .package_list(Parameters(PackageListRequest::default()))
+            .await,
+    )
+}
+
+fn experiment(path: &str) -> Parameters<ExperimentRequest> {
+    Parameters(ExperimentRequest {
+        experiment: path.parse().unwrap(),
+    })
+}
+
+async fn run_experiment(server: &AxionomyMcp, path: &str) -> Outcome {
+    outcome(server.experiment_run(experiment(path)).await)
+}
+
+async fn experiment_results(server: &AxionomyMcp, path: &str) -> Outcome {
+    outcome(server.experiment_results(experiment(path)).await)
+}
+
+async fn root_of(server: &AxionomyMcp, economy_id: &Value) -> Value {
+    let economy_id = handle(economy_id);
+    read(server, &uri(Target::Economy { economy_id })).await["root"].clone()
+}
+
+#[tokio::test]
+async fn a_loaded_package_lists_its_refs_experiments_and_strategies() {
+    let server = maze_server();
+    let listed = packages(&server).await;
+    assert!(!listed.is_error, "{}", listed.value);
+    let packages_listed = listed.value["packages"].as_array().unwrap();
+    assert_eq!(packages_listed.len(), 1);
+    let maze = &packages_listed[0];
+    assert_eq!(maze["name"], "maze");
+    assert_eq!(maze["version"], "0.1.0");
+    assert_eq!(maze["format"], axionomy_store::FORMAT_VERSION);
+    assert_eq!(maze["host_api"], axionomy_engine::HOST_API);
+    let instances = ["maze/micro", "maze/showcase", "maze/stress"];
+    assert_eq!(maze["experiments"], json!(instances));
+    assert_eq!(
+        maze["strategies"],
+        json!([
+            "maze/a-star",
+            "maze/breadth-first",
+            "maze/dijkstra",
+            "maze/pareto-energy",
+            "maze/pareto-time"
+        ])
+    );
+    let refs = maze["refs"].as_array().unwrap();
+    assert_eq!(
+        refs.iter().map(|named| &named["ref"]).collect::<Vec<_>>(),
+        instances
+    );
+
+    // Each ref names an authored economy: the instance's start, the state
+    // at the point the package's ref names.
+    let engine = server.archive.engine();
+    for named in refs {
+        let economy_id: EconomyId = handle(&named["economy_id"]);
+        let economy = read(
+            &server,
+            &uri(Target::Economy {
+                economy_id: economy_id.clone(),
+            }),
+        )
+        .await;
+        assert!(listed.links.contains(&uri(Target::Economy { economy_id })));
+        assert!(economy.get("parent_id").is_none());
+        assert_eq!(economy["origin"]["kind"], "authored");
+        let point = engine
+            .referred(&named["ref"].as_str().unwrap().parse().unwrap())
+            .unwrap();
+        let root = engine.reach(point).unwrap().state.root();
+        assert_eq!(economy["root"], root.to_hex().as_str());
+    }
+    // A point keeps the handle that first named it.
+    assert_eq!(packages(&server).await.value, listed.value);
+
+    // A server that loaded nothing lists nothing.
+    assert_eq!(
+        packages(&self::server()).await.value,
+        json!({ "packages": [] })
+    );
+}
+
+#[tokio::test]
+async fn an_experiment_runs_as_the_engine_runs_it_and_names_every_trial_end() {
+    let server = maze_server();
+    let ran = run_experiment(&server, "maze/micro").await;
+    assert!(!ran.is_error, "{}", ran.value);
+    assert_eq!(ran.value["experiment"], "maze/micro");
+    assert_eq!(
+        ran.value["objectives"],
+        json!([
+            { "objective": "maze/energy", "direction": "minimize" },
+            { "objective": "maze/time", "direction": "minimize" },
+        ])
+    );
+
+    // The engine, running the package's experiment alone, gives the same
+    // arms the same trials: seeds, outcomes, objective values and traces.
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    engine.load(&maze_package()).unwrap();
+    let expected = engine
+        .run_experiment(&"maze/micro".parse().unwrap(), &mut |_| {
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    let arms = ran.value["arms"].as_array().unwrap();
+    assert_eq!(arms.len(), expected.arms.len());
+    let listed = packages(&server).await.value;
+    let start = &listed["packages"][0]["refs"][0];
+    assert_eq!(start["ref"], "maze/micro");
+    for (arm, expected) in arms.iter().zip(&expected.arms) {
+        assert_eq!(arm["strategy"], expected.arm.strategy.as_str());
+        assert_eq!(arm["start"], "maze/micro");
+        // Every arm starts from the economy the package's ref names.
+        assert_eq!(arm["start_economy_id"], start["economy_id"]);
+        let trials = arm["trials"].as_array().unwrap();
+        assert_eq!(trials.len(), expected.trials.len());
+        for (trial, expected) in trials.iter().zip(&expected.trials) {
+            assert_eq!(trial["seed"], expected.seed);
+            assert_eq!(trial["ended"], json!({ "kind": "reached" }));
+            assert_eq!(
+                trial["values"],
+                json!({
+                    "maze/energy": expected.values[0].to_string(),
+                    "maze/time": expected.values[1].to_string(),
+                })
+            );
+            let (_, trace) = engine.history(expected.end).unwrap();
+            assert_eq!(trial["exchanges"], trace.len());
+
+            // The trial's end is an economy like any other: its exchanges
+            // are the trace, its step zero the arm's start, and each step's
+            // exchange takes the step before it to it.
+            let end: EconomyId = handle(&trial["economy_id"]);
+            let exchanges = read(
+                &server,
+                &uri(Target::Exchanges {
+                    economy_id: end.clone(),
+                }),
+            )
+            .await;
+            assert_eq!(exchanges["items"], serde_json::to_value(&trace).unwrap());
+            let root = engine.reach(expected.end).unwrap().state.root();
+            assert_eq!(
+                root_of(&server, &trial["economy_id"]).await,
+                root.to_hex().as_str()
+            );
+            let source = step(&server, &end, 0).await;
+            assert_eq!(source.value["source_economy_id"], arm["start_economy_id"]);
+            assert_eq!(
+                source.value["root"],
+                root_of(&server, &arm["start_economy_id"]).await
+            );
+            for (index, exchange) in trace.into_iter().enumerate() {
+                let before = id(&step(&server, &end, index).await);
+                let tried = apply(&server, &before, exchange).await;
+                let after = step(&server, &end, index + 1).await;
+                assert_eq!(tried.value["root"], after.value["root"]);
+            }
+        }
+    }
+
+    // The recorded results read back as they ran, under the same handles.
+    let recorded = experiment_results(&server, "maze/micro").await;
+    assert_eq!(recorded.value, ran.value);
+
+    // Running again records runs of its own: the same trials and values,
+    // reaching equal economies under handles of their own.
+    let again = run_experiment(&server, "maze/micro").await;
+    for (arm, earlier) in again.value["arms"].as_array().unwrap().iter().zip(arms) {
+        assert_eq!(arm["start_economy_id"], earlier["start_economy_id"]);
+        let (trial, earlier) = (&arm["trials"][0], &earlier["trials"][0]);
+        assert_eq!(trial["values"], earlier["values"]);
+        assert_ne!(trial["economy_id"], earlier["economy_id"]);
+        assert_eq!(
+            root_of(&server, &trial["economy_id"]).await,
+            root_of(&server, &earlier["economy_id"]).await
+        );
+    }
+    assert_eq!(
+        experiment_results(&server, "maze/micro").await.value,
+        again.value
+    );
+}
+
+#[tokio::test]
+async fn an_experiment_is_one_a_loaded_package_carries_within_the_trial_limit() {
+    let server = maze_server();
+    for path in ["maze/huge", "sokoban/micro"] {
+        for refused in [
+            run_experiment(&server, path).await,
+            experiment_results(&server, path).await,
+        ] {
+            assert!(refused.is_error);
+            assert_eq!(refused.value["error"], "not_found");
+            assert_eq!(refused.value["details"]["pointer"], "/experiment");
+            let message = refused.value["message"].as_str().unwrap();
+            assert!(message.contains("axionomy_package_list"), "{message}");
+        }
+    }
+
+    // An experiment that has not run has no results to give.
+    let unrun = experiment_results(&server, "maze/showcase").await;
+    assert_eq!(unrun.value["error"], "not_found");
+    let message = unrun.value["message"].as_str().unwrap();
+    assert!(message.contains("axionomy_experiment_run"), "{message}");
+
+    // An experiment of more trials than one call runs is refused before
+    // anything runs.
+    let engine = server.archive.engine();
+    let mut huge = engine.experiment(&"maze/micro".parse().unwrap()).unwrap();
+    huge.trials = MAX_TRIALS / huge.arms.len() as u64 + 1;
+    engine
+        .keep_experiment(&"maze/huge".parse().unwrap(), &huge)
+        .unwrap();
+    let refused = run_experiment(&server, "maze/huge").await;
+    assert_eq!(refused.value["error"], "too_large", "{}", refused.value);
+    assert_eq!(refused.value["details"]["pointer"], "/experiment");
+    assert!(engine.results(&"maze/huge".parse().unwrap()).is_err());
 }
