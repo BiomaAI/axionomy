@@ -1,7 +1,10 @@
 // Lending: how people read the lending market. Labels and formats name its
 // identifiers; the scene draws who lends, borrows and is paid: the market's
 // cash, the borrower's collateral and loan, what a keeper seized, and the
-// market's terms at this state, each computed as the market computes it.
+// market's terms at this state, each computed as the market computes it,
+// with the market's economy script's scale and debt.
+
+import "lending" as lending;
 
 // A name as people read it: `keeper` is `Keeper`.
 fn words(name) {
@@ -10,11 +13,6 @@ fn words(name) {
         parts.push(part.sub_string(0, 1).to_upper() + part.sub_string(1));
     }
     parts.reduce(|sum, part| if sum == () { part } else { sum + " " + part })
-}
-
-// The fixed-point scale of the borrow index and every market term (10^18).
-fn wad() {
-    quantity(1_000_000_000_000_000_000)
 }
 
 // A numbered identifier counted from one: `depositor/0` is Depositor 1.
@@ -113,7 +111,7 @@ fn market_balance(state, asset) {
 
 // Outstanding debt valued rounded down.
 fn debt_value(state) {
-    mul_div(market_balance(state, "debt-share-supply"), market_balance(state, "borrow-index"), wad(), "floor")
+    mul_div(market_balance(state, "debt-share-supply"), market_balance(state, "borrow-index"), lending::wad(), "floor")
 }
 
 // Market cash plus outstanding debt, less reserves.
@@ -121,16 +119,11 @@ fn total_assets(state) {
     market_balance(state, "cash") + debt_value(state) - market_balance(state, "reserves")
 }
 
-// Cash the borrower owes now, rounded up.
-fn debt(state) {
-    mul_div(state.balance("borrower", "debt-share"), market_balance(state, "borrow-index"), wad(), "ceil")
-}
-
 // Borrowed share of cash plus debt, scaled by WAD, rounded up.
 fn utilization(state) {
     let lent = debt_value(state);
     let gross = max(market_balance(state, "cash") + lent, quantity(1));
-    mul_div(lent, wad(), gross, "ceil")
+    mul_div(lent, lending::wad(), gross, "ceil")
 }
 
 // Interest per period at the current utilization, scaled by WAD.
@@ -138,19 +131,13 @@ fn interest(state) {
     let used = utilization(state);
     let kink = market_balance(state, "kink");
     market_balance(state, "base-rate")
-        + mul_div(min(used, kink), market_balance(state, "slope-below-kink"), wad(), "ceil")
-        + mul_div(max(used, kink) - kink, market_balance(state, "slope-above-kink"), wad(), "ceil")
-}
-
-// A share of the posted collateral's value, rounded down.
-fn limit(state, term) {
-    let value = state.balance("borrower", "posted-collateral") * market_balance(state, "collateral-price");
-    mul_div(value, market_balance(state, term), wad(), "floor")
+        + mul_div(min(used, kink), market_balance(state, "slope-below-kink"), lending::wad(), "ceil")
+        + mul_div(max(used, kink) - kink, market_balance(state, "slope-above-kink"), lending::wad(), "ceil")
 }
 
 // A WAD-scaled share as a percentage with two decimals.
 fn percent(value) {
-    let hundredths = mul_div(value, quantity(10_000), wad(), "floor").to_int();
+    let hundredths = mul_div(value, quantity(10_000), lending::wad(), "floor").to_int();
     let cents = hundredths % 100;
     `${hundredths / 100}.${if cents < 10 { "0" } else { "" }}${cents}`
 }
@@ -195,8 +182,8 @@ fn metric(key, label, value, unit) {
 }
 
 fn scene(state, frame) {
-    let owed = debt(state);
-    let liquidation_limit = limit(state, "liquidation-threshold");
+    let owed = lending::owed(state);
+    let liquidation_limit = lending::limit(state, "liquidation-threshold");
     let unsafe_loan = owed > liquidation_limit;
     let open_loan = owed > 0;
     let bill_paid = state.balance("borrower", "bill-paid") > 0;
@@ -257,7 +244,7 @@ fn scene(state, frame) {
         metric("utilization", "Utilization", percent(utilization(state)), "%"),
         metric("rate", "Interest per period", percent(interest(state)), "%"),
         metric("owed", "Borrower owes", owed, "cash"),
-        metric("borrow-limit", "Borrowing limit", limit(state, "loan-to-value"), "cash"),
+        metric("borrow-limit", "Borrowing limit", lending::limit(state, "loan-to-value"), "cash"),
         metric("liquidation-limit", "Liquidation threshold", liquidation_limit, "cash"),
         metric("price", "Collateral price", market_balance(state, "collateral-price"), "cash"),
         metric("reserves", "Reserves", market_balance(state, "reserves"), "cash"),

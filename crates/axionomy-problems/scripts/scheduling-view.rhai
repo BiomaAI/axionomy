@@ -2,7 +2,10 @@
 // identifiers; the scene draws the machines' timeline: the slots each
 // operation reserves and the queue still waiting, or, on the executed shop,
 // the work done and underway, each operation's state, the crew, Machine
-// Two's condition and each job's completion.
+// Two's condition and each job's completion. The operations and the
+// makespan are the shop's economy script's.
+
+import "scheduling" as scheduling;
 
 // A name as people read it: `one` is `One`.
 fn words(name) {
@@ -15,10 +18,6 @@ fn words(name) {
 
 fn machines() {
     ["one", "two", "three"]
-}
-
-fn operations() {
-    ["one-a", "one-b", "one-c", "two-a", "two-b", "two-c"]
 }
 
 fn job_name(job) {
@@ -153,18 +152,8 @@ fn metric(key, label, value, unit) {
     #{ key: key, label: label, value: value.to_string(), unit: unit }
 }
 
-// The overall finish the schedule has reserved, or the executed shop's time.
-fn makespan(state) {
-    for slot in 0..=16 {
-        if !state.balance("success", `makespan/${slot}`).is_zero() {
-            return slot;
-        }
-    }
-    0
-}
-
 fn scene(state, frame) {
-    if "close" in state.rates("close") {
+    if scheduling::executing(state) {
         return execution_scene(state);
     }
     let lanes = machines().map(|machine| #{
@@ -174,7 +163,7 @@ fn scene(state, frame) {
     let spans = [];
     let scheduled = [];
     for machine in machines() {
-        for operation in operations() {
+        for operation in scheduling::operations() {
             let first = ();
             let last = ();
             for time in 0..12 {
@@ -198,7 +187,7 @@ fn scene(state, frame) {
             }
         }
     }
-    let pending = operations().filter(|operation| !scheduled.contains(operation));
+    let pending = scheduling::operations().filter(|operation| !scheduled.contains(operation));
     let entities = pending.map(|operation| #{
         id: #{ key: `pending/${operation}`, label: operation_name(operation) },
         glyph: "task",
@@ -207,11 +196,11 @@ fn scene(state, frame) {
         tone: "warning",
         status: "ready queue",
     });
-    let finish = makespan(state);
+    let finish = scheduling::makespan(state);
     let scene = scene::entities(scene::timeline("Machine timeline", lanes, spans, finish), entities);
     scene.metrics = [
         metric("pending", "Pending operations", pending.len(), ()),
-        metric("scheduled", "Scheduled operations", operations().len() - pending.len(), ()),
+        metric("scheduled", "Scheduled operations", scheduling::operations().len() - pending.len(), ()),
         metric("makespan", "Current makespan", finish, "ticks"),
     ];
     scene
@@ -238,7 +227,7 @@ fn execution_scene(state) {
     }
     let spans = [];
     let entities = [];
-    for operation in operations() {
+    for operation in scheduling::operations() {
         let job = job_of(operation);
         let account = `job/${job}`;
         let started = state.balance("success", `started/${operation}`) > 0;

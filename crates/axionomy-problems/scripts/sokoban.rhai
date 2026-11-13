@@ -7,13 +7,21 @@ fn number(text, prefix) {
     parse_int(text.sub_string(prefix.len()))
 }
 
-fn candidates(state) {
+// The board's width and height, as the puzzle account records them.
+fn dimensions(state) {
     let width = 0;
     let height = 0;
     for asset in state.balances("success").keys() {
         if asset.starts_with("board-width/") { width = number(asset, "board-width/"); }
         if asset.starts_with("board-height/") { height = number(asset, "board-height/"); }
     }
+    [width, height]
+}
+
+fn candidates(state) {
+    let size = dimensions(state);
+    let width = size[0];
+    let height = size[1];
     // The player's cell, and each crate with the cell it is on.
     let player = -1;
     let crates = [];
@@ -70,10 +78,7 @@ fn candidates(state) {
 // A*'s lower bound: each crate's distance to its nearest goal cell, in
 // moves along the grid.
 fn crate_goal_distance(state) {
-    let width = 0;
-    for asset in state.balances("success").keys() {
-        if asset.starts_with("board-width/") { width = number(asset, "board-width/"); }
-    }
+    let width = dimensions(state)[0];
     let crates = [];
     let goals = [];
     for account in state.accounts("cell/") {

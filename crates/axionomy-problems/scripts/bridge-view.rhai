@@ -1,7 +1,10 @@
 // Bridge: how people read two travellers sharing one lane. Labels and
 // formats name its identifiers; the scene draws the banks, the bridge and,
 // in timed traffic, the paid detour, where each traveller stands and why,
-// and the lane's capacity, priorities, clock and trips.
+// and the lane's capacity, priorities, clock and trips, each measured as the
+// bridge's economy script measures it.
+
+import "bridge" as bridge;
 
 // A name as people read it: `agent-a` is `Agent A`.
 fn words(name) {
@@ -150,7 +153,7 @@ fn traveler(state, name, timed, clock) {
 }
 
 fn scene(state, frame) {
-    let timed = "advance/1" in state.rates("advance/");
+    let timed = bridge::timed(state);
     let clock = state.balance("bridge", "now");
     let places = [
         ["west", "West bank", 70.0, 100.0],
@@ -197,14 +200,14 @@ fn scene(state, frame) {
             if state.balance("bridge", "capacity-free").is_zero() { "reserved / occupied" } else { "available" },
             (),
         ),
-        metric("priority-a", "A priority", state.balance("agent/a", "priority-benefit"), ()),
-        metric("priority-b", "B priority", state.balance("agent/b", "priority-benefit"), ()),
+        metric("priority-a", "A priority", bridge::priority_a(state), ()),
+        metric("priority-b", "B priority", bridge::priority_b(state), ()),
     ];
     if timed {
         scene.metrics += [
             metric("world-time", "World time", clock, "ticks"),
             metric("wave", "Traffic wave", state.balance("bridge", "round") + 1, ()),
-            metric("ontime", "On-time trips", state.balance("agent/a", "on-time") + state.balance("agent/b", "on-time"), ()),
+            metric("ontime", "On-time trips", bridge::on_time_a(state) + bridge::on_time_b(state), ()),
             metric("late", "Late trips", state.balance("agent/a", "late") + state.balance("agent/b", "late"), ()),
         ];
     }

@@ -2,15 +2,10 @@
 // road, a fuel pump, a repair bay and a relay hub. Labels and formats name
 // its identifiers; the scene draws the depot, the hub and the customers,
 // each van where it stands or how far along its road, the cargo aboard,
-// every order and its window, and the shared services' free capacity.
+// every order and its window, and the shared services' free capacity. The
+// vans, places, roads and orders are the fleet's economy script's.
 
-fn vans() { ["cold", "freight"] }
-
-// Each road between two places, in the fleet's order.
-fn roads() {
-    [["depot", "hub"], ["hub", "north"], ["hub", "south"], ["north", "east"], ["south", "east"],
-     ["depot", "north"]]
-}
+import "logistics/fleet" as fleet;
 
 // A name as people read it: `cold` is `Cold`.
 fn capital(name) {
@@ -24,24 +19,6 @@ fn van_label(van) {
 // An order, counted from zero, as people count it.
 fn order_label(id) {
     `Order ${parse_int(id) + 1}`
-}
-
-// Every third order needs refrigeration, and the one after it is heavy.
-fn cold(id) {
-    id % 3 == 0
-}
-
-fn weight(id) {
-    if id % 3 == 1 { 3 } else { 1 }
-}
-
-fn destination(id) {
-    switch id {
-        0 => "north",
-        1 | 2 => "south",
-        3 | 4 => "east",
-        _ => "north",
-    }
 }
 
 fn asset_label(parts) {
@@ -200,10 +177,6 @@ fn format(asset) {
     if unit == () { () } else { #{ scale: 0, unit: unit } }
 }
 
-fn val(state, account, asset) {
-    state.balance(account, asset).to_int()
-}
-
 fn metric(key, label, value, unit) {
     #{ key: key, label: label, value: value.to_string(), unit: unit }
 }
@@ -231,33 +204,27 @@ fn entity(key, label, glyph, anchor, role, tone, status, account) {
 // A van where it stands, or how far along the road it travels.
 fn van_entity(state, van, now) {
     let own = `vehicle/${van}`;
-    let at = ();
-    for location in ["depot", "hub", "north", "south", "east"] {
-        if val(state, own, `at/${location}`) > 0 {
-            at = location;
-            break;
-        }
-    }
+    let at = fleet::whereabouts(state, own);
     let travel = ();
-    for road in roads() {
+    for road in fleet::roads() {
         for leg in [[road[0], road[1]], [road[1], road[0]]] {
-            if travel == () && val(state, own, `travelling/${leg[0]}/${leg[1]}`) > 0 {
+            if travel == () && fleet::value(state, own, `travelling/${leg[0]}/${leg[1]}`) > 0 {
                 travel = leg;
             }
         }
     }
-    let ready_at = val(state, own, "ready-at");
+    let ready_at = fleet::value(state, own, "ready-at");
     let anchor = if at != () {
         #{ kind: "graph_node", node: at }
     } else if travel != () {
         let road = ();
-        for candidate in roads() {
+        for candidate in fleet::roads() {
             if road == () && ((candidate[0] == travel[0] && candidate[1] == travel[1])
                 || (candidate[0] == travel[1] && candidate[1] == travel[0])) {
                 road = candidate;
             }
         }
-        let start = val(state, own, "departed-at");
+        let start = fleet::value(state, own, "departed-at");
         let progress = if ready_at > start {
             let elapsed = if now > start { now - start } else { 0 };
             let fraction = elapsed.to_float() / (ready_at - start).to_float();
@@ -274,18 +241,18 @@ fn van_entity(state, van, now) {
         #{ kind: "unanchored" }
     };
     let status = if travel != () {
-        if val(state, own, "awaiting-outcome") > 0 {
+        if fleet::value(state, own, "awaiting-outcome") > 0 {
             `To ${capital(travel[1])} · awaiting route outcome`
         } else {
             `To ${capital(travel[1])} · arrives ${ready_at}`
         }
-    } else if val(state, own, "refueling") > 0 {
+    } else if fleet::value(state, own, "refueling") > 0 {
         `Pump occupied until ${ready_at}`
-    } else if val(state, own, "repairing") > 0 {
+    } else if fleet::value(state, own, "repairing") > 0 {
         `Repair bay occupied until ${ready_at}`
-    } else if val(state, own, "towing") > 0 {
+    } else if fleet::value(state, own, "towing") > 0 {
         `Being towed until ${ready_at}`
-    } else if val(state, own, "damage") > 0 {
+    } else if fleet::value(state, own, "damage") > 0 {
         "Broken down · transfer cargo or tow"
     } else {
         "Ready for dispatch"
@@ -293,20 +260,20 @@ fn van_entity(state, van, now) {
     let drawn = entity(
         `van/${van}`, van_label(van), "vehicle", anchor,
         if at != () || travel != () { "occupant" } else { "context" },
-        if val(state, own, "damage") > 0 { "danger" } else { "active" },
+        if fleet::value(state, own, "damage") > 0 { "danger" } else { "active" },
         status, own,
     );
     drawn.metrics = [
-        metric("fuel", "Fuel", val(state, own, "fuel"), "/ 8"),
-        asset_metric("space", "Free payload space", "space", val(state, own, "space")),
-        metric("wear", "Wear", val(state, own, "wear"), "/ 6"),
+        metric("fuel", "Fuel", fleet::value(state, own, "fuel"), "/ 8"),
+        asset_metric("space", "Free payload space", "space", fleet::value(state, own, "space")),
+        metric("wear", "Wear", fleet::value(state, own, "wear"), "/ 6"),
     ];
     drawn
 }
 
 fn scene(state, frame) {
-    let now = val(state, "world", "time");
-    let count = val(state, "world", "count");
+    let now = fleet::value(state, "world", "time");
+    let count = fleet::value(state, "world", "count");
     let nodes = [
         ["depot", "Depot and service yard", 120.0, 300.0],
         ["hub", "Shared relay hub", 430.0, 300.0],
@@ -319,7 +286,7 @@ fn scene(state, frame) {
         x: node[2],
         y: node[3],
     });
-    let edges = roads().map(|road| #{
+    let edges = fleet::roads().map(|road| #{
         id: `road/${road[0]}/${road[1]}`,
         source: road[0],
         target: road[1],
@@ -330,18 +297,18 @@ fn scene(state, frame) {
     });
 
     let entities = [];
-    for van in vans() {
+    for van in fleet::vans() {
         entities.push(van_entity(state, van, now));
         for id in 0..count {
-            if val(state, `vehicle/${van}`, `cargo/${id}`) > 0 {
+            if fleet::value(state, `vehicle/${van}`, `cargo/${id}`) > 0 {
                 let cargo = entity(
                     `cargo/${id}`, `${order_label(id.to_string())} cargo`, "package",
                     #{ kind: "entity", entity: `van/${van}` }, "attachment", "neutral",
-                    if cold(id) { "Refrigerated" } else if weight(id) == 3 { "Heavy freight" } else { "Standard freight" },
+                    if fleet::cold(id) { "Refrigerated" } else if fleet::heavy(id) { "Heavy freight" } else { "Standard freight" },
                     `order/${id}`,
                 );
                 cargo.metrics = [
-                    asset_metric("weight", "Payload", "weight", val(state, `order/${id}`, "weight")),
+                    asset_metric("weight", "Payload", "weight", fleet::value(state, `order/${id}`, "weight")),
                 ];
                 entities.push(cargo);
             }
@@ -349,26 +316,26 @@ fn scene(state, frame) {
     }
     for id in 0..count {
         let own = `order/${id}`;
-        let delivered = val(state, own, "delivered") > 0;
-        let expired = val(state, own, "expired") > 0;
-        let staged = val(state, own, "dock-used") > 0;
+        let delivered = fleet::value(state, own, "delivered") > 0;
+        let expired = fleet::value(state, own, "expired") > 0;
+        let staged = fleet::value(state, own, "dock-used") > 0;
         let status = if delivered { "Delivered and paid" }
             else if expired { "Expired undelivered" }
             else if staged { "Staged at hub for another van" }
-            else if val(state, own, "in-transit") > 0 { "Cargo assigned to vehicle" }
-            else if val(state, own, "scheduled") > 0 { "Customer order arriving later" }
+            else if fleet::value(state, own, "in-transit") > 0 { "Cargo assigned to vehicle" }
+            else if fleet::value(state, own, "scheduled") > 0 { "Customer order arriving later" }
             else { "Cargo waiting at depot" };
-        let kind = if cold(id) { "cold" } else if weight(id) == 3 { "heavy" } else { "standard" };
+        let kind = if fleet::cold(id) { "cold" } else if fleet::heavy(id) { "heavy" } else { "standard" };
         let order = entity(
             own, `${order_label(id.to_string())} · ${kind}`, "task",
-            #{ kind: "graph_node", node: if staged { "hub" } else { destination(id) } },
+            #{ kind: "graph_node", node: if staged { "hub" } else { fleet::destination(id) } },
             "attachment",
             if delivered { "success" } else if expired { "danger" } else { "neutral" },
             status, own,
         );
         order.metrics = [
-            asset_metric("deadline", "Delivery window", "deadline", val(state, own, "deadline")),
-            asset_metric("arrival", "Order release", "arrival", val(state, own, "arrival")),
+            asset_metric("deadline", "Delivery window", "deadline", fleet::value(state, own, "deadline")),
+            asset_metric("arrival", "Order release", "arrival", fleet::value(state, own, "arrival")),
         ];
         entities.push(order);
     }
@@ -379,11 +346,11 @@ fn scene(state, frame) {
     );
     scene.metrics = [
         asset_metric("time", "Fleet time", "time", now),
-        asset_metric("delivered", "Orders delivered", "delivered-count", val(state, "world", "delivered-count")),
-        asset_metric("on-time", "Orders on time", "on-time-count", val(state, "world", "on-time-count")),
-        asset_metric("expired", "Orders expired", "expired-count", val(state, "world", "expired-count")),
-        asset_metric("staged", "Hub handoffs staged", "staged-count", val(state, "world", "staged-count")),
-        asset_metric("cash", "Fleet cash", "money", val(state, "world", "money")),
+        asset_metric("delivered", "Orders delivered", "delivered-count", fleet::value(state, "world", "delivered-count")),
+        asset_metric("on-time", "Orders on time", "on-time-count", fleet::value(state, "world", "on-time-count")),
+        asset_metric("expired", "Orders expired", "expired-count", fleet::value(state, "world", "expired-count")),
+        asset_metric("staged", "Hub handoffs staged", "staged-count", fleet::value(state, "world", "staged-count")),
+        asset_metric("cash", "Fleet cash", "money", fleet::value(state, "world", "money")),
     ];
     // The depot's and the hub's shared capacity, on the places themselves.
     for index in 0..scene.entities.len() {
@@ -391,15 +358,15 @@ fn scene(state, frame) {
         if key == "depot" {
             scene.entities[index].status = "Shared paid services";
             scene.entities[index].metrics = [
-                metric("pump", "Free fuel pump", val(state, "station", "fuel-pump"), "/ 1"),
-                metric("bay", "Free repair bay", val(state, "station", "repair-bay"), "/ 1"),
-                asset_metric("fuel", "Station fuel", "fuel", val(state, "station", "fuel")),
+                metric("pump", "Free fuel pump", fleet::value(state, "station", "fuel-pump"), "/ 1"),
+                metric("bay", "Free repair bay", fleet::value(state, "station", "repair-bay"), "/ 1"),
+                asset_metric("fuel", "Station fuel", "fuel", fleet::value(state, "station", "fuel")),
             ];
         } else if key == "hub" {
             scene.entities[index].status = "Finite cargo relay";
             scene.entities[index].metrics = [
-                metric("dock", "Free staging space", val(state, "world", "dock-space"), "/ 2"),
-                metric("road", "Trunk road available", val(state, "world", "road-space"), "/ 1"),
+                metric("dock", "Free staging space", fleet::value(state, "world", "dock-space"), "/ 2"),
+                metric("road", "Trunk road available", fleet::value(state, "world", "road-space"), "/ 1"),
             ];
         }
     }

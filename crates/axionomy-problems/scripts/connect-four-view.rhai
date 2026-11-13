@@ -3,7 +3,9 @@
 // bottom, as the scene counts them; the scene draws the board, every piece
 // on it, and the tactics of the player to move: the columns that win at
 // once, the opponent's threats, the drops making two threats, and those
-// leaving the opponent no win.
+// leaving the opponent no win, as the game's own tactics read the board.
+
+import "connect-four" as game;
 
 fn player(name) { if name == "red" { "Red" } else { "Yellow" } }
 
@@ -110,11 +112,6 @@ fn label(item) {
     }
 }
 
-// The board's width and height.
-fn dimensions(state) {
-    if state.balance("game", "board-size/7/6") > 0 { [7, 6] } else { [4, 4] }
-}
-
 // The piece a cell holds: `red`, `yellow` or nothing.
 fn piece(state, column, row) {
     let account = `cell/${column}/${row}`;
@@ -123,92 +120,36 @@ fn piece(state, column, row) {
     ()
 }
 
-// Whether the game is over: won by either player, or drawn.
-fn finished(state) {
-    state.balance("result", "winner/red") > 0 || state.balance("result", "winner/yellow") > 0
-        || state.balance("result", "draw") > 0
-}
-
-// ---- Tactics over bitboards: a player's pieces each, bit `column * 7 +
-// row` set where the player has a piece.
-
-// Whether `bits` hold four in a line: down a column, along a row, or along
-// either diagonal.
-fn won(bits) {
-    for shift in [1, 7, 6, 8] {
-        let pairs = bits & (bits >> shift);
-        if (pairs & (pairs >> (shift * 2))) != 0 { return true; }
-    }
-    false
-}
-
-// The open columns.
-fn open_columns(heights, size) {
-    let found = [];
-    for column in 0..size[0] {
-        if heights[column] < size[1] { found.push(column); }
-    }
-    found
-}
-
-// The board after `seat` drops into `column`: its two bitboards and
-// column heights. Arguments are copies, so the board passed is unchanged.
-fn dropped(board, seat, column) {
-    let row = board.heights[column];
-    board.bits[seat] = board.bits[seat] | (1 << (column * 7 + row));
-    board.heights[column] = row + 1;
-    board
-}
-
-// The columns where a drop by `seat` gives it four in a line.
-fn wins(board, seat, size) {
-    let found = [];
-    for column in open_columns(board.heights, size) {
-        if won(dropped(board, seat, column).bits[seat]) { found.push(column); }
-    }
-    found
-}
-
 // What the player to move, if any, may do: its winning columns, the
 // opponent's, the columns after which the opponent cannot win at once,
 // and of those the ones making two threats at once.
-fn evidence(state, size) {
+fn evidence(state, width, height) {
     let none = #{ player: (), winning: [], threats: [], safe: [], forks: [] };
-    if finished(state) { return none; }
-    let mover = ();
-    for name in ["red", "yellow"] {
-        if mover == () && state.balance("game", `turn/${name}`) > 0 { mover = name; }
-    }
-    if mover == () { return none; }
-    let seat = if mover == "red" { 0 } else { 1 };
-    let bits = [0, 0];
-    let heights = [];
-    for column in 0..size[0] {
-        let height = 0;
-        for row in 0..size[1] {
-            let holder = piece(state, column, row);
-            if holder == () { continue; }
-            let owner = if holder == "red" { 0 } else { 1 };
-            bits[owner] = bits[owner] | (1 << (column * 7 + row));
-            height = row + 1;
-        }
-        heights.push(height);
-    }
-    let board = #{ bits: bits, heights: heights };
+    let mover = game::to_move(state);
+    if game::outcome(state) != () || mover == () { return none; }
+    let seat = game::seat(mover);
+    let boards = game::pieces(state, width, height);
+    let mine = boards[seat];
+    let theirs = boards[1 - seat];
+    let occupied = mine | theirs;
     let safe = [];
     let forks = [];
-    for column in open_columns(heights, size) {
-        let next = dropped(board, seat, column);
-        let winning = won(next.bits[seat]);
-        if winning || wins(next, 1 - seat, size).is_empty() {
+    for column in 0..width {
+        if !game::is_open(occupied, column, height) { continue; }
+        let landed = game::landing(occupied, column);
+        let after = occupied | landed;
+        let winning = game::won(mine | landed);
+        if winning || game::winning(theirs, after, width, height).is_empty() {
             safe.push(column);
-            if !winning && wins(next, seat, size).len() >= 2 { forks.push(column); }
+            if !winning && game::winning(mine | landed, after, width, height).len() >= 2 {
+                forks.push(column);
+            }
         }
     }
     #{
         player: mover,
-        winning: wins(board, seat, size),
-        threats: wins(board, 1 - seat, size),
+        winning: game::winning(mine, occupied, width, height),
+        threats: game::winning(theirs, occupied, width, height),
         safe: safe,
         forks: forks,
     }
@@ -230,9 +171,8 @@ fn metric(key, label, value) {
 }
 
 fn scene(state, frame) {
-    let size = dimensions(state);
-    let width = size[0];
-    let height = size[1];
+    let width = game::board_width(state);
+    let height = game::board_height(state);
     let cells = [];
     let pieces = [];
     for column in 0..width {
@@ -261,12 +201,12 @@ fn scene(state, frame) {
             }
         }
     }
-    let tactics = evidence(state, size);
+    let tactics = evidence(state, width, height);
     let scene = scene::entities(scene::grid("Board and pieces", width, height, cells), pieces);
     scene.metrics = [
         metric("turn", "Next player",
             if tactics.player != () { player(tactics.player) }
-            else if finished(state) { "finished" } else { "adjudicating" }),
+            else if game::outcome(state) != () { "finished" } else { "adjudicating" }),
         metric("wins", "Winning columns", columns(tactics.winning)),
         metric("opponent-wins", "Opponent threats", columns(tactics.threats)),
         metric("forks", "Double-threat moves", columns(tactics.forks)),

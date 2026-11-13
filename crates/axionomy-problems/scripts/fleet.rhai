@@ -18,6 +18,14 @@ fn roads() {
 
 fn value(state, account, asset) { state.balance(account, asset).to_int() }
 
+// Where `account` stands, if anywhere.
+fn whereabouts(state, account) {
+    for at in locations() {
+        if value(state, account, `at/${at}`) > 0 { return at; }
+    }
+    ()
+}
+
 // What an order is: one in three needs the refrigerated slot, one in three
 // is three slots of heavy freight, and where it goes.
 fn cold(id) { id % 3 == 0 }
@@ -172,10 +180,7 @@ fn decision(state, van, policy) {
     if value(state, own, "ready") == 0 || value(state, "world", `permit/${van}`) == 0 {
         return ();
     }
-    let from = ();
-    for at in locations() {
-        if value(state, own, `at/${at}`) > 0 { from = at; break; }
-    }
+    let from = whereabouts(state, own);
     if from == () { return (); }
     let relay = policy == "relay";
     let reliable = policy != "fastest";

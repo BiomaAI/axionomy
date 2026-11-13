@@ -1,7 +1,10 @@
 // Sokoban: how people read the warehouse. Labels name its cells, assets,
 // moves and roles; the scene draws the floor, walls, goals and dead squares,
 // the exit and the plate, door and latch mechanisms, the player and every
-// crate, and counts held plates, latched doors and crates on goals.
+// crate, and counts held plates, latched doors and crates on goals. The
+// board's size is read as the puzzle's economy script reads it.
+
+import "sokoban" as sokoban;
 
 // One more than the number `text` writes: crates, plates and doors are
 // counted from one.
@@ -62,18 +65,6 @@ fn label(item) {
     }
 }
 
-// The board's width and height, as the puzzle account records them.
-fn dimensions(state) {
-    let width = 0;
-    let height = 0;
-    for asset in state.balances("success").keys() {
-        let parts = asset.split("/");
-        if parts[0] == "board-width" { width = parse_int(parts[1]); }
-        if parts[0] == "board-height" { height = parse_int(parts[1]); }
-    }
-    [width, height]
-}
-
 fn at_cell(cell, width) {
     #{ kind: "grid_cell", x: cell % width, y: cell / width }
 }
@@ -99,7 +90,7 @@ fn metric(key, label, value) {
 }
 
 fn scene(state, frame) {
-    let size = dimensions(state);
+    let size = sokoban::dimensions(state);
     let width = size[0];
     let height = size[1];
     let puzzle = state.balances("success");

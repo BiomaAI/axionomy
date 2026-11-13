@@ -1,12 +1,10 @@
 // The Living Market: how people read the closed endogenous market. Labels
 // and formats name its identifiers; the scene draws the energy / credit pool
 // and the actors trading against it; and the leaderboard ranks each actor's
-// direct contribution to the price, carried over the trace.
+// direct contribution to the price, carried over the trace. The actors, the
+// price and the pool's tallies are the market's economy script's.
 
-// The actors, in the order the market lists them.
-fn actors() {
-    ["founder", "generator", "factory", "household", "speculator", "adaptive-lp", "arbitrageur", "whale"]
-}
+import "amm" as amm;
 
 fn actor_label(actor) {
     switch actor {
@@ -171,14 +169,6 @@ fn milli(value, signed) {
 
 fn read(state, account, asset) { state.balance(account, asset).to_int() }
 
-// The pool's credit per energy in thousandths, rounded down; nothing
-// without energy.
-fn price_milli(state) {
-    let energy = state.balance("pool", "energy");
-    if energy.is_zero() { 0 }
-    else { mul_div(state.balance("pool", "credit"), quantity(1000), energy, "floor").to_int() }
-}
-
 // The actor whose trade or liquidity an exchange is, if any: the trader
 // of a swap, the provider of a liquidity change.
 fn price_actor(exchange) {
@@ -196,11 +186,11 @@ fn carry(carried, before, exchange, after) {
     let contributions = carried;
     if contributions == () {
         contributions = #{};
-        for actor in actors() { contributions[actor] = 0; }
+        for actor in amm::actors() { contributions[actor] = 0; }
     }
     let actor = price_actor(exchange);
     if actor != () {
-        contributions[actor] += price_milli(after) - price_milli(before);
+        contributions[actor] += amm::price_milli(after).to_int() - amm::price_milli(before).to_int();
     }
     contributions
 }
@@ -208,7 +198,7 @@ fn carry(carried, before, exchange, after) {
 fn leaderboards(state, frame) {
     let contributions = frame.carried;
     // Ties keep the actors' identifier order.
-    let ordered = actors();
+    let ordered = amm::actors();
     ordered.sort();
     let entries = ordered.map(|actor| {
         let value = if contributions == () { 0 } else { contributions[actor] };
@@ -276,12 +266,12 @@ fn tone(state, actor, status) {
 fn scene(state, frame) {
     let energy = state.balance("pool", "energy");
     let credit = state.balance("pool", "credit");
-    let issued = quantity(1000000) - state.balance("pool", "unissued-lp-share");
-    let price = price_milli(state);
+    let issued = amm::issued(state);
+    let price = amm::price_milli(state).to_int();
     let positions = [[12.0, 17.0], [11.0, 44.0], [13.0, 72.0], [36.0, 87.0], [64.0, 87.0], [87.0, 72.0], [89.0, 44.0], [88.0, 17.0]];
     let participants = [];
     let entities = [];
-    for (actor, index) in actors() {
+    for (actor, index) in amm::actors() {
         let account = `amm/account/actor/${actor}`;
         let id = #{ key: `amm/actor/${actor}`, label: actor_label(actor) };
         let status = status(state, actor);
@@ -311,12 +301,8 @@ fn scene(state, frame) {
     if state.has_account("world") {
         metrics.insert(0, metric("day", "Market day", read(state, "world", "day") + 1, "day"));
         metrics += [
-            metric("unmet", "Unmet daily needs",
-                read(state, "actor/factory", "missed-need/factory") + read(state, "actor/household", "missed-need/household"),
-                "needs"),
-            metric("defaults", "Missed obligations",
-                read(state, "actor/factory", "defaulted-obligation/factory") + read(state, "actor/generator", "defaulted-obligation/generator"),
-                "payments"),
+            metric("unmet", "Unmet daily needs", amm::unmet(state), "needs"),
+            metric("defaults", "Missed obligations", amm::defaulted(state), "payments"),
             asset_metric("sunlight", "Sunlight", "current-sunlight", state.balance("world", "current-sunlight")),
             asset_metric("capacity", "Generating capacity", "production-capacity", state.balance("actor/generator", "production-capacity")),
             asset_metric("goods", "Goods delivered", "delivered-goods", state.balance("treasury", "delivered-goods")),

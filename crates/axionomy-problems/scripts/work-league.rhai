@@ -49,6 +49,15 @@ fn before(a, b) {
     false
 }
 
+// The workers the economy holds, in the league's order.
+fn competitors(state) {
+    let found = [];
+    for worker in workers() {
+        if state.has_account(`agent/${worker}`) { found.push(worker); }
+    }
+    found
+}
+
 // What `balances`, an account's, holds of `asset`.
 fn held(balances, asset) {
     let quantity = balances[asset];
@@ -161,10 +170,7 @@ fn walk(worker, from, to) {
 
 // The serial match whole: turn by turn until no job is left to claim.
 fn serial(state, random) {
-    let crew = [];
-    for worker in workers() {
-        if state.has_account(`agent/${worker}`) { crew.push(worker); }
-    }
+    let crew = competitors(state);
     let open = [];
     for id in 1..=state.accounts("job/").len() { open.push(id); }
     // What the plan follows of each worker: its policy, where it is and

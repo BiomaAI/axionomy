@@ -13,6 +13,13 @@ fn owed(state) {
     mul_div(state.balance("borrower", "debt-share"), state.balance("market", "borrow-index"), wad(), "ceil")
 }
 
+// A share of the posted collateral's value, the market's `term`, rounded
+// down.
+fn limit(state, term) {
+    let value = state.balance("borrower", "posted-collateral") * state.balance("market", "collateral-price");
+    mul_div(value, state.balance("market", term), wad(), "floor")
+}
+
 // The exchanges, each bound to the accounts its roles name.
 fn with_market(name, bindings, units) {
     bindings.market = "market";
@@ -133,11 +140,9 @@ fn over_borrowed(state, random) {
         let free = state.balance("borrower", "collateral");
         if free > 0 { return post_collateral(free); }
         if state.balance("borrower", "debt-share").is_zero() {
-            let value = state.balance("borrower", "posted-collateral")
-                * state.balance("market", "collateral-price");
-            let limit = mul_div(value, state.balance("market", "loan-to-value"), wad(), "floor");
+            let ceiling = limit(state, "loan-to-value");
             let debt = owed(state);
-            let room = if limit > debt { limit - debt } else { quantity(0) };
+            let room = if ceiling > debt { ceiling - debt } else { quantity(0) };
             let room = room.min(state.balance("market", "cash"));
             if room > 0 {
                 let loan = borrow(room);

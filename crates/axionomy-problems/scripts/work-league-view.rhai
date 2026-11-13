@@ -3,13 +3,10 @@
 // the scene draws the places and the routes between them, each worker where
 // it stands, each contract and who holds it, and in a season the service
 // bays; the leaderboards rank the workers by contract value, throughput,
-// resource efficiency, residual waste, reliability and Pareto standing.
+// resource efficiency, residual waste, reliability and Pareto standing. The
+// league's workers, places and contracts are its economy script's.
 
-fn agents() { ["atlas", "bolt", "coda", "delta"] }
-
-fn locations() { ["depot", "north", "east", "south", "west", "workshop", "charger", "recycler"] }
-
-fn facilities() { ["workshop", "charger", "recycler"] }
+import "work-league" as league;
 
 // A name as people read it: `atlas` is `Atlas`.
 fn capital(name) {
@@ -195,32 +192,9 @@ fn asset_metric(key, label, asset, quantity) {
     metric(key, label, quantity, unit(asset))
 }
 
-// The workers competing: those the economy holds.
-fn competing(state) {
-    let competing = [];
-    for agent in agents() {
-        if state.has_account(`agent/${agent}`) { competing.push(agent); }
-    }
-    competing
-}
-
 // Where a worker stands, if anywhere.
 fn whereabouts(state, agent) {
-    for location in locations() {
-        if val(state, `agent/${agent}`, `at/${location}`) > 0 { return location; }
-    }
-    ()
-}
-
-// A contract as the league writes it, numbered from one.
-fn job_spec(number) {
-    let index = number - 1;
-    let locations = ["north", "east", "south", "west"];
-    #{
-        location: locations[index % 4],
-        value: 8 + (index * 7 % 17),
-        risk: 1 + (index * 3 % 4),
-    }
+    league::first_held(state.balances(`agent/${agent}`), "at", league::locations())
 }
 
 // An entity on the location `node`, shown as `account`.
@@ -241,21 +215,12 @@ fn worker(state, agent, continuous) {
     let account = `agent/${agent}`;
     let location = whereabouts(state, agent);
     if location == () { location = "depot"; }
-    let policy = "sprinter";
-    for candidate in ["sprinter", "steward", "value-hunter", "resilient"] {
-        if val(state, account, `policy/${candidate}`) > 0 {
-            policy = candidate;
-            break;
-        }
-    }
+    let balances = state.balances(account);
+    let policy = league::first_held(balances, "policy", league::policies());
+    if policy == () { policy = "sprinter"; }
     let status = if val(state, account, "busy") > 0 {
-        let activity = "working";
-        for facility in facilities() {
-            if val(state, account, `servicing/${facility}`) > 0 {
-                activity = `${capital(facility)} service`;
-                break;
-            }
-        }
+        let servicing = league::first_held(balances, "servicing", league::facilities());
+        let activity = if servicing == () { "working" } else { `${capital(servicing)} service` };
         `${activity} · ready at ${val(state, account, "ready-at")}`
     } else if val(state, account, "damage") > 0 {
         "damaged · repair or handoff needed"
@@ -291,14 +256,8 @@ fn worker(state, agent, continuous) {
 
 fn contract(state, number, continuous, tick) {
     let account = `job/${number}`;
-    let spec = job_spec(number);
-    let assigned = ();
-    for agent in agents() {
-        if val(state, account, `assigned/${agent}`) > 0 {
-            assigned = agent;
-            break;
-        }
-    }
+    let spec = league::job_spec(number);
+    let assigned = league::first_held(state.balances(account), "assigned", league::workers());
     let shown = if val(state, account, "completed") > 0 {
         ["success", "completed"]
     } else if val(state, account, "expired") > 0 {
@@ -332,13 +291,9 @@ fn contract(state, number, continuous, tick) {
 
 fn bay(state, facility) {
     let account = `facility/${facility}`;
-    let occupant = ();
-    for agent in agents() {
-        if val(state, account, `occupied/${facility}/${agent}`) > 0 {
-            occupant = agent;
-            break;
-        }
-    }
+    let occupant = league::first_held(
+        state.balances(account), `occupied/${facility}`, league::workers(),
+    );
     let drawn = entity(
         `league/facility/${facility}`, `${capital(facility)} bay`, "task", facility, "attachment",
         if occupant != () { "active" } else { "neutral" },
@@ -350,7 +305,7 @@ fn bay(state, facility) {
         account,
     );
     let waiting = 0;
-    for agent in agents() {
+    for agent in league::workers() {
         if whereabouts(state, agent) == facility && val(state, `agent/${agent}`, "idle") > 0 {
             waiting += 1;
         }
@@ -362,7 +317,7 @@ fn bay(state, facility) {
 fn scene(state, frame) {
     let continuous = state.has_account("world");
     let tick = val(state, "world", "tick");
-    let competitors = competing(state);
+    let competitors = league::competitors(state);
     let nodes = [
         ["depot", 360.0, 210.0],
         ["north", 360.0, 40.0],
@@ -374,7 +329,7 @@ fn scene(state, frame) {
         ["recycler", 650.0, 40.0],
     ].map(|node| #{
         id: #{ key: `league/location/${node[0]}`, label: capital(node[0]) },
-        classes: if node[0] in facilities() { ["facility"] } else { [] },
+        classes: if node[0] in league::facilities() { ["facility"] } else { [] },
         x: node[1],
         y: node[2],
     });
@@ -420,7 +375,7 @@ fn scene(state, frame) {
         }
     }
     if continuous {
-        for facility in facilities() {
+        for facility in league::facilities() {
             entities.push(bay(state, facility));
         }
     }
@@ -560,7 +515,7 @@ fn dominated(row, rows) {
 
 fn leaderboards(state, frame) {
     let rows = [];
-    for (agent, order) in competing(state) {
+    for (agent, order) in league::competitors(state) {
         rows.push(standing(state, agent, order));
     }
     let standings = [];

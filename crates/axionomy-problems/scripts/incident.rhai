@@ -15,6 +15,14 @@ fn distance(from, to) { distances(roads(), from)[to] }
 
 fn value(state, account, asset) { state.balance(account, asset).to_int() }
 
+// Where `account` stands, if anywhere.
+fn whereabouts(seen, account) {
+    for location in locations() {
+        if value(seen, account, `at/${location}`) > 0 { return location; }
+    }
+    ()
+}
+
 // The exchange of `rate`, with the accounts its roles bind.
 fn action(rate) {
     let bindings = #{ world: "world", responder: "responder" };
@@ -81,10 +89,7 @@ fn drive(seen, from, to, urgent, rapid) {
 fn decide(seen, policy) {
     let count = value(seen, "world", "patient-count");
     if value(seen, "world", "resolved") == count { return action("close"); }
-    let from = ();
-    for location in locations() {
-        if value(seen, "responder", `at/${location}`) > 0 { from = location; break; }
-    }
+    let from = whereabouts(seen, "responder");
     if from == () { return (); }
     let now = value(seen, "world", "time");
     let rapid = policy == "rapid-north";

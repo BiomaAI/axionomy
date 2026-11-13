@@ -3,7 +3,10 @@
 // the platform and the tax authority around the orders, each binding the
 // kernel would settle now, each contract booked and each settlement made,
 // with the funds, deadlines and deliveries of a market that runs on a
-// clock.
+// clock. The orders and their settlements are the market's economy
+// script's.
+
+import "marketplace" as marketplace;
 
 // A letter as people read it: `a` is `A`.
 fn letter(name) { name.to_upper() }
@@ -115,11 +118,6 @@ fn metric(key, label, value, unit) {
 
 fn held(state, account, asset) { state.balance(account, asset).to_int() }
 
-// The market's orders, one for each settlement rate, in identifier order.
-fn order_ids(state) {
-    state.rates("settle-order/").map(|rate| rate.sub_string(13))
-}
-
 // Whether `order` has settled.
 fn settled(state, order) { held(state, `order/${order}`, `settled-order/${order}`) > 0 }
 
@@ -133,15 +131,8 @@ fn holder(state, prefix, ids, asset) {
 
 // The settlement of `order` binding a buyer, a seller and a carrier.
 fn settlement(order, buyer, seller, carrier) {
-    let bindings = #{
-        buyer: `buyer/${buyer}`,
-        seller: `seller/${seller}`,
-        platform: "platform",
-        carrier: `carrier/${carrier}`,
-        order: `order/${order}`,
-    };
-    bindings["tax-authority"] = "tax-authority";
-    exchange(`settle-order/${order}`, bindings, 1)
+    let party = #{ buyer: `buyer/${buyer}`, seller: `seller/${seller}`, carrier: `carrier/${carrier}` };
+    marketplace::bound(`settle-order/${order}`, order, party)
 }
 
 // The id of each account under `prefix`, in identifier order.
@@ -170,7 +161,7 @@ fn entity(key, label, glyph, node, tone, status, account) {
 
 fn scene(state, frame) {
     let timed = state.rates("dispatch/").contains("dispatch/a");
-    let orders = order_ids(state);
+    let orders = marketplace::order_ids(state);
     let nodes = [];
     for (buyer, index) in ["a", "b", "c"] {
         nodes.push(node(`buyer/${buyer}`, `Buyer ${letter(buyer)}`, "buyer", 30.0, 60.0 + index.to_float() * 95.0));

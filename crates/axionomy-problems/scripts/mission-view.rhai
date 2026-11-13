@@ -1,7 +1,10 @@
 // Mission: how people read the hidden-information mission. Labels and
 // formats name its identifiers; the scene draws the base and the two sites
 // the victim may be at, where each agent stands and what it knows, mission
-// control, Nature's hidden scenario and the mission's outcome.
+// control, Nature's hidden scenario and the mission's outcome. Its sites,
+// and what each holds, are read as the mission's economy script reads them.
+
+import "mission" as mission;
 
 // A location as people read it: `north` is `North`.
 fn place(name) {
@@ -100,13 +103,9 @@ fn format(asset) {
     if unit == () { () } else { #{ scale: 0, unit: unit } }
 }
 
-fn held(state, account, asset) {
-    !state.balance(account, asset).is_zero()
-}
-
 // Whether either agent stands at `location`.
 fn occupied(state, location) {
-    held(state, "agent/scout", `at/${location}`) || held(state, "agent/medic", `at/${location}`)
+    mission::holds(state, "agent/scout", `at/${location}`) || mission::holds(state, "agent/medic", `at/${location}`)
 }
 
 fn entity(key, label, glyph, anchor, role, tone, status, account) {
@@ -125,16 +124,16 @@ fn agent_entity(state, agent) {
     let own = `agent/${agent}`;
     let location = ();
     for spot in ["base", "north", "south"] {
-        if held(state, own, `at/${spot}`) { location = spot; break; }
+        if mission::holds(state, own, `at/${spot}`) { location = spot; break; }
     }
     if location == () { throw "mission agents remain at an encoded location"; }
     let known = ();
-    for site in ["north", "south"] {
-        if held(state, own, `shared-intel/${site}`) {
+    for site in mission::sites() {
+        if mission::holds(state, own, `shared-intel/${site}`) {
             known = `shared ${place(site)}`;
             break;
         }
-        if held(state, own, `intel/${site}`) {
+        if mission::holds(state, own, `intel/${site}`) {
             known = `${if agent == "scout" { "saw" } else { "briefed" }} ${place(site)}`;
             break;
         }
@@ -142,7 +141,7 @@ fn agent_entity(state, agent) {
     let drawn = entity(
         own, place(agent), if agent == "scout" { "sensor" } else { "agent" },
         #{ kind: "graph_node", node: `location/${location}` }, "occupant", "active",
-        if held(state, own, "injured") { "injured" } else if known == () { "ready" } else { known },
+        if mission::holds(state, own, "injured") { "injured" } else if known == () { "ready" } else { known },
         own,
     );
     drawn.evidence = [#{
@@ -165,7 +164,7 @@ fn scene(state, frame) {
         });
     }
     let edges = [];
-    for site in ["north", "south"] {
+    for site in mission::sites() {
         edges.push(#{
             id: `mission/${site}`,
             source: "location/base",
@@ -185,12 +184,12 @@ fn scene(state, frame) {
     ));
     entities.push(entity(
         "system/success", "Mission outcome", "goal", #{ kind: "unanchored" }, "context", "goal",
-        if state.balance("success", "solved") >= 1 { "complete" } else { "rescue objective" },
+        if mission::solved(state) { "complete" } else { "rescue objective" },
         "success",
     ));
     let reports = 0;
-    for site in ["north", "south"] {
-        if held(state, "agent/scout", `shared-intel/${site}`) { reports += 1; }
+    for site in mission::sites() {
+        if mission::holds(state, "agent/scout", `shared-intel/${site}`) { reports += 1; }
     }
     let scene = scene::entities(
         scene::graph("Where each agent is, and what it knows", nodes, edges, ()),

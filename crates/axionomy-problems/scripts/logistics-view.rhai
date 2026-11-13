@@ -4,12 +4,7 @@
 // junction, where the vehicle is or which leg it travels, each order
 // waiting, aboard or delivered, the fuel station and the weather.
 
-fn orders() { ["a", "b", "c", "d"] }
-
-fn routes() {
-    ["direct-out", "direct-back", "safe-out-first", "safe-out-second", "safe-back-first",
-     "safe-back-second"]
-}
+import "logistics" as logistics;
 
 // A name as people read it: `depot` is `Depot`.
 fn capital(name) {
@@ -157,20 +152,8 @@ fn at_location(location) {
 
 fn scene(state, frame) {
     let locations = [["depot", 70.0, 150.0], ["junction", 320.0, 150.0], ["customer", 570.0, 150.0]];
-    let focus = ();
-    for location in locations {
-        if state.balance("vehicle", `at/${location[0]}`) > 0 {
-            focus = location[0];
-            break;
-        }
-    }
-    let traveling = ();
-    for route in routes() {
-        if state.balance("vehicle", `traveling/${route}`) > 0 {
-            traveling = route;
-            break;
-        }
-    }
+    let focus = logistics::location(state);
+    let traveling = logistics::active_route(state);
     let nodes = locations.map(|location| #{
         id: #{ key: `location/${location[0]}`, label: capital(location[0]) },
         classes: if focus == location[0] { ["current"] }
@@ -180,7 +163,7 @@ fn scene(state, frame) {
         y: location[2],
     });
     let edges = [];
-    for route in routes() {
+    for route in logistics::routes() {
         let ends = route_ends(route);
         edges.push(#{
             id: `route/${route}`,
@@ -219,11 +202,9 @@ fn scene(state, frame) {
         asset_metric("elapsed", "Elapsed", "elapsed-time", state.balance("vehicle", "elapsed-time")),
     ];
     let entities = [vehicle];
-    let delivered = 0;
-    for order in orders() {
+    for order in logistics::orders() {
         let account = `order/${order}`;
         let placed = if state.balance(account, "delivered") > 0 {
-            delivered += 1;
             [at_location("customer"), "success", "delivered"]
         } else if state.balance(account, "in-transit") > 0 {
             [vehicle_anchor, "active", "in transit"]
@@ -252,7 +233,7 @@ fn scene(state, frame) {
         entities,
     );
     scene.metrics = [
-        metric("delivered", "Orders delivered", delivered, "orders"),
+        metric("delivered", "Orders delivered", logistics::delivered(state), "orders"),
         asset_metric("remaining-time", "Time remaining", "time-remaining", state.balance("vehicle", "time-remaining")),
         asset_metric("fuel", "Fuel remaining", "fuel", state.balance("vehicle", "fuel")),
     ];

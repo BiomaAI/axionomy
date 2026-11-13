@@ -1,7 +1,10 @@
 // Rescue: how people read the uncertain rescue. Labels and formats name its
 // identifiers; the scene draws what the responder can see: the base and the
 // sites the hidden prior spreads the survivor over, the responder, its
-// beliefs, and Nature's hidden state.
+// beliefs, and Nature's hidden state. The sites, and what the responder
+// holds, are read as the rescue's economy script reads them.
+
+import "rescue" as rescue;
 
 // A location as people read it: `north` is `North`.
 fn place(name) {
@@ -55,13 +58,6 @@ fn format(asset) {
     if asset == "energy" || asset == "spent-energy" { #{ scale: 0, unit: "units" } } else { () }
 }
 
-// The sites the hidden prior spreads the survivor over.
-fn sites() { ["north", "south", "east", "west", "harbor", "hills"] }
-
-fn held(state, asset) {
-    !state.balance("agent", asset).is_zero()
-}
-
 fn entity(key, label, glyph, node, role, tone, status) {
     #{
         id: #{ key: key, label: label },
@@ -85,7 +81,7 @@ fn scene(state, frame) {
     ];
     let focus = ();
     for location in locations {
-        if focus == () && held(state, `at/${location[0]}`) { focus = location[0]; }
+        if focus == () && rescue::holds(state, `at/${location[0]}`) { focus = location[0]; }
     }
     if focus == () { throw "the responder remains at an encoded location"; }
     let nodes = locations.map(|location| #{
@@ -93,7 +89,7 @@ fn scene(state, frame) {
         classes: if location[0] == focus { ["current"] } else { [] },
         x: location[1], y: location[2],
     });
-    let edges = sites().map(|site| #{
+    let edges = rescue::sites().map(|site| #{
         id: `route/${site}`,
         source: "location/base",
         target: `location/${site}`,
@@ -103,12 +99,12 @@ fn scene(state, frame) {
     let energy = state.balance("agent", "energy");
     let agent = linked(entity(
         "agent/responder", "Responder", "agent", focus, "occupant", "active",
-        if held(state, "awaiting-observation") { "awaiting observation" } else { "acting" },
+        if rescue::holds(state, "awaiting-observation") { "awaiting observation" } else { "acting" },
     ), `at/${focus}`);
     agent.metrics = [#{ key: "energy", label: "Energy", value: energy.to_string(), unit: "units" }];
     let entities = [agent];
-    for site in sites() {
-        if held(state, `belief/${site}`) {
+    for site in rescue::sites() {
+        if rescue::holds(state, `belief/${site}`) {
             entities.push(linked(entity(
                 `belief/${site}`, `Belief: ${place(site)}`, "information", site, "state", "uncertain",
                 "actor belief",

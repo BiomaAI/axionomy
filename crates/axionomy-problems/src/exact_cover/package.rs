@@ -10,15 +10,17 @@ use axionomy::{OntologyPath, path};
 use axionomy_engine::{Arm, CandidateSet, Effort, Engine, EngineError, Experiment, Strategy, View};
 use axionomy_store::Checkpoints;
 
-/// The script the searches call, and the view's.
+/// The script the searches call, and the view's, both importing Algorithm X.
 const SCRIPT: &str = include_str!("../../scripts/exact-cover.rhai");
 const VIEW: &str = include_str!("../../scripts/exact-cover-view.rhai");
+const ALGORITHM_X: &str = include_str!("../../scripts/exact-cover-algorithm-x.rhai");
 
 /// Writes exact cover's package into `engine`'s store, everything named
 /// under `exact-cover`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let view = |function| Some(call("exact-cover/view", function));
     let call = |function| call("exact-cover", function);
+    engine.keep_script(&path!("exact-cover/algorithm-x"), ALGORITHM_X)?;
     engine.keep_script(&path!("exact-cover"), SCRIPT)?;
     engine.keep_script(&path!("exact-cover/view"), VIEW)?;
     engine.keep_view(

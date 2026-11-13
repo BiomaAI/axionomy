@@ -3,7 +3,10 @@
 // deliveries, on power and fuel they compete for. Labels and formats name
 // its identifiers; the scene draws the chain's places and what links them,
 // each cohort in use with its thermal history, each place's stock, and the
-// day's grid, refrigeration, stock, deliveries and reserves.
+// day's grid, refrigeration, stock, deliveries and reserves. Batches and
+// totals are read as the cold chain's economy script reads them.
+
+import "perishables/cold-chain" as chain;
 
 // A cohort, counted from zero, as people count it.
 fn cohort_label(id) {
@@ -147,15 +150,6 @@ fn val(state, account, asset) {
     state.balance(account, asset).to_int()
 }
 
-// What every account holds of `asset`.
-fn total(state, asset) {
-    let sum = 0;
-    for account in state.accounts("") {
-        sum += val(state, account, asset);
-    }
-    sum
-}
-
 fn metric(key, label, value, unit) {
     #{ key: key, label: label, value: value.to_string(), unit: unit }
 }
@@ -212,16 +206,14 @@ fn scene(state, frame) {
     });
 
     let entities = [];
-    for id in 0..6 {
+    for id in chain::batch_ids() {
         let account = `batch/${id}`;
-        let at = ();
-        for candidate in ["warehouse", "fridge"] {
-            if at == () && val(state, account, `at/${candidate}`) > 0 { at = candidate; }
-        }
-        if at == () { continue; }
-        let fresh = val(state, account, "fresh");
-        let stable = val(state, account, "preserved");
-        let spoiled = val(state, account, "spoiled");
+        let batch = chain::batch_shadow(state, id);
+        let at = batch.at;
+        if at == "" { continue; }
+        let fresh = batch.fresh;
+        let stable = batch.preserved;
+        let spoiled = batch.spoiled;
         let cohort = entity(
             `cohort/${id}`, cohort_label(id.to_string()), "package",
             if at == "fridge" { "fridge" } else { "warehouse" }, "attachment",
@@ -240,10 +232,10 @@ fn scene(state, frame) {
     }
     for stock in [
         ["fridge", "stock/space", "space", "Free cold capacity", "cold-space", val(state, "world", "cold-space")],
-        ["power", "stock/energy", "energy", "Stored energy", "energy", total(state, "energy")],
-        ["fuel", "stock/fuel", "fuel", "Fuel available", "fuel", total(state, "fuel")],
-        ["buyer", "stock/delivered", "delivered", "Delivered", "delivered", total(state, "delivered")],
-        ["processing", "stock/labor", "labor", "Labor available", "labor", total(state, "labor")],
+        ["power", "stock/energy", "energy", "Stored energy", "energy", chain::total(state, "energy")],
+        ["fuel", "stock/fuel", "fuel", "Fuel available", "fuel", chain::total(state, "fuel")],
+        ["buyer", "stock/delivered", "delivered", "Delivered", "delivered", chain::total(state, "delivered")],
+        ["processing", "stock/labor", "labor", "Labor available", "labor", chain::total(state, "labor")],
     ] {
         let drawn = entity(
             stock[1], stock[3], "material", stock[0], "state", "neutral", (),
@@ -266,18 +258,18 @@ fn scene(state, frame) {
         ),
         metric(
             "cooling", "Refrigeration",
-            if total(state, "cooling-on") > 0 { "powered" } else { "unpowered" }, (),
+            if chain::total(state, "cooling-on") > 0 { "powered" } else { "unpowered" }, (),
         ),
-        asset_metric("fresh", "Fresh stock", "fresh", total(state, "fresh")),
-        asset_metric("preserved", "Preserved stock", "preserved", total(state, "preserved")),
+        asset_metric("fresh", "Fresh stock", "fresh", chain::total(state, "fresh")),
+        asset_metric("preserved", "Preserved stock", "preserved", chain::total(state, "preserved")),
         metric(
             "spoiled", "Spoiled or discarded",
-            total(state, "spoiled") + total(state, "disposed"), "crates",
+            chain::total(state, "spoiled") + chain::total(state, "disposed"), "crates",
         ),
-        asset_metric("delivered", "Food delivered", "delivered", total(state, "delivered")),
-        asset_metric("missed", "Unmet obligations", "missed-demand", total(state, "missed-demand")),
-        asset_metric("energy", "Electricity left", "energy", total(state, "energy")),
-        asset_metric("fuel", "Fuel left", "fuel", total(state, "fuel")),
+        asset_metric("delivered", "Food delivered", "delivered", chain::total(state, "delivered")),
+        asset_metric("missed", "Unmet obligations", "missed-demand", chain::total(state, "missed-demand")),
+        asset_metric("energy", "Electricity left", "energy", chain::total(state, "energy")),
+        asset_metric("fuel", "Fuel left", "fuel", chain::total(state, "fuel")),
     ];
     scene
 }
