@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 is done and P2 to
-P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 and P2 are done and
+P3 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -318,7 +318,7 @@ values, records and receipt digests in postcard, and records its format (1),
 refusing any other; MCP's handle tables and the operations its handles are
 minted from are postcard too. JSON is left only in protocols.
 
-**P2. One engine, no registry.** `Engine::new(store)`. MCP takes the
+**P2. One engine, no registry (done).** `Engine::new(store)`. MCP takes the
 registry its study tools use beside its engine until P9 replaces them. The
 CLI and the Studio server hold an engine as soon as they use one: the CLI for
 packages (P8), the Studio server for points and refs (P10, P12).

@@ -469,7 +469,6 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "axionomy-store",
- "axionomy-study",
  "thiserror",
 ]
 

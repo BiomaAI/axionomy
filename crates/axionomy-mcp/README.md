@@ -298,8 +298,9 @@ with `-32602` (a resource not found, which rmcp reports as invalid params under
 used economies and studies stay in memory.
 
 `AxionomyMcp::new` takes the `Engine` it serves (`axionomy-engine`), which
-holds the `Registry` of problems the server studies and the store it keeps
-economies in; `axionomy_problems::registry()` holds every sample problem.
+holds the store it keeps economies in, and the `Registry` of problems its
+study tools study until packages replace them;
+`axionomy_problems::registry()` holds every sample problem.
 
 ```rust
 use axionomy_engine::Engine;
@@ -307,8 +308,8 @@ use axionomy_mcp::AxionomyMcp;
 use axionomy_store::Store;
 use axionomy_study::Registry;
 
-let engine = Engine::new(Registry::new(), Store::memory()?)?;
-let server = AxionomyMcp::new(engine)?;
+let engine = Engine::new(Store::memory()?)?;
+let server = AxionomyMcp::new(engine, Registry::new())?;
 # let _ = server;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

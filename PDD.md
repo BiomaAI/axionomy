@@ -2143,9 +2143,8 @@ its fixtures are too.
 ### D-045: One engine serves every front end
 
 Partly built: the engine records points (author, apply, reach, ancestor,
-assess) and MCP keeps only its handles; P2 of
-[the plan](docs/SIMULATION.md#plan-axionomy-on-primitives) removes its
-`Registry`. `axionomy-engine` holds every operation on economies, runs and
+assess) over a store with nothing registered, and MCP keeps only its handles
+([the plan](docs/SIMULATION.md#plan-axionomy-on-primitives), P2). `axionomy-engine` holds every operation on economies, runs and
 refs, and runs scripts, strategies, experiments and views, over a `Store`
 alone. It is synchronous, has no async runtime or protocol types, and builds
 natively and for `wasm32-unknown-unknown`. MCP, the Studio server, the CLI

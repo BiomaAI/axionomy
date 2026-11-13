@@ -318,9 +318,9 @@ impl AxionomyMcp {
             return Ok(None);
         };
         let request = studies::request(&record.key);
-        let engine = self.archive.engine().clone();
+        let registry = Arc::clone(&self.registry);
         let (study, trajectories) = tokio::task::spawn_blocking(move || {
-            studies::compute(engine.registry(), &request, &StudyControl::default(), None)
+            studies::compute(&registry, &request, &StudyControl::default(), None)
         })
         .await
         .map_err(internal)?

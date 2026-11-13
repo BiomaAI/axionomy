@@ -31,10 +31,10 @@ pub(crate) fn mcp(
         }
         None => Store::memory()?,
     };
-    let engine = Engine::new(registry, store)?;
+    let engine = Engine::new(store)?;
     runtime(async move {
         let cancellation = CancellationToken::new();
-        let service = stateless_http_service(engine, cancellation.clone())?;
+        let service = stateless_http_service(engine, registry, cancellation.clone())?;
         let app = Router::new()
             .route("/health", get(|| async { "ok" }))
             .nest_service("/mcp", service);

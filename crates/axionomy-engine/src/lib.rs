@@ -4,7 +4,6 @@ mod cache;
 
 use axionomy::paths::{self, Paths};
 use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
-use axionomy_study::Registry;
 use cache::Cache;
 use std::{num::NonZeroU64, sync::Arc};
 use thiserror::Error;
@@ -50,27 +49,20 @@ pub struct Reached {
     pub receipts: Vec<paths::Receipt>,
 }
 
-/// The work every front end shares, over a registry of problems and a store.
+/// The work every front end shares, over a store and nothing registered.
 #[derive(Clone)]
 pub struct Engine {
-    registry: Arc<Registry>,
     store: Store,
     reached: Cache<Point, Reached>,
 }
 
 impl Engine {
-    /// An engine studying the problems of `registry` and keeping what it
-    /// records in `store`.
-    pub fn new(registry: Registry, store: Store) -> Result<Self, EngineError> {
+    /// An engine keeping what it records in `store`.
+    pub fn new(store: Store) -> Result<Self, EngineError> {
         Ok(Self {
-            registry: Arc::new(registry),
             store,
             reached: Cache::new(CACHED),
         })
-    }
-
-    pub fn registry(&self) -> &Registry {
-        &self.registry
     }
 
     pub fn store(&self) -> &Store {

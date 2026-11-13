@@ -4,8 +4,8 @@ use axionomy_store::Store;
 /// A server that studies every sample problem and keeps its economies in
 /// memory.
 fn server() -> AxionomyMcp {
-    let engine = Engine::new(axionomy_problems::registry(), Store::memory().unwrap()).unwrap();
-    AxionomyMcp::new(engine).unwrap()
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    AxionomyMcp::new(engine, axionomy_problems::registry()).unwrap()
 }
 use crate::{handles::StudyId, resources::Address, store::State};
 
@@ -680,8 +680,9 @@ fn maze_study() -> StudyRequest {
 async fn study(server: &AxionomyMcp, request: StudyRequest) -> Value {
     let tasks = TaskManager::new();
     let archive = server.archive.clone();
+    let registry = Arc::clone(&server.registry);
     let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(study_problem(context, archive, request))
+        Box::pin(study_problem(context, archive, registry, request))
     });
     completed(terminal_task(&tasks, &task.task_id).await)
 }
@@ -875,7 +876,8 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
         },
     ];
     let restarted = AxionomyMcp::new(
-        Engine::new(axionomy_problems::registry(), server.archive.store()).unwrap(),
+        Engine::new(server.archive.store()).unwrap(),
+        axionomy_problems::registry(),
     )
     .unwrap();
     assert!(restarted.archive.cached_study(&study_id).is_none());
@@ -896,7 +898,8 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
         .replace_study_bytes(&study_id, postcard::to_allocvec(&kept).unwrap())
         .await;
     let stale = AxionomyMcp::new(
-        Engine::new(axionomy_problems::registry(), server.archive.store()).unwrap(),
+        Engine::new(server.archive.store()).unwrap(),
+        axionomy_problems::registry(),
     )
     .unwrap();
     let error = stale
@@ -1314,11 +1317,8 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
     let _ = std::fs::remove_file(&file);
     let (parent_id, applied) = {
         let server = AxionomyMcp::new(
-            Engine::new(
-                axionomy_problems::registry(),
-                axionomy_store::Store::open(&file).unwrap(),
-            )
-            .unwrap(),
+            Engine::new(axionomy_store::Store::open(&file).unwrap()).unwrap(),
+            axionomy_problems::registry(),
         )
         .unwrap();
         let parent_id = id(&create(&server, fixture()).await);
@@ -1326,11 +1326,8 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
         (parent_id, applied)
     };
     let server = AxionomyMcp::new(
-        Engine::new(
-            axionomy_problems::registry(),
-            axionomy_store::Store::open(&file).unwrap(),
-        )
-        .unwrap(),
+        Engine::new(axionomy_store::Store::open(&file).unwrap()).unwrap(),
+        axionomy_problems::registry(),
     )
     .unwrap();
     let economy = read(

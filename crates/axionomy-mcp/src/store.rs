@@ -164,10 +164,6 @@ impl Archive {
         })
     }
 
-    pub fn engine(&self) -> &Engine {
-        &self.engine
-    }
-
     /// Whether the store is in memory, so its handles end with the server.
     pub fn in_memory(&self) -> bool {
         self.engine.store().in_memory()

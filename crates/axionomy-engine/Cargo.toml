@@ -12,6 +12,5 @@ rust-version.workspace = true
 [dependencies]
 axionomy.workspace = true
 axionomy-store.workspace = true
-axionomy-study.workspace = true
 thiserror.workspace = true
 

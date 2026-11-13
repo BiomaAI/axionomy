@@ -1,11 +1,10 @@
 # axionomy-engine
 
 `axionomy-engine` is the work every Axionomy front end shares. An `Engine`
-holds a `Store` (and, until P2 of
-[the plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), a
-`Registry`) and works on points: a point is one saved state of an economy, the
-economy after a given step of a recorded run, named by the run and the step.
-Scripts, strategies, experiments, views and packages join it as the plan
+holds a `Store` and nothing registered, and works on points: a point is one
+saved state of an economy, the economy after a given step of a recorded run,
+named by the run and the step. Scripts, strategies, experiments, views and
+packages join it as [the plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives)
 goes.
 
 - `author` records an economy as the first point of a run of its own.
@@ -27,7 +26,6 @@ never implements an operation the engine has.
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError};
 use axionomy_store::Store;
-use axionomy_study::Registry;
 
 fn path<K>(text: &str) -> Path<K> {
     text.parse().unwrap()
@@ -47,7 +45,7 @@ let pay = paths::Exchange::new(path("pay"), Quantity::new(40))
     .bind(path("from"), path("bank"))
     .bind(path("to"), path("alice"));
 
-let engine = Engine::new(Registry::new(), Store::memory()?)?;
+let engine = Engine::new(Store::memory()?)?;
 let start = engine.author(economy)?;
 let paid = engine.apply(start, &[pay.clone()])?;
 

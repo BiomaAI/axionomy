@@ -20,7 +20,7 @@ use axionomy_search::{
     session::{Continue, SearchStatus, WorkBudget},
 };
 use axionomy_store::StoreError;
-use axionomy_study::{Progress, StudyControl, StudyError, StudyRequest};
+use axionomy_study::{Progress, Registry, StudyControl, StudyError, StudyRequest};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
@@ -110,6 +110,9 @@ server's store: across restarts when it is on disk, until the server stops when 
 #[derive(Clone)]
 pub struct AxionomyMcp {
     pub(crate) archive: Archive,
+    /// The problems `axionomy_problem_study` studies, until packages replace
+    /// them.
+    pub(crate) registry: Arc<Registry>,
     tasks: TaskManager,
     task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
@@ -117,13 +120,14 @@ pub struct AxionomyMcp {
 
 #[tool_router]
 impl AxionomyMcp {
-    /// A server over `engine`, studying the problems of its registry and
-    /// keeping its economies, and the handles that name them, in its store.
-    /// A store on disk keeps them, and the secret the handles are keyed with,
-    /// across restarts.
-    pub fn new(engine: Engine) -> Result<Self, StoreError> {
+    /// A server over `engine`, keeping its economies, and the handles that
+    /// name them, in the engine's store, and studying the problems of
+    /// `registry`. A store on disk keeps them, and the secret the handles are
+    /// keyed with, across restarts.
+    pub fn new(engine: Engine, registry: Registry) -> Result<Self, StoreError> {
         Ok(Self {
             archive: Archive::open(engine)?,
+            registry: Arc::new(registry),
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
@@ -395,7 +399,7 @@ impl AxionomyMcp {
     ) -> Result<Linked<ProblemCatalogResponse>, ToolError> {
         Ok(Linked::new(
             ProblemCatalogResponse {
-                problems: self.archive.engine().registry().catalog(),
+                problems: self.registry.catalog(),
             },
             Vec::new(),
         ))
@@ -584,7 +588,7 @@ impl AxionomyMcp {
                 "budget must be greater than zero",
             ));
         }
-        self.archive.engine().registry().resolve(&request).map_err(|error| {
+        self.registry.resolve(&request).map_err(|error| {
             let refused = ToolError::new(
                 FailureCode::InvalidRequest,
                 format!(
@@ -599,8 +603,9 @@ impl AxionomyMcp {
             }
         })?;
         let archive = self.archive.clone();
+        let registry = Arc::clone(&self.registry);
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(study_problem(context, archive, request))
+            Box::pin(study_problem(context, archive, registry, request))
         });
         Ok(CreateTaskResult::new(task).into())
     }
@@ -1176,19 +1181,14 @@ fn task_error(error: impl ToString) -> TaskExit {
 async fn study_problem(
     context: TaskContext,
     archive: Archive,
+    registry: Arc<Registry>,
     request: StudyRequest,
 ) -> Result<CallToolResult, TaskExit> {
     let control = Arc::new(StudyControl::default());
     let worker_control = Arc::clone(&control);
     let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<Progress>();
-    let engine = archive.engine().clone();
     let mut worker = tokio::task::spawn_blocking(move || {
-        studies::compute(
-            engine.registry(),
-            &request,
-            &worker_control,
-            Some(progress_tx),
-        )
+        studies::compute(&registry, &request, &worker_control, Some(progress_tx))
     });
 
     let mut reporting = true;
