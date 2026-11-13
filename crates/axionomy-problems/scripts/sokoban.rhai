@@ -66,3 +66,36 @@ fn candidates(state) {
     }
     proposals.filter(|proposal| state.applicable(proposal))
 }
+
+// A*'s lower bound: each crate's distance to its nearest goal cell, in
+// moves along the grid.
+fn crate_goal_distance(state) {
+    let width = 0;
+    for asset in state.balances("success").keys() {
+        if asset.starts_with("board-width/") { width = number(asset, "board-width/"); }
+    }
+    let crates = [];
+    let goals = [];
+    for account in state.accounts("cell/") {
+        let holds = state.balances(account);
+        if !("floor" in holds) { continue; }
+        let cell = number(account, "cell/");
+        if "goal-cell" in holds { goals.push(cell); }
+        for asset in holds.keys() {
+            if asset.starts_with("crate/") { crates.push(cell); }
+        }
+    }
+    let total = 0;
+    for crate_cell in crates {
+        let nearest = ();
+        for goal in goals {
+            let distance = abs(crate_cell % width - goal % width) + abs(crate_cell / width - goal / width);
+            if nearest == () || distance < nearest { nearest = distance; }
+        }
+        if nearest != () { total += nearest; }
+    }
+    total
+}
+
+// Every exchange costs one.
+fn step(before, exchange, after) { 1 }

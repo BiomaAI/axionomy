@@ -7,6 +7,8 @@ use axionomy::{
 };
 use axionomy_search::{SearchSolution, astar, bfs};
 
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

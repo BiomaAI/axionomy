@@ -129,3 +129,8 @@ path = "src/lib.rs"
 [[bench]]
 name = "economy"
 harness = false
+
+# Package scripts run in Rhai's interpreter, which a debug build makes tens of
+# times slower; tests and development run the samples' experiments.
+[profile.dev.package.rhai]
+opt-level = 3

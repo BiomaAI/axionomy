@@ -2,7 +2,10 @@
 //! and view call, its goal, objectives and strategies, and an experiment
 //! comparing every strategy on each instance.
 
-use crate::maze::{self, Ontology};
+use crate::{
+    maze::{self, Ontology},
+    package::written,
+};
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ScriptCall, Strategy,
@@ -16,7 +19,7 @@ const SCRIPT: &str = include_str!("../../scripts/maze.rhai");
 const VIEW: &str = include_str!("../../scripts/maze-view.rhai");
 
 fn call(function: &str) -> ScriptCall {
-    ScriptCall::new(path!("maze"), function.parse().expect("a function name"))
+    crate::package::call("maze", function)
 }
 
 /// Writes the maze's package into `engine`'s store, everything named under
@@ -115,10 +118,4 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         )?;
     }
     Ok(())
-}
-
-/// A typed value written as paths, which D-044 makes the same bytes.
-fn written<T: serde::de::DeserializeOwned>(value: &impl serde::Serialize) -> T {
-    postcard::from_bytes(&postcard::to_allocvec(value).expect("values encode"))
-        .expect("a typed value reads as paths")
 }

@@ -16,6 +16,8 @@ pub mod sokoban;
 pub mod work_league;
 pub mod workshop;
 
+#[cfg(feature = "packages")]
+mod package;
 mod support;
 
 use axionomy::{ApplyError, Ontology, ReplayError};
@@ -30,7 +32,10 @@ pub type WritePackage = fn(&axionomy_engine::Engine) -> Result<(), axionomy_engi
 /// The samples written as packages, by name, in catalog order.
 #[cfg(feature = "packages")]
 pub fn packages() -> Vec<(axionomy_engine::PackagePath, WritePackage)> {
-    let packages: [(&str, WritePackage); 1] = [("maze", maze::package::write)];
+    let packages: [(&str, WritePackage); 2] = [
+        ("maze", maze::package::write),
+        ("sokoban", sokoban::package::write),
+    ];
     packages
         .into_iter()
         .map(|(name, write)| (name.parse().expect("a sample's name is a path"), write))
