@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 and P2 are done and
-P3 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P3 are done and
+P4 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -323,10 +323,16 @@ registry its study tools use beside its engine until P9 replaces them. The
 CLI and the Studio server hold an engine as soon as they use one: the CLI for
 packages (P8), the Studio server for points and refs (P10, P12).
 
-**P3. Rhai scripts in the engine.** `rhai = "1.27.0"`; the host API above,
-exact quantities, seeded randomness, scripts stored by path. Done when maze's
-A* heuristic, sokoban's candidates and incident's triage, run as scripts,
-propose the same exchanges as their Rust code, with their speed measured.
+**P3. Rhai scripts in the engine (done).** `rhai = "1.27.0"`; the host API
+above, exact quantities, seeded randomness, and scripts kept in the store as
+definitions (`script/<path>`), a new store table merged like refs. Maze's A*
+heuristic, sokoban's candidates and incident's Nature, view and triage
+(`crates/axionomy-problems/scripts`) give exactly what their Rust code gives
+on every state checked, and the scripted incident runs the same trace. Per
+call, in release, scripts take 3 to 5 times the Rust code's time (maze's
+heuristic 3.6 µs against 1.4 µs, sokoban's candidates 283 µs against 87 µs,
+an incident turn 340 µs against 65 µs), since most of a call is the host
+API's kernel work; `examples/script_speed.rs` measures it.
 
 **P4. Goals, objectives and candidates.** Goals are kernel data stored by
 path; objectives are script expressions with a direction, including sums of

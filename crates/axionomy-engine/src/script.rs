@@ -26,6 +26,9 @@ pub const HOST_API: u64 = 1;
 
 /// The most operations one call of a script may run before it is stopped.
 const MAX_OPERATIONS: u64 = 50_000_000;
+/// The deepest a script's expressions may nest at its top level; half that
+/// inside its functions.
+const MAX_DEPTH: usize = 256;
 
 /// The kind of path a script is named by.
 pub mod kind {
@@ -106,6 +109,8 @@ impl Random {
 pub(crate) fn host() -> rhai::Engine {
     let mut rhai = rhai::Engine::new();
     rhai.set_max_operations(MAX_OPERATIONS);
+    // Rhai's defaults reject the nesting an ordinary policy reaches.
+    rhai.set_max_expr_depths(MAX_DEPTH, MAX_DEPTH / 2);
     rhai.on_print(|_| {});
     rhai.on_debug(|_, _, _| {});
     quantities(&mut rhai);

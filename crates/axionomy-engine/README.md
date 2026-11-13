@@ -29,6 +29,12 @@ randomness is only a `Random` the host seeds; scripts have no clock; and a
 call stops after a bounded number of operations. Scripts are kept in the
 store as definitions (`script/<path>`), so they travel with a package.
 
+Rhai calls a script's own function in method style before a host method of
+the same name: a script that defines `view(state)` makes `state.view(...)`
+call it, with `state` as `this`. Name script functions apart from the host's
+(`balance`, `balances`, `accounts`, `rates`, `roles`, `view`, `applicable`,
+`assess`, `has_account`, `parameter`, `rate`, `next`).
+
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so will the Studio server, the CLI and Studio's browser Worker
 (D-045). A transport

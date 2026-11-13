@@ -519,11 +519,13 @@ name = "axionomy-problems"
 version = "0.1.0"
 dependencies = [
  "axionomy",
+ "axionomy-engine",
  "axionomy-search",
  "axionomy-store",
  "axionomy-study",
  "axionomy-view",
  "criterion",
+ "postcard",
  "proptest",
  "serde",
  "serde_json",
