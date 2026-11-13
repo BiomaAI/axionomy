@@ -163,10 +163,11 @@ impl Engine {
 
     /// Runs every arm of the experiment at `path` once per trial, toward the
     /// experiment's goal with its effort, records the runs as a store group
-    /// of kind `experiment`, and keeps and returns the results. `watch` sees every
-    /// search's progress and may stop it, which stops the experiment: it
-    /// keeps no results, and the results it kept before stay, so an
-    /// experiment stopped is never mistaken for one whose searches ran out.
+    /// of kind `experiment`, and keeps and returns the results. `watch` sees
+    /// every run's progress, as [`run_strategy`](Engine::run_strategy)
+    /// reports it, and may stop the run, whatever its kind, which stops the
+    /// experiment: it keeps no results, and the results it kept before stay,
+    /// so an experiment stopped is never mistaken for one whose runs ran out.
     pub fn run_experiment(
         &self,
         path: &ExperimentPath,

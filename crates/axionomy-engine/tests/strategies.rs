@@ -2,7 +2,7 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{CandidateSet, Effort, Engine, Outcome, ScriptCall, Strategy};
-use axionomy_search::bounded::Tie;
+use axionomy_search::{GraphSearchProgress, bounded::Tie};
 use axionomy_store::{Point, Store};
 use std::ops::ControlFlow;
 
@@ -998,4 +998,218 @@ fn a_rollout_draws_the_searchs_own_tickets() {
             salt: 3,
         }],
     });
+}
+
+/// Runs `strategy` from `start` toward `goal`, its watcher stopping it at
+/// the first look for which `stop`, given every look so far, says so; and
+/// every look.
+fn watched(
+    engine: &Engine,
+    start: Point,
+    strategy: &Strategy,
+    goal: &str,
+    stop: impl Fn(&[GraphSearchProgress]) -> bool,
+) -> (axionomy_engine::Ran, Vec<GraphSearchProgress>) {
+    let mut looks = Vec::new();
+    let ran = engine
+        .run_strategy(start, strategy, &path(goal), EFFORT, &mut |progress| {
+            looks.push(*progress);
+            if stop(&looks) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        })
+        .unwrap();
+    (ran, looks)
+}
+
+/// A run its watcher stopped ends as a stopped search does: where it
+/// started, with nothing recorded.
+fn stopped(ran: &axionomy_engine::Ran, start: Point) {
+    assert!(matches!(ran.outcome, Outcome::Interrupted), "{ran:?}");
+    assert_eq!(ran.end, start);
+    assert!(ran.cost.is_none());
+}
+
+#[test]
+fn a_policy_and_a_plan_look_every_turn_and_stop_between_turns() {
+    // Twenty in the bank: five a turn pays four turns, and the fifth overdraws.
+    let (engine, start) = bank(30);
+    let fives = Strategy::Policy {
+        policy: call("five"),
+    };
+    let (ran, looks) = watched(&engine, start, &fives, "rich", |_| false);
+    assert!(matches!(ran.outcome, Outcome::Refused { turn: 4, .. }));
+    // A look before every turn, counting the turns played as expansions
+    // and the states reached, its start among them, as visited.
+    let turns: Vec<_> = looks
+        .iter()
+        .map(|look| {
+            (
+                look.expanded(),
+                look.generated(),
+                look.visited(),
+                look.frontier(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        turns,
+        [
+            (0, 0, 1, 0),
+            (1, 1, 2, 0),
+            (2, 2, 3, 0),
+            (3, 3, 4, 0),
+            (4, 4, 5, 0)
+        ]
+    );
+    // Stopped before its third turn, it records neither turn it played.
+    let (ran, looks) = watched(&engine, start, &fives, "rich", |looks| looks.len() == 3);
+    stopped(&ran, start);
+    assert_eq!(looks.len(), 3);
+
+    let (engine, start) = bank(10);
+    engine
+        .keep_script(
+            &path("planner"),
+            r#"fn enough(state) { [pay(), pay()] }
+               fn pay() { exchange("pay", #{ from: "bank", to: "alice" }, 5) }"#,
+        )
+        .unwrap();
+    let plan = Strategy::Plan {
+        plan: ScriptCall::new(path("planner"), "enough".parse().unwrap()),
+    };
+    let (ran, looks) = watched(&engine, start, &plan, "rich", |_| false);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    // Before the plan is made, and once it is, its two exchanges generated.
+    let generated: Vec<_> = looks.iter().map(|look| look.generated()).collect();
+    assert_eq!(generated, [0, 2]);
+    // Stopped before it is made, or once it is but before it is applied.
+    for stop in [1, 2] {
+        let (ran, _) = watched(&engine, start, &plan, "rich", |looks| looks.len() == stop);
+        stopped(&ran, start);
+    }
+}
+
+#[test]
+fn a_game_stops_between_turns_and_while_a_player_searches() {
+    let (engine, start) = nim();
+    let minimax = game(axionomy_engine::Chooser::Minimax {
+        candidates: path("takes"),
+        evaluate: nim_call("evaluate"),
+        depth: 6,
+    });
+    let searched = game(axionomy_engine::Chooser::Mcts {
+        candidates: path("takes"),
+        payoffs: nim_call("payoffs"),
+        estimate: nim_call("even"),
+        iterations: 400,
+        depth: 10,
+        chance: None,
+        rollout: None,
+        salt: 0,
+    });
+    for strategy in [&minimax, &searched] {
+        let (ran, looks) = watched(&engine, start, strategy, "over", |_| false);
+        assert!(matches!(ran.outcome, Outcome::Reached));
+        // Watching changes nothing the game does.
+        let unwatched = run(&engine, start, strategy, "over", EFFORT);
+        assert_eq!(
+            engine.history(ran.end).unwrap().1,
+            engine.history(unwatched.end).unwrap().1
+        );
+        // The first player looks again and again while it searches, what
+        // its search made counted as generated.
+        let first: Vec<_> = looks.iter().filter(|look| look.expanded() == 0).collect();
+        assert!(first.len() > 2, "{first:?}");
+        assert!(
+            first
+                .windows(2)
+                .all(|pair| pair[0].generated() <= pair[1].generated())
+        );
+        assert!(first.last().unwrap().generated() > 0);
+
+        // Stopped while the first player searches, or before the second turn.
+        let (ran, looks) = watched(&engine, start, strategy, "over", |looks| {
+            looks.last().unwrap().generated() > 0
+        });
+        stopped(&ran, start);
+        assert_eq!(looks.last().unwrap().expanded(), 0);
+        let (ran, _) = watched(&engine, start, strategy, "over", |looks| {
+            looks.last().unwrap().expanded() == 1
+        });
+        stopped(&ran, start);
+    }
+    // Tree search looks before each of its iterations.
+    let (_, looks) = watched(&engine, start, &searched, "over", |_| false);
+    let first = looks.iter().filter(|look| look.expanded() == 0).count();
+    assert!(first > 400, "{first}");
+
+    // An information-set player is stopped alike, while it searches.
+    let (engine, start) = coin();
+    let blind = calling("own", "calls");
+    let (_, looks) = watched(&engine, start, &blind, "settled", |_| false);
+    let searching = looks.iter().filter(|look| look.expanded() == 1).count();
+    assert!(searching > 400, "{searching}");
+    let (ran, looks) = watched(&engine, start, &blind, "settled", |looks| {
+        let last = looks.last().unwrap();
+        last.expanded() == 1 && last.generated() > 1
+    });
+    stopped(&ran, start);
+    assert_eq!(looks.last().unwrap().expanded(), 1);
+}
+
+#[test]
+fn searches_without_a_session_of_their_own_stop_as_they_expand() {
+    let (engine, start) = workshop();
+    let (chores_engine, chores_start, _, _) = chores();
+    let strategies = [
+        Strategy::BranchAndBound {
+            candidates: path("steps"),
+            cost: workshop_call("cost"),
+            bound: workshop_call("cost"),
+        },
+        Strategy::Beam {
+            candidates: path("steps"),
+            score: workshop_call("score"),
+            width: 1,
+            depth: 10,
+            tie: Tie::First,
+        },
+        Strategy::BestFirst {
+            candidates: path("steps"),
+            cost: workshop_call("cost"),
+            heuristic: None,
+        },
+    ];
+    let dijkstra = Strategy::Cheapest {
+        candidates: path("chores"),
+        cost: ScriptCall::new(path("chores"), "effort".parse().unwrap()),
+        heuristic: None,
+    };
+    let runs = strategies
+        .iter()
+        .map(|strategy| (&engine, start, strategy))
+        .chain([(&chores_engine, chores_start, &dijkstra)]);
+    for (engine, start, strategy) in runs {
+        let (ran, looks) = watched(engine, start, strategy, "done", |_| false);
+        assert!(matches!(ran.outcome, Outcome::Reached), "{strategy:?}");
+        // Watching changes nothing the search finds.
+        let unwatched = run(engine, start, strategy, "done", EFFORT);
+        assert_eq!(
+            engine.history(ran.end).unwrap().1,
+            engine.history(unwatched.end).unwrap().1,
+            "{strategy:?}"
+        );
+        // A look before every expansion, counting what each offered.
+        assert!(looks.len() > 1, "{strategy:?}");
+        let last = looks.last().unwrap();
+        assert_eq!(last.expanded(), looks.len() - 1, "{strategy:?}");
+        assert!(last.generated() >= last.expanded(), "{strategy:?}");
+
+        let (ran, looks) = watched(engine, start, strategy, "done", |looks| looks.len() == 2);
+        stopped(&ran, start);
+        assert_eq!(looks.len(), 2, "{strategy:?}");
+    }
 }

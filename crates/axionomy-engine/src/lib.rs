@@ -117,6 +117,8 @@ pub enum EngineError {
         current: Option<Point>,
     },
     /// The caller stopped an experiment before it ended; it kept no results.
+    /// A strategy's run its caller stops ends as
+    /// [`Outcome::Interrupted`] instead.
     #[error("the experiment was stopped before it ended")]
     Interrupted,
     /// A ref moves forward only, over steps on the history of where it goes.

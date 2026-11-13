@@ -16,8 +16,8 @@ use axionomy_search::{
     best_first,
     bounded::{Tie, beam, branch_and_bound, minimax},
     dijkstra,
-    ismcts::{InformationState, search as ismcts},
-    mcts::{MctsConfig, search as mcts},
+    ismcts::{InformationState, IsmctsProgress, IsmctsSession},
+    mcts::{MctsConfig, MctsProgress, MctsSession},
     pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample, sample_seed},
     session::{SearchStatus, WorkBudget},
@@ -25,7 +25,7 @@ use axionomy_search::{
 use axionomy_store::Point;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, btree_map::Entry},
     hash::{Hash, Hasher},
     ops::ControlFlow,
@@ -328,11 +328,22 @@ pub struct Ran {
 
 impl Engine {
     /// Runs `strategy` from `at` toward the goal kept at `goal` with
-    /// `effort`, telling `watch` of a search's progress, which may stop it.
-    /// The start, the goal and the effort are the caller's question; the
+    /// `effort`, telling `watch` how far it is, which may stop it. The
+    /// start, the goal and the effort are the caller's question; the
     /// strategy is how it is answered. Every exchange is the kernel's to
     /// apply; what the strategy reaches is recorded as a run forked from
     /// `at`.
+    ///
+    /// Every kind of run consults `watch` as it goes: a search as it expands
+    /// states, and a policy, a plan or a game at least once a turn, a game's
+    /// player who searches for its choice as that search goes. A run `watch`
+    /// stops ends as a stopped search ends, [`Outcome::Interrupted`] at `at`,
+    /// recording nothing. A run played turn by turn reports its progress as
+    /// a search would: the turns it played as the states it expanded, the
+    /// states it reached, its start among them, as those it visited, and as
+    /// those it generated one a turn and every state its players' searches
+    /// made while choosing, a tree's nodes or the successors minimax looked
+    /// at, so a long turn's progress moves too; it has no frontier.
     pub fn run_strategy(
         &self,
         at: Point,
@@ -341,11 +352,38 @@ impl Engine {
         effort: Effort,
         watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
     ) -> Result<Ran, EngineError> {
+        match self.run(at, strategy, goal, effort, watch) {
+            Err(EngineError::Interrupted) => Ok(Ran {
+                start: at,
+                end: at,
+                outcome: Outcome::Interrupted,
+                thinking: None,
+                cost: None,
+            }),
+            ran => ran,
+        }
+    }
+
+    /// What [`run_strategy`](Self::run_strategy) runs. A run `watch` stops
+    /// unwinds as [`EngineError::Interrupted`], unless its search's session
+    /// ends it as stopped.
+    fn run(
+        &self,
+        at: Point,
+        strategy: &Strategy,
+        goal: &GoalPath,
+        effort: Effort,
+        watch: &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+    ) -> Result<Ran, EngineError> {
         let initial = self.reach(at)?.state.economy.clone();
         let goal = self.goal(goal)?;
         match strategy {
-            Strategy::Policy { policy } => self.drive(at, initial, policy, &goal, effort),
+            Strategy::Policy { policy } => {
+                self.drive(at, initial, policy, &goal, effort, Watcher::turns(watch))
+            }
             Strategy::Plan { plan } => {
+                let mut watcher = Watcher::turns(watch);
+                watcher.look(0)?;
                 let (script, function) = (&plan.script, plan.function.as_str());
                 let state = ScriptState::new(initial.clone());
                 // A plan that draws chance takes the run's random as well.
@@ -369,6 +407,8 @@ impl Engine {
                         found: "something else".to_owned(),
                     },
                 )?)?;
+                // A plan stopped while it was being made is not applied.
+                watcher.look(exchanges.len())?;
                 let (end, outcome) = match self.apply(at, &exchanges) {
                     Ok(end) => {
                         let reached = self.reach(end)?.state.economy.matches(&goal);
@@ -417,10 +457,13 @@ impl Engine {
             } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
+                let watcher = RefCell::new(Watcher::expansions(watch));
                 let found = branch_and_bound(
                     &initial,
                     &goal,
-                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| {
+                        self.expanding(&candidates, economy, &failure, &watcher)
+                    },
                     |economy: &paths::Economy| self.counted(cost, economy, &failure),
                     |economy: &paths::Economy| self.counted(bound, economy, &failure),
                     usize::try_from(effort.budget).unwrap_or(usize::MAX),
@@ -455,10 +498,13 @@ impl Engine {
             } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
+                let watcher = RefCell::new(Watcher::expansions(watch));
                 let found = beam(
                     &initial,
                     &goal,
-                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| {
+                        self.expanding(&candidates, economy, &failure, &watcher)
+                    },
                     |economy: &paths::Economy| self.signed(score, economy, &failure),
                     usize::try_from(*width).unwrap_or(usize::MAX),
                     usize::try_from(*depth).unwrap_or(usize::MAX),
@@ -484,10 +530,13 @@ impl Engine {
             } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
+                let watcher = RefCell::new(Watcher::expansions(watch));
                 let found = best_first(
                     &initial,
                     &goal,
-                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| {
+                        self.expanding(&candidates, economy, &failure, &watcher)
+                    },
                     |economy: &paths::Economy| self.counted(cost, economy, &failure),
                     |economy: &paths::Economy| {
                         heuristic
@@ -529,7 +578,16 @@ impl Engine {
                 nature,
                 actor,
                 players,
-            } => self.play(at, initial, &goal, nature.as_ref(), actor, players, effort),
+            } => self.play(
+                at,
+                initial,
+                &goal,
+                nature.as_ref(),
+                actor,
+                players,
+                effort,
+                &RefCell::new(Watcher::turns(watch)),
+            ),
             Strategy::Cheapest {
                 candidates,
                 cost,
@@ -537,6 +595,7 @@ impl Engine {
             } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
+                let watcher = RefCell::new(Watcher::expansions(watch));
                 let budget = effort.budget;
                 let (mut expanded, mut spent) = (0, false);
                 let found = dijkstra(
@@ -549,7 +608,7 @@ impl Engine {
                             return Vec::new();
                         }
                         expanded += 1;
-                        self.offered(&candidates, economy, &failure)
+                        self.expanding(&candidates, economy, &failure, &watcher)
                     },
                     |before: &paths::Economy,
                      exchange: &paths::Exchange,
@@ -652,6 +711,24 @@ impl Engine {
                 Vec::new()
             }
         }
+    }
+
+    /// What [`offered`](Self::offered) gives a search expanding `economy`,
+    /// once `watcher` has been told how far the search is; a search it stops
+    /// is offered nothing more, the stop kept in `failure`.
+    fn expanding(
+        &self,
+        set: &CandidateSet,
+        economy: &paths::Economy,
+        failure: &RefCell<Option<EngineError>>,
+        watcher: &RefCell<Watcher<'_>>,
+    ) -> Vec<paths::Exchange> {
+        if !going(watcher, failure, 0) {
+            return Vec::new();
+        }
+        let offered = self.offered(set, economy, failure);
+        watcher.borrow_mut().expanded(offered.len());
+        offered
     }
 
     /// What `call` measures of `economy`, as a count, keeping the first
@@ -959,6 +1036,7 @@ impl Engine {
         actor: &ScriptCall,
         players: &[Chooser],
         Effort { seed, turns, .. }: Effort,
+        watcher: &RefCell<Watcher<'_>>,
     ) -> Result<Ran, EngineError> {
         let chance = Random::new(seed);
         let random = Random::new(sample_seed(seed, 1));
@@ -974,6 +1052,7 @@ impl Engine {
             if turn >= turns {
                 break Outcome::Horizon;
             }
+            watcher.borrow_mut().look(0)?;
             let responded = match nature {
                 Some(nature) => {
                     let proposed: rhai::Dynamic = self.call(
@@ -1011,7 +1090,7 @@ impl Engine {
                         seed,
                         choice: choices,
                     };
-                    let chosen = self.choose(chooser, turn, &mut believing)?;
+                    let chosen = self.choose(chooser, turn, &mut believing, watcher)?;
                     choices += 1;
                     chosen
                 }
@@ -1026,6 +1105,7 @@ impl Engine {
                 };
             }
             exchanges.push(exchange);
+            watcher.borrow_mut().expanded(1);
         };
         Ok(Ran {
             start: at,
@@ -1037,12 +1117,14 @@ impl Engine {
     }
 
     /// What `chooser` chooses on `turn`, with what the game's
-    /// information-set players believe in `believing`.
+    /// information-set players believe in `believing`, telling `watcher` as
+    /// a search for the choice goes, which may stop it.
     fn choose(
         &self,
         chooser: &Chooser,
         turn: Turn<'_>,
         believing: &mut Believing,
+        watcher: &RefCell<Watcher<'_>>,
     ) -> Result<Option<paths::Exchange>, EngineError> {
         let Turn {
             economy,
@@ -1084,14 +1166,25 @@ impl Engine {
                 depth,
             } => {
                 let candidates = self.candidate_set(candidates)?;
-                minimax(
+                // The successors minimax has looked at this turn.
+                let thinking = Cell::new(0);
+                let chosen = minimax(
                     economy,
                     usize::try_from(*depth).unwrap_or(usize::MAX),
-                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| {
+                        if !going(watcher, &failure, thinking.get()) {
+                            return Vec::new();
+                        }
+                        let offered = self.offered(&candidates, economy, &failure);
+                        thinking.set(thinking.get() + offered.len());
+                        offered
+                    },
                     player,
                     |economy: &paths::Economy| self.signed(evaluate, economy, &failure),
                 )
-                .map(|chosen| chosen.exchange)
+                .map(|chosen| chosen.exchange);
+                watcher.borrow_mut().thought(thinking.get());
+                chosen
             }
             Chooser::Mcts {
                 candidates,
@@ -1117,11 +1210,13 @@ impl Engine {
                 .with_seed((seed ^ salt).wrapping_add(choice));
                 // What rollouts draw from: the search's tickets, lent to each.
                 let simulating = Random::new(config.seed());
-                let decided = mcts(
+                let session = MctsSession::new(
                     economy,
                     config,
                     players,
-                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    eager_actions(|economy: &paths::Economy| {
+                        self.offered(&candidates, economy, &failure)
+                    }),
                     |economy: &paths::Economy| match chance {
                         Some(chance) => self.weighted(chance, economy, &failure),
                         None => Vec::new(),
@@ -1147,13 +1242,24 @@ impl Engine {
                         None => uniformly(actions, sampler),
                     },
                 );
-                // A script that failed explains the search better than the
-                // search's own complaint.
+                let decided = session.and_then(|mut session| {
+                    session.advance(
+                        WorkBudget::new(config.iterations()),
+                        &mut |progress: &MctsProgress| looking(watcher, &failure, progress.nodes()),
+                    )?;
+                    Ok(session.into_decision())
+                });
+                // A script that failed, or a stop, explains the search better
+                // than the search's own complaint.
                 if let Some(error) = failure.borrow_mut().take() {
                     return Err(error);
                 }
                 match decided {
-                    Ok(decision) => Some(decision.action().clone()),
+                    Ok(Some(decision)) => {
+                        watcher.borrow_mut().thought(decision.nodes());
+                        Some(decision.action().clone())
+                    }
+                    Ok(None) => return Err(EngineError::Interrupted),
                     Err(error) => return Err(EngineError::Undecided(format!("{error:?}"))),
                 }
             }
@@ -1200,7 +1306,7 @@ impl Engine {
                 .with_seed((seed ^ salt).wrapping_add(choice));
                 // What rollouts draw from: the search's tickets, lent to each.
                 let simulating = Random::new(config.seed());
-                let decided = ismcts(
+                let session = IsmctsSession::new(
                     economy,
                     config,
                     players,
@@ -1232,11 +1338,24 @@ impl Engine {
                         None => uniformly(actions, sampler),
                     },
                 );
+                let decided = session.and_then(|mut session| {
+                    session.advance(
+                        WorkBudget::new(config.iterations()),
+                        &mut |progress: &IsmctsProgress| {
+                            looking(watcher, &failure, progress.information_sets())
+                        },
+                    )?;
+                    Ok(session.into_decision())
+                });
                 if let Some(error) = failure.borrow_mut().take() {
                     return Err(error);
                 }
                 match decided {
-                    Ok(decision) => Some(decision.action().clone()),
+                    Ok(Some(decision)) => {
+                        watcher.borrow_mut().thought(decision.information_sets());
+                        Some(decision.action().clone())
+                    }
+                    Ok(None) => return Err(EngineError::Interrupted),
                     Err(error) => return Err(EngineError::Undecided(format!("{error:?}"))),
                 }
             }
@@ -1252,6 +1371,7 @@ impl Engine {
         policy: &ScriptCall,
         goal: &paths::Goal,
         Effort { seed, turns, .. }: Effort,
+        mut watcher: Watcher<'_>,
     ) -> Result<Ran, EngineError> {
         let random = Random::new(seed);
         let mut exchanges = Vec::new();
@@ -1263,6 +1383,7 @@ impl Engine {
             if turn >= turns {
                 break Outcome::Horizon;
             }
+            watcher.look(0)?;
             let proposed: rhai::Dynamic = self.call(
                 &policy.script,
                 policy.function.as_str(),
@@ -1286,6 +1407,7 @@ impl Engine {
                 };
             }
             exchanges.push(exchange);
+            watcher.expanded(1);
         };
         Ok(Ran {
             start: at,
@@ -1308,7 +1430,7 @@ impl Engine {
         goal: paths::Goal,
         (objectives, by): (&[ObjectivePath], &[ObjectivePath]),
         effort: Effort,
-        watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+        watch: &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>,
     ) -> Result<Ran, EngineError> {
         // Where each objective ranking the front is among those measured.
         let ranking = by
@@ -1499,7 +1621,7 @@ where
 fn search(
     session: &mut impl Session,
     budget: u64,
-    watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+    watch: &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>,
 ) -> SearchStatus {
     let mut left = usize::try_from(budget).unwrap_or(usize::MAX);
     loop {
@@ -1526,6 +1648,100 @@ fn failed(failure: RefCell<Option<EngineError>>) -> Result<(), EngineError> {
     match failure.into_inner() {
         Some(error) => Err(error),
         None => Ok(()),
+    }
+}
+
+/// A run's watcher where no search session tells it how far the run is:
+/// the run counts its progress itself, and a stop unwinds it as
+/// [`EngineError::Interrupted`].
+struct Watcher<'w> {
+    watch: &'w mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+    /// The states expanded, or the turns played.
+    expanded: usize,
+    /// The states generated: successors offered, or one a turn and every
+    /// state its players' searches made.
+    generated: usize,
+    /// The states reached.
+    visited: usize,
+}
+
+impl<'w> Watcher<'w> {
+    /// A watcher of a search that expands states.
+    fn expansions(watch: &'w mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>) -> Self {
+        Self {
+            watch,
+            expanded: 0,
+            generated: 0,
+            visited: 0,
+        }
+    }
+
+    /// A watcher of a run played turn by turn, which has reached its start.
+    fn turns(watch: &'w mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>) -> Self {
+        Self {
+            visited: 1,
+            ..Self::expansions(watch)
+        }
+    }
+
+    /// Tells the watcher how far the run is, with `thinking` states a search
+    /// still under way has made; refused as interrupted when it stops it.
+    fn look(&mut self, thinking: usize) -> Result<(), EngineError> {
+        let progress = GraphSearchProgress::new(
+            self.expanded,
+            self.generated.saturating_add(thinking),
+            0,
+            self.visited,
+            None,
+        );
+        match (self.watch)(&progress) {
+            ControlFlow::Continue(()) => Ok(()),
+            ControlFlow::Break(()) => Err(EngineError::Interrupted),
+        }
+    }
+
+    /// A state expanded into `generated` more, or a turn played.
+    fn expanded(&mut self, generated: usize) {
+        self.expanded += 1;
+        self.visited += 1;
+        self.generated = self.generated.saturating_add(generated);
+    }
+
+    /// A search for a player's choice made `generated` states.
+    fn thought(&mut self, generated: usize) {
+        self.generated = self.generated.saturating_add(generated);
+    }
+}
+
+/// Whether the run goes on: no script has failed, and `watcher`, told how
+/// far it is, did not stop it, a stop kept in `failure` as interrupted.
+fn going(
+    watcher: &RefCell<Watcher<'_>>,
+    failure: &RefCell<Option<EngineError>>,
+    thinking: usize,
+) -> bool {
+    if failure.borrow().is_some() {
+        return false;
+    }
+    match watcher.borrow_mut().look(thinking) {
+        Ok(()) => true,
+        Err(stopped) => {
+            failure.borrow_mut().get_or_insert(stopped);
+            false
+        }
+    }
+}
+
+/// [`going`] as a tree search's observer reads it.
+fn looking(
+    watcher: &RefCell<Watcher<'_>>,
+    failure: &RefCell<Option<EngineError>>,
+    thinking: usize,
+) -> ControlFlow<()> {
+    if going(watcher, failure, thinking) {
+        ControlFlow::Continue(())
+    } else {
+        ControlFlow::Break(())
     }
 }
 

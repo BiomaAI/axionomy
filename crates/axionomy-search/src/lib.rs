@@ -44,6 +44,26 @@ pub struct GraphSearchProgress {
 }
 
 impl GraphSearchProgress {
+    /// Progress counted by a caller that runs no session of its own, so a
+    /// watcher following every search alike follows it too: the states it
+    /// expanded and generated, those waiting to be expanded, those it
+    /// visited, and the depth of a solution once it has one.
+    pub const fn new(
+        expanded: usize,
+        generated: usize,
+        frontier: usize,
+        visited: usize,
+        solution_depth: Option<u64>,
+    ) -> Self {
+        Self {
+            expanded,
+            generated,
+            frontier,
+            visited,
+            solution_depth,
+        }
+    }
+
     pub const fn expanded(self) -> usize {
         self.expanded
     }

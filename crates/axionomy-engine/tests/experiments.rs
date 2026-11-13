@@ -264,14 +264,34 @@ fn an_experiment_stopped_keeps_no_results() {
         .keep_experiment(&path("paying"), &experiment(&["ones", "searched"]))
         .unwrap();
     let finished = run(&engine, "paying");
-    // The watcher stops the first search: the experiment stops with it,
-    // and the results it kept before stay.
+    // The watcher stops the first run: the experiment stops with it, and
+    // the results it kept before stay.
     let stopped = engine.run_experiment(&path("paying"), &mut |_| ControlFlow::Break(()));
     assert!(matches!(
         stopped,
         Err(axionomy_engine::EngineError::Interrupted)
     ));
     assert_eq!(engine.results(&path("paying")).unwrap(), finished);
+
+    // A policy's trial is stopped between its turns, its first or its
+    // second, ten looks a trial, and a search's as it expands, alike.
+    for stop in [3, 12, 42] {
+        let mut looks = 0;
+        let stopped = engine.run_experiment(&path("paying"), &mut |_| {
+            looks += 1;
+            if looks == stop {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+        assert!(matches!(
+            stopped,
+            Err(axionomy_engine::EngineError::Interrupted)
+        ));
+        assert_eq!(looks, stop);
+        assert_eq!(engine.results(&path("paying")).unwrap(), finished);
+    }
 }
 
 #[test]

@@ -82,7 +82,8 @@ impl From<Ended> for EndedView {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExperimentEvent {
-    /// A search's progress so far, in the trial running now.
+    /// How far the trial running now is: its search's progress, or its
+    /// turns counted as a search counts expansions.
     Progress { progress: GraphSearchProgress },
     /// Every trial ran; the store keeps these results.
     Results { results: ResultsView },
@@ -141,7 +142,7 @@ pub fn check_experiment(engine: &Engine, path: &ExperimentPath) -> Result<(), Re
 }
 
 /// Runs the experiment at `path`, keeping its results; `watch` sees every
-/// search's progress and may stop it, which stops the experiment.
+/// run's progress and may stop it, which stops the experiment.
 pub fn run_experiment(
     engine: &Engine,
     path: ExperimentPath,
