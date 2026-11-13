@@ -55,15 +55,21 @@ jobs:
       - run: cargo test --workspace --doc --all-features
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
       # uv comes from PyPI and uses the runner's Python, so nothing is fetched
-      # from GitHub releases.
+      # from GitHub releases. The Python checks below start this binary.
+      - name: Install uv and build the server the Python checks start
+        run: |
+          pipx install uv==0.9.26
+          cargo build -p axionomy-cli --bin axionomy
       - name: MCP server with the official MCP Python SDK
         working-directory: crates/axionomy-mcp/interop
         env:
           UV_PYTHON_PREFERENCE: only-system
-        run: |
-          pipx install uv==0.9.26
-          cargo build -p axionomy-cli --bin axionomy
-          uv run --locked pytest
+        run: uv run --locked pytest
+      - name: Two players, a thinker and a learner over the Studio server's HTTP API
+        working-directory: acceptance
+        env:
+          UV_PYTHON_PREFERENCE: only-system
+        run: uv run --locked pytest
 
   studio:
     runs-on: ubuntu-latest
