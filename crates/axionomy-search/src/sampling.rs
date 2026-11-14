@@ -1,5 +1,14 @@
 //! Deterministic selection among weighted, core-encoded exchange proposals.
+//!
+//! Tickets come from one of two kinds of source. A [`SeededSampler`] draws a
+//! sequence: each ticket is the next, so what it draws depends on everything
+//! drawn before. That suits a decision-maker's own randomness, such as a tree
+//! search exploring. [`EventTickets`] draw the world's chance by named event:
+//! the tickets of an event depend only on the seed and the event's name, so
+//! runs that differ elsewhere meet the same luck wherever they meet the same
+//! event.
 
+use axionomy::path::Path;
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use thiserror::Error;
@@ -48,9 +57,7 @@ pub trait TicketSource {
 const GOLDEN_GAMMA: u64 = 0x9e37_79b9_7f4a_7c15;
 
 /// Value `index` of the SplitMix64 sequence that starts at `seed`:
-/// deterministic and the same on every platform. Problems draw tickets keyed
-/// by what they sample (a day, a job's attempt, a road), so the same key gets
-/// the same ticket whatever else happened: common random numbers.
+/// deterministic and the same on every platform.
 pub const fn splitmix(seed: u64, index: u64) -> u64 {
     let mut value = seed.wrapping_add(GOLDEN_GAMMA.wrapping_mul(index));
     value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -85,6 +92,78 @@ impl SeededSampler {
 impl TicketSource for SeededSampler {
     fn ticket(&mut self, total_weight: u64) -> u64 {
         self.random.random_range(0..total_weight)
+    }
+}
+
+/// The kind of path a chance event is named by.
+pub mod kind {
+    use axionomy::PathKind;
+
+    /// One occurrence of the world's chance, such as the weather a road
+    /// meets at a given time.
+    pub enum Event {}
+
+    impl PathKind for Event {
+        const SCHEMA: &'static str = "EventPath";
+        const EXAMPLE: &'static str = "weather/direct-out/12";
+    }
+}
+
+/// A chance event's name, such as `weather/direct-out/12`: the weather of
+/// the direct road out, met at time 12. The name says which occurrence a
+/// draw is for, so each occurrence the world meets has a name of its own.
+pub type EventPath = Path<kind::Event>;
+
+/// The tickets of the chance event `event` in a world seeded `seed`. They
+/// depend on nothing but the seed and the event's name: the same event of
+/// the same seed draws the same tickets whatever else was drawn before it,
+/// and different events draw independently. Runs that differ elsewhere, such
+/// as a branch that makes another choice, meet the same luck wherever they
+/// meet the same event (common random numbers), so comparing them compares
+/// the choices, not the luck.
+///
+/// The event's key folds the name's bytes into the seed eight at a time,
+/// little-endian with the last word padded with zeros, each word mixed in by
+/// SplitMix64, and then the name's length. Its tickets are the SplitMix64
+/// sequence that starts at that key, each brought below the total weight by
+/// Lemire's multiply-and-reject, so every ticket below the total is equally
+/// likely. Only integer arithmetic is used, so every platform, wasm32 among
+/// them, draws the same.
+#[derive(Debug, Clone)]
+pub struct EventTickets {
+    key: u64,
+    drawn: u64,
+}
+
+impl EventTickets {
+    pub fn new(seed: u64, event: &EventPath) -> Self {
+        let name = event.as_str().as_bytes();
+        let folded = name.chunks(8).fold(seed, |key, chunk| {
+            let mut word = [0; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            splitmix(key ^ u64::from_le_bytes(word), 1)
+        });
+        Self {
+            key: splitmix(folded ^ name.len() as u64, 1),
+            drawn: 0,
+        }
+    }
+}
+
+impl TicketSource for EventTickets {
+    /// The event's next ticket below `total_weight`, which must be positive,
+    /// as [`sample`] asks only for a positive total.
+    fn ticket(&mut self, total_weight: u64) -> u64 {
+        // Values whose low half of the product falls below this would make
+        // some tickets likelier than others; they are drawn again.
+        let biased = total_weight.wrapping_neg() % total_weight;
+        loop {
+            self.drawn += 1;
+            let product = u128::from(splitmix(self.key, self.drawn)) * u128::from(total_weight);
+            if product as u64 >= biased {
+                return (product >> 64) as u64;
+            }
+        }
     }
 }
 
@@ -152,6 +231,28 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(sample(&outcomes, &mut left), sample(&outcomes, &mut right));
         }
+    }
+
+    #[test]
+    fn an_events_tickets_are_its_seed_and_name_alone() {
+        let tickets = |seed, event: &str| {
+            let mut tickets = EventTickets::new(seed, &event.parse().unwrap());
+            [1000, 1000, 6, 1 << 63].map(|total| tickets.ticket(total))
+        };
+        // Fixed by the seed and the name's bytes on every platform: a store
+        // replays a run's chance wherever it is opened.
+        assert_eq!(
+            tickets(17, "scenario"),
+            [836, 662, 0, 7_672_138_121_928_009_263]
+        );
+        assert_eq!(
+            tickets(17, "weather/direct-out/12"),
+            [596, 461, 3, 4_840_340_453_360_151_081]
+        );
+        assert_eq!(
+            tickets(0, "attempt/3/2"),
+            [602, 362, 3, 4_285_863_854_964_752_419]
+        );
     }
 
     #[test]
