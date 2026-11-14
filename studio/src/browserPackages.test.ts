@@ -66,6 +66,23 @@ describe("BrowserPackages", () => {
     expect(worker.posted).toHaveLength(1);
   });
 
+  it("asks the Worker to compare two histories, and refuses as it refuses", async () => {
+    const packages = new BrowserPackages();
+    const [worker] = FakeWorker.spawned;
+    const other = "run-0000000000000000000000000000000b:2";
+    const query = { left: point, right: other, limit: 10, objectives: "paid" };
+    const compared = packages.divergence(query);
+    expect(worker.posted.map((posted) => posted.request)).toEqual([{ kind: "divergence", query }]);
+    const view = { shared: point, left: { point, values: ["0"] }, right: { point: other, values: ["3"] }, objectives: [], steps: [] };
+    worker.says({ kind: "store_reply", id: worker.asked("divergence"), ok: true, value: view });
+    expect(await compared).toEqual(view);
+
+    const apart = packages.divergence({ left: point, right: other });
+    const id = worker.posted[1].id;
+    worker.says({ kind: "store_reply", id, ok: false, status: 400, body: { error: "they share no history" } });
+    await expect(apart).rejects.toMatchObject({ status: 400, message: "they share no history" });
+  });
+
   it("cancels a run by terminating the Worker running it, and asks the next one everything else waiting", async () => {
     const packages = new BrowserPackages();
     const [first] = FakeWorker.spawned;

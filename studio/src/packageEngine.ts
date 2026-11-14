@@ -37,6 +37,8 @@ export type HistoriesView = Schemas["HistoriesView"];
 export type SegmentView = Schemas["SegmentView"];
 export type ChangeView = Schemas["ChangeView"];
 export type FramesQuery = operations["listRefFrames"]["parameters"]["query"];
+export type DivergenceView = Schemas["DivergenceView"];
+export type DivergenceQuery = operations["getDivergence"]["parameters"]["query"];
 
 /** An operation refused, with the status the server answers it with. */
 export class EngineRefusal extends Error {
@@ -124,6 +126,14 @@ export interface PackageEngine {
    * function that stops it.
    */
   onChange(listener: (change: ChangeView) => void): () => void;
+  /**
+   * Two points' histories compared: the last point both share, and for each
+   * step after it in the window `query` asks for, the exchange each side
+   * applied and the balances the two states differ in; where they are equal
+   * again, and objectives at both ends. Refused with 400 when the histories
+   * share no point.
+   */
+  divergence(query: DivergenceQuery): Promise<DivergenceView>;
 }
 
 /** The sample packages a static site serves beside Studio, each at `packages/<name>.zip`. */
@@ -301,4 +311,7 @@ export const nativePackages: PackageEngine = {
     return answered(await api.GET("/api/packages/{name}/histories", { params: { path: { name } } }));
   },
   onChange: nativeChanges,
+  async divergence(query) {
+    return answered(await api.GET("/api/divergence", { params: { query } }));
+  },
 };

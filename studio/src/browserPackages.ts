@@ -8,6 +8,8 @@ import {
   type ChangeView,
   type CompareRequest,
   type ComparisonView,
+  type DivergenceQuery,
+  type DivergenceView,
   type Exchange,
   type FramesQuery,
   type HistoriesView,
@@ -55,7 +57,8 @@ export type StoreRequest =
   | { kind: "run_experiment"; experiment: string }
   | { kind: "results"; experiment: string }
   | { kind: "compare"; request: CompareRequest }
-  | { kind: "histories"; name: string };
+  | { kind: "histories"; name: string }
+  | { kind: "divergence"; query: DivergenceQuery };
 
 export type StoreMessage =
   | { kind: "store_reply"; id: number; ok: true; value: unknown }
@@ -194,6 +197,10 @@ export class BrowserPackages implements PackageEngine {
   onChange(listener: (change: ChangeView) => void): () => void {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
+  }
+
+  divergence(query: DivergenceQuery): Promise<DivergenceView> {
+    return this.request({ kind: "divergence", query }) as Promise<DivergenceView>;
   }
 
   /** Stops the Worker for good, releasing the store. */
