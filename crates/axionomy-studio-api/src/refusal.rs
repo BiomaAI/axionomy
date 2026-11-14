@@ -126,6 +126,9 @@ impl From<EngineError> for Refusal {
             EngineError::NotOnHistory { .. } => Self::BadRequest(format!(
                 "{error}: ask for a point the history passes through"
             )),
+            EngineError::Unrelated { .. } => Self::BadRequest(format!(
+                "{error}: compare points whose histories meet, such as a branch and the history it forked from"
+            )),
             EngineError::Refused { .. } => {
                 Self::BadRequest(format!("{error}; nothing was applied, so assess it first"))
             }

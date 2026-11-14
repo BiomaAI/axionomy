@@ -25,6 +25,7 @@ engine's own and shapes its answer for the wire.
 | `run_strategy` | `run_strategy` | where a strategy run from a point toward a goal ended, how, and its search's thinking |
 | `run_experiment`, `results` | `run_experiment`, `results` | every arm's trials with their seeds, ends and exact objective values |
 | `compare` | `compare`, `pick` | points' objective values, the front no point dominates, and the best by objectives in order |
+| `divergence` | `divergence`, `objective` | `DivergenceView`: the last point two histories share, and for each step after it in a window of at most 1000, paged by `next`, the exchange each side applied and the balances and accounts the two states differ in, exactly; the first step they are equal again; objectives at both points |
 | `create_ref`, `read_ref`, `advance_ref`, `delete_ref`, `frames` | `refer`, `referred`, `shipped_by`, `advance`, `delete_ref`, `frames` | refs, moved forward or deleted only from where the mover saw them; a ref a package ships is fixed |
 
 A point is written `PointId` (`run-…:3`), and a 64-bit number JSON cannot

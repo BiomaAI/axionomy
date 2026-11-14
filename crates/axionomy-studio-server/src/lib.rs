@@ -2,13 +2,15 @@
 //! packages, points, refs, strategies and experiments, as
 //! `axionomy-studio-api` defines them.
 
+mod divergence;
 mod engine;
 mod openapi;
 mod refs;
 
 pub use axionomy_studio_api::{
-    ErrorResponse, ObjectiveList, PointId, PointIdError, RefAdvanceRequest, RefCreateRequest,
-    RefDeleteQuery, RefFrame, RefFrames, RefFramesQuery, RefMoved, RefView,
+    DivergenceQuery, DivergenceView, ErrorResponse, ObjectiveList, PointId, PointIdError,
+    RefAdvanceRequest, RefCreateRequest, RefDeleteQuery, RefFrame, RefFrames, RefFramesQuery,
+    RefMoved, RefView,
 };
 pub use engine::{ExperimentName, PackageName, PointName};
 pub use openapi::OpenApiDocument;
@@ -237,6 +239,14 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         .path_parameters::<ExperimentName>()
         .event_stream::<ExperimentEvent>()
         .fallible(),
+        Endpoint::new::<DivergenceView>("get", "/api/divergence", get(divergence::divergence))
+            .describe(
+                "getDivergence",
+                "Compare two points' histories: where they part, and step by step after it the exchange each side applied and the balances the two states differ in",
+                "points",
+            )
+            .query::<DivergenceQuery>()
+            .fallible(),
         Endpoint::new::<ComparisonView>("post", "/api/compare", post(engine::compare))
             .describe(
                 "comparePoints",
@@ -361,6 +371,7 @@ mod tests {
             "/api/experiments/{experiment}/results",
             "/api/experiments/{experiment}/run",
             "/api/compare",
+            "/api/divergence",
         ] {
             assert!(paths.contains_key(path), "missing {path}");
         }

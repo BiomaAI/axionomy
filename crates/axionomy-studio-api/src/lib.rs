@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod divergence;
 mod experiments;
 mod histories;
 mod ids;
@@ -8,6 +9,10 @@ mod points;
 mod refs;
 mod refusal;
 
+pub use divergence::{
+    AccountDifferenceView, AlignedView, BalanceDifferenceView, DivergenceQuery, DivergenceView,
+    MAX_STEPS, SideView, TipView, divergence,
+};
 pub use experiments::{
     ArmResultView, CompareRequest, ComparisonView, EndedView, ExperimentEvent, PointValues,
     ResultsView, TrialView, check_experiment, compare, results, run_experiment,

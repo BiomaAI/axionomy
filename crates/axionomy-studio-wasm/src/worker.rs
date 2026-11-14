@@ -322,6 +322,13 @@ impl WorkerEngine {
         answer(parsed(request).and_then(|request| api::compare(&self.engine, request)))
     }
 
+    /// Two points' histories compared, a `DivergenceView`: where they part
+    /// and, step by step after it, the exchange each side applied and the
+    /// balances the two states differ in. `query` is a `DivergenceQuery`.
+    pub fn divergence(&self, query: &str) -> Result<String, JsValue> {
+        answer(parsed(query).and_then(|query| api::divergence(&self.engine, query)))
+    }
+
     /// Names a point with a new ref; `request` is a `RefCreateRequest`.
     #[wasm_bindgen(js_name = createRef)]
     pub fn create_ref(&self, request: &str) -> Result<String, JsValue> {

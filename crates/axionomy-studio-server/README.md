@@ -6,7 +6,8 @@ them, with an OpenAPI 3.1 contract generated from the same route table
 ([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), P12, D-045):
 the packages its store holds, loading one, a point's history, the
 candidates at a point, assessing and applying exchanges, strategies and
-experiments run while their progress streams, comparison and refs. The
+experiments run while their progress streams, comparison, two
+histories compared step by step, and refs. The
 browser Worker (`axionomy-studio-wasm`) calls the same functions and gives
 the same JSON, so Studio reaches both through one client.
 
@@ -39,6 +40,7 @@ decimal text.
 | `GET /api/experiments/{experiment}/results` | | `ResultsView`: every arm's trials with their seeds, ends, how they ended and exact objective values; 404 before it has run |
 | `POST /api/experiments/{experiment}/run` | | server-sent `ExperimentEvent`s: `progress`, then `results` or `failed` |
 | `POST /api/compare` | `{points, objectives}` | `ComparisonView`: each point's values, the front no point dominates, and the pick, best by the objectives in order |
+| `GET /api/divergence` | `left`, `right`, `after`, `limit` (1 to 1000, 100 by default), `objectives` | `DivergenceView {shared, left, right, objectives, steps, converged, next}`: the last point both histories share; each step after it and after `after`, `{step, left, right, balances, accounts}`, the exchange each side applied (absent once its history has ended) and every balance `{account, asset, left, right}`, exactly, and account `{account, on}` the two states differ in after it; the first step they are equal again; each end's point and objective `values`; and `next`, the `after` of the next page while steps follow. 400 when the histories share no point |
 
 A strategy or an experiment is checked before it runs, so one the store
 lacks is 404 at once; then its run streams, and a client that closes the

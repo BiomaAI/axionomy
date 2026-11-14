@@ -251,6 +251,19 @@ fn the_worker_offers_the_operations_the_server_offers() {
             .any(|entry| entry["name"] == "maze/branch/one"),
         "{refs}"
     );
+    // The branch and the move compared: they part at the start, and the
+    // same move made on both reaches the same state.
+    let query = json!({ "left": moved, "right": branched["point"], "objectives": "maze/energy" })
+        .to_string();
+    let compared = parsed(&worker.divergence(&query).unwrap());
+    assert_eq!(
+        compared,
+        serde_json::to_value(api::divergence(worker.engine(), from(&query)).unwrap()).unwrap()
+    );
+    assert_eq!(compared["shared"], json!(start));
+    assert_eq!(compared["converged"], 1);
+    assert_eq!(compared["steps"][0]["left"], compared["steps"][0]["right"]);
+    assert_eq!(compared["left"]["values"], compared["right"]["values"]);
 
     // A ref goes from where its deleter saw it; the package's never does.
     let at_start = json!({ "expected": start }).to_string();
