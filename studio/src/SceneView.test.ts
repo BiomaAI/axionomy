@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { ExchangeFrame, Scene, SceneEntity } from "./api";
-import { SceneView, graphEdgeSides, sceneEntityEffect } from "./SceneView";
+import { SceneView, graphEdgeRoutes, graphEdgeSides, graphLineRects, sceneEntityEffect } from "./SceneView";
 
 const entity = {
   id: { key: "stock/wood", label: "Wood" },
@@ -49,6 +49,30 @@ describe("graphEdgeSides", () => {
   test("routes vertical edges through the facing sides of their nodes", () => {
     expect(graphEdgeSides({ x: 100, y: 20 }, { x: 120, y: 280 })).toEqual({ source: "bottom", target: "top" });
     expect(graphEdgeSides({ x: 120, y: 280 }, { x: 100, y: 20 })).toEqual({ source: "top", target: "bottom" });
+  });
+});
+
+describe("graphEdgeRoutes", () => {
+  const line = (id: string, source: string, target: string) => ({ id, source, target, label: id, classes: [] });
+  const positions = new Map([["wood", { x: 0, y: 100 }], ["scrap", { x: 300, y: 0 }], ["chair", { x: 300, y: 260 }]]);
+
+  test("gives every line its own place on a side, in the order of where it goes", () => {
+    const routes = graphEdgeRoutes([line("to-chair", "wood", "chair"), line("to-scrap", "wood", "scrap")], positions);
+    expect(routes.get("to-scrap")).toMatchObject({ sourceSide: "right", sourceOffset: 1 / 3 });
+    expect(routes.get("to-chair")).toMatchObject({ sourceSide: "right", sourceOffset: 2 / 3 });
+  });
+
+  test("numbers the lines between two nodes around zero, whichever way they run", () => {
+    const routes = graphEdgeRoutes([line("basic", "wood", "chair"), line("batch", "wood", "chair"), line("back", "chair", "wood"), line("scrap", "wood", "scrap")], positions);
+    expect([routes.get("back")?.parallel, routes.get("basic")?.parallel, routes.get("batch")?.parallel, routes.get("scrap")?.parallel]).toEqual([-1, 0, 1, 0]);
+  });
+
+  test("parallel lines bend apart, so their labels do not meet", () => {
+    const routes = graphEdgeRoutes([line("basic", "wood", "chair"), line("batch", "wood", "chair")], positions);
+    const label = (id: string) => graphLineRects("recipe", routes.get(id)!, positions).at(-1)!;
+    const [basic, batch] = [label("basic"), label("batch")];
+    const overlap = basic.x < batch.x + batch.width && batch.x < basic.x + basic.width && basic.y < batch.y + batch.height && batch.y < basic.y + basic.height;
+    expect(overlap).toBe(false);
   });
 });
 

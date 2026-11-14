@@ -164,7 +164,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
    One viewport-height cockpit: picture | standings rail | truth rail.
    Frames come from this grid, never from panel content (IC-1). */
 .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(288px, 350px) minmax(276px, 330px); gap: 14px; height: clamp(560px, calc(100dvh - 120px), 1160px); margin-bottom: 14px; }
-.truth-rail { display: grid; grid-template-rows: minmax(0, .44fr) minmax(0, .56fr); gap: 14px; min-height: 0; }
+.truth-rail { display: grid; grid-template-rows: fit-content(44%) minmax(0, 1fr); gap: 14px; min-height: 0; }
 
 .definition-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .5fr); height: clamp(390px, 50vh, 580px); gap: 14px; margin-top: 14px; }
 
@@ -283,12 +283,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .attachment-rows button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-rows button small { grid-column: 2; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 6px; text-transform: uppercase; white-space: nowrap; }
 .attachment-overflow { min-height: 22px; display: grid; place-items: center; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
-.scene-context { position: absolute; top: calc(var(--scene-top, 0px) + 8px); right: 10px; z-index: 6; width: min(190px, calc(100% - 72px)); border-left: 2px solid var(--hold); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(4px); box-shadow: 0 8px 20px #0008; }
-.scene-context > header { padding: 5px 8px; border-bottom: 1px solid var(--line); color: var(--hold); font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-.scene-context button { width: 100%; min-height: 36px; padding: 5px 8px; display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; }
-.scene-context button:last-child { border-bottom: 0; }
+.scene-context { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; margin: 0; padding: 0; list-style: none; pointer-events: auto; }
+.scene-context button { min-height: 26px; max-width: 100%; padding: 3px 8px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-left: 2px solid var(--hold); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(3px); color: var(--text); font: 10px var(--mono); text-align: left; }
 .scene-context button:disabled { opacity: 1; cursor: default; }
-.scene-context b, .scene-context small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-context b { font-weight: 600; white-space: nowrap; }
+.scene-context small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .scene-context b { font: 10px var(--mono); }
 .scene-context small { margin-top: 2px; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
 .react-flow__node.effect-produced::after, .react-flow__node.effect-consumed::after, .react-flow__node.effect-preserved::after, .react-flow__node.effect-changed::after, .grid-entity.effect-produced::after, .grid-entity.effect-consumed::after, .grid-entity.effect-preserved::after, .grid-entity.effect-changed::after { position: absolute; right: -5px; top: -5px; z-index: 7; width: 15px; height: 15px; display: grid; place-items: center; padding: 0; border: 1px solid currentColor; border-radius: 999px; background: var(--surface); box-shadow: 0 3px 9px #0008; font: 7px var(--mono); line-height: 1; pointer-events: none; }
@@ -516,8 +515,8 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .activity { grid-template-columns: 1fr; }
   .stage { grid-template-columns: minmax(0, 1fr); height: auto; }
   .stage > .world-panel { height: min(74vh, 640px); }
-  .truth-rail { grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .truth-rail > .panel { height: min(52vh, 440px); }
+  .truth-rail { grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .truth-rail > .panel { max-height: min(52vh, 440px); }
   .playback { grid-template-columns: auto 1fr auto auto; }
   .kbd-hint { display: none; }
 }
@@ -529,7 +528,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .capabilities { justify-content: start; max-width: none; }
   .stage > .world-panel { height: min(70vh, 520px); }
   .truth-rail { grid-template-columns: minmax(0, 1fr); }
-  .truth-rail > .panel { height: 420px; }
+  .truth-rail > .panel { max-height: 420px; }
   .definition-grid { grid-template-columns: minmax(0, 1fr); height: auto; }
   .definition-grid > .panel { height: clamp(380px, 52vh, 520px); }
   .model-explorer { grid-template-columns: 1fr; }
@@ -583,7 +582,6 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .react-flow__node.structure-node.current { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 9%, transparent), 0 9px 24px #2a251a2b; }
   .react-flow__node.occupant-overlay { box-shadow: 0 9px 22px #2a251a30, 0 0 0 1px #ffffffb3; }
   .attachment-collection { box-shadow: 0 8px 18px #2a251a24; }
-  .scene-context { box-shadow: 0 8px 18px #2a251a20; }
   .grid-scene > div.red { background: #a8524b; }
   .grid-scene > div.yellow { background: #ac9344; color: #23200f; }
 }
@@ -661,7 +659,8 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .point-stage .continue-controls .numeric-field { flex: 1 1 80px; width: auto; }
 .proof-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); height: clamp(420px, 56vh, 640px); }
 .transition-panel .transition, .transition-panel > .empty-state { flex: 1; min-height: 0; overflow: auto; }
-.start-note { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+/* With nothing to play there is no transport to keep in reach. */
+.start-note { position: static; display: flex; align-items: center; justify-content: space-between; gap: 14px; box-shadow: none; }
 .start-note p { margin: 0; color: var(--muted); font-size: 12px; }
 .start-note strong { color: var(--text); font-weight: 600; }
 .sample-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
@@ -669,11 +668,13 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .packages-workspace .command-bar button, .packages-workspace .command-bar .file-button { font-size: 12px; }
 @media (max-width: 1180px) {
   .point-stage > .action-panel { max-height: min(70vh, 560px); }
-  .proof-grid { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .proof-grid > .panel { height: clamp(380px, 52vh, 560px); }
+  .proof-grid { grid-template-columns: minmax(0, 1fr); height: auto; align-items: start; }
+  .proof-grid > .panel { height: auto; max-height: clamp(380px, 52vh, 560px); }
 }
 @media (max-width: 520px) {
   .start-note { flex-direction: column; align-items: stretch; }
+  /* The lane above the picture wraps into several rows on a phone. */
+  .point-stage > .world-panel { height: min(86vh, 700px); }
 }
 .point-stage .action-panel .panel-heading h2 { white-space: normal; line-height: 1.3; }
 .keep-ref button, .start-note button { font-size: 12px; white-space: nowrap; }

@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import {
   Background,
+  BaseEdge,
   Controls,
   Handle,
   MarkerType,
   Position,
   ReactFlow,
+  getSmoothStepPath,
   type Edge,
+  type EdgeProps,
   type Node,
   type NodeProps,
   type ReactFlowInstance,
@@ -35,13 +38,13 @@ export function SceneView({ scene, previousScene, history = [], frame, motion = 
     return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
   }
   return <div className="scene-composition" style={{ "--scene-top": `${chromeHeight}px` } as CSSProperties}>
-    <SceneChrome scene={scene} lane={chrome} />
+    <SceneChrome scene={scene} lane={chrome} onAccount={onAccount} />
     <SceneSurfaceView scene={scene} previousScene={previousScene} history={history} frame={frame} motion={motion} onAccount={onAccount} topInset={chromeHeight} />
   </div>;
 }
 
 function hasChrome(scene: Scene): boolean {
-  return scene.metrics.length > 0 || scene.legend.length > 0 || scene.annotations.length > 0;
+  return scene.metrics.length > 0 || scene.legend.length > 0 || scene.annotations.length > 0 || scene.entities.some((entity) => entity.role === "context");
 }
 
 function SceneSurfaceView({ scene, previousScene, history, frame, motion, onAccount, topInset }: { scene: Scene; previousScene?: Scene | null; history: Scene[]; frame?: ExchangeFrame; motion: ReplayMotionMode; onAccount?: (account: string) => void; topInset: number }) {
@@ -212,8 +215,11 @@ function ReserveCurveChart({ pool, curve }: { pool: ReservePool; curve: ReserveC
   </svg>;
 }
 
-function SceneChrome({ scene, lane }: { scene: Scene; lane: RefObject<HTMLDivElement | null> }) {
+function SceneChrome({ scene, lane, onAccount }: { scene: Scene; lane: RefObject<HTMLDivElement | null>; onAccount?: (account: string) => void }) {
   if (!hasChrome(scene)) return null;
+  // What bears on the whole scenario rides in the lane, above the picture,
+  // so it never covers a part of it.
+  const context = scene.entities.filter((entity) => entity.role === "context");
   return <div className="scene-chrome" ref={lane}>
     {scene.metrics.length > 0 && <div className="scene-metrics">{scene.metrics.map((metric) => {
       const changed = metric.previous !== null && metric.previous !== undefined && metric.previous !== metric.value;
@@ -223,6 +229,7 @@ function SceneChrome({ scene, lane }: { scene: Scene; lane: RefObject<HTMLDivEle
     })}</div>}
     {scene.annotations.length > 0 && <ul className="scene-annotations" aria-label="Scene notes">{scene.annotations.map((annotation) => <li key={annotation.id} className={`tone-${annotation.tone}`}>{annotation.label}</li>)}</ul>}
     {scene.legend.length > 0 && <ul className="scene-legend" aria-label="Scene legend">{scene.legend.slice(0, 8).map((entry, index) => <li key={`${entry.glyph}:${entry.tone}:${index}`} className={`tone-${entry.tone}`}><SceneIcon glyph={entry.glyph} size={15} />{entry.label}</li>)}</ul>}
+    {context.length > 0 && <ul className="scene-context" aria-label="Scenario context">{context.map((entity) => <li key={entity.id.key}><button type="button" className={`tone-${entity.tone}`} title={[entity.status, scene.surface.kind === "graph" ? contextRelation(entity, scene.surface) : undefined, entityDetail(entity)].filter(Boolean).join(" · ")} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={14} /><b>{entity.id.label}</b>{entity.status && <small>{entity.status}</small>}</button></li>)}</ul>}
   </div>;
 }
 
@@ -347,20 +354,27 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
     return () => { observer.disconnect(); cancelAnimationFrame(pending); };
   }, [flow]);
   const positions = new Map(surface.nodes.map((node) => [node.id.key, { x: node.x ?? 0, y: node.y ?? 0 }]));
-  const routes = graphEdgeRoutes(surface, positions);
+  const routes = graphEdgeRoutes(surface.edges, positions);
   const handles = new Map<string, GraphHandle[]>();
   for (const route of routes.values()) {
     const sourceHandles = handles.get(route.source) ?? [];
-    sourceHandles.push({ id: route.sourceHandle, type: "source", side: route.sourceSide, offset: route.offset });
+    sourceHandles.push({ id: route.sourceHandle, type: "source", side: route.sourceSide, offset: route.sourceOffset });
     handles.set(route.source, sourceHandles);
     const targetHandles = handles.get(route.target) ?? [];
-    targetHandles.push({ id: route.targetHandle, type: "target", side: route.targetSide, offset: route.offset });
+    targetHandles.push({ id: route.targetHandle, type: "target", side: route.targetSide, offset: route.targetOffset });
     handles.set(route.target, targetHandles);
   }
   const previousById = new Map(previousScene?.entities.map((entity) => [entity.id.key, entity]) ?? []);
   const structureById = new Map(scene.entities.filter((entity) => entity.role === "structure").map((entity) => [entity.id.key, entity]));
   const statesByNode = groupBy(scene.entities.filter((entity) => entity.role === "state" && entity.anchor.kind === "graph_node"), (entity) => entity.anchor.kind === "graph_node" ? entity.anchor.node : "");
-  const occupied: GraphRect[] = surface.nodes.map((node) => ({ x: node.x ?? 0, y: node.y ?? 0, width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT }));
+  // Nodes, lines and their labels are taken; markers and item lists find room around them.
+  const occupied: GraphRect[] = [
+    ...surface.nodes.map((node) => ({ x: node.x ?? 0, y: node.y ?? 0, width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT })),
+    ...surface.edges.flatMap((edge) => {
+      const route = routes.get(edge.id);
+      return route ? graphLineRects(edge.label, route, positions) : [];
+    }),
+  ];
   const relationEdges: Edge[] = [];
   const relationHandles = new Map<string, GraphHandle[]>();
   const nodes: Node[] = [];
@@ -444,7 +458,8 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      type: "smoothstep",
+      type: "scene",
+      data: { parallel: route?.parallel ?? 0 } satisfies SceneEdgeData,
       sourceHandle: route?.sourceHandle,
       targetHandle: route?.targetHandle,
       label: edge.label,
@@ -453,14 +468,22 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
       markerEnd: { type: MarkerType.ArrowClosed },
     };
   });
-  const context = scene.entities.filter((entity) => entity.role === "context");
   const layoutKey = nodes.map((node) => `${node.id}:${node.position.x}:${node.position.y}:${node.type === "attachments" ? attachmentHeight((node.data as AttachmentNodeData).entities.length) : ""}`).join("|");
+  // A different graph (another package, another view) is fitted afresh;
+  // the same graph a step later moves only if something left the frame.
+  const surfaceKey = surface.nodes.map((node) => node.id.key).join("|");
+  const fittedSurface = useRef(surfaceKey);
   useEffect(() => {
     if (!flow || !host.current) return;
     let pending = requestAnimationFrame(() => {
       pending = requestAnimationFrame(() => {
         const box = host.current?.getBoundingClientRect();
         if (!box) return;
+        if (fittedSurface.current !== surfaceKey) {
+          fittedSurface.current = surfaceKey;
+          void flow.fitView({ padding: fitPadding.current });
+          return;
+        }
         const viewport = flow.getViewport();
         const clipped = flow.getNodes().some((node) => {
           const x = node.position.x * viewport.zoom + viewport.x;
@@ -473,20 +496,19 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
       });
     });
     return () => cancelAnimationFrame(pending);
-  }, [flow, layoutKey, motion, topInset]);
+  }, [flow, layoutKey, motion, surfaceKey, topInset]);
   return <div className={`graph-scene motion-${motion}`} data-motion={motion} ref={host} aria-label={scene.title}>
     {/* The wheel scrolls the page; the controls, a pinch, or Ctrl with the wheel zoom the picture. */}
-    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
+    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
       <Controls showInteractive={false} fitViewOptions={{ padding }} />
     </ReactFlow>
-    {context.length > 0 && <aside className="scene-context" aria-label="Scenario context"><header>Scenario context</header>{context.map((entity) => <button type="button" key={entity.id.key} className={`tone-${entity.tone}`} title={[entity.status, ...entity.metrics.map((metric) => `${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`)].filter(Boolean).join(" · ")} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={15} /><span><b>{entity.id.label}</b>{entity.status && <small>{entity.status}</small>}<small>{contextRelation(entity, surface)} · {entityDetail(entity)}</small></span></button>)}</aside>}
   </div>;
 }
 
 type GraphPoint = { x: number; y: number };
 type GraphRect = GraphPoint & { width: number; height: number };
-type GraphEdgeRoute = { source: string; target: string; sourceHandle: string; targetHandle: string; sourceSide: HandleSide; targetSide: HandleSide; offset: number };
+type GraphEdgeRoute = { source: string; target: string; sourceHandle: string; targetHandle: string; sourceSide: HandleSide; targetSide: HandleSide; sourceOffset: number; targetOffset: number; parallel: number };
 
 const GRAPH_NODE_WIDTH = 88;
 const GRAPH_NODE_HEIGHT = 72;
@@ -501,31 +523,108 @@ export function graphEdgeSides(source: GraphPoint, target: GraphPoint): { source
   return dy >= 0 ? { source: "bottom", target: "top" } : { source: "top", target: "bottom" };
 }
 
-function graphEdgeRoutes(surface: GraphSurface, positions: Map<string, GraphPoint>): Map<string, GraphEdgeRoute> {
-  const groups = new Map<string, typeof surface.edges>();
-  for (const edge of surface.edges) {
+// Every line meeting a side of a node gets its own place on that side, in
+// the order of the nodes at the lines' other ends, so no two lines share an
+// end. Lines between the same two nodes are numbered around zero (`parallel`)
+// so each can bend at its own place and keep its label clear of the others.
+export function graphEdgeRoutes(edges: GraphSurface["edges"], positions: Map<string, GraphPoint>): Map<string, GraphEdgeRoute> {
+  const at = (node: string, fallback: GraphPoint) => positions.get(node) ?? fallback;
+  const pairs = new Map<string, string[]>();
+  for (const edge of edges) {
     const key = [edge.source, edge.target].sort().join("\u0000");
-    groups.set(key, [...(groups.get(key) ?? []), edge]);
+    pairs.set(key, [...(pairs.get(key) ?? []), edge.id]);
+  }
+  const parallel = new Map<string, number>();
+  for (const ids of pairs.values()) [...ids].sort().forEach((id, index) => parallel.set(id, index - (ids.length - 1) / 2));
+  const sides = new Map(edges.map((edge) => [edge.id, graphEdgeSides(at(edge.source, { x: 0, y: 0 }), at(edge.target, { x: 0, y: 1 }))]));
+  const ends = new Map<string, Array<{ key: string; along: number; id: string }>>();
+  for (const edge of edges) {
+    const side = sides.get(edge.id);
+    if (!side) continue;
+    for (const [end, node, other, nodeSide] of [["source", edge.source, edge.target, side.source], ["target", edge.target, edge.source, side.target]] as const) {
+      const far = at(other, { x: 0, y: 0 });
+      const list = ends.get(`${node}\u0000${nodeSide}`) ?? [];
+      list.push({ key: `${end}:${edge.id}`, along: nodeSide === "left" || nodeSide === "right" ? far.y : far.x, id: edge.id });
+      ends.set(`${node}\u0000${nodeSide}`, list);
+    }
+  }
+  const offsets = new Map<string, number>();
+  for (const list of ends.values()) {
+    list.sort((left, right) => left.along - right.along || left.id.localeCompare(right.id));
+    list.forEach((end, index) => offsets.set(end.key, (index + 1) / (list.length + 1)));
   }
   const routes = new Map<string, GraphEdgeRoute>();
-  for (const group of groups.values()) {
-    const ordered = [...group].sort((left, right) => left.id.localeCompare(right.id));
-    ordered.forEach((edge, index) => {
-      const source = positions.get(edge.source) ?? { x: 0, y: 0 };
-      const target = positions.get(edge.target) ?? { x: 0, y: 1 };
-      const sides = graphEdgeSides(source, target);
-      routes.set(edge.id, {
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: `source:${edge.id}`,
-        targetHandle: `target:${edge.id}`,
-        sourceSide: sides.source,
-        targetSide: sides.target,
-        offset: (index + 1) / (ordered.length + 1),
-      });
+  for (const edge of edges) {
+    const side = sides.get(edge.id);
+    if (!side) continue;
+    routes.set(edge.id, {
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: `source:${edge.id}`,
+      targetHandle: `target:${edge.id}`,
+      sourceSide: side.source,
+      targetSide: side.target,
+      sourceOffset: offsets.get(`source:${edge.id}`) ?? .5,
+      targetOffset: offsets.get(`target:${edge.id}`) ?? .5,
+      parallel: parallel.get(edge.id) ?? 0,
     });
   }
   return routes;
+}
+
+type SceneEdgeData = { parallel: number };
+const PARALLEL_GAP = 18;
+
+// A step line whose bend moves with its place among parallel lines. Lines
+// that fall (or rise) to the right bend outermost first, so they never cross,
+// and their labels, drawn on the bend, stand apart.
+function SceneEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, markerEnd, style, interactionWidth, data }: EdgeProps<Edge<SceneEdgeData>>) {
+  const across = sourcePosition === Position.Left || sourcePosition === Position.Right;
+  const bend = parallelBend(data?.parallel ?? 0, { x: sourceX, y: sourceY }, { x: targetX, y: targetY });
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+    ...(across ? { centerX: (sourceX + targetX) / 2 + bend } : { centerY: (sourceY + targetY) / 2 + bend }),
+  });
+  return <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} label={label} labelX={labelX} labelY={labelY} />;
+}
+
+const edgeTypes = { scene: SceneEdge };
+
+function parallelBend(parallel: number, source: GraphPoint, target: GraphPoint): number {
+  const sense = Math.sign(target.x - source.x) * Math.sign(target.y - source.y) || 1;
+  return -parallel * PARALLEL_GAP * sense;
+}
+
+function handlePoint(node: GraphPoint, side: HandleSide, offset: number): GraphPoint {
+  if (side === "left") return { x: node.x, y: node.y + GRAPH_NODE_HEIGHT * offset };
+  if (side === "right") return { x: node.x + GRAPH_NODE_WIDTH, y: node.y + GRAPH_NODE_HEIGHT * offset };
+  if (side === "top") return { x: node.x + GRAPH_NODE_WIDTH * offset, y: node.y };
+  return { x: node.x + GRAPH_NODE_WIDTH * offset, y: node.y + GRAPH_NODE_HEIGHT };
+}
+
+const LABEL_CHARACTER_WIDTH = 5.4;
+const LABEL_HEIGHT = 16;
+
+const LINE_WIDTH = 6;
+
+// The room a line takes, as `SceneEdge` draws it: its three straight runs
+// (out, across at its bend, in) and its label, which sits on the bend.
+export function graphLineRects(label: string | null | undefined, route: GraphEdgeRoute, positions: Map<string, GraphPoint>): GraphRect[] {
+  const source = handlePoint(positions.get(route.source) ?? { x: 0, y: 0 }, route.sourceSide, route.sourceOffset);
+  const target = handlePoint(positions.get(route.target) ?? { x: 0, y: 0 }, route.targetSide, route.targetOffset);
+  const bend = parallelBend(route.parallel, source, target);
+  const across = route.sourceSide === "left" || route.sourceSide === "right";
+  const center = { x: (source.x + target.x) / 2 + (across ? bend : 0), y: (source.y + target.y) / 2 + (across ? 0 : bend) };
+  const corners = across
+    ? [source, { x: center.x, y: source.y }, { x: center.x, y: target.y }, target]
+    : [source, { x: source.x, y: center.y }, { x: target.x, y: center.y }, target];
+  const runs = corners.slice(1).map((end, index) => {
+    const start = corners[index];
+    return { x: Math.min(start.x, end.x) - LINE_WIDTH / 2, y: Math.min(start.y, end.y) - LINE_WIDTH / 2, width: Math.abs(end.x - start.x) + LINE_WIDTH, height: Math.abs(end.y - start.y) + LINE_WIDTH };
+  });
+  if (!label) return runs;
+  const width = label.length * LABEL_CHARACTER_WIDTH + 8;
+  return [...runs, { x: center.x - width / 2, y: center.y - LABEL_HEIGHT / 2, width, height: LABEL_HEIGHT }];
 }
 
 function anchorKey(anchor: SceneEntity["anchor"]): string {

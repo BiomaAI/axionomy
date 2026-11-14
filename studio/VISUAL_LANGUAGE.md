@@ -103,7 +103,9 @@ problem's topology readable before any animation begins.
 - Goals use a distinct double boundary rather than color alone.
 - Structure coordinates remain stable throughout replay.
 - Directed transition edges sit behind nodes and expose their actual source
-  and target ports.
+  and target ports. Every edge meeting a side of a node has its own port there,
+  ordered by where the edge leads, and edges between the same two nodes bend
+  apart, so neither the lines nor their labels meet.
 - Edge labels describe costs, duration, conditions, or other authoritative
   transition facts.
 - A retained solution may distinguish its remaining planned passages from
@@ -123,7 +125,8 @@ ambiguous.
 
 - The same stable entity ID moves between anchors; it is not recreated under a
   new label.
-- Multiple occupants use deterministic, non-overlapping slots.
+- Multiple occupants use deterministic, non-overlapping slots, clear of
+  structures, edges and edge labels.
 - An occupant never visually covers the structure that explains where it is.
 - Movement animates between adjacent replay states without moving unrelated
   layout around it.
@@ -144,8 +147,9 @@ semantic icon, primary label, and concise detail.
 ### Context stays separate
 
 Scenario-wide chance, weather, hidden information, and similar context belongs
-in a dedicated context lane. It may affect topology or transitions, but it
-must not masquerade as a location or mobile entity.
+in a dedicated context lane, the row above the picture beside its metrics and
+legend, so it never covers part of the picture. It may affect topology or
+transitions, but it must not masquerade as a location or mobile entity.
 
 ## Content hierarchy
 
@@ -210,8 +214,10 @@ hierarchy, grouping, and stable geometry—not by hiding important state.
   replay controls and current economic step.
 - Source-of-truth and current-step panels complement the picture rather than
   duplicate every label inside it.
-- Legends name the symbols currently needed to read the scene.
-- Scene metrics, notes, and the legend wrap onto further rows instead of
+- Legends name the symbols currently needed to read the scene. A symbol that
+  differently named things share has no one name, so an inferred legend leaves
+  it out rather than name it after one of them.
+- Scene metrics, notes, the legend, and scenario context wrap onto further rows instead of
   clipping at the picture's edge, and the picture is fitted below them.
   Legend entries, notes, and capability lists are static labels; only
   controls look like buttons.
