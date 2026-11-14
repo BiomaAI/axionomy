@@ -18,7 +18,10 @@ ordinary exchanges validated by the `axionomy` kernel.
   or a recorder that keeps them. `Episodes` makes the same choice for the
   rollouts of repeated trials, with `Unrecorded` keeping none.
 - `sampling` selects among weighted, encoded Nature exchanges through `rand`,
-  including reproducible ChaCha8 and caller-owned generators.
+  including reproducible ChaCha8 and caller-owned generators, or by named
+  event: `EventTickets` draws an event's tickets from a seed and the event's
+  path alone, so the same occurrence draws the same outcome whatever else
+  was drawn, on every platform.
 - `bounded` holds depth-first branch-and-bound for the cheapest goal state under
   a lower bound, beam search keeping the best-scoring states of each depth and
   answering with the first or the last of the best goal states it reaches, and

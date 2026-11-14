@@ -180,7 +180,7 @@ The repository test suite additionally verifies:
 - Applicable assessment parity with eventual receipt deltas.
 - Receipt deltas for every touched account.
 - Rollout goal, cutoff, rejection, retention, and replay behavior.
-- Deterministic systematic and seeded weighted sampling.
+- Deterministic systematic, seeded and named-event weighted sampling.
 - Bernoulli, scalar, vector, quantile, and lower-tail statistics.
 - Objective-schema validation, four-way dominance, incremental Pareto
   filtering, exact replayable fronts, and approximate sampled fronts.
