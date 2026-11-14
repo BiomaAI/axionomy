@@ -10,15 +10,16 @@ pub use axionomy_studio_api::{
     ErrorResponse, ObjectiveList, PointId, PointIdError, RefAdvanceRequest, RefCreateRequest,
     RefDeleteQuery, RefFrame, RefFrames, RefFramesQuery, RefMoved, RefView,
 };
-pub use engine::{ExperimentName, PointName};
+pub use engine::{ExperimentName, PackageName, PointName};
 pub use openapi::OpenApiDocument;
 pub use refs::RefName;
 
 use axionomy_engine::Engine;
 use axionomy_studio_api::{
     Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
-    CandidatesQuery, CompareRequest, ComparisonView, ExperimentEvent, LoadedView, PackageList,
-    Refusal, RefusalBody, ResultsView, SamplePackages, StrategyEvent, StrategyRequest,
+    CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent, HistoriesView,
+    LoadedView, PackageList, Refusal, RefusalBody, ResultsView, SamplePackages, StrategyEvent,
+    StrategyRequest,
 };
 use axionomy_view::ViewDocument;
 use axum::{
@@ -31,7 +32,8 @@ use axum::{
 use openapi::Endpoint;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
+use tokio::sync::broadcast;
 use tower_http::{
     cors::CorsLayer,
     services::{ServeDir, ServeFile},
@@ -50,13 +52,25 @@ pub struct HealthResponse {
 pub struct StudioState {
     /// The engine whose store's packages, points and refs the API serves.
     engine: Engine,
+    /// Every change the engine makes, for each client following them.
+    changes: broadcast::Sender<ChangeView>,
 }
+
+/// How many changes a client following them may fall behind by before it
+/// is told to read everything again.
+const CHANGES_KEPT: usize = 1024;
 
 impl StudioState {
     /// A Studio server over `engine`, whose store holds the packages,
     /// points and refs it serves.
     pub fn new(engine: Engine) -> Self {
-        Self { engine }
+        let (changes, _) = broadcast::channel(CHANGES_KEPT);
+        let told = changes.clone();
+        engine.subscribe(Arc::new(move |change| {
+            // No client following changes is no one to tell.
+            let _ = told.send(ChangeView::from(change));
+        }));
+        Self { engine, changes }
     }
 }
 
@@ -105,6 +119,25 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         )
         .bytes_body("A package file: a store file, or a zip holding one")
         .fallible(),
+        Endpoint::new::<HistoriesView>(
+            "get",
+            "/api/packages/{name}/histories",
+            get(engine::histories),
+        )
+        .describe(
+            "listHistories",
+            "List a package's history tree: each history its refs are on and every branch grown from it",
+            "packages",
+        )
+        .path_parameters::<PackageName>()
+        .fallible(),
+        Endpoint::new::<ChangeView>("get", "/api/changes", get(engine::changes))
+            .describe(
+                "followChanges",
+                "Follow every change to the store as it happens: runs recorded, refs moved, definitions kept",
+                "packages",
+            )
+            .event_stream::<ChangeView>(),
         Endpoint::new::<ViewDocument>(
             "get",
             "/api/points/{point}/document",

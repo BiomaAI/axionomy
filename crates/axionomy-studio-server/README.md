@@ -27,6 +27,8 @@ decimal text.
 | --- | --- | --- |
 | `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it ships, each with `shipped_by`, and any made under its name since), experiments with their start, goal, arms, objectives, seed, budget, turns, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
 | `POST /api/packages` | the file's bytes, `application/octet-stream` | `LoadedView {packages, kept, replaced}`: the packages it held, the names the store kept as it gives them, and the versions it replaced; 400 for a file that is no package or one this engine cannot load |
+| `GET /api/packages/{name}/histories` | | `HistoriesView {segments}`: the package's history tree, each history its refs are on and every branch grown from it, parents first; each segment `{from, tip}`, the point it branched at (none for a history's first run) and its last point; 404 for a package the store lacks |
+| `GET /api/changes` | | server-sent `ChangeView`s, each event named `change`, as they are made: `run` with a new `segment`, `ref` with the `name` and the `point` it names now (none once deleted), and `definitions` when a package loaded or results were recorded; a client that falls behind is told `definitions`, to read everything again |
 | `GET /api/points/{point}/document` | | the point's history as a `ViewDocument`, drawn with its view |
 | `GET /api/points/{point}/ancestor` | `step` | `Ancestor {point}`: the point at that step of the history |
 | `GET /api/points/{point}/balances` | | `Balances {point, accounts}`: every account there, in path order, each `{account, balances}`, its basket of `[asset, quantity]` pairs, exactly, by the paths exchanges bind |

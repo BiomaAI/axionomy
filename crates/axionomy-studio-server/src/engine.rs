@@ -5,12 +5,12 @@
 //! the same one the browser Worker calls, where blocking is allowed.
 
 use crate::{ApiError, StudioState};
-use axionomy_engine::{Engine, ExperimentPath};
+use axionomy_engine::{Engine, ExperimentPath, PackagePath};
 use axionomy_search::GraphSearchProgress;
 use axionomy_studio_api::{
     Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
-    CandidatesQuery, CompareRequest, ComparisonView, ExperimentEvent, LoadedView, PackageList,
-    PointId, Refusal, ResultsView, StrategyEvent, StrategyRequest,
+    CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent, HistoriesView,
+    LoadedView, PackageList, PointId, Refusal, ResultsView, StrategyEvent, StrategyRequest,
 };
 use axionomy_view::ViewDocument;
 use axum::{
@@ -31,7 +31,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
 /// The longest a run goes between two reports of its progress.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
@@ -47,6 +47,40 @@ pub struct PointName {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 pub struct ExperimentName {
     pub experiment: ExperimentPath,
+}
+
+/// A package's name in a URL. A name such as `acme/maze` is one path
+/// segment, its `/` written `%2F`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+pub struct PackageName {
+    pub name: PackagePath,
+}
+
+pub(crate) async fn histories(
+    State(state): State<StudioState>,
+    Path(PackageName { name }): Path<PackageName>,
+) -> Result<Json<HistoriesView>, ApiError> {
+    blocking(&state.engine, move |engine| {
+        axionomy_studio_api::histories(engine, &name)
+    })
+    .await
+    .map(Json)
+}
+
+/// Every change to the store from now on, each an event named `change`. A
+/// client that falls behind is told [`ChangeView::Definitions`], to read
+/// everything again.
+pub(crate) async fn changes(
+    State(state): State<StudioState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let events = BroadcastStream::new(state.changes.subscribe()).map(|change| {
+        let change = change.unwrap_or(ChangeView::Definitions);
+        Ok(Event::default()
+            .event("change")
+            .json_data(&change)
+            .expect("a change always serializes"))
+    });
+    Sse::new(events).keep_alive(KeepAlive::default())
 }
 
 pub(crate) async fn packages(

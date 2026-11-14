@@ -2,7 +2,7 @@
 import init, { Engine } from "./generated/wasm/axionomy_studio_wasm";
 import type { StoreMessage, StoreRequest } from "./browserPackages";
 import { Followers } from "./following";
-import type { LoadedFrom, LoadedView, StoreKept } from "./packageEngine";
+import type { ChangeView, LoadedFrom, LoadedView, StoreKept } from "./packageEngine";
 
 type Command = { kind: "store"; id: number; request: StoreRequest };
 
@@ -36,7 +36,11 @@ const HANDLE_RETRY_MS = 100;
 let store: Promise<{ engine: Engine; opened: StoreKept; followers: Followers }> | undefined;
 
 function opened() {
-  store ??= openStore().then((kept) => ({ ...kept, followers: new Followers(kept.engine) })).catch((cause: unknown) => {
+  store ??= openStore().then((kept) => {
+    // Every change is told the page as it is made, even mid-run.
+    kept.engine.followChanges((change: string) => post({ kind: "store_change", change: JSON.parse(change) as ChangeView }));
+    return { ...kept, followers: new Followers(kept.engine) };
+  }).catch((cause: unknown) => {
     store = undefined;
     throw cause;
   });
@@ -112,6 +116,8 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       return read(engine.results(request.experiment));
     case "compare":
       return read(engine.compare(JSON.stringify(request.request)));
+    case "histories":
+      return read(engine.histories(request.name));
   }
 }
 

@@ -6,13 +6,13 @@
 //! and what that URL said of its response, so the Worker asks for it again
 //! only to learn whether it changed.
 
-use axionomy_engine::{Engine, EngineError, ExperimentPath, Loaded, PackagePath};
+use axionomy_engine::{Change, Engine, EngineError, ExperimentPath, Loaded, PackagePath};
 use axionomy_store::{Durability, RefPath, Store, StoreError};
-use axionomy_studio_api::{self as api, LoadedView, PointId, Refusal};
+use axionomy_studio_api::{self as api, ChangeView, LoadedView, PointId, Refusal};
 use js_sys::Function;
 use redb::{TableDefinition, TableError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::ops::ControlFlow;
+use std::{cell::RefCell, ops::ControlFlow, sync::Arc};
 use wasm_bindgen::prelude::*;
 use web_sys::FileSystemSyncAccessHandle;
 
@@ -38,6 +38,13 @@ pub struct Validators {
 pub struct Source {
     pub validators: Validators,
     pub packages: Vec<PackagePath>,
+}
+
+thread_local! {
+    /// The function the Worker is told each change with: the Worker runs
+    /// on one thread, so the engine's subscriber, which may hold nothing
+    /// but what every thread may share, finds it here.
+    static TOLD: RefCell<Option<Function>> = const { RefCell::new(None) };
 }
 
 /// The engine of Studio's browser Worker, over the Worker's store.
@@ -149,6 +156,31 @@ impl WorkerEngine {
         }
         .map_err(failed)?;
         Self::over(store).map_err(failed)
+    }
+
+    /// Calls `told` with each change to the store from now on, as the JSON
+    /// of a `ChangeView`, the moment it is made, even while a strategy or an
+    /// experiment that made it runs on. Called once; a second call replaces
+    /// the function told.
+    #[wasm_bindgen(js_name = followChanges)]
+    pub fn follow_changes(&self, told: Function) {
+        let first = TOLD.with(|current| current.replace(Some(told)).is_none());
+        if first {
+            self.engine.subscribe(Arc::new(|change: &Change| {
+                let change = serde_json::to_string(&ChangeView::from(change))
+                    .expect("a change always serializes");
+                TOLD.with(|told| {
+                    if let Some(told) = told.borrow().as_ref() {
+                        let _ = told.call1(&JsValue::NULL, &JsValue::from_str(&change));
+                    }
+                });
+            }));
+        }
+    }
+
+    /// The history tree of the package `name`: a `HistoriesView`.
+    pub fn histories(&self, name: &str) -> Result<String, JsValue> {
+        answer(path_of(name).and_then(|name| api::histories(&self.engine, &name)))
     }
 
     /// Whether the store stays across reloads.

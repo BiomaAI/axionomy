@@ -314,6 +314,7 @@ impl Engine {
             // other version's.
             self.scripts.forget();
         }
+        self.changes.tell(&crate::Change::Definitions);
         Ok(Loaded {
             manifests,
             kept,

@@ -443,3 +443,84 @@ async fn an_experiment_runs_its_arms_and_their_ends_compare() {
     let (status, _) = send(&router, request).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// The next event of a server-sent stream that is still open, its JSON data.
+async fn next_event(body: &mut Body) -> Value {
+    let mut buffered = String::new();
+    loop {
+        let frame = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame())
+            .await
+            .expect("an event within ten seconds")
+            .expect("the stream stays open")
+            .unwrap();
+        if let Ok(data) = frame.into_data() {
+            buffered.push_str(std::str::from_utf8(&data).unwrap());
+        }
+        if let Some(end) = buffered.find("\n\n") {
+            let block = &buffered[..end];
+            if let Some(data) = block.lines().find_map(|line| line.strip_prefix("data: ")) {
+                return serde_json::from_str(data).unwrap();
+            }
+            buffered.drain(..end + 2);
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_history_tree_grows_with_every_branch_and_each_change_streams_as_it_is_made() {
+    let router = studio();
+    let response = router
+        .clone()
+        .oneshot(Request::get("/api/changes").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut changes = response.into_body();
+
+    ok(load(&router, maze()).await);
+    assert_eq!(
+        next_event(&mut changes).await,
+        json!({ "kind": "definitions" })
+    );
+    let start = referred(&router, "maze/micro").await;
+    let before = ok(get(&router, "/api/packages/maze/histories").await);
+    let segments = before["segments"].as_array().unwrap();
+    assert!(
+        segments
+            .iter()
+            .any(|segment| point(&segment["tip"]).point().run == start.point().run),
+        "{before}"
+    );
+
+    let offered = ok(get(
+        &router,
+        &format!("/api/points/{start}/candidates?set=maze%2Fmoves"),
+    )
+    .await);
+    let first = offered["candidates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|candidate| candidate["proposal"]["assessment"]["status"] == "applicable")
+        .unwrap()["exchange"]
+        .clone();
+    let applied = ok(post(
+        &router,
+        &format!("/api/points/{start}/apply"),
+        json!({ "exchanges": [first] }),
+    )
+    .await);
+    let branch = json!({ "from": start.to_string(), "tip": applied["point"] });
+    assert_eq!(
+        next_event(&mut changes).await,
+        json!({ "kind": "run", "segment": branch })
+    );
+
+    let after = ok(get(&router, "/api/packages/maze/histories").await);
+    let grown = after["segments"].as_array().unwrap();
+    assert_eq!(grown.len(), segments.len() + 1);
+    assert!(grown.contains(&branch), "{after}");
+
+    let (status, _) = get(&router, "/api/packages/nowhere/histories").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

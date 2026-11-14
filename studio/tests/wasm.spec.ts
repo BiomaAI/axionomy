@@ -99,6 +99,39 @@ test("a follower waits in the Worker for its ref to move, asking nothing in the 
   expect(followed.idleFor).toBeGreaterThanOrEqual(1_000);
 });
 
+test("each change to the store reaches the page as it is made, a run's branches before the run ends", async ({ page }) => {
+  await page.goto(BLANK);
+  const heard = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    await packages.open();
+    const told: { kind: string; at: number }[] = [];
+    packages.onChange((change: { kind: string }) => told.push({ kind: change.kind, at: performance.now() }));
+    await packages.loadUrl("/packages/maze.zip");
+    const loaded = told.length;
+    const before = await packages.histories("maze");
+    const results = await packages.runExperiment("maze/micro", () => undefined).result;
+    const ended = performance.now();
+    const after = await packages.histories("maze");
+    packages.terminate();
+    const ran = told.slice(loaded);
+    return {
+      loaded: told.slice(0, loaded).map((change) => change.kind),
+      runs: ran.filter((change) => change.kind === "run").map((change) => change.at),
+      recorded: ran.filter((change) => change.kind === "definitions").length,
+      ended,
+      trials: results.arms.length,
+      grew: after.segments.length - before.segments.length,
+    };
+  }, "/src/browserPackages.ts");
+  expect(heard.loaded).toEqual(["definitions"]);
+  // Each trial's branch is told on its own, as it is recorded, before the run gives its results.
+  expect(heard.runs).toHaveLength(heard.trials);
+  for (const at of heard.runs) expect(at).toBeLessThanOrEqual(heard.ended);
+  expect(heard.recorded).toBeGreaterThan(0);
+  expect(heard.grew).toBe(heard.trials);
+});
+
 test("a second Worker keeps its store in memory while another holds the saved one", async ({ page }) => {
   await page.goto(BLANK);
   const opened = await page.evaluate(async (client) => {

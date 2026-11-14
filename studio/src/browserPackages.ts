@@ -5,10 +5,12 @@ import {
   type Balances,
   type Candidate,
   type Candidates,
+  type ChangeView,
   type CompareRequest,
   type ComparisonView,
   type Exchange,
   type FramesQuery,
+  type HistoriesView,
   type LoadedFrom,
   type PackageEngine,
   type PackageList,
@@ -52,13 +54,15 @@ export type StoreRequest =
   | { kind: "run_strategy"; point: PointId; request: StrategyRequest }
   | { kind: "run_experiment"; experiment: string }
   | { kind: "results"; experiment: string }
-  | { kind: "compare"; request: CompareRequest };
+  | { kind: "compare"; request: CompareRequest }
+  | { kind: "histories"; name: string };
 
 export type StoreMessage =
   | { kind: "store_reply"; id: number; ok: true; value: unknown }
   | { kind: "store_reply"; id: number; ok: false; status: number; body: unknown }
   | { kind: "store_progress"; id: number; progress: SearchProgress }
-  | { kind: "store_begun"; id: number };
+  | { kind: "store_begun"; id: number }
+  | { kind: "store_change"; change: ChangeView };
 
 type Waiting = {
   /** What the Worker was asked, to ask the next one should it be terminated. */
@@ -77,6 +81,7 @@ export class BrowserPackages implements PackageEngine {
   private waiting = new Map<number, Waiting>();
   /** Runs cancelled before the Worker began them, each stopped as it begins. */
   private stopping = new Set<number>();
+  private listeners = new Set<(change: ChangeView) => void>();
   private worker = this.spawn();
 
   /** Opens the store, if it is not open yet, and says where it is kept. */
@@ -182,6 +187,15 @@ export class BrowserPackages implements PackageEngine {
     return this.request({ kind: "compare", request }) as Promise<ComparisonView>;
   }
 
+  histories(name: string): Promise<HistoriesView> {
+    return this.request({ kind: "histories", name }) as Promise<HistoriesView>;
+  }
+
+  onChange(listener: (change: ChangeView) => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
   /** Stops the Worker for good, releasing the store. */
   terminate() {
     this.worker.terminate();
@@ -227,6 +241,8 @@ export class BrowserPackages implements PackageEngine {
     this.worker.terminate();
     this.stopping.clear();
     this.worker = this.spawn();
+    // What the terminated Worker committed last may not have been told.
+    this.tell({ kind: "definitions" });
     for (const [id, waiting] of this.waiting) {
       waiting.begun = false;
       this.worker.postMessage({ kind: "store", id, request: waiting.request });
@@ -239,6 +255,7 @@ export class BrowserPackages implements PackageEngine {
       // A Worker terminated is no longer heard: the next one answers.
       if (worker !== this.worker) return;
       const data = message.data;
+      if (data.kind === "store_change") return this.tell(data.change);
       if (data.kind === "store_begun") {
         if (this.stopping.has(data.id)) return this.restart();
         const begun = this.waiting.get(data.id);
@@ -275,6 +292,10 @@ export class BrowserPackages implements PackageEngine {
       }, { once: true });
       this.worker.postMessage({ kind: "store", id, request });
     });
+  }
+
+  private tell(change: ChangeView) {
+    for (const listener of this.listeners) listener(change);
   }
 
   private fail(error: Error) {

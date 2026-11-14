@@ -3,6 +3,7 @@
 mod cache;
 pub mod definitions;
 mod experiment;
+mod histories;
 mod package;
 mod refs;
 pub mod script;
@@ -14,6 +15,7 @@ pub use definitions::{
     ScriptCall, ScriptFunction, StrategyPath,
 };
 pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Trial};
+pub use histories::{Change, Segment, Subscriber};
 pub use package::{
     Contents, Loaded, Manifest, PackageError, PackagePath, Version, VersionError, package, zipped,
 };
@@ -154,6 +156,8 @@ pub struct Engine {
     scripts: Scripts,
     /// Told each time a ref moves, so a follower waiting on one wakes.
     moved: Arc<refs::Moves>,
+    /// Told of every run recorded, ref moved and definition kept.
+    changes: Arc<histories::Changes>,
 }
 
 impl Engine {
@@ -166,6 +170,7 @@ impl Engine {
             host: Arc::new(script::host(scripts.clone())),
             scripts,
             moved: Arc::default(),
+            changes: Arc::default(),
         })
     }
 
@@ -546,6 +551,7 @@ impl Engine {
                 txn.define(&name, Some(&bytes))
             })
             .wait()?;
+        self.changes.tell(&Change::Definitions);
         Ok(())
     }
 
@@ -587,6 +593,10 @@ impl Engine {
                 txn.pin(point, None)
             })
             .wait()?;
+        self.changes.tell(&Change::Run(Segment {
+            from: None,
+            tip: point,
+        }));
         self.reached.insert(
             point,
             Reached {
@@ -648,6 +658,10 @@ impl Engine {
                 txn.pin(last, Some(&last_tree))
             })
             .wait()?;
+        self.changes.tell(&Change::Run(Segment {
+            from: Some(at),
+            tip: last,
+        }));
         self.reached.insert(
             last,
             Reached {

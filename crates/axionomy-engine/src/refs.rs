@@ -248,6 +248,10 @@ impl Engine {
         match moved {
             Ok(None) => {
                 self.moved.tell();
+                self.changes.tell(&crate::Change::Ref {
+                    name: name.clone(),
+                    point: to,
+                });
                 Ok(())
             }
             Ok(Some(Unmoved::Moved(current))) => Err(EngineError::Moved {

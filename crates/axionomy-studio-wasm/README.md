@@ -24,8 +24,10 @@ reimplement any economic semantics.
   `axionomy-studio-api` function and giving the same JSON: `packages`,
   `draw`, `ancestor`, `balances`, `candidates`, `assess`, `apply`,
   `runStrategy` and `runExperiment` (calling back with their progress),
-  `results`, `compare`, `createRef`, `readRef`, `advanceRef`, `deleteRef`
-  and `frames`. A request is the JSON of the server's body or query, read as
+  `results`, `compare`, `histories`, `createRef`, `readRef`, `advanceRef`,
+  `deleteRef` and `frames`. `followChanges` calls back with every change to
+  the store as it is made, even while a strategy or an experiment that made
+  it runs on, so the page's history tree grows as the run does. A request is the JSON of the server's body or query, read as
   its extractors read it; a point is a `PointId` and a path its text. The
   engine's wait blocks a thread, which a Worker has only one of, so
   `frames` answers at once; `moves` counts the moves of the engine's refs,

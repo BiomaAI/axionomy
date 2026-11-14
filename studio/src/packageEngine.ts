@@ -33,6 +33,9 @@ export type RefFrames = Schemas["RefFrames"];
 export type RefMoved = Schemas["RefMoved"];
 export type SearchProgress = Schemas["GraphSearchProgress"];
 export type SamplePackages = Schemas["SamplePackages"];
+export type HistoriesView = Schemas["HistoriesView"];
+export type SegmentView = Schemas["SegmentView"];
+export type ChangeView = Schemas["ChangeView"];
 export type FramesQuery = operations["listRefFrames"]["parameters"]["query"];
 
 /** An operation refused, with the status the server answers it with. */
@@ -112,6 +115,15 @@ export interface PackageEngine {
   /** The results an experiment last recorded, or undefined before it has run. */
   results(experiment: string): Promise<ResultsView | undefined>;
   compare(request: CompareRequest): Promise<ComparisonView>;
+  /** The package's history tree: each history its refs are on and every branch grown from it. */
+  histories(name: string): Promise<HistoriesView>;
+  /**
+   * Tells `listener` of every change to the store from now on, as it is
+   * made, even while the run that made it goes on. A listener that may have
+   * missed some is told `definitions`, to read everything again. Gives the
+   * function that stops it.
+   */
+  onChange(listener: (change: ChangeView) => void): () => void;
 }
 
 /** The sample packages a static site serves beside Studio, each at `packages/<name>.zip`. */
@@ -187,6 +199,33 @@ function running<E extends { kind: string }, T>(path: string, body: unknown, onP
   return { result, cancel: () => abort.abort() };
 }
 
+/**
+ * The native server's changes, one stream for every listener, open while
+ * any listens. A stream that reconnects may have missed changes, so its
+ * listeners are told to read everything again.
+ */
+const nativeChanges = (() => {
+  const listeners = new Set<(change: ChangeView) => void>();
+  let source: EventSource | undefined;
+  const tell = (change: ChangeView) => { for (const listener of listeners) listener(change); };
+  return (listener: (change: ChangeView) => void) => {
+    listeners.add(listener);
+    if (!source) {
+      let opened = false;
+      source = new EventSource(new URL("/api/changes", window.location.origin));
+      source.addEventListener("change", (event) => tell(JSON.parse((event as MessageEvent<string>).data) as ChangeView));
+      source.addEventListener("open", () => {
+        if (opened) tell({ kind: "definitions" });
+        opened = true;
+      });
+    }
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) { source?.close(); source = undefined; }
+    };
+  };
+})();
+
 /** The native Studio server's engine, over HTTP. */
 export const nativePackages: PackageEngine = {
   kind: "native",
@@ -258,4 +297,8 @@ export const nativePackages: PackageEngine = {
   async compare(request) {
     return answered(await api.POST("/api/compare", { body: request }));
   },
+  async histories(name) {
+    return answered(await api.GET("/api/packages/{name}/histories", { params: { path: { name } } }));
+  },
+  onChange: nativeChanges,
 };

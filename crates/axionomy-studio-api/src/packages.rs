@@ -4,7 +4,7 @@
 use crate::{Natural, PackageVersion, PointId, RefView, Refusal};
 use axionomy::{PathKind, path::Path};
 use axionomy_engine::{
-    CandidatesPath, Engine, EngineError, Experiment, ExperimentPath, GoalPath, Loaded,
+    CandidatesPath, Engine, EngineError, Experiment, ExperimentPath, GoalPath, Loaded, Manifest,
     ObjectivePath, PackagePath, StrategyPath,
 };
 use axionomy_search::pareto::ObjectiveDirection;
@@ -139,26 +139,33 @@ impl From<&Loaded> for LoadedView {
 }
 
 /// Every package the store holds.
+/// The refs of `manifest`'s package that name points: those it ships and
+/// those named under its name.
+pub(crate) fn refs_of(engine: &Engine, manifest: &Manifest) -> Result<Vec<RefView>, Refusal> {
+    let mut named: BTreeSet<RefPath> = manifest.refs.iter().cloned().collect();
+    named.extend(engine.named_under(&manifest.name)?.refs);
+    let mut refs = Vec::with_capacity(named.len());
+    for name in named {
+        match engine.referred(&name) {
+            Ok(point) => refs.push(RefView {
+                shipped_by: engine.shipped_by(&name)?,
+                name,
+                point: PointId::from(point),
+            }),
+            // A ref naming a run or a group, or nothing, names no point.
+            Err(EngineError::UnknownRef(_)) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(refs)
+}
+
 pub fn packages(engine: &Engine) -> Result<PackageList, Refusal> {
     let mut manifests = engine.manifests()?;
     manifests.sort_by(|left, right| left.name.cmp(&right.name));
     let mut packages = Vec::with_capacity(manifests.len());
     for manifest in manifests {
-        let mut named: BTreeSet<RefPath> = manifest.refs.iter().cloned().collect();
-        named.extend(engine.named_under(&manifest.name)?.refs);
-        let mut refs = Vec::with_capacity(named.len());
-        for name in named {
-            match engine.referred(&name) {
-                Ok(point) => refs.push(RefView {
-                    shipped_by: engine.shipped_by(&name)?,
-                    name,
-                    point: PointId::from(point),
-                }),
-                // A ref naming a run or a group, or nothing, names no point.
-                Err(EngineError::UnknownRef(_)) => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
+        let refs = refs_of(engine, &manifest)?;
         let experiments = carried(&manifest.definitions)
             .into_iter()
             .map(|path: ExperimentPath| {

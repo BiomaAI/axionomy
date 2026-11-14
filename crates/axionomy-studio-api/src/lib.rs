@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod experiments;
+mod histories;
 mod ids;
 mod packages;
 mod points;
@@ -11,6 +12,7 @@ pub use experiments::{
     ArmResultView, CompareRequest, ComparisonView, EndedView, ExperimentEvent, PointValues,
     ResultsView, TrialView, check_experiment, compare, results, run_experiment,
 };
+pub use histories::{ChangeView, HistoriesView, SegmentView, histories};
 pub use ids::{Natural, ObjectiveList, PackageVersion, PointId, PointIdError};
 pub use packages::{
     ArmView, ExperimentView, KeptView, LoadedView, ObjectiveView, PackageList, PackageView,
