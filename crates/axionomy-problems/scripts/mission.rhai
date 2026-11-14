@@ -71,13 +71,14 @@ fn draws(state) {
     responses(state).map(|response| [response, 1])
 }
 
-// Nature's turn: the scenario, drawn from the prior with the run's tickets
-// while unresolved, and otherwise the response the team awaits, if any.
+// Nature's turn: the scenario while unresolved, drawn from the prior by the
+// event `scenario`, which a run meets once, as it begins; and otherwise the
+// response the team awaits, if any.
 fn nature(state, random) {
     if state.balance("nature", "unresolved") > 0 {
         let weighted = scenarios(state);
         if weighted.is_empty() { return (); }
-        return weighted[random.sample(weighted.map(|outcome| outcome[1]))][0];
+        return weighted[random.sample("scenario", weighted.map(|outcome| outcome[1]))][0];
     }
     let found = responses(state);
     if found.is_empty() { () } else { found[0] }

@@ -566,8 +566,9 @@ the scenario its study plays, and the Showcase and Stress incidents, an
 ontology of their own whose goal and policies are named under
 `rescue/incident`) reproduces every policy's document, and a Monte Carlo
 experiment of 128 trials plays each sampled scenario of its study's front,
-which needed scripts to sample weighted outcomes with the tickets
-`axionomy_search`'s sampler draws. Scheduling's (best-first search over the
+which needed scripts to sample weighted outcomes as `axionomy_search`
+samples them, now by the event `scenario` each trial draws once.
+Scheduling's (best-first search over the
 makespan, the branch optimizer as branch-and-bound under the clock, and
 Pareto picks for either job finishing first, over a script dispatching the
 executed shop's events in the study's order; each instance's horizon too
@@ -615,9 +616,10 @@ being in the economy and a steward recycling after the last job completes,
 and the seasons played turn by turn, events, services ending, the season's
 end, then each worker's decision in the clock's rotation, then the tick)
 reproduces every document, and every field's match on four more seeds; it
-needed scripts to draw a ticket keyed by what it is for,
-`random.keyed(key, bound)`, as the samples' common random numbers do, and a
-plan to draw chance from the run's seed when its function takes a random. Mission's (Micro's receding-horizon planner as a game in which the
+needed scripts to draw a ticket keyed by what it is for, as the samples'
+common random numbers do, which they now draw by named event,
+`random.next("attempt/<job>/<n>", bound)`, and a plan to draw chance from
+the run's seed when its function takes a random. Mission's (Micro's receding-horizon planner as a game in which the
 Scout chooses every public action by information-set tree search over its
 own view, and the fixed policies' Monte Carlo front over Nature's prior; the
 Showcase and Stress expeditions, an ontology of their own under

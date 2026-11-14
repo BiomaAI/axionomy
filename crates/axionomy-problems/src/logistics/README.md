@@ -44,6 +44,12 @@ route-specific fuel and time; breakdown consumes time through a repair
 exchange and returns the route to Nature for another resolution. Loading,
 delivery, refueling, travel, repair, and order completion are all rates.
 
+Nature draws each resolution by its event, `weather/<route>/<elapsed time>`:
+the weather of that leg, met at the time the vehicle has elapsed when the
+leg begins or, after a repair, which takes time, when it resumes. A run
+seeded alike that meets the same leg at the same time meets the same weather,
+whichever policy brought it there.
+
 ## Required results
 
 - A reliable-policy trajectory delivers all four orders and exceeds forty

@@ -30,11 +30,13 @@ units into one usable material unit and one explicit loss. A joint handoff
 moves a pending claim and two credits atomically, spends both workers' current
 decision permissions, and can occur only once per contract.
 
-All policy fields use the same scenario seed. Nature tickets are keyed by job
-and attempt, independently of worker, mode, or proposal ordering. Modes apply
-their encoded failure weights to that common latent ticket. Rotating the first
-worker each tick reduces fixed-seat access advantages. Role/policy permutations
-and broader held-out evaluation remain future benchmark work.
+All policy fields use the same scenario seed. Nature draws each attempt's
+ticket by its event, `attempt/<job>/<n>`, the nth attempt at the job, in
+Micro and the seasons alike, independently of worker, mode, or proposal
+ordering. Modes apply their encoded failure weights to that common latent
+ticket. Rotating the first worker each tick reduces fixed-seat access
+advantages. Role/policy permutations and broader held-out evaluation remain
+future benchmark work.
 
 The Showcase match produces at least sixty replay-verified exchanges. At every
 snapshot, the presentation ontology independently derives six standings:

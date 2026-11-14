@@ -198,15 +198,6 @@ impl Random {
         ((u128::from(value) * u128::from(bound)) >> 64) as u64
     }
 
-    /// The number below `bound` keyed by `key`: value 1 of the SplitMix64
-    /// sequence that starts at the seed XOR `key`, modulo `bound`, the
-    /// ticket the samples draw for what they sample (a job's attempt). The
-    /// same key gets the same number whatever else is drawn, so runs that
-    /// differ elsewhere meet the same chances: common random numbers.
-    fn keyed(&self, key: u64, bound: u64) -> u64 {
-        splitmix(self.seed ^ key, 1) % bound
-    }
-
     /// The tickets of the event `event` in this generator's world.
     fn event(&self, event: &str) -> Result<EventTickets, Failure> {
         let event: EventPath = event.parse().map_err(|error| {
@@ -328,16 +319,6 @@ pub(crate) fn host(scripts: Scripts) -> rhai::Engine {
             "next",
             move |random: &mut Random, event: &str, bound: i64| {
                 number(random.below_for(event, bound_of(bound)?)?)
-            },
-        )
-        .register_fn(
-            "keyed",
-            |random: &mut Random, key: i64, bound: i64| -> Result<i64, Failure> {
-                let key = u64::try_from(key).map_err(|_| {
-                    Failure::from(format!("{key} is not a key: keys are not negative"))
-                })?;
-                i64::try_from(random.keyed(key, bound_of(bound)?))
-                    .map_err(|_| "a number out of range".into())
             },
         )
         .register_fn("sample", |random: &mut Random, weights: Array| {

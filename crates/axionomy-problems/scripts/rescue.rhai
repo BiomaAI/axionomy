@@ -30,7 +30,8 @@ fn first_applicable(state, prefix) {
 }
 
 // Nature's draw from its prior: every scenario it encodes, in rate order,
-// weighted by what Nature holds of it, chosen with the run's tickets.
+// weighted by what Nature holds of it, chosen by the event `scenario`,
+// which a run meets once, as it begins.
 fn instantiation(state, random) {
     let scenarios = [];
     let weights = [];
@@ -44,7 +45,7 @@ fn instantiation(state, random) {
         }
     }
     if scenarios.is_empty() { return (); }
-    scenarios[random.sample(weights)]
+    scenarios[random.sample("scenario", weights)]
 }
 
 fn holds(seen, asset) { seen.balance("agent", asset) > 0 }

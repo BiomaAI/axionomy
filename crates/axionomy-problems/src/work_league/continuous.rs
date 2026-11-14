@@ -1015,7 +1015,6 @@ fn sampled_result(world: &World, seed: u64, id: JobId, mode: WorkMode) -> Outcom
     // Common random numbers: the same job and attempt receive the same latent
     // ticket across lineups, independently of actor, mode, and action ordering.
     let attempt = job_balance(world, id, Asset::Attempts);
-    let ticket = axionomy_search::sampling::splitmix(seed ^ (u64::from(id.0) << 32) ^ attempt, 1);
     let failure = world
         .balance(
             &AccountId::Nature,
@@ -1028,7 +1027,7 @@ fn sampled_result(world: &World, seed: u64, id: JobId, mode: WorkMode) -> Outcom
             &Asset::OutcomeWeight(id, mode, Outcome::Success),
         )
         .to_u64();
-    if ticket % (failure + success) < failure {
+    if attempt_fails(seed, id, attempt, failure, failure + success) {
         Outcome::Failure
     } else {
         Outcome::Success

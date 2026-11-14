@@ -3,6 +3,8 @@
 // Every leg it departs on waits for Nature to draw its weather from the
 // weights Nature holds, clear, delayed or a breakdown; a clear or delayed
 // leg then arrives, and a breakdown is repaired before Nature draws again.
+// Each draw is the event of its leg at the vehicle's elapsed time, so any
+// run that travels that leg then meets the same weather.
 // The fixed policies drive one route; the planner searches its choices with
 // Monte Carlo tree search, Nature's draws as chance in its tree.
 
@@ -73,12 +75,16 @@ fn weather(state) {
     weighted
 }
 
-// One of `weighted` outcomes, drawn with the run's tickets.
-fn drawn(weighted, random) {
+// The weather of the leg under way, one of `weighted` outcomes: the event
+// `weather/<leg>/<elapsed time>`, the leg's weather met at that time. A
+// leg's weather is drawn as it begins and again after each repair, which
+// takes time, so each draw names an occurrence of its own.
+fn drawn(state, weighted, random) {
     if weighted.is_empty() { return (); }
     let weights = [];
     for outcome in weighted { weights.push(outcome[1]); }
-    weighted[random.sample(weights)][0]
+    let event = `weather/${active_route(state)}/${state.balance("vehicle", "elapsed-time")}`;
+    weighted[random.sample(event, weights)][0]
 }
 
 // What `policy`, `direct` or `reliable`, does once Nature has drawn: repair
@@ -124,7 +130,7 @@ fn decide(state, policy) {
 // policy's move otherwise.
 fn turn(state, random, policy) {
     if active_route(state) != () && state.balance("nature", "weather-ready") > 0 {
-        return drawn(weather(state), random);
+        return drawn(state, weather(state), random);
     }
     decide(state, policy)
 }
@@ -189,7 +195,7 @@ fn moves(state) {
 // has only one. The planner searches only real choices.
 fn nature(state, random) {
     let weighted = weather(state);
-    if !weighted.is_empty() { return drawn(weighted, random); }
+    if !weighted.is_empty() { return drawn(state, weighted, random); }
     let forced = moves(state);
     if forced.len() == 1 { return forced[0]; }
     ()

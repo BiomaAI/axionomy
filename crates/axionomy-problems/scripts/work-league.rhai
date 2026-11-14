@@ -5,14 +5,15 @@
 // Micro is the compact serial fixture: each worker in turn claims the open
 // job its policy prefers and works it until it succeeds, repairing after
 // each failure and retrying safely, and a steward then recycles a unit of
-// its waste. Nature's outcome for each attempt is the ticket keyed by the
-// job, the worker, the mode and the attempt, a counter the economy does not
-// hold, so `serial` plans the match whole.
+// its waste. Nature's outcome for each attempt is drawn by the event
+// `attempt/<job>/<n>`, the nth attempt at the job, whoever makes it and in
+// whatever mode; the count of attempts is one the economy does not hold, so
+// `serial` plans the match whole.
 //
 // Showcase and Stress are seasons on a shared clock, played turn by turn by
 // `season`: the events that are due, contract by contract (an expiry,
-// Nature settling an attempt from the ticket keyed by the job and its
-// attempt, a claim whose lease lapsed), then services ending, then the
+// Nature settling an attempt by the event of the job and its attempt, a
+// claim whose lease lapsed), then services ending, then the
 // season's end once it may come; otherwise each worker with a decision left
 // decides, the first one rotating with the clock, and then the clock ticks.
 
@@ -155,11 +156,11 @@ fn chosen_job(open, policy) {
     best
 }
 
-// Nature's outcome for `worker`'s `attempt` at a job in `mode`.
-fn serial_outcome(random, worker, spec, mode, attempt) {
-    let key = (spec.id << 17) ^ (workers().index_of(worker) << 9)
-        ^ (modes().index_of(mode) << 5) ^ attempt;
-    if random.keyed(key, 10) < failure_weight(spec.risk, mode) { "failure" } else { "success" }
+// Nature's outcome for the `attempt`th attempt at a job in `mode`: a number
+// below ten the attempt's event draws, failing below the chances in ten.
+fn serial_outcome(random, spec, mode, attempt) {
+    let drawn = random.next(`attempt/${spec.id}/${attempt}`, 10);
+    if drawn < failure_weight(spec.risk, mode) { "failure" } else { "success" }
 }
 
 // `worker`'s walk from `from` to `to`: one move, or none when there.
@@ -206,7 +207,7 @@ fn serial(state, random) {
             attempt += 1;
             plan.push(once(`begin/${worker}/${id}/${mode}`, #{ agent: agent, job: job }));
             waste[worker] += work_cost(spec, mode).waste;
-            let outcome = serial_outcome(random, worker, spec, mode, attempt);
+            let outcome = serial_outcome(random, spec, mode, attempt);
             plan.push(once(`resolve/${worker}/${id}/${mode}/${outcome}`, #{ agent: agent, nature: "nature" }));
             plan.push(once(`finish/${worker}/${id}/${mode}/${outcome}`, #{ agent: agent, job: job }));
             if outcome == "success" { break; }
@@ -303,12 +304,14 @@ fn service(state, who, facility) {
     if state.applicable(begin) { begin } else { () }
 }
 
-// Nature settling the `attempt`th attempt at job `id` in `mode`: the
-// ticket keyed by the job and the attempt, against Nature's weights.
+// Nature settling the `attempt`th attempt at job `id` in `mode`: a number
+// the attempt's event draws below Nature's weights' total, failing below the
+// weight of failure. Any lineup meets the same number at the same attempt.
 fn settled(state, random, id, mode, attempt) {
     let failure = state.balance("nature", `outcome-weight/${id}/${mode}/failure`).to_int();
     let success = state.balance("nature", `outcome-weight/${id}/${mode}/success`).to_int();
-    if random.keyed((id << 32) ^ attempt, failure + success) < failure { "failure" } else { "success" }
+    let drawn = random.next(`attempt/${id}/${attempt}`, failure + success);
+    if drawn < failure { "failure" } else { "success" }
 }
 
 // The event due for job `id`, if any: its expiry once its deadline has

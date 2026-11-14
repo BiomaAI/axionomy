@@ -133,8 +133,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         Some(path!("rescue/micro/scenario")),
         1,
     )?;
-    // Each trial draws its scenario from the prior with the ticket the
-    // Rust Monte Carlo draws for the same sample.
+    // Each trial draws its scenario from the prior by the event `scenario`
+    // with its seed, as the Rust Monte Carlo draws it for the same sample.
     micro.experiment(engine, "rescue/micro/monte-carlo", None, SAMPLES)?;
 
     for (instance, stress) in [("showcase", false), ("stress", true)] {

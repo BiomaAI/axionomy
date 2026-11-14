@@ -600,7 +600,7 @@ fn bridge_outcomes(size: Size) -> Vec<Outcome> {
 fn rescue_outcomes(size: Size) -> Vec<Outcome> {
     use rescue::Policy;
     if size == Size::Micro {
-        // The scenario Nature draws first: the survivor is south.
+        // The scenario Micro plays: the survivor south, the sensor's seed 1.
         let model = rescue::uniform_uncertain();
         let sample = rescue::instantiate(&model, rescue::Location::South, 1).unwrap();
         return [
@@ -1612,7 +1612,7 @@ fn logistics(engine: &Engine, instance: &str) {
 /// Micro plans a single decision. On the economy with all four orders
 /// waiting, which its Monte Carlo samples, the package's policies play the
 /// Rust ones, and its planner the Rust receding-horizon run, which replans
-/// thirteen times there, around three breakdowns, with this seed.
+/// thirteen times there, around seven breakdowns, with this seed.
 fn logistics_beyond_micro(engine: &Engine) {
     use axionomy_problems::logistics::{self, Policy};
     const SEED: u64 = 2;
@@ -1664,7 +1664,7 @@ fn logistics_beyond_micro(engine: &Engine) {
         .iter()
         .filter(|exchange| exchange.rate().as_str().starts_with("repair/"))
         .count();
-    assert_eq!((planned.decisions.len(), repairs), (13, 3));
+    assert_eq!((planned.decisions.len(), repairs), (13, 7));
     assert_eq!(ran("mcts"), trace, "logistics mcts");
 }
 
@@ -1870,14 +1870,17 @@ fn work_league(engine: &Engine, instance: &str) {
     work_league_on_more_seeds(engine, instance);
 }
 
-/// With the seeds below four, which bring more failed attempts,
-/// maintenance, voluntary releases and handoffs, each arm of the
-/// instance's experiment runs the Rust league's match.
+/// With the seeds one to four, each arm of the instance's experiment runs
+/// the Rust league's match. Between them the seeds bring failed attempts,
+/// and in the seasons maintenance, voluntary releases and handoffs too.
 fn work_league_on_more_seeds(engine: &Engine, instance: &str) {
+    use work_league::{Outcome, RateId};
     let profile = work_league_profile(Size::of(instance));
     let experiment = engine
         .experiment(&format!("work-league/{instance}").parse().unwrap())
         .unwrap();
+    // How many of the Rust matches' exchanges were each of those.
+    let mut met = [0; 4];
     for arm in &experiment.arms {
         let (_, lineup) = work_league_fields()
             .into_iter()
@@ -1888,7 +1891,7 @@ fn work_league_on_more_seeds(engine: &Engine, instance: &str) {
             .referred(arm.start.as_ref().unwrap_or(&experiment.start))
             .unwrap();
         let strategy = engine.strategy(&arm.strategy).unwrap();
-        for seed in 0..4 {
+        for seed in 1..=4 {
             let effort = Effort {
                 seed,
                 ..experiment.effort
@@ -1899,6 +1902,20 @@ fn work_league_on_more_seeds(engine: &Engine, instance: &str) {
                 })
                 .unwrap();
             let rust = work_league::run(&league, seed).unwrap();
+            for exchange in rust.trace().exchanges() {
+                match exchange.rate() {
+                    RateId::Finish {
+                        outcome: Outcome::Failure,
+                        ..
+                    } => met[0] += 1,
+                    RateId::BeginService {
+                        maintenance: true, ..
+                    } => met[1] += 1,
+                    RateId::ReleaseClaim { expired: false, .. } => met[2] += 1,
+                    RateId::Handoff { .. } => met[3] += 1,
+                    _ => {}
+                }
+            }
             let trace: Vec<paths::Exchange> =
                 rust.trace().exchanges().iter().map(written).collect();
             assert_eq!(
@@ -1909,6 +1926,12 @@ fn work_league_on_more_seeds(engine: &Engine, instance: &str) {
             );
         }
     }
+    // Micro's serial match only ever fails and retries.
+    let seasons = instance != "micro";
+    assert!(
+        met[0] > 0 && met[1..].iter().all(|met| (*met > 0) == seasons),
+        "work-league {instance}: failures, maintenance, voluntary releases, handoffs {met:?}"
+    );
 }
 
 /// Every sample, its package builder and its check.

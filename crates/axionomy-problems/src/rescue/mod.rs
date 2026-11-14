@@ -15,8 +15,8 @@ use axionomy_search::{
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     sampling::{
-        SeededSampler, WeightedExchange, choose_by_ticket, sample, sample_seed, systematic_ticket,
-        total_weight,
+        EventTickets, SamplingError, WeightedExchange, choose_by_ticket, sample, sample_seed,
+        systematic_ticket, total_weight,
     },
 };
 
@@ -603,6 +603,15 @@ pub fn evaluate_scenarios(
     comparison(estimates, samples)
 }
 
+/// The scenario of `support`, Nature's prior, that the world seeded `seed`
+/// draws: the event `scenario`, drawn once, as a run begins.
+fn drawn_scenario(
+    support: &[WeightedExchange<Action>],
+    seed: u64,
+) -> Result<&Action, SamplingError> {
+    sample(support, &mut EventTickets::new(seed, &path!("scenario")))
+}
+
 /// Estimates both policies from reproducible random draws over Nature's prior.
 pub fn monte_carlo(
     model: &World,
@@ -615,8 +624,8 @@ pub fn monte_carlo(
         [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
         MonteCarloConfig::new(samples),
         |policy, sample_index| {
-            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
-            let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
+            let sampled = drawn_scenario(&weighted_scenarios, sample_seed(seed, sample_index))
+                .map_err(|_| ())?;
             episode(model, sampled, policy, sample_index, episodes)
                 .map(|rollout| rollout.succeeded())
                 .ok_or(())
@@ -642,8 +651,8 @@ pub fn policy_front(
         [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
         MonteCarloConfig::new(samples),
         |policy, sample_index| {
-            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
-            let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
+            let sampled = drawn_scenario(&weighted_scenarios, sample_seed(seed, sample_index))
+                .map_err(|_| ())?;
             let rollout = episode(model, sampled, policy, sample_index, episodes).ok_or(())?;
             Ok::<_, ()>(vec![
                 f64::from(rollout.succeeded()),

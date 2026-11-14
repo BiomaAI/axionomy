@@ -151,8 +151,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &objectives,
     )?;
     // The fixed policies' front, as the Rust Monte Carlo samples it: each
-    // trial draws its scenario from the prior with the ticket that Monte Carlo
-    // draws for the same sample.
+    // trial draws its scenario from the prior by the event `scenario` with
+    // its seed, as that Monte Carlo draws it for the same sample.
     experiment(
         engine,
         "mission/micro/monte-carlo",

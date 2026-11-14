@@ -14,7 +14,7 @@ use axionomy_search::{
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
-    sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
+    sampling::{EventPath, EventTickets, SamplingError, WeightedExchange, sample},
     session::{Continue, WorkBudget},
     tree::{TreeSearchError, TreeStatus},
 };
@@ -122,6 +122,15 @@ pub enum RateId {
     Repair(Route),
     Deliver(OrderId),
     Refuel,
+}
+
+/// A chance event a run meets, which names the draw of its outcome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+enum Event {
+    /// The weather of a leg, met at the elapsed time the vehicle has when
+    /// Nature draws it: once as the leg begins and again after each repair,
+    /// which takes time, so every draw names an occurrence of its own.
+    Weather(Route, u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -431,19 +440,17 @@ pub fn candidates(world: &World) -> Vec<Action> {
     world.applicable(rates.into_iter().map(action))
 }
 
-/// Runs a policy on `world`, which is left where the rollout ended.
-pub fn run_policy(
-    world: &mut impl Apply<Ontology>,
-    policy: Policy,
-    exploration_seed: u64,
-) -> MissionRollout {
-    let mut sampler = SeededSampler::new(exploration_seed);
+/// Runs a policy on `world`, which is left where the rollout ended, in the
+/// world seeded `seed`: the weather of each leg is drawn by its event.
+pub fn run_policy(world: &mut impl Apply<Ontology>, policy: Policy, seed: u64) -> MissionRollout {
     let goal = goal();
     let result = run_to_goal(
         world,
         &goal,
         RolloutConfig::new(ROLLOUT_HORIZON).with_retention(TraceRetention::Trace),
-        |world, _| match policy_action(world, policy, &mut sampler) {
+        |world, _| match policy_action(world, policy, |outcomes| {
+            weather(world, seed, outcomes).ok()
+        }) {
             Some(exchange) => RolloutDecision::Propose(exchange),
             None => RolloutDecision::Stop(RolloutStop::NoProposal),
         },
@@ -464,7 +471,7 @@ pub fn run_policy(
 }
 
 /// Sample `index` of `policy` from the model, stepped where `episodes` keeps
-/// it; the sample index is its exploration seed.
+/// it; the sample index seeds its world.
 fn episode(
     model: &World,
     policy: &Policy,
@@ -649,9 +656,12 @@ pub fn plan_action_with_progress(
         },
         |state| vec![planning_utility(state)],
         |state, actions, random| {
-            policy_action(state, Policy::Reliable, random)
-                .filter(|preferred| actions.contains(preferred))
-                .or_else(|| actions.first().cloned())
+            // A simulation's weather is the search's own, drawn in sequence.
+            policy_action(state, Policy::Reliable, |outcomes| {
+                sample(outcomes, random).ok().cloned()
+            })
+            .filter(|preferred| actions.contains(preferred))
+            .or_else(|| actions.first().cloned())
         },
     )?;
     while session.status() == TreeStatus::Running {
@@ -664,8 +674,9 @@ pub fn plan_action_with_progress(
 }
 
 /// Executes a receding-horizon planner through delivery or an explicit failure.
-/// Search consumes a separate random stream from actual Nature events, so a
-/// larger planning budget cannot itself change the realized weather sequence.
+/// Nature draws each leg's weather by its event in the world seeded
+/// `environment_seed`, and search draws from a stream of its own, so a larger
+/// planning budget cannot itself change the realized weather.
 pub fn run_planned_with_progress(
     initial: &World,
     iterations: usize,
@@ -677,7 +688,6 @@ pub fn run_planned_with_progress(
     let mut world = initial.clone();
     let mut trace = Trace::new();
     let mut decisions = Vec::new();
-    let mut nature = SeededSampler::new(environment_seed);
     let stop = loop {
         if world.matches(&goal()) {
             break PlanningStop::DeliveredAllOrders;
@@ -687,7 +697,7 @@ pub fn run_planned_with_progress(
         }
         let outcomes = planning_outcomes(&world);
         let action = if !outcomes.is_empty() {
-            sample(&outcomes, &mut nature)?.clone()
+            weather(&world, environment_seed, &outcomes)?
         } else {
             let actions = planning_candidates(&world);
             if actions.is_empty() {
@@ -830,14 +840,19 @@ fn risk_score(summary: &ScalarSummary, criterion: RiskCriterion) -> f64 {
     }
 }
 
-fn policy_action(world: &World, policy: Policy, sampler: &mut impl TicketSource) -> Option<Action> {
+/// What `policy` does next, Nature's weather drawn by `weather` from the
+/// outcomes it weighs while the weather is ready.
+fn policy_action(
+    world: &World,
+    policy: Policy,
+    weather: impl FnOnce(&[WeightedExchange<Action>]) -> Option<Action>,
+) -> Option<Action> {
     if let Some(route) = active_route(world) {
         if !world
             .balance(&AccountId::Nature, &Asset::WeatherReady)
             .is_zero()
         {
-            let outcomes = nature_outcomes(world, route);
-            return sample(&outcomes, sampler).ok().cloned();
+            return weather(&nature_outcomes(world, route));
         }
         if !world
             .balance(
@@ -895,6 +910,22 @@ fn policy_action(world: &World, policy: Policy, sampler: &mut impl TicketSource)
             Route::SafeBackSecond
         }))),
     }
+}
+
+/// The weather of the leg under way in the world seeded `seed`, one of
+/// `outcomes`: drawn by the event of that leg at the vehicle's elapsed time,
+/// so any run meeting that leg then meets the same weather.
+fn weather(
+    world: &World,
+    seed: u64,
+    outcomes: &[WeightedExchange<Action>],
+) -> Result<Action, SamplingError> {
+    let route = active_route(world).ok_or(SamplingError::EmptySupport)?;
+    let elapsed = world
+        .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
+        .to_u64();
+    let event: EventPath = path::write(&Event::Weather(route, elapsed));
+    sample(outcomes, &mut EventTickets::new(seed, &event)).cloned()
 }
 
 fn nature_outcomes(world: &World, route: Route) -> Vec<WeightedExchange<Action>> {

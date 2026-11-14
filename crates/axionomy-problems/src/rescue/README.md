@@ -53,7 +53,8 @@ match.
   a north-only policy succeeds four.
 - Exact scenario evaluation selects observe-then-follow.
 - A separate seeded Monte Carlo entry point draws randomly from the same
-  encoded weighted prior and is reproducible.
+  encoded weighted prior and is reproducible: each sample draws its scenario
+  by the event `scenario` with its own seed, as the package's script does.
 - A sampled Pareto front retains the higher-success sensor policy and the
   sensor-free direct policy, and is explicitly labeled approximate.
 

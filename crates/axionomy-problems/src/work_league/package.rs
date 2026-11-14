@@ -11,10 +11,11 @@
 //! takes a count of attempts the economy does not hold, and a steward's
 //! recycling comes after the last job's completion, its goal. So its
 //! strategies are plans, `work-league/serial/<document>`, made whole with
-//! Nature's tickets drawn from the run's seed, keyed by job, worker, mode
-//! and attempt. Showcase and Stress are seasons on a shared clock, played
-//! turn by turn by `work-league/<document>` until the season ends, Nature
-//! settling each attempt from the ticket keyed by its job and attempt.
+//! Nature's outcome of each attempt drawn by its event, `attempt/<job>/<n>`,
+//! from the run's seed. Showcase and Stress are seasons on a shared clock,
+//! played turn by turn by `work-league/<document>` until the season ends,
+//! Nature settling each attempt by the same event. Whoever makes an attempt
+//! and in whatever mode, every field meets the same luck at it.
 
 use crate::{
     package::{call, written},
@@ -31,7 +32,8 @@ use axionomy_store::{Checkpoints, RefPath};
 const SCRIPT: &str = include_str!("../../scripts/work-league.rhai");
 const VIEW: &str = include_str!("../../scripts/work-league-view.rhai");
 
-/// The seed the sample's Rust league runs with, which keys Nature's tickets.
+/// The seed the sample's Rust league runs with, from which Nature's events
+/// are drawn.
 const SEED: u64 = 17;
 
 /// The most turns a season takes: at each of Stress's 79 clock readings,

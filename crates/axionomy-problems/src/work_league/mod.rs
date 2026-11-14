@@ -5,6 +5,7 @@ use axionomy::{
     Account, ApplyError, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, Rate, ReplayError, Trace, basket,
 };
+use axionomy_search::sampling::{EventPath, EventTickets, TicketSource};
 
 mod continuous;
 #[cfg(feature = "packages")]
@@ -774,7 +775,7 @@ pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, LeagueError> {
                 &mut trace,
                 action(RateId::Begin { agent, job, mode }),
             )?;
-            let outcome = sampled_outcome(seed, agent, job, mode, attempt, spec.risk);
+            let outcome = sampled_outcome(seed, job, mode, attempt, spec.risk);
             apply(
                 &mut world,
                 &mut trace,
@@ -958,21 +959,29 @@ fn failure_weight(risk: u64, mode: WorkMode) -> u64 {
     }
 }
 
-fn sampled_outcome(
-    seed: u64,
-    agent: AgentId,
-    job: JobId,
-    mode: WorkMode,
-    attempt: u64,
-    risk: u64,
-) -> Outcome {
-    // SplitMix64 gives deterministic, platform-independent tickets without
-    // making an RNG part of authoritative state. Nature's weight assets remain
-    // the inspectable distribution the caller samples from.
-    let key =
-        seed ^ (u64::from(job.0) << 17) ^ ((agent as u64) << 9) ^ ((mode as u64) << 5) ^ attempt;
-    let ticket = axionomy_search::sampling::splitmix(key, 1) % 10;
-    if ticket < failure_weight(risk, mode) {
+/// A chance event of a match, which names the draw of its outcome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+enum Event {
+    /// The outcome of the `n`th attempt at a job, whoever makes it and in
+    /// whatever mode: each attempt at a job is counted, so every draw names
+    /// an occurrence of its own.
+    Attempt(JobId, u64),
+}
+
+/// Whether the `attempt`th attempt at `job` in the world seeded `seed`
+/// fails, `failure` times in `total`: the attempt's event draws a ticket
+/// below `total`, and a ticket below `failure` fails. A match whose lineup
+/// differs meets the same ticket at the same attempt at the same job, and
+/// only how likely its mode makes failure differs: common random numbers.
+fn attempt_fails(seed: u64, job: JobId, attempt: u64, failure: u64, total: u64) -> bool {
+    let event: EventPath = path::write(&Event::Attempt(job, attempt));
+    EventTickets::new(seed, &event).ticket(total) < failure
+}
+
+fn sampled_outcome(seed: u64, job: JobId, mode: WorkMode, attempt: u64, risk: u64) -> Outcome {
+    // The attempt's event draws its ticket without making an RNG part of
+    // authoritative state; the chances in ten are the distribution sampled.
+    if attempt_fails(seed, job, attempt, failure_weight(risk, mode), 10) {
         Outcome::Failure
     } else {
         Outcome::Success

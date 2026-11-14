@@ -16,8 +16,8 @@ use axionomy_search::{
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{
-        SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, sample_seed,
-        systematic_ticket, total_weight,
+        EventTickets, SamplingError, SeededSampler, TicketSource, WeightedExchange,
+        choose_by_ticket, sample, sample_seed, systematic_ticket, total_weight,
     },
     session::{Continue, WorkBudget},
     tree::{TreeSearchError, TreeStatus},
@@ -973,6 +973,15 @@ pub fn evaluate_scenarios(
     comparison(estimates, samples)
 }
 
+/// The scenario of `support`, Nature's prior, that the world seeded `seed`
+/// draws: the event `scenario`, drawn once, as a run begins.
+fn drawn_scenario(
+    support: &[WeightedExchange<Action>],
+    seed: u64,
+) -> Result<&Action, SamplingError> {
+    sample(support, &mut EventTickets::new(seed, &path!("scenario")))
+}
+
 /// Estimates policies from reproducible random draws over the encoded prior.
 pub fn monte_carlo(
     model: &World,
@@ -998,8 +1007,9 @@ pub fn monte_carlo_with_progress(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
         MonteCarloConfig::new(samples),
         |policy: &Policy, sample_index| {
-            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
-            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
+            let scenario = drawn_scenario(&support, sample_seed(seed, sample_index))
+                .map_err(|_| ())?
+                .clone();
             Ok::<_, ()>(episode(model, policy, sample_index, scenario, episodes).succeeded())
         },
         BernoulliStatistics::new,
@@ -1043,8 +1053,9 @@ pub fn policy_front_with_progress(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
         MonteCarloConfig::new(samples),
         |policy: &Policy, sample_index| {
-            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
-            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
+            let scenario = drawn_scenario(&support, sample_seed(seed, sample_index))
+                .map_err(|_| ())?
+                .clone();
             let rollout = episode(model, policy, sample_index, scenario, episodes);
             Ok::<_, ()>(vec![
                 f64::from(rollout.succeeded()),

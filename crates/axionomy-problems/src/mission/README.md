@@ -75,6 +75,8 @@ outcome exchanges. The selected live action is core-revalidated.
   resolution, share, encounter, and finish exchanges and replays exactly.
 - Across all 16 weighted scenarios, coordination succeeds 12 times and direct
   north succeeds 8.
+- Seeded Monte Carlo draws each sample's scenario by the event `scenario`
+  with that sample's seed, as the package's script does.
 - The complete trace becomes one RL transition per exchange, ending with an
   encoded terminal outcome.
 - A sampled Pareto front retains the reliability/time/medical-use tradeoff and

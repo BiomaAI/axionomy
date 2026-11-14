@@ -4,7 +4,7 @@
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError, Random, ScriptPath, ScriptState, exchanges_of, rhai};
 use axionomy_search::sampling::{
-    EventTickets, SeededSampler, TicketSource, WeightedExchange, sample, sample_seed, splitmix,
+    EventTickets, SeededSampler, TicketSource, WeightedExchange, sample, sample_seed,
 };
 use axionomy_store::Store;
 
@@ -100,17 +100,6 @@ const SCRIPT: &str = r#"
         random.next("weather/direct-out/12", 1000);
         random.sample("scenario", [1, 2, 3]);
         [first, random.next(1000)]
-    }
-
-    // Tickets keyed by what they are for, around a draw and a sample.
-    fn keyed(random, keys, bound) {
-        let tickets = [];
-        for key in keys {
-            tickets.push(random.keyed(key, bound));
-            random.next(1000);
-            random.sample([1, 2]);
-        }
-        tickets
     }
 
     fn road(from, to) {
@@ -439,44 +428,6 @@ fn weighted_events_sample_as_the_rust_sampler_does() {
             "{reason}: {refused:?}"
         );
     }
-}
-
-#[test]
-fn keyed_tickets_are_the_samples_common_random_numbers() {
-    let (engine, script) = engine();
-    let keys = [0_u64, 3, 1 << 32 | 2, 7 << 17 | 1 << 9 | 2 << 5 | 1];
-    let as_ints: rhai::Array = keys
-        .iter()
-        .map(|key| rhai::Dynamic::from(*key as i64))
-        .collect();
-    let keyed = |seed, keys: rhai::Array, bound: i64| {
-        engine.call::<rhai::Array>(&script, "keyed", (Random::new(seed), keys, bound))
-    };
-    for seed in [7, 17, sample_seed(17, 3)] {
-        // `splitmix(seed ^ key, 1) % bound`, as the samples key their
-        // tickets, whatever else the generator draws in between.
-        let expected: Vec<i64> = keys
-            .iter()
-            .map(|key| (splitmix(seed ^ key, 1) % 10) as i64)
-            .collect();
-        let drawn: Vec<i64> = keyed(seed, as_ints.clone(), 10)
-            .unwrap()
-            .into_iter()
-            .map(|ticket| ticket.as_int().unwrap())
-            .collect();
-        assert_eq!(drawn, expected, "seed {seed}");
-    }
-
-    // Keys are not negative, and bounds are positive.
-    let negative: rhai::Array = vec![rhai::Dynamic::from(-1_i64)];
-    assert!(matches!(
-        keyed(7, negative, 10),
-        Err(EngineError::Script { .. })
-    ));
-    assert!(matches!(
-        keyed(7, as_ints, 0),
-        Err(EngineError::Script { .. })
-    ));
 }
 
 #[test]

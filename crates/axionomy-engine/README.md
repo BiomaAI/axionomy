@@ -135,8 +135,7 @@ draws from `bound` equal weights. A decision-maker's own randomness, such as
 a rollout exploring, is drawn in sequence: `random.next(bound)` and
 `random.sample(weights)` take the next of their sequences, `sample` drawing
 the tickets `axionomy_search`'s sampler of the same seed draws. Draws by
-event never move a sequence. `keyed(key, bound)`, the ticket
-`splitmix(seed ^ key, 1) % bound`, stays while a sample draws by it.
+event never move a sequence.
 
 Every generator of a run draws the world's events from the run's seed: a
 policy's, a plan's, a game's Nature's, and a game's players', whose own
@@ -166,7 +165,7 @@ the same name: a script that defines `view(state)` makes `state.view(...)`
 call it, with `state` as `this`. Name script functions apart from the host's
 (`balance`, `balances`, `accounts`, `rates`, `roles`, `consumed`, `produced`,
 `preserved`, `view`, `applicable`, `assess`, `has_account`, `parameter`,
-`rate`, `next`, `sample`, `keyed`). A loop variable
+`rate`, `next`, `sample`). A loop variable
 needs a name: Rhai refuses `for _ in ...`. A view's script builds its scene on
 the `scene` module (`scene::graph(title, nodes, edges, focus)`, `grid`,
 `matrix`, `timeline`), which infers entities, paths and legend from the
