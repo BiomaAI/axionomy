@@ -2,7 +2,7 @@
 //! at every step after, the balances the two states differ in, and where
 //! they meet again.
 
-use axionomy::{Quantity, Rate, basket, path::Path, paths};
+use axionomy::{AssetPath, Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{
     AccountDifference, BalanceDifference, Engine, EngineError, Measure, Objective, ScriptCall, Side,
 };
@@ -356,4 +356,90 @@ fn unknown_objectives_are_refused() {
         engine.divergence(start, paid, None, 10, &[path("missing")]),
         Err(EngineError::Undefined(_))
     ));
+}
+
+/// What a run's receipts made of `asset`, produced less consumed, over its
+/// first `steps` steps.
+fn made(engine: &Engine, at: Point, steps: usize, asset: &AssetPath) -> i128 {
+    let amount = |quantity: Quantity| i128::from(u64::try_from(quantity).unwrap());
+    engine.reach(at).unwrap().receipts[..steps]
+        .iter()
+        .flat_map(|receipt| receipt.deltas())
+        .map(|delta| {
+            amount(delta.produced().quantity(asset)) - amount(delta.consumed().quantity(asset))
+        })
+        .sum()
+}
+
+/// The property `Divergence.difference_made` proves of the kernel: after
+/// every step, what the two sides hold of an asset, over all accounts,
+/// differs by exactly what their exchanges since the shared point made of
+/// it.
+#[test]
+fn every_difference_in_what_is_held_is_one_the_exchanges_made() {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let economy = paths::EconomyBuilder::new()
+        .account(
+            path("bank"),
+            basket([(path("cash"), 50), (path("gold"), 9)]).into(),
+        )
+        .account(path("alice"), basket([]).into())
+        .rate(
+            path("pay"),
+            Rate::new()
+                .consume(path("from"), basket([(path("cash"), 1)]))
+                .produce(path("to"), basket([(path("cash"), 1)])),
+        )
+        .rate(
+            path("mint"),
+            Rate::new().produce(path("to"), basket([(path("cash"), 1)])),
+        )
+        .rate(
+            path("melt"),
+            Rate::new().consume(path("from"), basket([(path("gold"), 1)])),
+        )
+        .build()
+        .unwrap();
+    let start = engine.author(economy).unwrap();
+    let exchange = |rate: &str, role: &str, account: &str, units: u64| {
+        paths::Exchange::new(path(rate), Quantity::new(units)).bind(path(role), path(account))
+    };
+    let left = engine
+        .apply(
+            start,
+            &[
+                pay(3),
+                exchange("mint", "to", "alice", 5),
+                exchange("melt", "from", "bank", 2),
+            ],
+        )
+        .unwrap();
+    let right = engine
+        .apply(start, &[exchange("mint", "to", "bank", 7), pay(1)])
+        .unwrap();
+    let compared = engine.divergence(left, right, None, 100, &[]).unwrap();
+    assert_eq!(compared.shared, start);
+    assert_eq!(compared.steps.len(), 3);
+    let assets: [AssetPath; 2] = [path("cash"), path("gold")];
+    for asset in assets {
+        for aligned in &compared.steps {
+            let taken = |at: Point| usize::try_from(aligned.step.min(at.step)).unwrap();
+            let difference: i128 = aligned
+                .balances
+                .iter()
+                .filter(|difference| difference.asset == asset)
+                .map(|difference| {
+                    i128::from(u64::try_from(difference.left).unwrap())
+                        - i128::from(u64::try_from(difference.right).unwrap())
+                })
+                .sum();
+            assert_eq!(
+                difference,
+                made(&engine, left, taken(left), &asset)
+                    - made(&engine, right, taken(right), &asset),
+                "{asset} after step {}",
+                aligned.step
+            );
+        }
+    }
 }

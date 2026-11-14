@@ -35,6 +35,7 @@ implementation itself is tested, not proved.
 | Account lifecycle | `Lifecycle` | Opened accounts are new and closed accounts are left empty by the exchange's own effects; a rejected exchange changes nothing; every receipt conserves every invariant; the accounts afterwards are exactly those before plus the opened less the closed |
 | Conservation | `Conservation` | Declared linear invariants are preserved exactly by accepted exchanges |
 | History | `Execution`, `Replay`, `Observations`, `Inspection` | Ordered execution and replay compose deterministically; a replay applies its whole trace or none of it and names the action that failed; read-only queries cannot mutate |
+| Divergence | `Divergence`, `DivergenceKernel` | Two traces replayed from one economy hold of each asset amounts that differ by exactly what their receipts made of it, produced less consumed; steps they share make none of the difference; the kernel's exchanges change an economy's supply of each asset by exactly what their receipts made, and keep it canonical |
 
 `Conformance.lean`, `TransactionConformance.lean`,
 `BasketCollectionConformance.lean` and `InvariantInputConformance.lean` only
