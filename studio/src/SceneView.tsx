@@ -11,8 +11,10 @@ import {
   type Edge,
   type EdgeProps,
   type Node,
+  type NodeChange,
   type NodeProps,
   type ReactFlowInstance,
+  useUpdateNodeInternals,
 } from "@xyflow/react";
 import type { ExchangeFrame, Scene, SceneEntity, SceneSurface } from "./api";
 import { formatQuantity } from "./Quantity";
@@ -327,9 +329,40 @@ function AttachmentNode({ data }: NodeProps) {
 const nodeTypes = { structure: StructureNode, occupant: OccupantNode, attachments: AttachmentNode };
 const RELATION_SIDES: HandleSide[] = ["top", "right", "bottom", "left"];
 
+/**
+ * React Flow keeps where a node's handles are with the node's measured size,
+ * which carries over from render to render: a node whose handles changed is
+ * measured again, so its lines meet the handles it has now.
+ */
+function HandlesMeasured({ handles }: { handles: ReadonlyMap<string, string> }) {
+  const measure = useUpdateNodeInternals();
+  const seen = useRef<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    const changed = [...handles].filter(([id, key]) => seen.current.has(id) && seen.current.get(id) !== key).map(([id]) => id);
+    seen.current = handles;
+    if (changed.length > 0) measure(changed);
+  });
+  return null;
+}
+
 function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, topInset }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GraphSurface; onAccount?: (account: string) => void; topInset: number }) {
   const host = useRef<HTMLDivElement>(null);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
+  // Nodes are made afresh each render, and React Flow hides a node that
+  // comes without its measured size until it measures it again, which a
+  // render can race past and leave it hidden. Each node comes with the size
+  // last measured; a change in size is measured as it happens, and a change
+  // in its handles by HandlesMeasured.
+  const [sizes, setSizes] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
+  const measured = (changes: NodeChange[]) => {
+    const now = changes.flatMap((change) => change.type === "dimensions" && change.dimensions ? [[change.id, change.dimensions] as const] : []);
+    if (now.length === 0) return;
+    setSizes((current) => {
+      const next = new Map(current);
+      for (const [id, size] of now) next.set(id, size);
+      return next;
+    });
+  };
   // The picture fits below the chrome lane, whatever its height.
   const padding: FitPadding = { top: `${topInset + 14}px`, right: "24px", bottom: "24px", left: "24px" };
   const fitPadding = useRef(padding);
@@ -499,9 +532,10 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
   }, [flow, layoutKey, motion, surfaceKey, topInset]);
   return <div className={`graph-scene motion-${motion}`} data-motion={motion} ref={host} aria-label={scene.title}>
     {/* The wheel scrolls the page; the controls, a pinch, or Ctrl with the wheel zoom the picture. */}
-    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
+    <ReactFlow nodes={nodes.map((node) => sizes.has(node.id) ? { ...node, measured: sizes.get(node.id) } : node)} onNodesChange={measured} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
       <Controls showInteractive={false} fitViewOptions={{ padding }} />
+      <HandlesMeasured handles={new Map(nodes.map((node) => [node.id, node.type === "structure" ? ((node.data as StructureNodeData).handles ?? []).map((handle) => handle.id).join(" ") : ""]))} />
     </ReactFlow>
   </div>;
 }
