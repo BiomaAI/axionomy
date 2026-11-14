@@ -35,7 +35,21 @@ const UNIT = 24;
 const ROW = 30;
 const PAD_X = 16;
 const PAD_Y = 18;
-const LABEL_SPACE = 220;
+
+/** How wide a label is drawn: its text in the tree's 11px monospace, padded. */
+function labelWidth(text: string): number {
+  return text.length * 6.6 + 12;
+}
+
+/** How far right of its step each label starts: labels at one step sit side by side. */
+function labelOffsets(labels: TreeLabel[]): number[] {
+  const taken = new Map<number, number>();
+  return labels.map((label) => {
+    const offset = taken.get(label.step) ?? 10;
+    taken.set(label.step, offset + labelWidth(label.text) + 4);
+    return offset;
+  });
+}
 
 export type Laid = {
   rows: Map<string, number>;
@@ -111,20 +125,21 @@ export function layoutTree(branches: TreeBranch[], selection?: TreeSelection): L
     }
     return sorted.at(-1) ?? 0;
   };
+  // The tree is as wide as its last step, or the end of its widest label.
+  let right = PAD_X + at;
+  for (const branch of branches) {
+    const labels = branch.labels ?? [];
+    labelOffsets(labels).forEach((offset, index) => { right = Math.max(right, x(labels[index].step) + offset + labelWidth(labels[index].text)); });
+  }
   return {
     rows,
     x,
     stepAt,
     gaps,
-    width: PAD_X * 2 + at + LABEL_SPACE,
+    width: right + PAD_X,
     height: PAD_Y * 2 + Math.max(0, ordered.length - 1) * ROW,
     ordered,
   };
-}
-
-/** How wide a label is drawn: its text in the tree's 11px monospace, padded. */
-function labelWidth(text: string): number {
-  return text.length * 6.6 + 12;
 }
 
 /** The branches a selection's history runs along, each with the steps of it the history takes. */
@@ -224,10 +239,8 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
               onClick={() => onSelect(branch.id, step)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(branch.id, step); } }}
               onMouseEnter={() => point(branch, step)} onMouseLeave={leave} onFocus={() => point(branch, step)} onBlur={leave} />;
           })}
-          {(branch.labels ?? []).map((label, index) => {
-            // Labels at one step sit side by side.
-            const before = (branch.labels ?? []).slice(0, index).filter((other) => other.step === label.step);
-            const lx = laid.x(label.step) + 10 + before.reduce((sum, other) => sum + labelWidth(other.text) + 4, 0);
+          {(branch.labels ?? []).map((label, index, labels) => {
+            const lx = laid.x(label.step) + labelOffsets(labels)[index];
             return <g key={`${label.text}:${index}`} className={`tree-label tone-${label.tone ?? "named"}${label.onClick ? " clickable" : ""}`} transform={`translate(${lx} ${row - 9})`} onClick={label.onClick} role={label.onClick ? "button" : undefined} aria-label={label.onClick ? `Open ${label.text}` : undefined}>
               <rect height={18} width={labelWidth(label.text)} rx={9} />
               <text x={6} y={12.5}>{label.text}</text>

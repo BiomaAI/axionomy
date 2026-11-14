@@ -30,6 +30,18 @@ describe("layoutTree", () => {
     expect(laid.x(1000) - laid.x(0)).toBeLessThan(500);
     expect(laid.stepAt(laid.x(400))).toBe(400);
   });
+
+  test("is as wide as its widest label, however short its histories", () => {
+    const named = (text: string) => ({ step: 0, text });
+    const short = layoutTree([{ id: "a", first: 0, last: 0, title: "a", labels: [named("a")] }]);
+    const long = layoutTree([
+      { id: "a", first: 0, last: 0, title: "a", labels: [named("work-league/showcase/sustainable-field")] },
+      { id: "b", first: 0, last: 0, title: "b", labels: [named("work-league/stress"), named("work-league/stress/throughput-field")] },
+    ]);
+    // Each label is a pill of about 6.6px a character: the two side by side end furthest right.
+    expect(long.width).toBeGreaterThan(long.x(0) + 6.6 * ("work-league/stress".length + "work-league/stress/throughput-field".length));
+    expect(short.width).toBeLessThan(long.width);
+  });
 });
 
 describe("pathOf", () => {
