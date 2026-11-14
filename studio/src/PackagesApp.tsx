@@ -183,6 +183,11 @@ export function PackagesApp() {
   const [motion, setMotion] = useState<ReplayMotionMode>("seek");
   const [playing, setPlaying] = useState(false);
   const [delay, setDelay] = useState(650);
+  // Play where nothing has happened yet finds the moves, then plays them as
+  // soon as their history is drawn.
+  const playOnOpen = useRef(false);
+  const [finding, setFinding] = useState<{ cancel(): void }>();
+  const findingStopped = useRef(false);
   const [focusedAccount, setFocusedAccount] = useState<string>();
   const [action, setAction] = useState<ActionTab>("act");
   const worldPanel = useRef<HTMLDivElement>(null);
@@ -211,7 +216,9 @@ export function PackagesApp() {
     const wanted = pendingStep.current;
     pendingStep.current = "end";
     setPosition(wanted === "end" ? document.frames.length : Math.min(wanted, document.frames.length));
-    setPlaying(false);
+    setMotion("step");
+    setPlaying(playOnOpen.current);
+    playOnOpen.current = false;
     setFocusedAccount(undefined);
   }, [document?.id]);
 
@@ -379,6 +386,60 @@ export function PackagesApp() {
     } catch (cause) { setError(described(cause)); }
   };
 
+  /**
+   * Play where nothing has happened yet: the strategy the package's first
+   * experiment runs (else its first strategy) finds the moves from the point
+   * on screen toward that experiment's goal, and the point it reaches opens
+   * and plays from here. Pressed again while it searches, it stops.
+   */
+  const playAhead = async () => {
+    if (finding) { findingStopped.current = true; finding.cancel(); return; }
+    if (!engine || !pkg || !screenPoint) return;
+    const strategy = pkg.experiments[0]?.arms[0]?.strategy ?? pkg.strategies[0];
+    const asked = askedOf(pkg, strategy);
+    if (!strategy || !asked.goal) { report(caution(`${pkg.name} defines no strategy and goal to find moves with; act on this point to make some.`)); return; }
+    report();
+    const work = engine.runStrategy(screenPoint, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, () => undefined);
+    setFinding({ cancel: work.cancel });
+    try {
+      const ran = await work.result;
+      const found = stepOf(ran.end) - stepOf(ran.start);
+      if (found === 0) { report(caution(`${strategy} found no move toward ${asked.goal} from here: ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
+      report(done(`${strategy} found ${counted(found, "step")} toward ${asked.goal}; ${outcomeWords(ran.outcome).toLowerCase()}.`));
+      playOnOpen.current = true;
+      pendingStep.current = stepOf(ran.start);
+      setOpened({ point: ran.end, how: "continued", note: `${strategy} toward ${asked.goal} from step ${stepOf(ran.start)}` });
+    } catch (cause) {
+      if (!findingStopped.current) setError(described(cause));
+    } finally {
+      setFinding(undefined);
+      findingStopped.current = false;
+    }
+  };
+
+  // The keys the transport names: Space plays or pauses (or finds moves to
+  // play), the arrows step. Keys typed into a field or a control stay theirs.
+  useEffect(() => {
+    if (view !== "point") return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : undefined;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || target?.closest("input, textarea, select, button, [contenteditable]")) return;
+      if (event.key === " ") {
+        event.preventDefault();
+        if (steps === 0) { void playAhead(); return; }
+        if (!playing && position >= steps) { setMotion("seek"); setPosition(0); }
+        setPlaying(!playing);
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        setPlaying(false);
+        setMotion("step");
+        setPosition((current) => Math.min(steps, Math.max(0, current + (event.key === "ArrowLeft" ? -1 : 1))));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   /** Deletes the ref on screen from the point it is on; the point stays on screen, a branch now. */
   const deleteRef = async () => {
     if (!engine || !opened?.ref) return;
@@ -466,9 +527,7 @@ export function PackagesApp() {
           : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Drawing the point's history…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
           : snapshot && <QuantityFormats.Provider value={document.formats ?? {}}><div className="point-cockpit" aria-busy={stale}>
             <PointHeading pkg={pkg} opened={opened} document={document} position={position} onKeep={keepAsRef} onDelete={deleteRef} />
-            {steps === 0
-              ? <StartNote experiments={pkg?.experiments.length ?? 0} onExperiments={() => setView("experiments")} />
-              : <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} frame={frame} />}
+            <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={() => void playAhead()} finding={Boolean(finding)} frame={frame} />
             <section className="stage point-stage">
               <div className="panel world-panel" ref={worldPanel}>
                 <PanelHeading kicker="The picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
@@ -515,14 +574,6 @@ function EmptyCatalog({ samples, busy, onOpen }: { samples: { name: string; url:
     <p>A package holds economies, the refs that name them, and the goals, scripts, strategies, experiments and views that use them. {samples.length > 0 ? "Open one of the samples, or load a package file of your own." : "Load a package file, a store file or a zip of one."} A link such as <code>?package=packages/maze.zip</code> opens one by its URL.</p>
     {samples.length > 0 && <ul className="sample-list" aria-label="Sample packages">{samples.map((sample) => <li key={sample.url}><button type="button" disabled={busy} onClick={() => onOpen(sample.url)}>{sample.name}</button></li>)}</ul>}
   </div>;
-}
-
-/** In place of playback at a point with no history: what makes one. */
-function StartNote({ experiments, onExperiments }: { experiments: number; onExperiments: () => void }) {
-  return <section className="playback start-note" aria-label="Nothing to play yet">
-    <p><strong>Nothing has happened here yet,</strong> so there is nothing to play. Act on it, continue with a strategy, or run {experiments > 0 ? "one of the package's experiments" : "an experiment"}; what it reaches plays here.</p>
-    {experiments > 0 && <button type="button" onClick={onExperiments}>Experiments</button>}
-  </section>;
 }
 
 /** What the point on screen is, and where it came from. */

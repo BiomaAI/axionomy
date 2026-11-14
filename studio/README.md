@@ -96,8 +96,11 @@ change in the history on screen may be folded for density, but remain
 explicitly labeled as unchanged assets and are always inspectable. The viewer
 does not reinterpret them as configuration or remove them from the
 source-of-truth ledger. The mouse wheel scrolls the page over the picture; its
-+/− controls, a pinch, or Ctrl with the wheel zoom it. A point without
-exchanges says so and has nothing to play.
++/− controls, a pinch, or Ctrl with the wheel zoom it. Space plays or
+pauses and the arrow keys step. Play on a point where nothing has happened
+yet, such as a package's first ref when it opens, runs the strategy the
+package's first experiment runs toward its goal and plays the moves it
+finds; pressed again while it searches, it stops.
 
 ## Run locally
 

@@ -20,15 +20,9 @@ async function loadSample(page: Page, name: string) {
 
 const trace = (page: Page) => page.getByRole("slider", { name: "Trace position" });
 
-/**
- * How many steps the history on screen has, once the point opened is
- * drawn: none where Studio says nothing has happened yet, in place of
- * playback.
- */
+/** How many steps the history on screen has, once the point opened is drawn. */
 async function steps(page: Page): Promise<number> {
   await expect(page.locator(".point-cockpit")).toHaveAttribute("aria-busy", "false");
-  await expect(trace(page).or(page.getByRole("region", { name: "Nothing to play yet" }))).toBeVisible();
-  if (await page.getByRole("region", { name: "Nothing to play yet" }).isVisible()) return 0;
   return Number(await trace(page).getAttribute("max"));
 }
 
@@ -75,6 +69,20 @@ test("loads a sample package and scrubs a ref's history", async ({ page }) => {
   await expect(page.locator(".transition-panel .assessment-applicable")).toContainText("applicable");
   await expect(page.locator(".stage .world-panel")).toBeVisible();
   await expect(page.locator(".stage .accounts-panel")).toBeVisible();
+});
+
+test("opens a package and plays it: Play finds the moves where nothing has happened yet", async ({ page }) => {
+  await page.goto("/");
+  await loadSample(page, "sokoban");
+  // The package opens on its first ref, where nothing has happened yet.
+  expect(await steps(page)).toBe(0);
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible({ timeout: 45_000 });
+  await expect.poll(async () => Number(await trace(page).getAttribute("max"))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await trace(page).inputValue()), { timeout: 15_000 }).toBeGreaterThan(0);
+  // Space pauses it, as the transport says.
+  await page.locator("body").press(" ");
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible();
 });
 
 test("applies a candidate at a ref's point, moving the ref, and anywhere else makes a branch", async ({ page }) => {
