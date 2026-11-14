@@ -116,6 +116,7 @@ fn a_branch_parts_from_its_parent_where_it_forked() {
         }
     );
     assert_eq!(compared.shared, fork);
+    assert_eq!(engine.shared(branch, parent).unwrap(), fork);
     let steps: Vec<_> = compared.steps.iter().map(|step| step.step).collect();
     assert_eq!(steps, [2, 3]);
     assert_eq!(compared.steps[0].left, Some(pay(2)));

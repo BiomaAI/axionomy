@@ -28,6 +28,7 @@ goes.
   a step costs what differs, not what the economy holds. It names the first
   step after which the two states are equal again, by their tree hashes,
   wherever it is on the histories, and measures objectives at both points.
+  `shared` names the point they part at alone.
 - `assess` explains whether an exchange would apply at a point, and
   `present` gives exchanges as people read them at a point, with the view
   of its run's ontology, each assessed there, as Studio shows a candidate

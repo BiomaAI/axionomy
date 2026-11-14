@@ -151,13 +151,14 @@ impl Engine {
         })
     }
 
-    /// The last point on the histories of both `left` and `right`. A
-    /// history runs back through the runs it forked from, each to the step
-    /// it forked at; two histories share a run's steps up to the earlier of
-    /// the steps each takes in it, and the first run of `right`'s, counting
-    /// back from its tip, that `left`'s history also runs through is the one
-    /// they part in.
-    fn shared(&self, left: Point, right: Point) -> Result<Point, EngineError> {
+    /// The last point on the histories of both `left` and `right`, where
+    /// they part; refused with `Unrelated` when there is none. A history
+    /// runs back through the runs it forked from, each to the step it forked
+    /// at; two histories share a run's steps up to the earlier of the steps
+    /// each takes in it, and the first run of `right`'s, counting back from
+    /// its tip, that `left`'s history also runs through is the one they part
+    /// in.
+    pub fn shared(&self, left: Point, right: Point) -> Result<Point, EngineError> {
         let reader = self.store.read()?;
         run_at(&reader, left)?;
         run_at(&reader, right)?;
