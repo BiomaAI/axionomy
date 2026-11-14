@@ -3,6 +3,10 @@ use crate::{
     handles::{AssessmentId, EconomyId, Handle, RefId},
     issues,
     messages::{
+        AccountDifference, BalanceDifference, ObjectiveValues, Side, TraceDiffRequest,
+        TraceDiffResponse, TraceDiffStep,
+    },
+    messages::{
         Amounts, ArmResults, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse,
         ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode, FrameReceipt,
@@ -67,6 +71,8 @@ const MAX_CHUNK_SIZE: usize = 10_000;
 const MAX_FRAMES: usize = 100;
 /// The longest `axionomy_ref_frames` waits for a ref to move.
 const MAX_WAIT_SECONDS: u64 = 30;
+/// Steps one call to `axionomy_trace_diff` returns at most.
+const MAX_DIFF_STEPS: usize = 100;
 /// Trials over all its arms an experiment may run, or report, in one call.
 const MAX_TRIALS: u64 = 1_000;
 const SEARCH: &str = "axionomy_search";
@@ -113,7 +119,10 @@ Economies with equal roots have equal contents, however they were made.
 Packages carry economies, strategies and experiments. An experiment's trials each give their \
 seed, how they ended, their objective values and the economy_id they reached: step through that \
 economy's trace with axionomy_trace_step and branch from any step. \
-axionomy_experiment_results gives the results an experiment last recorded.
+axionomy_experiment_results gives the results an experiment last recorded. axionomy_trace_diff \
+compares two economies' traces, such as a branch and the trial it branched from: the economy \
+where they part, and step by step after it the exchange each made and the balances they then \
+differ in, with objectives at both.
 
 An application that moves through economies, such as a game or a simulation, keeps a ref on the \
 economy it is at. axionomy_ref_create makes one and axionomy_ref_read says where it is. \
@@ -395,6 +404,135 @@ impl AxionomyMcp {
                 economy: Some(economy),
                 message: None,
             }))
+    }
+
+    #[tool(
+        name = "axionomy_trace_diff",
+        title = "Compare two traces",
+        description = "Compare the traces that made two economies: `shared_economy_id`, the last economy both passed through, and for each step after it, counted from it (step 1 is the first exchange after it), the exchange each side made (absent once its trace has ended, when it stays the economy it ended at) and every balance the two sides then differ in, `left` and `right`, exactly, with the accounts only one side has. `converged_step` is the first step after which they are equal again, wherever it is. At most `limit` steps, up to 100, per call; `next_after_step` pages on. `objectives`, such as an experiment's, are measured at both economies. Economies whose traces meet are one made by exchanges from the other, or both from a third, such as two branches of a trial's trace; economies authored apart share none.",
+        output_schema = schema_for_output::<TraceDiffResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn trace_diff(
+        &self,
+        Parameters(request): Parameters<TraceDiffRequest>,
+    ) -> Result<Linked<TraceDiffResponse>, ToolError> {
+        if !(1..=MAX_DIFF_STEPS).contains(&request.limit) {
+            return Err(ToolError::argument(
+                "/limit",
+                format!("limit must be from 1 to {MAX_DIFF_STEPS}; page on from next_after_step"),
+            ));
+        }
+        for (index, objective) in request.objectives.iter().enumerate() {
+            match self.archive.engine().objective(objective) {
+                Ok(_) => {}
+                Err(EngineError::Undefined(_)) => {
+                    return Err(ToolError::new(
+                        FailureCode::NotFound,
+                        format!(
+                            "no loaded package carries an objective `{objective}`; axionomy_experiment_results lists an experiment's"
+                        ),
+                    )
+                    .at(&format!("/objectives/{index}")));
+                }
+                Err(error) => return Err(ToolError::internal(error)),
+            }
+        }
+        let left = self.economy(&request.left_economy_id).await?;
+        let right = self.economy(&request.right_economy_id).await?;
+        let compared = self
+            .archive
+            .divergence(
+                left.record.point,
+                right.record.point,
+                request.after_step,
+                request.limit,
+                request.objectives.clone(),
+            )
+            .await;
+        let (compared, shared_economy_id) = match compared {
+            Ok(compared) => compared,
+            Err(EngineError::Unrelated { .. }) => {
+                return Err(ToolError::argument(
+                    "/right_economy_id",
+                    format!(
+                        "the traces of `{}` and `{}` share no economy: neither was made by exchanges from the other, nor both from a third. Economies authored apart, by axionomy_economy_create or axionomy_economy_extend, start traces of their own; compare economies made by exchanges from one economy",
+                        request.left_economy_id, request.right_economy_id
+                    ),
+                ));
+            }
+            Err(error) => return Err(ToolError::internal(error)),
+        };
+        let shared = compared.shared.step;
+        let last = compared.last() - shared;
+        let steps: Vec<TraceDiffStep> = compared
+            .steps
+            .into_iter()
+            .map(|aligned| TraceDiffStep {
+                step: aligned.step - shared,
+                left_exchange: aligned.left,
+                right_exchange: aligned.right,
+                balances: aligned
+                    .balances
+                    .into_iter()
+                    .map(|difference| BalanceDifference {
+                        account: difference.account,
+                        asset: difference.asset,
+                        left: difference.left,
+                        right: difference.right,
+                    })
+                    .collect(),
+                accounts: aligned
+                    .accounts
+                    .into_iter()
+                    .map(|difference| AccountDifference {
+                        account: difference.account,
+                        on: match difference.on {
+                            axionomy_engine::Side::Left => Side::Left,
+                            axionomy_engine::Side::Right => Side::Right,
+                        },
+                    })
+                    .collect(),
+            })
+            .collect();
+        let next_after_step = steps
+            .last()
+            .map(|step| step.step)
+            .filter(|&listed| listed < last);
+        let links = vec![
+            Target::Economy {
+                economy_id: shared_economy_id.clone(),
+            }
+            .link("economy", "The last economy both traces passed through"),
+            Target::Diff {
+                economy_id: request.left_economy_id.clone(),
+                other_id: request.right_economy_id.clone(),
+            }
+            .link("diff", "What differs from the left economy to the right"),
+        ];
+        Ok(Linked::new(
+            TraceDiffResponse {
+                left_exchanges: compared.left.point.step - shared,
+                right_exchanges: compared.right.point.step - shared,
+                converged_step: compared.converged.map(|step| step - shared),
+                objectives: request
+                    .objectives
+                    .into_iter()
+                    .zip(compared.left.values.into_iter().zip(compared.right.values))
+                    .map(|(objective, (left, right))| ObjectiveValues {
+                        objective,
+                        left,
+                        right,
+                    })
+                    .collect(),
+                left_economy_id: request.left_economy_id,
+                right_economy_id: request.right_economy_id,
+                shared_economy_id,
+                steps,
+                next_after_step,
+            },
+            links,
+        ))
     }
 
     #[tool(
@@ -1404,6 +1542,7 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         "axionomy_trace_replay" => check::<ReplayRequest>(arguments),
         "axionomy_trace_step" => check::<TraceStepRequest>(arguments),
         "axionomy_trace_find" => check::<TraceFindRequest>(arguments),
+        "axionomy_trace_diff" => check::<TraceDiffRequest>(arguments),
         SEARCH => check::<SearchRequest>(arguments),
         "axionomy_package_list" => check::<PackageListRequest>(arguments),
         "axionomy_experiment_run" | "axionomy_experiment_results" => {

@@ -179,6 +179,7 @@ the reason it is malformed.
 | `axionomy_trace_replay` | new `economy_id`, change count | additive, idempotent |
 | `axionomy_trace_step` | `economy_id` of the economy at one step of the trace that made another | additive, idempotent |
 | `axionomy_trace_find` | The first step of that trace where a balance is equal to, at least or at most a quantity, and its economy; `null` if none | additive, idempotent |
+| `axionomy_trace_diff` | The economy two traces share last, and step by step after it each side's exchange and the balances they then differ in, where they are equal again, and objectives at both | additive, idempotent |
 | `axionomy_search` | MCP task: outcome and the economy a solution reaches | additive, idempotent |
 | `axionomy_package_list` | Every loaded package's manifest, its refs with the `economy_id` of each point, its experiments and strategies | additive, idempotent |
 | `axionomy_experiment_run` | The goal every arm works toward, every arm's strategy and start, and every trial's seed, outcome, objective values and `economy_id` | additive |
@@ -216,7 +217,8 @@ One convention holds everywhere:
 
 - Step `N` of a trace is the economy after its first `N` exchanges; step `0`
   is the economy they were applied to. `axionomy_trace_step`,
-  and `axionomy_trace_find` count steps.
+  and `axionomy_trace_find` count steps; `axionomy_trace_diff` counts them
+  from the economy two traces share.
 - A position of an exchange counts from zero: the exchange at index `i` takes
   step `i` to step `i + 1`. Change lines and failures name it
   `exchange_index`.
@@ -228,6 +230,23 @@ economy passed in as `traced_economy_id`, and the trace's source, step `0`, as
 `source_economy_id`. `axionomy_trace_find` returns the first step where a
 balance condition holds, or `{"step": null, "message": …}` when none does; an
 account no economy of the trace has is `not_found`.
+
+`axionomy_trace_diff` compares the traces that made `left_economy_id` and
+`right_economy_id`. They meet when one was made by exchanges from the other,
+or both from a third, as two trials of an experiment are from their start
+and a branch is from the step it was made at; economies authored apart, by
+`axionomy_economy_create` or `axionomy_economy_extend`, start traces of their
+own and are refused, `invalid_request` at `/right_economy_id`. It returns
+`shared_economy_id`, the last economy on both traces, how many exchanges each
+side made after it, and for each step after it, counted from it, the exchange
+each side made (absent once its trace has ended, when it stays the economy it
+ended at) and every balance `{account, asset, left, right}` the two sides then
+differ in, exactly, with any account only one side has. `converged_step` is
+the first step after which they are equal again, listed or not. At most
+`limit` steps, up to 100, come per call, after `after_step`;
+`next_after_step` asks for the rest. `objectives`, paths a loaded package
+carries such as an experiment's, are measured at both economies; one no
+package carries is `not_found` at its pointer.
 
 ## Packages and experiments
 
@@ -295,6 +314,7 @@ result with the trial's own step `N + 1` through the `diff` resource:
 economy_id + N ──────────── trace_step ──────> the trial's economy at step N
 that economy + exchange ─── exchange_apply ──> your branch
 your branch + trial's N + 1  …/diff/{other} ──> what your choice changed
+your branch + trial ──────── trace_diff ─────> where they part, and every step since
 ```
 
  `axionomy_experiment_results` gives

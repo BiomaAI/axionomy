@@ -133,7 +133,7 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 16
+        assert len(tools) == 17
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
@@ -217,6 +217,44 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
         assert found.structured_content["step"] == 2
         assert found.structured_content["economy"]["root"] == steps[2]["root"]
         assert any(uri.endswith(steps[2]["economy_id"]) for uri in links(found))
+
+
+async def test_two_traces_from_one_economy_compare_step_by_step(url: str) -> None:
+    async with Client(url) as client:
+        source = await create(client, ECONOMY)
+        replayed = await client.call_tool("axionomy_trace_replay", {"economy_id": source, "exchanges": [transfer(1), transfer(2)]})
+        applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": source, "exchange": transfer(3)})
+        left, right = replayed.structured_content["economy_id"], applied.structured_content["economy_id"]
+
+        compared = await client.call_tool("axionomy_trace_diff", {"left_economy_id": left, "right_economy_id": right})
+        assert not compared.is_error, compared.structured_content
+        diff = compared.structured_content
+        # They part where both were made from, and step 1 counts from there.
+        assert diff["shared_economy_id"] == source
+        assert (diff["left_exchanges"], diff["right_exchanges"]) == (2, 1)
+        first, second = diff["steps"]
+        assert (first["step"], first["left_exchange"], first["right_exchange"]) == (1, transfer(1), transfer(3))
+        assert first["balances"] == [
+            {"account": "sink", "asset": "token", "left": "1", "right": "3"},
+            {"account": "source", "asset": "token", "left": "4", "right": "2"},
+        ]
+        # The right's trace has ended; two transfers make what one of their sum made.
+        assert "right_exchange" not in second and second["balances"] == []
+        assert diff["converged_step"] == 2
+        assert f"axionomy://economy/{source}" in links(compared)
+
+        paged = await client.call_tool("axionomy_trace_diff", {"left_economy_id": left, "right_economy_id": right, "limit": 1})
+        assert [step["step"] for step in paged.structured_content["steps"]] == [1]
+        after = paged.structured_content["next_after_step"]
+        rest = await client.call_tool("axionomy_trace_diff", {"left_economy_id": left, "right_economy_id": right, "after_step": after})
+        assert [step["step"] for step in rest.structured_content["steps"]] == [2]
+        assert "next_after_step" not in rest.structured_content
+
+        # Economies authored apart share no trace.
+        apart = await create(client, {**ECONOMY, "accounts": {"source": {"token": "7"}, "sink": {}}})
+        refused = await client.call_tool("axionomy_trace_diff", {"left_economy_id": source, "right_economy_id": apart})
+        assert refused.is_error and refused.structured_content["error"] == "invalid_request"
+        assert refused.structured_content["details"] == {"pointer": "/right_economy_id"}
 
 
 async def test_trace_find_says_when_nothing_matches_and_refuses_unknown_accounts(url: str) -> None:
@@ -550,6 +588,31 @@ async def test_an_experiment_runs_and_a_client_steps_through_a_trial(maze_url: s
         # The results read back as they ran, under the same handles.
         recorded = await client.call_tool("axionomy_experiment_results", {"experiment": "maze/micro"})
         assert recorded.structured_content == results
+
+
+async def test_two_arms_trials_compare_from_the_start_they_share(maze_url: str) -> None:
+    async with Client(maze_url) as client:
+        ran = await client.call_tool("axionomy_experiment_run", {"experiment": "maze/micro"})
+        arms = {arm["strategy"]: arm for arm in ran.structured_content["arms"]}
+        (fast,), (frugal,) = arms["maze/breadth-first"]["trials"], arms["maze/dijkstra"]["trials"]
+        ends = {"left_economy_id": fast["economy_id"], "right_economy_id": frugal["economy_id"]}
+        objectives = ["maze/energy", "maze/time"]
+        compared = await client.call_tool("axionomy_trace_diff", {**ends, "objectives": objectives})
+        assert not compared.is_error, compared.structured_content
+        diff = compared.structured_content
+        # Both arms start from the instance's start, and part there.
+        start = arms["maze/breadth-first"]["start_economy_id"]
+        assert diff["shared_economy_id"] == start == arms["maze/dijkstra"]["start_economy_id"]
+        assert (diff["left_exchanges"], diff["right_exchanges"]) == (fast["exchanges"], frugal["exchanges"])
+        # The objectives at each end are the trials' own, exactly.
+        assert diff["objectives"] == [
+            {"objective": objective, "left": fast["values"][objective], "right": frugal["values"][objective]}
+            for objective in objectives
+        ]
+        assert diff["steps"] and diff["steps"][0]["step"] == 1
+        unknown = await client.call_tool("axionomy_trace_diff", {**ends, "objectives": ["maze/luck"]})
+        assert unknown.structured_content["error"] == "not_found"
+        assert unknown.structured_content["details"] == {"pointer": "/objectives/0"}
 
 
 async def test_an_experiment_is_one_a_loaded_package_carries(maze_url: str) -> None:

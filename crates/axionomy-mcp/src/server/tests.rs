@@ -155,7 +155,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = server().tool_router.list_all();
-    assert_eq!(tools.len(), 16);
+    assert_eq!(tools.len(), 17);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -869,6 +869,108 @@ async fn stepping_through_a_trace_names_each_state_and_diffs_compare_them() {
     assert_eq!(beyond.value["details"]["pointer"], "/step");
     let authored = step(&server, &parent_id, 0).await;
     assert_eq!(authored.value["details"]["pointer"], "/economy_id");
+}
+
+async fn diff(server: &AxionomyMcp, arguments: Value) -> Outcome {
+    outcome(
+        server
+            .trace_diff(Parameters(serde_json::from_value(arguments).unwrap()))
+            .await,
+    )
+}
+
+#[tokio::test]
+async fn two_traces_from_one_economy_compare_step_by_step() {
+    let server = server();
+    let source = id(&create(&server, fixture()).await);
+    let left = id(&replay(&server, &source, vec![transfer(1), transfer(2)]).await);
+    let right = id(&apply(&server, &source, transfer(3)).await);
+    let compared = diff(
+        &server,
+        json!({ "left_economy_id": left, "right_economy_id": right }),
+    )
+    .await;
+    assert!(!compared.is_error, "{}", compared.value);
+    assert_eq!(
+        compared.value,
+        json!({
+            "left_economy_id": left,
+            "right_economy_id": right,
+            "shared_economy_id": source,
+            "left_exchanges": 2,
+            "right_exchanges": 1,
+            "steps": [
+                {
+                    "step": 1,
+                    "left_exchange": serde_json::to_value(transfer(1)).unwrap(),
+                    "right_exchange": serde_json::to_value(transfer(3)).unwrap(),
+                    "balances": [
+                        { "account": "sink", "asset": "token", "left": "1", "right": "3" },
+                        { "account": "source", "asset": "token", "left": "4", "right": "2" }
+                    ]
+                },
+                {
+                    "step": 2,
+                    "left_exchange": serde_json::to_value(transfer(2)).unwrap(),
+                    "balances": []
+                }
+            ],
+            // Two transfers make what one of their sum made.
+            "converged_step": 2
+        })
+    );
+    assert_eq!(
+        compared.links,
+        [
+            uri(Target::Economy {
+                economy_id: source.clone()
+            }),
+            uri(Target::Diff {
+                economy_id: left.clone(),
+                other_id: right.clone(),
+            }),
+        ]
+    );
+
+    // A step at a time, paged on from the last listed.
+    let first = diff(
+        &server,
+        json!({ "left_economy_id": left, "right_economy_id": right, "limit": 1 }),
+    )
+    .await;
+    assert_eq!(first.value["steps"].as_array().unwrap().len(), 1);
+    assert_eq!(first.value["next_after_step"], 1);
+    let rest = diff(
+        &server,
+        json!({ "left_economy_id": left, "right_economy_id": right, "limit": 1, "after_step": 1 }),
+    )
+    .await;
+    assert_eq!(rest.value["steps"][0]["step"], 2);
+    assert!(rest.value.get("next_after_step").is_none());
+    let wide = diff(
+        &server,
+        json!({ "left_economy_id": left, "right_economy_id": right, "limit": 101 }),
+    )
+    .await;
+    assert_eq!(wide.value["details"]["pointer"], "/limit");
+
+    // Economies authored apart share no trace; an objective no package
+    // carries is not found.
+    let apart = id(&extend(&server, &source, json!({ "accounts": { "other": {} } })).await);
+    let unrelated = diff(
+        &server,
+        json!({ "left_economy_id": source, "right_economy_id": apart }),
+    )
+    .await;
+    assert_eq!(unrelated.value["error"], "invalid_request");
+    assert_eq!(unrelated.value["details"]["pointer"], "/right_economy_id");
+    let unknown = diff(
+        &server,
+        json!({ "left_economy_id": left, "right_economy_id": right, "objectives": ["paid"] }),
+    )
+    .await;
+    assert_eq!(unknown.value["error"], "not_found");
+    assert_eq!(unknown.value["details"]["pointer"], "/objectives/0");
 }
 
 async fn find(

@@ -564,6 +564,113 @@ pub struct FrameReceipt {
     pub closed: Vec<AccountPath>,
 }
 
+/// Two economies whose traces to compare, and which of the steps after the
+/// economy they share to list.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TraceDiffRequest {
+    pub left_economy_id: EconomyId,
+    pub right_economy_id: EconomyId,
+    /// The steps after the shared economy to skip: zero, the default, lists
+    /// from step 1, the first exchange after it; the last step a call listed
+    /// lists the steps after it.
+    #[serde(default)]
+    pub after_step: u64,
+    /// The most steps to return, from 1 to 100; `next_after_step` pages on.
+    #[serde(default = "default_diff_limit")]
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: usize,
+    /// Objectives a loaded package carries, such as an experiment's,
+    /// measured at both economies.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objectives: Vec<ObjectivePath>,
+}
+
+const fn default_diff_limit() -> usize {
+    100
+}
+
+/// Where two economies' traces part, and how they differ after.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TraceDiffResponse {
+    pub left_economy_id: EconomyId,
+    pub right_economy_id: EconomyId,
+    /// The last economy on both traces: every exchange up to it is the
+    /// same on both, and both sides start from it.
+    pub shared_economy_id: EconomyId,
+    /// How many exchanges each side made after the shared economy.
+    pub left_exchanges: u64,
+    pub right_exchanges: u64,
+    /// The steps listed, earliest first, each counted from the shared
+    /// economy: step 1 is the first exchange after it.
+    pub steps: Vec<TraceDiffStep>,
+    /// The first step after the shared economy after which the two sides
+    /// are equal again, listed or not; absent when they never are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converged_step: Option<u64>,
+    /// The `after_step` that lists the steps after these, while more follow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_after_step: Option<u64>,
+    /// The objectives asked for, exactly, at each economy, in the order
+    /// asked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objectives: Vec<ObjectiveValues>,
+}
+
+/// One step after the shared economy on both traces: the exchange each
+/// side made, absent once its trace has ended and it stays the economy it
+/// ended at, and how the two sides differ after it.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TraceDiffStep {
+    pub step: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "exchange_as_written")]
+    pub left_exchange: Option<paths::Exchange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "exchange_as_written")]
+    pub right_exchange: Option<paths::Exchange>,
+    /// Every balance the two sides differ in, by account path, then asset;
+    /// empty when they hold the same.
+    pub balances: Vec<BalanceDifference>,
+    /// Accounts one side has and the other does not.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accounts: Vec<AccountDifference>,
+}
+
+/// What an account holds of an asset on each side, exactly; zero where it
+/// holds none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct BalanceDifference {
+    pub account: AccountPath,
+    pub asset: AssetPath,
+    pub left: Quantity,
+    pub right: Quantity,
+}
+
+/// An account only one side has.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AccountDifference {
+    pub account: AccountPath,
+    /// The side that has it.
+    pub on: Side,
+}
+
+/// One of the two economies compared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Side {
+    Left,
+    Right,
+}
+
+/// An objective at each of the two economies compared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ObjectiveValues {
+    pub objective: ObjectivePath,
+    pub left: Quantity,
+    pub right: Quantity,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackageListRequest {}

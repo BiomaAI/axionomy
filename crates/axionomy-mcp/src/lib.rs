@@ -13,6 +13,10 @@ mod store;
 pub use handles::{AssessmentId, EconomyId, HandleError, RefId};
 pub use http::{StatelessHttpService, stateless_http_config, stateless_http_service};
 pub use messages::{
+    AccountDifference, BalanceDifference, ObjectiveValues, Side, TraceDiffRequest,
+    TraceDiffResponse, TraceDiffStep,
+};
+pub use messages::{
     Amounts, ArmResults, AssessResponse, AssessmentStatus, ComputedEntry, Direction, EconomyCounts,
     EconomyCreateRequest, EconomyEntries, EconomyExtendRequest, EconomyStored, ExchangeRequest,
     ExchangedResponse, ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode,

@@ -21,7 +21,8 @@
 use crate::handles::{AssessmentId, EconomyId, RefId};
 use axionomy::paths;
 use axionomy_engine::{
-    Engine, EngineError, ExperimentPath, Following, Frame, GoalPath, Reached, Results,
+    Divergence, Engine, EngineError, ExperimentPath, Following, Frame, GoalPath, ObjectivePath,
+    Reached, Results,
 };
 use axionomy_store::{Durability, Point, Reader, RefPath, StoreError};
 
@@ -480,6 +481,32 @@ impl Archive {
         .await?;
         self.keep_all(minted).await?;
         Ok(names)
+    }
+
+    /// How the traces of `left` and `right` compare over the steps after the
+    /// first `after_step` past the point they share, at most `limit` of
+    /// them, with `objectives` measured at both; and the handle of the
+    /// shared point, its first or one minted for it.
+    pub async fn divergence(
+        &self,
+        left: Point,
+        right: Point,
+        after_step: u64,
+        limit: usize,
+        objectives: Vec<ObjectivePath>,
+    ) -> Result<(Divergence, EconomyId), EngineError> {
+        let engine = self.engine.clone();
+        let compared = blocking(move || {
+            let after = engine.shared(left, right)?.step.saturating_add(after_step);
+            engine.divergence(left, right, Some(after), limit, &objectives)
+        })
+        .await?;
+        let shared = self
+            .names(vec![compared.shared])
+            .await?
+            .pop()
+            .ok_or(StoreError::Malformed("a shared point no handle names"))?;
+        Ok((compared, shared))
     }
 
     /// Runs the experiment at `path` where blocking is allowed, recording
