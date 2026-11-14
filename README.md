@@ -244,6 +244,7 @@ visually separate from transport failures.
 
 ### Reading Studio
 
+- Whatever is running (a strategy or an experiment playing, a package loading, a ref followed, a history played back) appears in the **activity line** at the top of the page, each with Stop where it can be stopped; with nothing running it says where the store is kept.
 - Every history of a package, and every branch grown from it, appears in the **history tree**, live: a branch appears as it is recorded.
 - What can be done at the step on screen (a move, a strategy, an experiment, naming it) appears under **From here**, beside the picture.
 - Assets and accounts appear under **Source of truth**.

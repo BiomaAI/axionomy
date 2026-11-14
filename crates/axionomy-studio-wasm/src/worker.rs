@@ -7,8 +7,11 @@
 //! only to learn whether it changed.
 
 use axionomy_engine::{Change, Engine, EngineError, ExperimentPath, Loaded, PackagePath};
+use axionomy_search::GraphSearchProgress;
 use axionomy_store::{Durability, RefPath, Store, StoreError};
-use axionomy_studio_api::{self as api, ChangeView, LoadedView, PointId, Refusal};
+use axionomy_studio_api::{
+    self as api, ChangeView, ExperimentProgress, LoadedView, PointId, Refusal,
+};
 use js_sys::Function;
 use redb::{TableDefinition, TableError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -292,7 +295,7 @@ impl WorkerEngine {
         request: &str,
         progress: &Function,
     ) -> Result<String, JsValue> {
-        let mut watch = reporter(progress);
+        let mut watch = reporter(progress, |_: &GraphSearchProgress, _| false);
         answer(
             point_id(point).and_then(|point| {
                 api::run_strategy(&self.engine, point, parsed(request)?, &mut watch)
@@ -300,11 +303,12 @@ impl WorkerEngine {
         )
     }
 
-    /// Runs the experiment at `path`, calling `progress` with a search's
-    /// progress as JSON now and then; gives a `ResultsView`.
+    /// Runs the experiment at `path`, calling `progress` with its
+    /// `ExperimentProgress` as JSON now and then, and as each trial begins;
+    /// gives a `ResultsView`.
     #[wasm_bindgen(js_name = runExperiment)]
     pub fn run_experiment(&self, path: &str, progress: &Function) -> Result<String, JsValue> {
-        let mut watch = reporter(progress);
+        let mut watch = reporter(progress, ExperimentProgress::another_trial);
         answer(
             path_of::<ExperimentPath>(path)
                 .and_then(|path| api::run_experiment(&self.engine, path, &mut watch)),
@@ -375,18 +379,23 @@ impl WorkerEngine {
     }
 }
 
-/// A watcher calling `progress` with every [`PROGRESS_EVERY`]th report of a
-/// run's progress, as JSON, the first included.
-fn reporter(
-    progress: &Function,
-) -> impl FnMut(&axionomy_search::GraphSearchProgress) -> ControlFlow<()> + '_ {
-    let mut reports = 0_u64;
+/// A watcher calling `progress` with a run's progress as JSON: its first
+/// report, then every [`PROGRESS_EVERY`]th, and any that `begins` another
+/// part of the run than the last one it called with.
+fn reporter<'a, T: Serialize + Copy + 'a>(
+    progress: &'a Function,
+    begins: impl Fn(&T, &T) -> bool + 'a,
+) -> impl FnMut(&T) -> ControlFlow<()> + 'a {
+    let mut since = 0_u64;
+    let mut last: Option<T> = None;
     move |watched| {
-        reports += 1;
-        if reports % PROGRESS_EVERY == 1
-            && let Ok(watched) = serde_json::to_string(watched)
-        {
-            let _ = progress.call1(&JsValue::NULL, &JsValue::from_str(&watched));
+        since += 1;
+        if last.is_none_or(|last| since >= PROGRESS_EVERY || begins(watched, &last)) {
+            since = 0;
+            last = Some(*watched);
+            if let Ok(watched) = serde_json::to_string(watched) {
+                let _ = progress.call1(&JsValue::NULL, &JsValue::from_str(&watched));
+            }
         }
         ControlFlow::Continue(())
     }

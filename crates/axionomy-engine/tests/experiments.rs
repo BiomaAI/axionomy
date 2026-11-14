@@ -3,8 +3,8 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{
-    Arm, CandidateSet, Chooser, Effort, Ended, Engine, Experiment, Measure, Objective, ScriptCall,
-    Strategy,
+    Arm, CandidateSet, Chooser, Effort, Ended, Engine, Experiment, Measure, Objective, Playing,
+    ScriptCall, Strategy,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::{Point, Store};
@@ -130,7 +130,7 @@ fn experiment(arms: &[&str]) -> Experiment {
 
 fn run(engine: &Engine, name: &str) -> axionomy_engine::Results {
     engine
-        .run_experiment(&path(name), &mut |_| ControlFlow::Continue(()))
+        .run_experiment(&path(name), &mut |_, _| ControlFlow::Continue(()))
         .unwrap()
 }
 
@@ -258,6 +258,28 @@ fn an_arm_can_start_from_its_own_ref() {
 }
 
 #[test]
+fn progress_says_which_trial_is_playing() {
+    let (engine, _) = bank();
+    engine
+        .keep_experiment(&path("paying"), &experiment(&["fives", "searched"]))
+        .unwrap();
+    let mut seen: Vec<Playing> = Vec::new();
+    engine
+        .run_experiment(&path("paying"), &mut |playing, _| {
+            if seen.last() != Some(&playing) {
+                seen.push(playing);
+            }
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    // Every trial of every arm, in order, each told before the next.
+    let expected: Vec<Playing> = (0..2)
+        .flat_map(|arm| (0..4).map(move |trial| Playing { arm, trial }))
+        .collect();
+    assert_eq!(seen, expected);
+}
+
+#[test]
 fn an_experiment_stopped_keeps_no_results() {
     let (engine, _) = bank();
     engine
@@ -266,7 +288,7 @@ fn an_experiment_stopped_keeps_no_results() {
     let finished = run(&engine, "paying");
     // The watcher stops the first run: the experiment stops with it, and
     // the results it kept before stay.
-    let stopped = engine.run_experiment(&path("paying"), &mut |_| ControlFlow::Break(()));
+    let stopped = engine.run_experiment(&path("paying"), &mut |_, _| ControlFlow::Break(()));
     assert!(matches!(
         stopped,
         Err(axionomy_engine::EngineError::Interrupted)
@@ -277,7 +299,7 @@ fn an_experiment_stopped_keeps_no_results() {
     // second, ten looks a trial, and a search's as it expands, alike.
     for stop in [3, 12, 42] {
         let mut looks = 0;
-        let stopped = engine.run_experiment(&path("paying"), &mut |_| {
+        let stopped = engine.run_experiment(&path("paying"), &mut |_, _| {
             looks += 1;
             if looks == stop {
                 ControlFlow::Break(())
@@ -330,7 +352,7 @@ fn an_experiment_names_only_what_is_kept() {
     );
     assert!(
         engine
-            .run_experiment(&path("nowhere"), &mut |_| ControlFlow::Continue(()))
+            .run_experiment(&path("nowhere"), &mut |_, _| ControlFlow::Continue(()))
             .is_err()
     );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconMaximize } from "@tabler/icons-react";
+import { ActivityStrip, type Activity } from "./Activity";
 import { BrowserPackages } from "./browserPackages";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
@@ -13,6 +14,7 @@ import {
   samplePackages,
   type Candidate,
   type Exchange,
+  type ExperimentProgress,
   type ExperimentView,
   type HistoriesView,
   type LoadedFrom,
@@ -214,8 +216,14 @@ export function PackagesApp() {
   // Play where nothing has happened yet finds the moves, then plays them as
   // soon as their history is drawn.
   const playOnOpen = useRef(false);
-  const [finding, setFinding] = useState<{ cancel(): void }>();
+  /** A strategy playing from a point, and how far it is. */
+  const [finding, setFinding] = useState<{ cancel(): void; strategy: string; from: PointId; progress?: SearchProgress }>();
   const findingStopped = useRef(false);
+  /** The experiments playing now, by path, each with how far it is. */
+  const [experimenting, setExperimenting] = useState<ReadonlyMap<string, ExperimentRun>>(new Map());
+  /** What each experiment's last play came to, by path. */
+  const [experimentSaid, setExperimentSaid] = useState<ReadonlyMap<string, string>>(new Map());
+  const experimentsStopped = useRef(new Set<string>());
   const [focusedAccount, setFocusedAccount] = useState<string>();
   /** The history the one on screen is set against: picked (a point), closed (null), or the one it left (undefined). */
   const [compareWith, setCompareWith] = useState<PointId | null>();
@@ -421,17 +429,24 @@ export function PackagesApp() {
     } catch (cause) { setError(described(cause)); }
   };
 
+  /** Stops the strategy playing, which then says nothing of it. */
+  const stopFinding = () => {
+    if (!finding) return;
+    findingStopped.current = true;
+    finding.cancel();
+  };
   /**
    * Lets `strategy` play from the point on screen toward `asked.goal`; the
    * branch it makes opens at the step it started from and plays. Asked again
    * while it searches, it stops.
    */
   const letPlay = async (strategy: string, asked: Asked) => {
-    if (finding) { findingStopped.current = true; finding.cancel(); return; }
+    if (finding) { stopFinding(); return; }
     if (!engine || !screenPoint || !asked.goal) return;
     report();
-    const work = engine.runStrategy(screenPoint, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, () => undefined);
-    setFinding({ cancel: work.cancel });
+    const from = screenPoint;
+    const work = engine.runStrategy(from, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, (progress) => setFinding((current) => current && { ...current, progress }));
+    setFinding({ cancel: work.cancel, strategy, from });
     try {
       const ran = await work.result;
       const found = stepOf(ran.end) - stepOf(ran.start);
@@ -475,6 +490,36 @@ export function PackagesApp() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  /** Plays every arm of `experiment`; each trial it plays is a new branch. */
+  const playExperiment = async (experiment: ExperimentView) => {
+    const path = experiment.experiment;
+    if (!engine || experimenting.has(path)) return;
+    const before = results.find((result) => result.experiment === path);
+    setExperimentSaid((current) => changed(current, path));
+    const work = engine.runExperiment(path, (progress) => setExperimenting((current) => {
+      const run = current.get(path);
+      return run ? changed(current, path, { ...run, progress }) : current;
+    }));
+    setExperimenting((current) => changed(current, path, { cancel: work.cancel, experiment }));
+    let said: string;
+    try {
+      const next = await work.result;
+      queryClient.setQueryData(["results", engine.kind, path], next);
+      const ends = (played: ResultsView) => JSON.stringify(played.arms.map((arm) => arm.trials.map((trial) => [trial.ended, trial.values])));
+      said = !before ? "Played: each trial is a new branch in the tree." : ends(before) === ends(next) ? "Played again: the same seeds gave the same results, as new branches." : "Played again: the results changed.";
+    } catch (cause) {
+      said = experimentsStopped.current.has(path) ? "Stopped before every trial ran: no results are kept." : described(cause);
+    } finally {
+      experimentsStopped.current.delete(path);
+      setExperimenting((current) => changed(current, path));
+    }
+    setExperimentSaid((current) => changed(current, path, said));
+  };
+  const stopExperiment = (path: string) => {
+    experimentsStopped.current.add(path);
+    experimenting.get(path)?.cancel();
+  };
+
   /** Watches a trial: its branch opens at the step it started from, and plays. */
   const watch = (trial: { end: PointId; start: PointId }) => openPoint(trial.end, stepOf(trial.start), true);
 
@@ -506,7 +551,7 @@ export function PackagesApp() {
   };
 
   const label = engine ? connectionLabel(engine.kind, "connected") : connectionLabel("native", "checking");
-  const storeWords = !engine ? "" : engine.kind === "native" ? "Store on the server" : kept.data?.persistent ? "Store saved in this browser" : `Store in memory${kept.data?.reason ? `: ${kept.data.reason}` : ""}`;
+  const storeWords = !engine ? "Looking for an engine…" : engine.kind === "native" ? "Store on the server" : kept.data?.persistent ? "Store saved in this browser" : `Store in memory${kept.data?.reason ? `: ${kept.data.reason}` : ""}`;
   const toggleTheater = () => {
     const node = worldPanel.current;
     if (!node) return;
@@ -521,6 +566,22 @@ export function PackagesApp() {
   const left = onScreen?.parent ? tree.branches.find((branch) => branch.id === onScreen.parent?.id) : undefined;
   const against = compareWith === null ? undefined : compareWith ?? (left ? `${left.id}:${left.last}` : undefined);
   const againstBranch = against ? tree.branches.find((branch) => branch.id === parsePoint(against).run) : undefined;
+  const activities: Activity[] = [
+    ...(busy ? [{ key: "loading", words: busy }] : []),
+    ...(finding ? [{
+      key: "strategy",
+      words: <>Playing <strong>{lastPart(finding.strategy)}</strong> from step {stepOf(finding.from)}{finding.progress && ` · ${finding.progress.expanded.toLocaleString()} states looked at`}</>,
+      stop: { label: "Stop", onStop: stopFinding },
+    }] : []),
+    ...[...experimenting].map(([path, run]) => ({ key: `experiment:${path}`, words: experimentWords(run), stop: { label: "Stop", onStop: () => stopExperiment(path) } })),
+    ...(follow.following && opened?.ref ? [{
+      key: "following",
+      words: <>Following <strong>{opened.ref}</strong>{follow.delivered.length > 0 && ` · ${counted(follow.delivered.length, "step")} arrived`}</>,
+      stop: { label: "Stop following", onStop: () => follow.setFollowing(false) },
+    }] : []),
+    // The transport, just below, pauses it.
+    ...(playing && document ? [{ key: "playback", words: <>Playing back <strong>{historyName}</strong>: step {position} of {steps}</> }] : []),
+  ];
   const rootOf = (id: string) => {
     let branch = tree.branches.find((candidate) => candidate.id === id);
     while (branch?.parent) branch = tree.branches.find((candidate) => candidate.id === branch?.parent?.id) ?? undefined;
@@ -532,6 +593,7 @@ export function PackagesApp() {
       <Brand />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
+    <ActivityStrip activities={activities} idle={storeWords} />
 
     <section className="command-bar" aria-label="Package controls">
       <label className="field package-field"><span><Term name="package">Package</Term></span><select name="package" value={packageName ?? ""} disabled={!engine || Boolean(busy)} onChange={(event) => {
@@ -551,11 +613,9 @@ export function PackagesApp() {
         void load(file.name, () => engine.loadFile(file));
       }} /></label>
       <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
-      <div className="engine-message">{storeWords}</div>
     </section>
 
-    {(busy || notices.length > 0) && <div className="status-layer">
-      {busy && <div className="activity" role="status"><div className="activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{busy}</strong><span>Its manifests are checked before it is merged into the store</span></div></div></div>}
+    {notices.length > 0 && <div className="status-layer">
       {notices.map((said) => <div className={`notice notice-${said.tone}`} role="status" key={said.message}>{said.message}{said.tone === "caution" && <button type="button" onClick={() => setNotices((current) => current.filter((candidate) => candidate !== said))}>Dismiss</button>}</div>)}
     </div>}
     {error && <div className="error-banner" role="alert">{error}<button type="button" onClick={() => setError(undefined)}>Dismiss</button></div>}
@@ -582,7 +642,8 @@ export function PackagesApp() {
               <div className="panel action-panel">
                 <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} />
                 <FromHere engine={engine} pkg={pkg} at={playing ? undefined : screenPoint} playing={playing} opened={opened} atEnd={atEnd} onRefPoint={onRefPoint} position={position}
-                  onApply={act} finding={Boolean(finding)} onLetPlay={letPlay} results={results} onWatch={watch} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives} />
+                  onApply={act} finding={Boolean(finding)} onLetPlay={letPlay} results={results} onWatch={watch} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives}
+                  experimenting={experimenting} experimentSaid={experimentSaid} onPlayExperiment={(experiment) => void playExperiment(experiment)} onStopExperiment={stopExperiment} />
               </div>
               <div className="truth-rail">
                 <div className="panel ticker-panel">
@@ -606,6 +667,24 @@ export function PackagesApp() {
 
     <footer>The picture explains. The accounts, rules, and replay prove.</footer>
   </div>;
+}
+
+/** An experiment playing: what it is, how to stop it, and how far it is. */
+type ExperimentRun = { cancel(): void; experiment: ExperimentView; progress?: ExperimentProgress };
+
+/** `map` with `key` set to `value`, or without `key` when there is none. */
+function changed<V>(map: ReadonlyMap<string, V>, key: string, value?: V): ReadonlyMap<string, V> {
+  const next = new Map(map);
+  if (value === undefined) next.delete(key);
+  else next.set(key, value);
+  return next;
+}
+
+/** An experiment playing, in words: the arm and the trial it is on, and how far that trial is. */
+function experimentWords({ experiment, progress }: ExperimentRun) {
+  const trials = Number(experiment.trials);
+  const arm = progress && experiment.arms[progress.arm];
+  return <>Playing <strong>{experiment.experiment}</strong>{arm && progress ? <>: <strong>{lastPart(arm.strategy)}</strong>, arm {progress.arm + 1} of {experiment.arms.length}{trials > 1 && `, trial ${progress.trial + 1} of ${trials}`} · {progress.progress.expanded.toLocaleString()} states looked at</> : "…"}</>;
 }
 
 /** The page before any package is loaded: the samples, each a click from open. */
@@ -686,7 +765,7 @@ function endedWords(ended: ResultsView["arms"][number]["trials"][number]["ended"
 }
 
 /** Everything one can do from the point on screen, each a click from done. */
-function FromHere({ engine, pkg, at, playing, opened, atEnd, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives }: {
+function FromHere({ engine, pkg, at, playing, opened, atEnd, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives, experimenting, experimentSaid, onPlayExperiment, onStopExperiment }: {
   engine: PackageEngine;
   pkg?: PackageView;
   at?: PointId;
@@ -704,6 +783,10 @@ function FromHere({ engine, pkg, at, playing, opened, atEnd, onRefPoint, positio
   onDelete: () => void;
   follow: Following;
   objectives: string[];
+  experimenting: ReadonlyMap<string, ExperimentRun>;
+  experimentSaid: ReadonlyMap<string, string>;
+  onPlayExperiment: (experiment: ExperimentView) => void;
+  onStopExperiment: (path: string) => void;
 }) {
   const experiments = (pkg?.experiments ?? []).filter((experiment) => at && pkg?.refs.find((ref) => ref.name === experiment.start)?.point === at);
   const what = onRefPoint ? <>What you do here moves <Term name="ref">{opened.ref}</Term> forward.</>
@@ -716,7 +799,8 @@ function FromHere({ engine, pkg, at, playing, opened, atEnd, onRefPoint, positio
     <LetPlay pkg={pkg} finding={finding} onLetPlay={onLetPlay} />
     {experiments.length > 0 && <section className="from-section" aria-label="Experiments from here">
       <h3><Term name="experiment">Experiments</Term> from here</h3>
-      {experiments.map((experiment) => <ExperimentHere key={experiment.experiment} engine={engine} experiment={experiment} recorded={results.find((result) => result.experiment === experiment.experiment)} onWatch={onWatch} />)}
+      {experiments.map((experiment) => <ExperimentHere key={experiment.experiment} experiment={experiment} recorded={results.find((result) => result.experiment === experiment.experiment)} onWatch={onWatch}
+        running={experimenting.has(experiment.experiment)} said={experimentSaid.get(experiment.experiment)} onPlay={() => onPlayExperiment(experiment)} onStop={() => onStopExperiment(experiment.experiment)} />)}
     </section>}
     <NameHere pkg={pkg} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
     <HandWritten engine={engine} at={at} onApply={onApply} />
@@ -785,32 +869,23 @@ function LetPlay({ pkg, finding, onLetPlay }: { pkg?: PackageView; finding: bool
   </section>;
 }
 
-/** An experiment that starts here: run it, and watch each trial it played. */
-function ExperimentHere({ engine, experiment, recorded, onWatch }: { engine: PackageEngine; experiment: ExperimentView; recorded?: ResultsView; onWatch: (trial: { end: PointId; start: PointId }) => void }) {
-  const queryClient = useQueryClient();
-  const [running, setRunning] = useState<{ cancel(): void; progress?: SearchProgress }>();
-  const [said, setSaid] = useState<string>();
-  const cancelled = useRef(false);
-  const run = async () => {
-    setSaid(undefined);
-    const before = recorded;
-    const work = engine.runExperiment(experiment.experiment, (progress) => setRunning((current) => current && { ...current, progress }));
-    setRunning({ cancel: work.cancel });
-    try {
-      const next = await work.result;
-      queryClient.setQueryData(["results", engine.kind, experiment.experiment], next);
-      const same = before && JSON.stringify(before.arms.map((arm) => arm.trials.map((trial) => [trial.ended, trial.values]))) === JSON.stringify(next.arms.map((arm) => arm.trials.map((trial) => [trial.ended, trial.values])));
-      setSaid(!before ? "Played: each trial is a new branch in the tree." : same ? "Played again: the same seeds gave the same results, as new branches." : "Played again: the results changed.");
-    } catch (cause) { setSaid(cancelled.current ? "Stopped: nothing it played is kept." : described(cause)); } finally { setRunning(undefined); cancelled.current = false; }
-  };
+/** An experiment that starts here: play it, and watch each trial it played. */
+function ExperimentHere({ experiment, recorded, onWatch, running, said, onPlay, onStop }: {
+  experiment: ExperimentView;
+  recorded?: ResultsView;
+  onWatch: (trial: { end: PointId; start: PointId }) => void;
+  running: boolean;
+  said?: string;
+  onPlay: () => void;
+  onStop: () => void;
+}) {
   const trials = experiment.trials === "1" ? "" : ` × ${experiment.trials} trials`;
   return <div className="experiment-here">
     <div className="experiment-line">
       <span><strong>{lastPart(experiment.experiment)}</strong> <span className="muted">{experiment.arms.length} <Term name="arm">arms</Term>{trials} toward {lastPart(experiment.goal)}</span></span>
-      {running ? <button type="button" className="danger" onClick={() => { cancelled.current = true; running.cancel(); }}>Stop</button>
-        : <button type="button" className="primary" onClick={() => void run()}>{recorded ? "Play again" : "Play each arm"}</button>}
+      {running ? <button type="button" className="danger" onClick={onStop}>Stop</button>
+        : <button type="button" className="primary" onClick={onPlay}>{recorded ? "Play again" : "Play each arm"}</button>}
     </div>
-    {running && <p className="muted" role="status">{running.progress ? `Playing · ${running.progress.expanded.toLocaleString()} states looked at` : "Playing every arm…"}</p>}
     {said && !running && <p className="muted" role="status">{said}</p>}
     {recorded && <ul className="trial-list">{recorded.arms.flatMap((arm) => arm.trials.map((trial, index) => <li key={`${arm.arm.strategy}:${index}`}>
       <span><strong>{lastPart(arm.arm.strategy)}</strong>{arm.trials.length > 1 ? ` · trial ${index + 1}` : ""} <span className="muted">{endedWords(trial.ended)}, {counted(stepOf(trial.end) - stepOf(arm.start), "step")}{recorded.objectives.length > 0 && ` · ${recorded.objectives.map((objective, column) => `${lastPart(objective.objective)} ${trial.values[column]}`).join(" · ")}`}</span></span>

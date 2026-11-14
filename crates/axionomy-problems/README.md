@@ -79,7 +79,7 @@ use std::ops::ControlFlow;
 
 let engine = Engine::new(Store::memory()?)?;
 maze::package::write(&engine)?;
-let results = engine.run_experiment(&path!("maze/micro"), &mut |_| ControlFlow::Continue(()))?;
+let results = engine.run_experiment(&path!("maze/micro"), &mut |_, _| ControlFlow::Continue(()))?;
 let searched = results
     .arms
     .iter()

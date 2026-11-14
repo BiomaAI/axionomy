@@ -37,5 +37,6 @@ asked, such as moving or deleting a ref a package ships, 409 with `RefMoved`
 when a ref is not where its mover saw it, 500 when the engine fails.
 `StrategyEvent` and `ExperimentEvent` report a run's progress before its
 end, which a transport streams: a search's counts, or a policy's or a game's
-turns counted as a search counts expansions. A watcher stops a run of any
+turns counted as a search counts expansions, and for an experiment the arm
+and trial it is on (`ExperimentProgress`). A watcher stops a run of any
 kind, and an experiment stopped keeps no results.

@@ -32,6 +32,7 @@ export type RefView = Schemas["RefView"];
 export type RefFrames = Schemas["RefFrames"];
 export type RefMoved = Schemas["RefMoved"];
 export type SearchProgress = Schemas["GraphSearchProgress"];
+export type ExperimentProgress = Schemas["ExperimentProgress"];
 export type SamplePackages = Schemas["SamplePackages"];
 export type HistoriesView = Schemas["HistoriesView"];
 export type SegmentView = Schemas["SegmentView"];
@@ -113,7 +114,7 @@ export interface PackageEngine {
   /** The steps a ref was moved over after `query.after`, waiting up to `wait_seconds` for one. */
   frames(name: string, query: FramesQuery, signal?: AbortSignal): Promise<RefFrames>;
   runStrategy(point: PointId, request: StrategyRequest, onProgress: (progress: SearchProgress) => void): Running<RanView>;
-  runExperiment(experiment: string, onProgress: (progress: SearchProgress) => void): Running<ResultsView>;
+  runExperiment(experiment: string, onProgress: (progress: ExperimentProgress) => void): Running<ResultsView>;
   /** The results an experiment last recorded, or undefined before it has run. */
   results(experiment: string): Promise<ResultsView | undefined>;
   compare(request: CompareRequest): Promise<ComparisonView>;
@@ -189,14 +190,17 @@ async function streamed<E>(path: string, body: unknown, onEvent: (event: E) => v
   }
 }
 
+/** What a run's events say of how far it is. */
+type ProgressOf<E> = E extends { kind: "progress"; progress: infer P } ? P : never;
+
 /** A run streamed natively: progress as it comes, then its end, or why it has none. */
-function running<E extends { kind: string }, T>(path: string, body: unknown, onProgress: (progress: SearchProgress) => void, end: (event: E) => T | undefined): Running<T> {
+function running<E extends { kind: string }, T>(path: string, body: unknown, onProgress: (progress: ProgressOf<E>) => void, end: (event: E) => T | undefined): Running<T> {
   const abort = new AbortController();
   const result = (async () => {
     let ended: T | undefined;
     let failure: EngineRefusal | undefined;
     await streamed<E>(path, body, (event) => {
-      if (event.kind === "progress") onProgress((event as unknown as { progress: SearchProgress }).progress);
+      if (event.kind === "progress") onProgress((event as unknown as { progress: ProgressOf<E> }).progress);
       else if (event.kind === "failed") {
         const failed = event as unknown as { status: number; error: string };
         failure = new EngineRefusal(failed.status, { error: failed.error });

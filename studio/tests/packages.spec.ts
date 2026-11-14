@@ -20,6 +20,7 @@ async function openSample(page: Page, name: string) {
 const trace = (page: Page) => page.getByRole("slider", { name: "Trace position" });
 const fromHere = (page: Page) => page.locator(".action-panel");
 const tree = (page: Page) => page.getByRole("group", { name: "History tree" });
+const activity = (page: Page) => page.getByRole("region", { name: "Activity" });
 
 /** How many steps the history on screen has, once it is drawn. */
 async function steps(page: Page): Promise<number> {
@@ -169,6 +170,11 @@ test("follows a ref and receives the steps it is moved over", async ({ page }) =
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
   await expect(fromHere(page).getByRole("list", { name: "Delivered steps" })).toContainText(`step ${start + 1}`);
   await expect(fromHere(page).getByRole("button", { name: "Stop following" })).toBeVisible();
+  // What runs is said at the top of the page, and stopped from there.
+  await expect(activity(page)).toContainText(`Following ${mine} · 1 step arrived`);
+  await activity(page).getByRole("button", { name: "Stop following" }).click();
+  await expect(fromHere(page).getByRole("button", { name: "Follow it" })).toBeVisible();
+  await expect(activity(page)).toContainText("Store");
 });
 
 test("stops a game mid-play, and nothing else notices", async ({ page }) => {
@@ -182,8 +188,10 @@ test("stops a game mid-play, and nothing else notices", async ({ page }) => {
   await play.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/self-play");
   await play.getByRole("button", { name: "Play it" }).click();
   await expect(page.locator(".scrubber-label")).toContainText("Finding the moves to play");
+  await expect(activity(page)).toContainText(`Playing self-play from step ${start}`);
+  await expect(activity(page)).toContainText(`Following ${live}`);
   await page.waitForTimeout(1_500);
-  await play.getByRole("button", { name: "Stop" }).click();
+  await activity(page).getByRole("button", { name: "Stop", exact: true }).click();
   await expect(play.getByRole("button", { name: "Play it" })).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
   // The follower never noticed: it is still waiting, and hears the next move.

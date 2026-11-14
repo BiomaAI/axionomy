@@ -14,8 +14,8 @@ pub use divergence::{
     MAX_STEPS, SideView, TipView, divergence,
 };
 pub use experiments::{
-    ArmResultView, CompareRequest, ComparisonView, EndedView, ExperimentEvent, PointValues,
-    ResultsView, TrialView, check_experiment, compare, results, run_experiment,
+    ArmResultView, CompareRequest, ComparisonView, EndedView, ExperimentEvent, ExperimentProgress,
+    PointValues, ResultsView, TrialView, check_experiment, compare, results, run_experiment,
 };
 pub use histories::{ChangeView, HistoriesView, SegmentView, histories};
 pub use ids::{Natural, ObjectiveList, PackageVersion, PointId, PointIdError};

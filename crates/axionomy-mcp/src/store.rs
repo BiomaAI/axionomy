@@ -513,7 +513,7 @@ impl Archive {
     /// its runs and results.
     pub async fn run_experiment(&self, path: ExperimentPath) -> Result<Results, EngineError> {
         let engine = self.engine.clone();
-        blocking(move || engine.run_experiment(&path, &mut |_| ControlFlow::Continue(()))).await
+        blocking(move || engine.run_experiment(&path, &mut |_, _| ControlFlow::Continue(()))).await
     }
 
     /// Indexes `point` by `economy_id` unless a handle names it already, and

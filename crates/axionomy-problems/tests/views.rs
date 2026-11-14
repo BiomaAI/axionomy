@@ -158,7 +158,7 @@ fn draws_every_run(name: &str, write: WritePackage, larger: bool) -> usize {
             continue;
         }
         let results = engine
-            .run_experiment(&experiment, &mut |_| ControlFlow::Continue(()))
+            .run_experiment(&experiment, &mut |_, _| ControlFlow::Continue(()))
             .unwrap();
         for arm in &results.arms {
             for (index, trial) in arm.trials.iter().enumerate() {

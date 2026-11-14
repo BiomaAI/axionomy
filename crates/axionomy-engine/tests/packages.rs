@@ -157,7 +157,7 @@ fn bank() -> Engine {
 
 fn run(engine: &Engine) -> axionomy_engine::Results {
     engine
-        .run_experiment(&path("bank/paying"), &mut |_| ControlFlow::Continue(()))
+        .run_experiment(&path("bank/paying"), &mut |_, _| ControlFlow::Continue(()))
         .unwrap()
 }
 

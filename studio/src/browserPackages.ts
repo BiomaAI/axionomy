@@ -11,6 +11,7 @@ import {
   type DivergenceQuery,
   type DivergenceView,
   type Exchange,
+  type ExperimentProgress,
   type FramesQuery,
   type HistoriesView,
   type LoadedFrom,
@@ -63,7 +64,7 @@ export type StoreRequest =
 export type StoreMessage =
   | { kind: "store_reply"; id: number; ok: true; value: unknown }
   | { kind: "store_reply"; id: number; ok: false; status: number; body: unknown }
-  | { kind: "store_progress"; id: number; progress: SearchProgress }
+  | { kind: "store_progress"; id: number; progress: SearchProgress | ExperimentProgress }
   | { kind: "store_begun"; id: number }
   | { kind: "store_change"; change: ChangeView };
 
@@ -72,7 +73,8 @@ type Waiting = {
   request: StoreRequest;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  progress?: (progress: SearchProgress) => void;
+  /** Hears the run's progress, as the Worker posts what the run reports. */
+  progress?: (progress: never) => void;
   /** Whether the Worker has begun it; a run says so as it begins. */
   begun?: boolean;
 };
@@ -173,7 +175,7 @@ export class BrowserPackages implements PackageEngine {
     return this.running<RanView>({ kind: "run_strategy", point, request }, onProgress);
   }
 
-  runExperiment(experiment: string, onProgress?: (progress: SearchProgress) => void): Running<ResultsView> {
+  runExperiment(experiment: string, onProgress?: (progress: ExperimentProgress) => void): Running<ResultsView> {
     return this.running<ResultsView>({ kind: "run_experiment", experiment }, onProgress);
   }
 
@@ -215,7 +217,7 @@ export class BrowserPackages implements PackageEngine {
    * reaches it without cross-origin isolation, which GitHub Pages cannot
    * give: cancelling terminates the Worker while it runs the run.
    */
-  private running<T>(request: StoreRequest, progress?: (progress: SearchProgress) => void): Running<T> {
+  private running<T>(request: StoreRequest, progress?: (progress: never) => void): Running<T> {
     const id = this.next++;
     const result = this.send(id, request, progress) as Promise<T>;
     return { result, cancel: () => this.cancel(id) };
@@ -272,7 +274,8 @@ export class BrowserPackages implements PackageEngine {
       const waiting = this.waiting.get(data.id);
       if (!waiting) return;
       if (data.kind === "store_progress") {
-        waiting.progress?.(data.progress);
+        // A run's progress is what that run reports, which the caller named.
+        (waiting.progress as ((progress: unknown) => void) | undefined)?.(data.progress);
         return;
       }
       this.waiting.delete(data.id);
@@ -285,11 +288,11 @@ export class BrowserPackages implements PackageEngine {
     return worker;
   }
 
-  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void, signal?: AbortSignal) {
+  private request(request: StoreRequest, progress?: (progress: never) => void, signal?: AbortSignal) {
     return this.send(this.next++, request, progress, signal);
   }
 
-  private send(id: number, request: StoreRequest, progress?: (progress: SearchProgress) => void, signal?: AbortSignal) {
+  private send(id: number, request: StoreRequest, progress?: (progress: never) => void, signal?: AbortSignal) {
     return new Promise<unknown>((resolve, reject) => {
       if (signal?.aborted) return reject(signal.reason);
       this.waiting.set(id, { request, resolve, reject, progress });

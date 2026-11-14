@@ -111,7 +111,7 @@ fn a_package_and_its_experiment_are_found_again_with_where_it_came_from() {
         assert!(experiments.contains(&path("maze/micro")), "{experiments:?}");
         worker
             .engine()
-            .run_experiment(&path("maze/micro"), &mut |_| ControlFlow::Continue(()))
+            .run_experiment(&path("maze/micro"), &mut |_, _| ControlFlow::Continue(()))
             .unwrap()
     };
 
@@ -355,7 +355,7 @@ fn a_worker_terminated_mid_run_leaves_its_store_whole() {
     // point of a ref the package ships, which is fixed, with a ref of the
     // Worker's own named there and moved over it, and another naming it.
     let results = engine
-        .run_experiment(&path("maze/micro"), &mut |_| ControlFlow::Continue(()))
+        .run_experiment(&path("maze/micro"), &mut |_, _| ControlFlow::Continue(()))
         .unwrap();
     let start = engine.referred(&path("maze/micro")).unwrap();
     engine.refer(&path("maze/play"), start).unwrap();
@@ -367,7 +367,7 @@ fn a_worker_terminated_mid_run_leaves_its_store_whole() {
     // is cut off at each of its looks, its trials' records among them.
     let mut cut = Vec::new();
     let again = engine
-        .run_experiment(&path("maze/micro"), &mut |_| {
+        .run_experiment(&path("maze/micro"), &mut |_, _| {
             cut.push(file.bytes());
             ControlFlow::Continue(())
         })

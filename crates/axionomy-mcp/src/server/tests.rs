@@ -1676,7 +1676,7 @@ async fn an_experiment_runs_as_the_engine_runs_it_and_names_every_trial_end() {
     let engine = Engine::new(Store::memory().unwrap()).unwrap();
     engine.load(&maze_package()).unwrap();
     let expected = engine
-        .run_experiment(&"maze/micro".parse().unwrap(), &mut |_| {
+        .run_experiment(&"maze/micro".parse().unwrap(), &mut |_, _| {
             ControlFlow::Continue(())
         })
         .unwrap();

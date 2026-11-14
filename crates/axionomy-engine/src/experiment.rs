@@ -104,6 +104,14 @@ impl ArmResult {
     }
 }
 
+/// The trial an experiment is playing: its arm, in the experiment's order,
+/// and that arm's trial, from 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Playing {
+    pub arm: usize,
+    pub trial: u64,
+}
+
 /// An experiment's results: every arm's trials, and the store group its
 /// runs were recorded in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,13 +173,14 @@ impl Engine {
     /// experiment's goal with its effort, records the runs as a store group
     /// of kind `experiment`, and keeps and returns the results. `watch` sees
     /// every run's progress, as [`run_strategy`](Engine::run_strategy)
-    /// reports it, and may stop the run, whatever its kind, which stops the
-    /// experiment: it keeps no results, and the results it kept before stay,
-    /// so an experiment stopped is never mistaken for one whose runs ran out.
+    /// reports it, with the trial it is [`Playing`], and may stop the run,
+    /// whatever its kind, which stops the experiment: it keeps no results,
+    /// and the results it kept before stay, so an experiment stopped is
+    /// never mistaken for one whose runs ran out.
     pub fn run_experiment(
         &self,
         path: &ExperimentPath,
-        watch: &mut impl FnMut(&axionomy_search::GraphSearchProgress) -> ControlFlow<()>,
+        watch: &mut impl FnMut(Playing, &axionomy_search::GraphSearchProgress) -> ControlFlow<()>,
     ) -> Result<Results, EngineError> {
         let experiment = self.experiment(path)?;
         let start = self.referred(&experiment.start)?;
@@ -188,7 +197,7 @@ impl Engine {
             .wait()?;
         let mut arms = Vec::with_capacity(experiment.arms.len());
         let mut member = 0;
-        for arm in &experiment.arms {
+        for (index, arm) in experiment.arms.iter().enumerate() {
             let from = match &arm.start {
                 Some(start) => self.referred(start)?,
                 None => start,
@@ -204,7 +213,14 @@ impl Engine {
                     seed,
                     ..experiment.effort
                 };
-                let ran = self.run_strategy(from, &strategy, &experiment.goal, effort, watch)?;
+                let playing = Playing { arm: index, trial };
+                let ran = self.run_strategy(
+                    from,
+                    &strategy,
+                    &experiment.goal,
+                    effort,
+                    &mut |progress| watch(playing, progress),
+                )?;
                 if let Outcome::Interrupted = ran.outcome {
                     return Err(EngineError::Interrupted);
                 }

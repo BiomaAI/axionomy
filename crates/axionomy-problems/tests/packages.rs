@@ -224,7 +224,7 @@ fn reproduced_by(
     let experiment = experiment.parse().unwrap();
     let objectives = engine.experiment(&experiment).unwrap().objectives;
     let results = engine
-        .run_experiment(&experiment, &mut |_| ControlFlow::Continue(()))
+        .run_experiment(&experiment, &mut |_, _| ControlFlow::Continue(()))
         .unwrap();
     for strategy in strategies {
         // An outcome some instances have, such as revenue where there are
@@ -1273,7 +1273,7 @@ fn exact_cover(engine: &Engine, instance: &str) {
     // No strategy covers the unsatisfiable twin: search runs out, and
     // Algorithm X makes no plan.
     let results = engine
-        .run_experiment(&unsatisfiable.parse().unwrap(), &mut |_| {
+        .run_experiment(&unsatisfiable.parse().unwrap(), &mut |_, _| {
             ControlFlow::Continue(())
         })
         .unwrap();
@@ -1461,7 +1461,7 @@ fn rescue_monte_carlo(engine: &Engine) {
     let path = path!("rescue/micro/monte-carlo");
     let experiment = engine.experiment(&path).unwrap();
     let results = engine
-        .run_experiment(&path, &mut |_| ControlFlow::Continue(()))
+        .run_experiment(&path, &mut |_, _| ControlFlow::Continue(()))
         .unwrap();
     let trials = usize::try_from(experiment.trials).unwrap();
     assert_eq!((trials, experiment.effort.seed), (EFFORT, SEED));
@@ -1553,7 +1553,7 @@ fn scheduling(engine: &Engine, instance: &str) {
     // No strategy fits the work into too short a horizon: every search
     // runs out.
     let results = engine
-        .run_experiment(&infeasible.parse().unwrap(), &mut |_| {
+        .run_experiment(&infeasible.parse().unwrap(), &mut |_, _| {
             ControlFlow::Continue(())
         })
         .unwrap();
@@ -1746,7 +1746,7 @@ fn mission_monte_carlo(engine: &Engine) {
     let path = path!("mission/micro/monte-carlo");
     let experiment = engine.experiment(&path).unwrap();
     let results = engine
-        .run_experiment(&path, &mut |_| ControlFlow::Continue(()))
+        .run_experiment(&path, &mut |_, _| ControlFlow::Continue(()))
         .unwrap();
     let trials = usize::try_from(experiment.trials).unwrap();
     assert_eq!(trials, MISSION_SAMPLES);

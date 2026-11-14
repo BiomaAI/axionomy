@@ -18,6 +18,12 @@ by an engine, native or in the browser, that Studio asks the same way.
   the same version again changes nothing. Refs and runs of your own stay.
   What an action did is said once, in place of what the last one said: a
   confirmation goes by itself, and a caution stays until it is dismissed.
+- **The activity line**, at the top of the page however far it is
+  scrolled, says what is running: a strategy playing and how many states it
+  has looked at, an experiment playing and the arm and trial it is on, a
+  package loading, a ref followed and the steps that arrived, a history
+  played back. Each that can be stopped has its **Stop** there. With nothing
+  running it says where the store is kept.
 - **The history tree** is the page's spine: every history the package's
   refs are on, and every branch grown from them, drawn as a timeline (steps
   left to right, each branch on a row below the step it split off at, long

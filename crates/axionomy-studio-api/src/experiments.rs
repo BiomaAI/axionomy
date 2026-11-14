@@ -77,18 +77,41 @@ impl From<Ended> for EndedView {
     }
 }
 
+/// How far a running experiment is: the trial it plays, by its arm in the
+/// experiment's order and that arm's trial, both from 0, and how far that
+/// trial's run is: its search's progress, or its turns counted as a search
+/// counts expansions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ExperimentProgress {
+    pub arm: usize,
+    pub trial: u64,
+    pub progress: GraphSearchProgress,
+}
+
+impl ExperimentProgress {
+    /// Whether this is the progress of another trial than `last` was.
+    pub fn another_trial(&self, last: &Self) -> bool {
+        (self.arm, self.trial) != (last.arm, last.trial)
+    }
+}
+
 /// What an experiment reports while it runs, then its results or why it
 /// has none.
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExperimentEvent {
-    /// How far the trial running now is: its search's progress, or its
-    /// turns counted as a search counts expansions.
-    Progress { progress: GraphSearchProgress },
+    Progress {
+        progress: ExperimentProgress,
+    },
     /// Every trial ran; the store keeps these results.
-    Results { results: ResultsView },
+    Results {
+        results: ResultsView,
+    },
     /// The experiment could not run, as the status says.
-    Failed { status: u16, error: String },
+    Failed {
+        status: u16,
+        error: String,
+    },
 }
 
 impl From<Result<ResultsView, Refusal>> for ExperimentEvent {
@@ -142,13 +165,19 @@ pub fn check_experiment(engine: &Engine, path: &ExperimentPath) -> Result<(), Re
 }
 
 /// Runs the experiment at `path`, keeping its results; `watch` sees every
-/// run's progress and may stop it, which stops the experiment.
+/// trial's progress and may stop it, which stops the experiment.
 pub fn run_experiment(
     engine: &Engine,
     path: ExperimentPath,
-    watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+    watch: &mut impl FnMut(&ExperimentProgress) -> ControlFlow<()>,
 ) -> Result<ResultsView, Refusal> {
-    let results = engine.run_experiment(&path, watch)?;
+    let results = engine.run_experiment(&path, &mut |playing, progress| {
+        watch(&ExperimentProgress {
+            arm: playing.arm,
+            trial: playing.trial,
+            progress: *progress,
+        })
+    })?;
     results_view(engine, path, results)
 }
 

@@ -89,9 +89,10 @@ goes.
   and `experiments` lists those the store keeps. `run_experiment` runs every
   arm's trials toward the goal with that effort over the same seeds,
   records the runs as a store group of kind `experiment` and keeps the
-  results, which `results` reads back. A watcher that stops a search stops
-  the experiment, which keeps no results then, so the results it kept
-  before stay.
+  results, which `results` reads back. Its watcher hears each run's
+  progress with the arm and trial it is `Playing`; a watcher that stops a
+  search stops the experiment, which keeps no results then, so the results
+  it kept before stay.
 - `compare` gives points' objective vectors and the front no other point
   dominates; `pick` the best point by objectives in order.
 - `export` copies a package (refs and definitions and everything they reach,

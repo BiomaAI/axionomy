@@ -16,7 +16,7 @@ pub use definitions::{
     ScriptCall, ScriptFunction, StrategyPath,
 };
 pub use divergence::{AccountDifference, Aligned, BalanceDifference, Divergence, Side, Tip};
-pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Trial};
+pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Playing, Results, Trial};
 pub use histories::{Change, Segment, Subscriber};
 pub use package::{
     Contents, Loaded, Manifest, PackageError, PackagePath, Version, VersionError, package, zipped,

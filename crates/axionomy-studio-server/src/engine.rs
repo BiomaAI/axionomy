@@ -9,8 +9,9 @@ use axionomy_engine::{Engine, ExperimentPath, PackagePath};
 use axionomy_search::GraphSearchProgress;
 use axionomy_studio_api::{
     Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
-    CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent, HistoriesView,
-    LoadedView, PackageList, PointId, Refusal, ResultsView, StrategyEvent, StrategyRequest,
+    CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent,
+    ExperimentProgress, HistoriesView, LoadedView, PackageList, PointId, Refusal, ResultsView,
+    StrategyEvent, StrategyRequest,
 };
 use axionomy_view::ViewDocument;
 use axum::{
@@ -33,7 +34,8 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
-/// The longest a run goes between two reports of its progress.
+/// The least time between two reports of a run's progress, unless the
+/// later one begins another part of it.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
 /// A point in a URL, such as `run-000000000000feed0000000000000007:3`.
@@ -229,14 +231,25 @@ pub(crate) async fn compare(
 
 /// What a running operation streams: its progress, then its end.
 trait Streamed: Serialize + Send + 'static {
-    fn progress(progress: GraphSearchProgress) -> Self;
+    /// How far the operation is.
+    type Progress: Copy + Send;
+    fn progress(progress: Self::Progress) -> Self;
+    /// Whether `progress` begins another part of the operation than `last`
+    /// was of, so it is reported however soon after `last` it comes.
+    fn begins(progress: &Self::Progress, last: &Self::Progress) -> bool;
     /// The event's name in the stream.
     fn kind(&self) -> &'static str;
 }
 
 impl Streamed for StrategyEvent {
+    type Progress = GraphSearchProgress;
+
     fn progress(progress: GraphSearchProgress) -> Self {
         Self::Progress { progress }
+    }
+
+    fn begins(_: &GraphSearchProgress, _: &GraphSearchProgress) -> bool {
+        false
     }
 
     fn kind(&self) -> &'static str {
@@ -249,8 +262,15 @@ impl Streamed for StrategyEvent {
 }
 
 impl Streamed for ExperimentEvent {
-    fn progress(progress: GraphSearchProgress) -> Self {
+    type Progress = ExperimentProgress;
+
+    fn progress(progress: ExperimentProgress) -> Self {
         Self::Progress { progress }
+    }
+
+    /// Each trial is reported as it begins.
+    fn begins(progress: &ExperimentProgress, last: &ExperimentProgress) -> bool {
+        progress.another_trial(last)
     }
 
     fn kind(&self) -> &'static str {
@@ -267,19 +287,19 @@ impl Streamed for ExperimentEvent {
 /// stream stops the run, whatever its kind, at its next look at its progress.
 fn streamed<E: Streamed>(
     engine: Engine,
-    work: impl FnOnce(&Engine, &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>) -> E
-    + Send
-    + 'static,
+    work: impl FnOnce(&Engine, &mut dyn FnMut(&E::Progress) -> ControlFlow<()>) -> E + Send + 'static,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (sender, receiver) = mpsc::channel::<E>(16);
     tokio::task::spawn_blocking(move || {
-        let mut reported: Option<Instant> = None;
-        let mut watch = |progress: &GraphSearchProgress| {
+        let mut reported: Option<(Instant, E::Progress)> = None;
+        let mut watch = |progress: &E::Progress| {
             if sender.is_closed() {
                 return ControlFlow::Break(());
             }
-            if reported.is_none_or(|at| at.elapsed() >= PROGRESS_EVERY) {
-                reported = Some(Instant::now());
+            if reported.is_none_or(|(at, last)| {
+                at.elapsed() >= PROGRESS_EVERY || E::begins(progress, &last)
+            }) {
+                reported = Some((Instant::now(), *progress));
                 // A full stream drops a report; a later one says more.
                 let _ = sender.try_send(E::progress(*progress));
             }
