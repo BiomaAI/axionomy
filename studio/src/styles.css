@@ -609,6 +609,7 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .tree-label.clickable { cursor: pointer; }
 .tree-label.clickable:hover rect { stroke: var(--text); }
 .tree-gap { font: 9px var(--mono); fill: var(--muted); }
+.tree-gap-back { fill: var(--surface); }
 .tree-hover { position: fixed; z-index: 80; width: max-content; min-width: 220px; max-width: 320px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 10px 26px #0009; }
 .branch-card { display: grid; gap: 4px; font-size: 12px; line-height: 1.45; color: var(--text); }
 .branch-card strong { font-size: 13px; }

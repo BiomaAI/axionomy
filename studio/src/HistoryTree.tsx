@@ -192,7 +192,6 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
   const frame = host.current?.getBoundingClientRect();
   return <div className="history-tree" ref={host} role="group" aria-label={label} onScroll={() => setHover(undefined)}>
     <svg width={laid.width} height={laid.height} role="presentation">
-      {laid.gaps.map((gap) => <text key={`${gap.from}-${gap.to}`} className="tree-gap" x={(laid.x(gap.from) + laid.x(gap.to)) / 2} y={10} textAnchor="middle">{gap.to - gap.from - 1} steps</text>)}
       {laid.ordered.map((branch) => {
         const row = y(branch.id);
         const own = branch.parent ? branch.first + 1 : branch.first;
@@ -204,7 +203,17 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
           {branch.parent && laid.rows.has(branch.parent.id) && <path className={`tree-link${on ? " on-path" : ""}`} d={`M ${laid.x(branch.parent.step)} ${y(branch.parent.id)} V ${row - 8} Q ${laid.x(branch.parent.step)} ${row} ${laid.x(branch.parent.step) + 8} ${row} H ${laid.x(own)}`} />}
           <line className="tree-line" x1={laid.x(branch.first)} x2={laid.x(branch.last)} y1={row} y2={row} />
           {on && <line className="tree-line path-line" x1={laid.x(Math.max(branch.first, on.from))} x2={laid.x(Math.min(branch.last, on.to))} y1={row} y2={row} />}
-          {laid.gaps.filter((gap) => gap.from >= branch.first && gap.to <= branch.last).map((gap) => <line key={gap.from} className="tree-line gap-line" x1={laid.x(gap.from) + 6} x2={laid.x(gap.to) - 6} y1={row} y2={row} />)}
+          {laid.gaps.filter((gap) => gap.from >= branch.first && gap.to <= branch.last).map((gap) => {
+            // A stretch drawn short says on it how many steps it holds.
+            const middle = (laid.x(gap.from) + laid.x(gap.to)) / 2;
+            const words = `${gap.to - gap.from - 1} steps`;
+            const width = words.length * 5.6 + 8;
+            return <g key={gap.from}>
+              <line className="tree-line gap-line" x1={laid.x(gap.from) + 6} x2={laid.x(gap.to) - 6} y1={row} y2={row} />
+              <rect className="tree-gap-back" x={middle - width / 2} y={row - 7} width={width} height={14} />
+              <text className="tree-gap" x={middle} y={row + 3} textAnchor="middle">{words}</text>
+            </g>;
+          })}
           <rect className="tree-track" x={laid.x(branch.first) - UNIT / 2} y={row - ROW / 2} width={laid.x(branch.last) - laid.x(branch.first) + UNIT} height={ROW}
             onClick={(event) => onTrack(branch, event)} />
           {steps.map((step) => {
