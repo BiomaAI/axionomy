@@ -1232,21 +1232,42 @@ fn inferred_path_status(classes: &[ClassPath]) -> ScenePathStatusView {
     }
 }
 
+/// A legend names an icon by what everything drawn with it is called. An icon
+/// that differently named things share has no one name to give it, so it is
+/// left out, and a name already given is not given again.
 fn inferred_legend(entities: &[SceneEntityView]) -> Vec<SceneLegendView> {
-    let mut entries = Vec::new();
+    let mut entries: Vec<SceneLegendView> = Vec::new();
+    let mut shared = Vec::new();
     for entity in entities {
-        if !entries
+        let icon = (entity.glyph, entity.tone);
+        if shared.contains(&icon) {
+            continue;
+        }
+        match entries
             .iter()
-            .any(|known: &SceneLegendView| known.glyph == entity.glyph && known.tone == entity.tone)
+            .position(|known| (known.glyph, known.tone) == icon)
         {
-            entries.push(SceneLegendView {
+            Some(index) if entries[index].label != entity.id.label => {
+                entries.remove(index);
+                shared.push(icon);
+            }
+            Some(_) => {}
+            None => entries.push(SceneLegendView {
                 label: entity.id.label.clone(),
                 glyph: entity.glyph,
                 tone: entity.tone,
                 path: None,
-            });
+            }),
         }
     }
+    let mut named = Vec::new();
+    entries.retain(|entry| {
+        let first = !named.contains(&entry.label);
+        if first {
+            named.push(entry.label.clone());
+        }
+        first
+    });
     entries
 }
 
@@ -2446,6 +2467,74 @@ mod tests {
         fn role(&self, _: &Role) -> ViewId {
             ViewId::new(path!("role/actor"), "Actor")
         }
+    }
+
+    #[test]
+    fn a_legend_names_an_icon_only_by_what_everything_drawn_with_it_is_called() {
+        let thing = |key, label: &str, glyph, tone| SceneEntityView {
+            id: ViewId::new(key, label),
+            glyph,
+            anchor: SceneAnchorView::GraphNode {
+                node: path!("shop"),
+            },
+            role: SceneEntityRoleView::State,
+            tone,
+            status: None,
+            account: None,
+            evidence: Vec::new(),
+            metrics: Vec::new(),
+        };
+        let legend = inferred_legend(&[
+            // Wood and labor share an icon, so it has no one name.
+            thing(
+                path!("wood"),
+                "Wood",
+                SceneGlyphView::Material,
+                SceneToneView::Active,
+            ),
+            thing(
+                path!("labor"),
+                "Labor",
+                SceneGlyphView::Material,
+                SceneToneView::Active,
+            ),
+            thing(
+                path!("tool"),
+                "Tool",
+                SceneGlyphView::Tool,
+                SceneToneView::Neutral,
+            ),
+            // A name already given is not given again.
+            thing(
+                path!("spare"),
+                "Tool",
+                SceneGlyphView::Tool,
+                SceneToneView::Active,
+            ),
+            thing(
+                path!("chair"),
+                "Chair",
+                SceneGlyphView::Product,
+                SceneToneView::Success,
+            ),
+            thing(
+                path!("stool"),
+                "Chair",
+                SceneGlyphView::Product,
+                SceneToneView::Success,
+            ),
+        ]);
+        let named: Vec<_> = legend
+            .iter()
+            .map(|entry| (entry.label.as_str(), entry.glyph, entry.tone))
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("Tool", SceneGlyphView::Tool, SceneToneView::Neutral),
+                ("Chair", SceneGlyphView::Product, SceneToneView::Success),
+            ]
+        );
     }
 
     #[test]
