@@ -6,29 +6,36 @@ It opens on **packages**
 economies, refs, strategies, experiments and views a package carries, served
 by an engine, native or in the browser, that Studio asks the same way.
 
-- **Load a package** from a file (a store file or a zip of one), or a sample
-  package by its URL (`packages/<name>.zip`, which `packages/index.json`
-  lists); a link such as `?package=packages/maze.zip` loads one when it
-  opens. The link keeps the URL, the package, the ref or point, the step and
+- **Load a package** from a file (a store file or a zip of one), or open a
+  sample by choosing it (`packages/<name>.zip`, which `packages/index.json`
+  lists; with nothing loaded, Studio lists them on its first page); a link
+  such as `?package=packages/maze.zip` loads one when it opens, and a sample
+  is linked by that path. The link keeps the URL, the package, the ref or point, the step and
   the view (`name`, `ref`, `point`, `step`, `view`), so a reload or a copied
   link opens the same. A package is a release: loading another version of
   one the store holds replaces what the held version shipped, and Studio
   says so; loading the same version again changes nothing. Refs and runs of
-  your own stay.
+  your own stay. What an action did is said once, in place of what the last
+  one said: a confirmation goes by itself, and a caution (a package that
+  could not be reached, a version replaced, a ref or definition kept) stays
+  until it is dismissed.
 - **A package's refs are fixed**, so the package means what it shipped:
-  at one, **Name a ref of your own here** names its point with a ref of
-  yours, which moves as you play. A ref of your own can be deleted; the
+  at one, **Name a ref here** names its point with a ref of yours
+  (`<package>/mine` unless you name it otherwise), which moves as you play. A ref of your own can be deleted; the
   points it named stay.
 - **A ref or a point** draws its history with the package's view, in the
-  playback, scene and inspectors below; a ref opens where it is, at the end
-  of its history.
+  playback, the picture and the inspectors; a ref opens where it is, at the
+  end of its history. A point with no history yet says so in place of
+  playback, and how to make one.
+- **What to do here** sits beside the picture, so what an action does shows
+  at once: **Act**, **Continue from here** and **Follow**.
 - **Act** works at the step on screen. A candidate set's exchanges there are
   listed, each assessed (applicable, infeasible or invalid, with what it
   lacks), and an exchange can be written as JSON and assessed before it can
   be applied. At the point a ref of your own is on, applying also moves the
   ref over the new step, and is told where the ref went if another mover
   came first; anywhere else, a package's ref's point among them, it makes a
-  branch, a new point no ref names, which **Keep as a ref** names.
+  branch, a new point no ref names, which **Name a ref here** names.
 - **Continue from here** runs a strategy from the step on screen toward a
   goal picked from the package's goals, with a seed, a budget of expansions
   for a search and the most turns a policy or a game plays (the goal and the
@@ -43,8 +50,9 @@ by an engine, native or in the browser, that Studio asks the same way.
   page or any other proposer, each with the package's objectives there.
 - **Experiments** lists the package's experiments; running one reports its
   progress and can be cancelled (a cancelled experiment keeps no results).
-  Each arm's trials are listed with their seeds, how they ended and their
-  exact objective values; **Pick by** orders the objectives, and the trial
+  Each names its arms before it runs; each arm's trials are listed with
+  their seeds, how they ended, the step they ended at and their exact
+  objective values; **Pick by** orders the objectives, and the trial
   ends no other dominates are marked, the pick highlighted. A trial's end
   opens like any point.
 
@@ -54,8 +62,8 @@ private file system where it stays across reloads, so a sample loaded again
 after Pages publishes a new version is that version, not a mix of both.
 
 **Source of truth** shows accounts and assets; **The rules** shows rates,
-roles, goals, and invariants; **One step** explains the selected exchange and
-its exact effects.
+roles, goals, and invariants; **Proof of this step** explains the selected
+exchange: what was checked before it applied and its exact effects.
 
 Graph, grid, matrix, timeline, and reserves pictures help people read a result, but they
 never become a second simulation model. Geometry, semantic entities, paths,

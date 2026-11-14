@@ -148,13 +148,13 @@ h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; mar
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 .kbd-hint { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
 .kbd-hint b { color: var(--text); border: 1px solid var(--line); padding: 1px 4px; font-weight: 500; }
-.share-mini { min-height: 30px; padding: 0 9px; color: var(--brass); font-size: 10px; white-space: nowrap; }
 .replay-proof { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
 .replay-proof span { color: var(--credit); }
 
-.share-link { white-space: nowrap; color: var(--brass); }
-.link-notice { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--hold) 55%, var(--line)); background: color-mix(in srgb, var(--hold) 10%, var(--surface)); color: var(--muted); font-size: 10px; }
-.link-notice button { min-height: 28px; font-size: 10px; }
+/* A confirmation reads plainly and goes by itself; a caution is amber and stays until dismissed. */
+.notice { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line-strong); border-left: 2px solid var(--credit); background: var(--surface); color: var(--text); font-size: 11px; }
+.notice-caution { border-color: color-mix(in srgb, var(--hold) 55%, var(--line)); border-left-color: var(--hold); background: color-mix(in srgb, var(--hold) 10%, var(--surface)); }
+.notice button { min-height: 28px; font-size: 10px; }
 .live-standings { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding-top: 9px; border-top: 1px solid color-mix(in srgb, var(--steel) 30%, var(--line)); }
 .live-standings > span { margin-right: auto; color: var(--brass); font: 10px var(--mono); text-transform: uppercase; }
 .live-standings > strong { padding: 4px 7px; border: 1px solid var(--line); font: 10px var(--mono); }
@@ -164,14 +164,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
    One viewport-height cockpit: picture | standings rail | truth rail.
    Frames come from this grid, never from panel content (IC-1). */
 .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(288px, 350px) minmax(276px, 330px); gap: 14px; height: clamp(560px, calc(100dvh - 120px), 1160px); margin-bottom: 14px; }
-.stage.no-boards { grid-template-columns: minmax(0, 1fr) minmax(300px, 372px); }
-.stage.scene-sparse { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px) minmax(300px, 372px); }
-.stage.no-boards.scene-sparse { grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); }
 .truth-rail { display: grid; grid-template-rows: minmax(0, .44fr) minmax(0, .56fr); gap: 14px; min-height: 0; }
 
-.evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: clamp(430px, 56vh, 640px); gap: 14px; margin-top: 14px; }
 .definition-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .5fr); height: clamp(390px, 50vh, 580px); gap: 14px; margin-top: 14px; }
-.definition-grid.no-observations { grid-template-columns: 1fr; }
 
 .panel { min-width: 0; min-height: 0; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--line); overflow: hidden; }
 .panel-heading { min-height: 52px; padding: 10px 15px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 15px; }
@@ -519,14 +514,12 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .command-bar { flex-wrap: wrap; }
   .engine-message { width: 100%; max-width: none; margin: 5px 0 0; text-align: left; }
   .activity { grid-template-columns: 1fr; }
-  .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); height: auto; }
-  .evidence-grid > .panel { height: clamp(400px, 52vh, 560px); }
-  .stage, .stage.no-boards, .stage.scene-sparse, .stage.no-boards.scene-sparse { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .stage { grid-template-columns: minmax(0, 1fr); height: auto; }
   .stage > .world-panel { height: min(74vh, 640px); }
   .truth-rail { grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .truth-rail > .panel { height: min(52vh, 440px); }
   .playback { grid-template-columns: auto 1fr auto auto; }
-  .kbd-hint, .share-mini { display: none; }
+  .kbd-hint { display: none; }
 }
 
 @media (max-width: 880px) {
@@ -537,8 +530,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .stage > .world-panel { height: min(70vh, 520px); }
   .truth-rail { grid-template-columns: minmax(0, 1fr); }
   .truth-rail > .panel { height: 420px; }
-  .evidence-grid { grid-template-columns: minmax(0, 1fr); }
-  .definition-grid, .definition-grid.no-observations { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .definition-grid { grid-template-columns: minmax(0, 1fr); height: auto; }
   .definition-grid > .panel { height: clamp(380px, 52vh, 520px); }
   .model-explorer { grid-template-columns: 1fr; }
   .rate-controls { grid-template-columns: 1fr; }
@@ -611,9 +603,7 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .empty-catalog code, .experiment-card code { font: 11px var(--mono); color: var(--text); }
 .keep-ref { display: flex; align-items: end; gap: 7px; }
 .keep-ref .field { min-width: 280px; }
-.act-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); height: auto; min-height: 360px; }
 .packages-workspace .command-bar button { white-space: nowrap; }
-.act-grid > .panel { max-height: clamp(520px, 80vh, 900px); }
 .action-panel { display: flex; flex-direction: column; }
 .action-tabs { display: flex; gap: 5px; padding: 10px 15px 0; }
 .action-tabs button { min-height: 30px; padding: 0 10px; color: var(--muted); font-size: 11px; }
@@ -652,9 +642,6 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .experiment-body .point-key, .experiment-body > .muted { margin: 0; }
 .pick-field { min-width: 200px; margin-left: auto; }
 .experiment-card td small.outcome-note { margin-left: 8px; }
-@media (max-width: 1180px) {
-  .act-grid { grid-template-columns: minmax(0, 1fr); }
-}
 @media (max-width: 880px) {
   .topbar { flex-wrap: wrap; gap: 8px 12px; }
 }
@@ -662,3 +649,31 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
   .keep-ref { flex-direction: column; align-items: stretch; }
   .keep-ref .field { min-width: 0; }
 }
+
+/* The point's stage: the picture, what to do here, and what is true there. */
+.point-stage > .action-panel { display: flex; flex-direction: column; }
+.point-stage .candidate { grid-template-columns: minmax(0, 1fr) auto; row-gap: 3px; padding: 6px 9px; }
+.point-stage .candidate > strong { grid-column: 1; grid-row: 1; white-space: normal; }
+.point-stage .candidate > span { grid-column: 1 / -1; grid-row: 2; }
+.point-stage .candidate > small { grid-column: 2; grid-row: 1; }
+.point-stage .candidate-list { max-height: none; }
+.point-stage .continue-controls .field { min-width: 0; flex: 1 1 140px; }
+.point-stage .continue-controls .numeric-field { flex: 1 1 80px; width: auto; }
+.proof-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); height: clamp(420px, 56vh, 640px); }
+.transition-panel .transition, .transition-panel > .empty-state { flex: 1; min-height: 0; overflow: auto; }
+.start-note { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.start-note p { margin: 0; color: var(--muted); font-size: 12px; }
+.start-note strong { color: var(--text); font-weight: 600; }
+.sample-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.sample-list button { min-height: 32px; font-size: 12px; }
+.packages-workspace .command-bar button, .packages-workspace .command-bar .file-button { font-size: 12px; }
+@media (max-width: 1180px) {
+  .point-stage > .action-panel { max-height: min(70vh, 560px); }
+  .proof-grid { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .proof-grid > .panel { height: clamp(380px, 52vh, 560px); }
+}
+@media (max-width: 520px) {
+  .start-note { flex-direction: column; align-items: stretch; }
+}
+.point-stage .action-panel .panel-heading h2 { white-space: normal; line-height: 1.3; }
+.keep-ref button, .start-note button { font-size: 12px; white-space: nowrap; }

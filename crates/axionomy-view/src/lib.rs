@@ -2052,9 +2052,9 @@ where
             scene.metrics.extend([
                 SceneMetricView {
                     key: path!("snapshot"),
-                    label: "Economic step".into(),
+                    label: "Exchanges applied".into(),
                     value: index.to_string(),
-                    unit: Some("exchanges".into()),
+                    unit: None,
                     previous: index.checked_sub(1).map(|value| value.to_string()),
                 },
                 SceneMetricView {

@@ -11,17 +11,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function loadSample(page: Page, name: string) {
   await expect(page.getByRole("combobox", { name: "Sample package" })).toBeVisible({ timeout: 30_000 });
+  // Choosing a sample loads it; the picker goes back to offering the others.
   await page.getByRole("combobox", { name: "Sample package" }).selectOption({ label: name });
-  await page.getByRole("button", { name: "Load sample" }).click();
-  await expect(page.getByRole("status").filter({ hasText: `Loaded ${name} from ${name}.zip` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("status").filter({ hasText: `Loaded ${name} from packages/${name}.zip` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("combobox", { name: "Sample package" })).toHaveValue("");
   await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue(name);
 }
 
 const trace = (page: Page) => page.getByRole("slider", { name: "Trace position" });
 
-/** How many steps the history on screen has, once the point opened is drawn. */
+/**
+ * How many steps the history on screen has, once the point opened is
+ * drawn: none where Studio says nothing has happened yet, in place of
+ * playback.
+ */
 async function steps(page: Page): Promise<number> {
   await expect(page.locator(".point-cockpit")).toHaveAttribute("aria-busy", "false");
+  await expect(trace(page).or(page.getByRole("region", { name: "Nothing to play yet" }))).toBeVisible();
+  if (await page.getByRole("region", { name: "Nothing to play yet" }).isVisible()) return 0;
   return Number(await trace(page).getAttribute("max"));
 }
 
@@ -44,7 +51,7 @@ function ownRef(pkg: string): string {
 async function playFrom(page: Page, shipped: string, name: string): Promise<number> {
   const start = await openRef(page, shipped);
   await expect(page.getByLabel("Point on screen")).toContainText("On a package's ref");
-  await page.getByRole("textbox", { name: "Name a ref of your own here" }).fill(name);
+  await page.getByRole("textbox", { name: "Name a ref here" }).fill(name);
   await page.getByRole("button", { name: "Name it" }).click();
   await expect(page.getByRole("status").filter({ hasText: `${name} names this point now` })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Ref" })).toHaveValue(name);
@@ -81,6 +88,7 @@ test("applies a candidate at a ref's point, moving the ref, and anywhere else ma
   const mine = ownRef("maze");
   const start = await playFrom(page, "maze/showcase", mine);
   await expect(panel.locator(".panel-heading")).toContainText(`At ${mine}'s point`);
+  await expect(panel.locator(".panel-heading")).toContainText(`Applying moves ${mine}`);
   // Each candidate is shown assessed before anything is applied.
   const applicable = panel.locator(".candidate-applicable");
   await expect(applicable.first()).toBeVisible();
@@ -94,7 +102,7 @@ test("applies a candidate at a ref's point, moving the ref, and anywhere else ma
   // Back at step 0 the point is not where the ref is: applying there branches.
   await page.getByRole("button", { name: "Go to initial state" }).click();
   await expect(panel.locator(".panel-heading")).toContainText("At step 0");
-  await expect(panel.locator(".panel-heading")).toContainText("applying makes a branch");
+  await expect(panel.locator(".panel-heading")).toContainText("Applying makes a branch");
   await panel.locator(".candidate-applicable").last().click();
   await panel.getByRole("button", { name: "Apply as a branch" }).click();
   await expect(page.getByRole("status").filter({ hasText: "a branch, a new point that no ref names" })).toBeVisible();

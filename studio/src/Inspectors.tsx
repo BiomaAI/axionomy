@@ -74,7 +74,7 @@ export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { s
 }
 
 export function StepTicker({ frame, steps, onProof }: { frame?: ExchangeFrame; steps: number; onProof?: () => void }) {
-  if (steps === 0) return <div className="empty-state">This outcome has no exchanges, so there is nothing to play: its initial state is the whole result.</div>;
+  if (steps === 0) return <div className="empty-state">Nothing has happened here yet: this is where its history starts.</div>;
   if (!frame) return <div className="empty-state">This is the initial state. Press play and every exchange narrates here as it applies.</div>;
   return <div className="step-ticker">
     <div className="ticker-feed" key={frame.index}>
@@ -91,7 +91,7 @@ export function StepTicker({ frame, steps, onProof }: { frame?: ExchangeFrame; s
 }
 
 export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: number }) {
-  if (steps === 0) return <div className="empty-state">This outcome has no exchanges to inspect.</div>;
+  if (steps === 0) return <div className="empty-state">No step has been taken here yet, so there is nothing to prove.</div>;
   if (!frame) return <div className="empty-state">Move the scrubber to see what a step checked, predicted, and actually changed.</div>;
   return <div className="transition">
     <div className="frame-cues" aria-label="Transition cues">
@@ -102,7 +102,7 @@ export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: num
       <span><small>Units</small>{frame.exchange.units}</span>
       {frame.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{words(parameter.name)}</small>{parameter.value}</span>)}
     </div>
-    <Assessment assessment={frame.assessment} />
+    <Assessment assessment={frame.assessment} recorded />
     <div className="proof-line">Projected deltas {JSON.stringify(frame.assessment.projected_deltas) === JSON.stringify(frame.receipt.deltas) ? "match" : "do not match"} the receipt</div>
     {frame.receipt.deltas.map((delta) => <div className="delta" key={delta.account.key}>
       <h3>{delta.account.label}</h3>
@@ -113,7 +113,11 @@ export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: num
   </div>;
 }
 
-export function Assessment({ assessment }: { assessment: ExchangeFrame["assessment"] }) {
+/**
+ * What the kernel found when it checked an exchange: before it is applied,
+ * a prediction; for a step already taken, what was checked before it applied.
+ */
+export function Assessment({ assessment, recorded = false }: { assessment: ExchangeFrame["assessment"]; recorded?: boolean }) {
   const quantity = useQuantity();
   return <div className={`assessment assessment-${assessment.status}`}>
     <strong>{assessment.status}</strong>
@@ -121,7 +125,9 @@ export function Assessment({ assessment }: { assessment: ExchangeFrame["assessme
       {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${quantity(missing.asset.key, missing.quantity)} ${missing.asset.label}`).join(", ")}
     </div>)}
     {assessment.issues.map((issue, index) => <div className="assessment-issue" key={`${issue.kind}:${index}`}><span>{issue.message}</span><small>{issue.kind.replaceAll("_", " ")}</small></div>)}
-    {assessment.status === "applicable" && <div>{assessment.projected_deltas.length} accounts would change — predicted, nothing changed yet</div>}
+    {assessment.status === "applicable" && <div>{recorded
+      ? `Checked before it applied: ${assessment.projected_deltas.length} ${assessment.projected_deltas.length === 1 ? "account" : "accounts"} to change`
+      : `${assessment.projected_deltas.length} ${assessment.projected_deltas.length === 1 ? "account" : "accounts"} would change — predicted, nothing changed yet`}</div>}
   </div>;
 }
 
@@ -145,7 +151,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
   const [filter, setFilter] = useState("");
   useEffect(() => { setSelectedRate(model?.rates[0]?.rate.key); setFilter(""); }, [document.id, model]);
   const rate = model?.rates.find((candidate) => candidate.rate.key === selectedRate) ?? model?.rates[0];
-  if (!model) return <div className="empty-state">This result was produced before rule inspection existed.</div>;
+  if (!model) return <div className="empty-state">This view describes no rules.</div>;
   const matchingRates = model.rates.filter((candidate) => `${candidate.rate.label} ${candidate.rate.key}`.toLowerCase().includes(filter.toLowerCase()));
   const visibleRates = matchingRates.slice(0, 200);
   if (rate && !visibleRates.some((candidate) => candidate.rate.key === rate.rate.key)) visibleRates.unshift(rate);
@@ -163,7 +169,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
       </div>}
     </section>
     <section className="model-rules">
-      <h3>Goal</h3>
+      {model.goal.length > 0 && <h3>Goal</h3>}
       {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <BasketQuantity key={required.asset.key} value={required} />)}</div>)}
       <h3>Conservation laws</h3>
       {model.invariants.map((invariant) => <details key={invariant.name}><summary>{words(invariant.name)}</summary><p>{invariant.terms.map((term) => `${term.weight}·${term.asset.label}`).join(" + ")}</p></details>)}

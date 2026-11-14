@@ -246,7 +246,7 @@ visually separate from transport failures.
 
 - Assets and accounts appear under **Source of truth**.
 - Rates, roles, goals, and invariants appear under **The rules**.
-- Each applied exchange appears under **One step** and in the replay scrubber.
+- Each applied exchange appears under **Proof of this step** and in the replay scrubber.
 - An experiment's trials, their objective values and the front appear under **Experiments**.
 
 Studio, the CLI, the HTTP API, and MCP deliberately call the same engine.
