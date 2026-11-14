@@ -115,7 +115,7 @@ const caution = (message: string): Notice => ({ tone: "caution", message });
 
 /** `count` of a thing, its word in the singular or the plural. */
 function counted(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`;
+  return `${count.toLocaleString()} ${count === 1 ? one : many}`;
 }
 
 /**
@@ -452,7 +452,7 @@ export function PackagesApp() {
       const found = stepOf(ran.end) - stepOf(ran.start);
       if (found === 0) { report(caution(`${lastPart(strategy)} found no move toward ${asked.goal} from here: ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
       note(ran.end, lastPart(strategy), ran.start);
-      report(done(`${lastPart(strategy)} ${outcomeWords(ran.outcome).toLowerCase()} in ${counted(found, "step")}${ran.thinking ? `, after looking at ${ran.thinking.expanded.toLocaleString()} states` : ""}.`));
+      report(done(`${lastPart(strategy)} ${outcomeWords(ran.outcome).toLowerCase()} in ${counted(found, "step")}${ran.thinking ? `, after looking at ${counted(ran.thinking.expanded, "state")}` : ""}.`));
       openPoint(ran.end, stepOf(ran.start), true);
     } catch (cause) {
       if (!findingStopped.current) setError(described(cause));
@@ -570,7 +570,7 @@ export function PackagesApp() {
     ...(busy ? [{ key: "loading", words: busy }] : []),
     ...(finding ? [{
       key: "strategy",
-      words: <>Playing <strong>{lastPart(finding.strategy)}</strong> from step {stepOf(finding.from)}{finding.progress && ` · ${finding.progress.expanded.toLocaleString()} states looked at`}</>,
+      words: <>Playing <strong>{lastPart(finding.strategy)}</strong> from step {stepOf(finding.from)}{finding.progress && ` · ${counted(finding.progress.expanded, "state")} looked at`}</>,
       stop: { label: "Stop", onStop: stopFinding },
     }] : []),
     ...[...experimenting].map(([path, run]) => ({ key: `experiment:${path}`, words: experimentWords(run), stop: { label: "Stop", onStop: () => stopExperiment(path) } })),
@@ -684,7 +684,7 @@ function changed<V>(map: ReadonlyMap<string, V>, key: string, value?: V): Readon
 function experimentWords({ experiment, progress }: ExperimentRun) {
   const trials = Number(experiment.trials);
   const arm = progress && experiment.arms[progress.arm];
-  return <>Playing <strong>{experiment.experiment}</strong>{arm && progress ? <>: <strong>{lastPart(arm.strategy)}</strong>, arm {progress.arm + 1} of {experiment.arms.length}{trials > 1 && `, trial ${progress.trial + 1} of ${trials}`} · {progress.progress.expanded.toLocaleString()} states looked at</> : "…"}</>;
+  return <>Playing <strong>{experiment.experiment}</strong>{arm && progress ? <>: <strong>{lastPart(arm.strategy)}</strong>, arm {progress.arm + 1} of {experiment.arms.length}{trials > 1 && `, trial ${progress.trial + 1} of ${trials}`} · {counted(progress.progress.expanded, "state")} looked at</> : "…"}</>;
 }
 
 /** The page before any package is loaded: the samples, each a click from open. */
