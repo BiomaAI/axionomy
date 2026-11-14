@@ -46,13 +46,14 @@ pub enum Strategy {
     /// A policy driving the economy turn by turn: each turn it proposes one
     /// exchange, `fn(state, random)`, or nothing, until the goal holds, it
     /// proposes nothing, or it has played the turns. Turn order, Nature's
-    /// responses and who acts are the policy's to decide. It spends turns,
-    /// never the budget.
+    /// responses and who acts are the policy's to decide; `random` is the
+    /// run's, its events drawn from the run's seed. It spends turns, never
+    /// the budget.
     Policy { policy: ScriptCall },
     /// A plan a script makes whole, `fn(state)` returning the exchanges in
     /// order or nothing, such as a specialised solver's or an outside
     /// solver's answer, or `fn(state, random)` for a plan that draws chance
-    /// (Nature's outcomes) from the run's seed: the kernel applies them all
+    /// (Nature's outcomes) by the run's events: the kernel applies them all
     /// or none, and the run ends at the goal or where the plan ends. It
     /// spends neither the budget nor the turns.
     Plan { plan: ScriptCall },
@@ -115,12 +116,13 @@ pub enum Strategy {
     /// turns, which are all it spends: each
     /// turn Nature responds if `nature`, `fn(state, random)`, proposes an
     /// exchange, and otherwise the player `actor`, `fn(state)` returning an
-    /// index into `players`, chooses as its chooser does. Nature draws from
-    /// a random stream of its own, so how hard the players think never
-    /// changes what Nature does: weighted scenarios are Nature sampling
-    /// them, and receding-horizon planning is a player that searches again
-    /// every turn from what happened. How hard each player thinks is its
-    /// own, its iterations or its depth, as its [`Chooser`] says.
+    /// index into `players`, chooses as its chooser does. Nature and the
+    /// players draw the world's events from the game's seed alike, and
+    /// their sequences apart, so how hard the players think never changes
+    /// what Nature does: weighted scenarios are Nature sampling them, and
+    /// receding-horizon planning is a player that searches again every turn
+    /// from what happened. How hard each player thinks is its own, its
+    /// iterations or its depth, as its [`Chooser`] says.
     Game {
         nature: Option<ScriptCall>,
         actor: ScriptCall,
@@ -150,8 +152,10 @@ pub enum Chooser {
     /// draws one by its weight instead of a player choosing. Simulations
     /// choose as `rollout`, `fn(state, candidates, random)`, does, one of
     /// the candidates or nothing to stop there, and uniformly without one;
-    /// `random`'s weighted samples draw the search's own tickets, so a
-    /// rollout exploring at random draws as one written in Rust does. The
+    /// `random`'s weighted samples in sequence draw the search's own
+    /// tickets, so a rollout exploring at random draws as one written in
+    /// Rust does, and its events are the search's imagined world, drawn
+    /// from the search's seed, never the game's. The
     /// search of the game's `k`th choice, counting from zero the turns Nature
     /// did not respond on, is seeded with the game's seed XOR `salt`, plus
     /// `k`. A player with no candidates chooses nothing.
@@ -1048,8 +1052,10 @@ impl Engine {
         Effort { seed, turns, .. }: Effort,
         watcher: &RefCell<Watcher<'_>>,
     ) -> Result<Ran, EngineError> {
+        // Nature and the players meet the same world, its events drawn from
+        // the game's seed; the players' own sequence is apart from Nature's.
         let chance = Random::new(seed);
-        let random = Random::new(sample_seed(seed, 1));
+        let random = Random::apart(seed, sample_seed(seed, 1));
         let mut exchanges = Vec::new();
         // The turns a player chose on so far.
         let mut choices = 0;

@@ -992,6 +992,12 @@ Domain randomness and exploration randomness have different authority:
 The latter seed is reproducibility metadata, not world state. Every sampled
 domain outcome still appears in the resulting trace.
 
+A sampled domain outcome is drawn by a named event: a path naming the
+occurrence, such as `weather/direct-out/12`, whose ticket depends only on the
+run's seed and that name (`sampling::EventTickets`). Runs seeded alike that
+differ in their choices meet the same outcome wherever they meet the same
+event, so comparing them compares the choices. Exploration draws in sequence.
+
 Reproducible exploration uses `rand` traits and ChaCha8 rather than a
 project-local random generator. Callers may provide their own compatible RNG.
 Fixed seeds make a solver run repeatable; they do not turn algorithmic

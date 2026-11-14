@@ -3,7 +3,9 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError, Random, ScriptPath, ScriptState, exchanges_of, rhai};
-use axionomy_search::sampling::{SeededSampler, WeightedExchange, sample, sample_seed, splitmix};
+use axionomy_search::sampling::{
+    EventTickets, SeededSampler, TicketSource, WeightedExchange, sample, sample_seed, splitmix,
+};
 use axionomy_store::Store;
 
 fn path<K>(text: &str) -> Path<K> {
@@ -65,6 +67,38 @@ const SCRIPT: &str = r#"
     fn between(random) {
         let first = random.next(1000);
         random.sample([1, 2, 3]);
+        [first, random.next(1000)]
+    }
+
+    // The world's chance by named event.
+    fn event(random, name, bound) { random.next(name, bound) }
+    fn weighted_event(random, name, weights) { random.sample(name, weights) }
+
+    // Each of `names`' draws, around draws in sequence.
+    fn events(random, names, bound) {
+        let drawn = [];
+        for name in names {
+            drawn.push(random.next(name, bound));
+            random.next(1000);
+            random.sample([1, 2]);
+        }
+        drawn
+    }
+
+    // The draw of `name` after unrelated ones, by event and in sequence.
+    fn after_others(random, name, bound) {
+        random.next("weather/elsewhere/3", bound);
+        random.next(1000);
+        random.sample([1, 2, 3]);
+        random.sample("scenario", [1, 1]);
+        random.next(name, bound)
+    }
+
+    // Draws in sequence around draws by event.
+    fn around_events(random) {
+        let first = random.next(1000);
+        random.next("weather/direct-out/12", 1000);
+        random.sample("scenario", [1, 2, 3]);
         [first, random.next(1000)]
     }
 
@@ -191,6 +225,219 @@ fn weighted_samples_are_the_rust_samplers() {
     for weights in [vec![], vec![rhai::Dynamic::from(0_i64)]] {
         let refused = engine.call::<rhai::Array>(&script, "weighted", (Random::new(7), weights));
         assert!(matches!(refused, Err(EngineError::Script { .. })));
+    }
+}
+
+fn ints(drawn: rhai::Array) -> Vec<i64> {
+    drawn
+        .into_iter()
+        .map(|value| value.as_int().unwrap())
+        .collect()
+}
+
+#[test]
+fn an_event_draws_the_same_whatever_else_was_drawn() {
+    let (engine, script) = engine();
+    let event = |random: Random, name: &str| -> i64 {
+        engine
+            .call(&script, "event", (random, name.to_owned(), 1000_i64))
+            .unwrap()
+    };
+    for seed in [7, 17, sample_seed(17, 3)] {
+        for name in ["scenario", "weather/direct-out/12", "attempt/3/2"] {
+            let drawn = event(Random::new(seed), name);
+            // Every generator of the run seeded alike, whatever its own
+            // sequence, meets the event alike: the ticket `axionomy_search`
+            // draws for the event.
+            assert_eq!(event(Random::new(seed), name), drawn);
+            assert_eq!(
+                event(Random::apart(seed, sample_seed(seed, 1)), name),
+                drawn
+            );
+            let mut tickets = EventTickets::new(seed, &path(name));
+            assert_eq!(drawn, tickets.ticket(1000) as i64, "{name}");
+            // A branch that draws something else first meets the same.
+            let after: i64 = engine
+                .call(
+                    &script,
+                    "after_others",
+                    (Random::new(seed), name.to_owned(), 1000_i64),
+                )
+                .unwrap();
+            assert_eq!(after, drawn, "seed {seed}: {name}");
+        }
+    }
+
+    // A generator that has drawn in sequence before meets the event alike.
+    let random = Random::new(7);
+    let _: rhai::Array = engine.call(&script, "draws", (random.clone(),)).unwrap();
+    assert_eq!(event(random, "scenario"), event(Random::new(7), "scenario"));
+
+    // Draws by event never move a sequence: it goes on as if none were.
+    let around: rhai::Array = engine
+        .call(&script, "around_events", (Random::new(7),))
+        .unwrap();
+    let drawn: rhai::Array = engine.call(&script, "draws", (Random::new(7),)).unwrap();
+    assert_eq!(ints(around), ints(drawn)[..2]);
+}
+
+#[test]
+fn different_events_and_seeds_draw_apart() {
+    let (engine, script) = engine();
+    let names: rhai::Array = (0..256)
+        .map(|time| rhai::Dynamic::from(format!("weather/direct-out/{time}")))
+        .collect();
+    let drawn = |seed| -> Vec<i64> {
+        ints(
+            engine
+                .call(
+                    &script,
+                    "events",
+                    (Random::new(seed), names.clone(), 1000_i64),
+                )
+                .unwrap(),
+        )
+    };
+    let seven = drawn(7);
+    assert_eq!(seven, drawn(7));
+    assert!(seven.iter().all(|value| (0..1000).contains(value)));
+    // Each occurrence draws on its own: few of 256 numbers below a thousand
+    // coincide, and another seed draws others.
+    let distinct: std::collections::BTreeSet<_> = seven.iter().collect();
+    assert!(distinct.len() > 200, "{} distinct", distinct.len());
+    let eight = drawn(8);
+    let same = seven.iter().zip(&eight).filter(|(a, b)| a == b).count();
+    assert!(same < 8, "{same} alike");
+    // Names that differ only past their first eight bytes, or in their
+    // length, are other events.
+    let event = |name: &str| -> i64 {
+        engine
+            .call(
+                &script,
+                "event",
+                (Random::new(7), name.to_owned(), 1_i64 << 40),
+            )
+            .unwrap()
+    };
+    let near = [
+        "weather/direct-out/1",
+        "weather/direct-out/10",
+        "weather/direct-ou",
+    ];
+    let near: std::collections::BTreeSet<_> = near.into_iter().map(event).collect();
+    assert_eq!(near.len(), 3);
+}
+
+#[test]
+fn an_event_is_named_by_a_path() {
+    let (engine, script) = engine();
+    for name in [
+        "",
+        "Weather",
+        "weather//1",
+        "weather/-1",
+        "weather/direct out",
+    ] {
+        let refused =
+            engine.call::<i64>(&script, "event", (Random::new(7), name.to_owned(), 10_i64));
+        assert!(
+            matches!(&refused, Err(EngineError::Script { message, .. })
+                if message.contains(&format!("`{name}` is not an event"))),
+            "{name}: {refused:?}"
+        );
+        let weights: rhai::Array = vec![rhai::Dynamic::from(1_i64)];
+        let refused = engine.call::<i64>(
+            &script,
+            "weighted_event",
+            (Random::new(7), name.to_owned(), weights),
+        );
+        assert!(matches!(refused, Err(EngineError::Script { .. })), "{name}");
+    }
+    // Bounds are positive.
+    for bound in [0_i64, -1] {
+        let refused = engine.call::<i64>(
+            &script,
+            "event",
+            (Random::new(7), "scenario".to_owned(), bound),
+        );
+        assert!(
+            matches!(refused, Err(EngineError::Script { .. })),
+            "{bound}"
+        );
+    }
+}
+
+#[test]
+fn weighted_events_sample_as_the_rust_sampler_does() {
+    let (engine, script) = engine();
+    let weights = [3_u64, 0, 5, 1];
+    let outcomes: Vec<_> = weights
+        .iter()
+        .enumerate()
+        .map(|(index, weight)| WeightedExchange::new(index as i64, *weight))
+        .collect();
+    let as_ints: rhai::Array = weights
+        .iter()
+        .map(|weight| rhai::Dynamic::from(*weight as i64))
+        .collect();
+    let as_quantities: rhai::Array = weights
+        .iter()
+        .map(|weight| rhai::Dynamic::from(Quantity::new(*weight)))
+        .collect();
+    let sampled = |seed, name: &str, weights: &rhai::Array| {
+        engine.call::<i64>(
+            &script,
+            "weighted_event",
+            (Random::new(seed), name.to_owned(), weights.clone()),
+        )
+    };
+    let mut counts = [0_usize; 4];
+    for time in 0..900 {
+        let name = format!("weather/safe-out-first/{time}");
+        // What `axionomy_search` samples with the event's tickets.
+        let expected = *sample(&outcomes, &mut EventTickets::new(17, &path(&name))).unwrap();
+        for weights in [&as_ints, &as_quantities] {
+            assert_eq!(sampled(17, &name, weights).unwrap(), expected, "{name}");
+        }
+        counts[usize::try_from(expected).unwrap()] += 1;
+    }
+    // Each outcome as often as its weight makes it, and never one of none.
+    assert_eq!(counts[1], 0);
+    for (count, weight) in counts.into_iter().zip(weights) {
+        let expected = 100 * weight as usize;
+        assert!(count.abs_diff(expected) < 60, "{counts:?}");
+    }
+
+    // A number below a bound is the index the event draws from that many
+    // equal weights.
+    let equal: rhai::Array = (0..6).map(|_| rhai::Dynamic::from(1_i64)).collect();
+    for name in ["scenario", "attempt/1/1", "attempt/1/2"] {
+        let below: i64 = engine
+            .call(&script, "event", (Random::new(17), name.to_owned(), 6_i64))
+            .unwrap();
+        assert_eq!(sampled(17, name, &equal).unwrap(), below, "{name}");
+    }
+
+    // What the Rust sampler refuses is refused: nothing to weigh, no weight,
+    // a total past a u64; and so is what is no weight.
+    let refusals: [(rhai::Array, &str); 4] = [
+        (vec![], "weighted support is empty"),
+        (vec![rhai::Dynamic::from(0_i64)], "zero total weight"),
+        (
+            vec![
+                rhai::Dynamic::from(Quantity::new(u64::MAX)),
+                rhai::Dynamic::from(Quantity::new(1)),
+            ],
+            "overflowed",
+        ),
+        (vec![rhai::Dynamic::from(-1_i64)], "is not a weight"),
+    ];
+    for (weights, reason) in refusals {
+        let refused = sampled(7, "scenario", &weights);
+        assert!(
+            matches!(&refused, Err(EngineError::Script { message, .. }) if message.contains(reason)),
+            "{reason}: {refused:?}"
+        );
     }
 }
 

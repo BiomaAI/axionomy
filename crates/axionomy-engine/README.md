@@ -110,15 +110,38 @@ roles and what it fixes for a role to consume, produce or preserve,
 `exchange(...)`, `applicable`, `assess`, `distances` over a list of edges),
 and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;
-randomness is only a `Random` the host seeds (`next(bound)` draws a number
-below a bound, and `sample(weights)` the index of a weight, drawn as
-`axionomy_search::sampling` samples weighted outcomes with a sampler of the
-same seed, so a script samples Nature's scenarios as a Rust Monte Carlo
-seeded alike does, and `keyed(key, bound)` the ticket keyed by what it is
-for, `splitmix(seed ^ key, 1) % bound`, the same whatever else is drawn);
-scripts have no clock; and a call stops after a bounded
+randomness is only a `Random` the host seeds (below); scripts have no clock;
+and a call stops after a bounded
 number of operations, its calls nested at most 64 deep in every build. Scripts are kept in the
 store as definitions (`script/<path>`), so they travel with a package.
+
+A `Random` draws two kinds of chance. The world's chance is drawn by named
+event: `random.next(event, bound)` draws a number below `bound`, and
+`random.sample(event, weights)` the index of one of `weights`, integers or
+quantities, where `event` is a path naming the occurrence the draw is for,
+such as `weather/direct-out/12`, the weather of the direct road out met at
+time 12. The same event drawn with the same seed gives the same outcome
+whatever else was drawn before it, and different events are drawn
+independently, so a run that makes another choice meets the same luck
+wherever it meets the same event, and a counterfactual compares the choice,
+not the luck. A name tells each occurrence apart: the weather of a road at
+each time it is travelled, an attempt at a job by its count, a scenario
+drawn once as `scenario`. A name that is not a path is a script error. The
+draw is `axionomy_search::sampling::EventTickets` of the seed and the
+event's path, so Rust code draws the same event alike, and
+`sample(event, weights)` samples exactly as `sampling::sample` does, with
+its refusals; `next(event, bound)` is the index `sample(event, weights)`
+draws from `bound` equal weights. A decision-maker's own randomness, such as
+a rollout exploring, is drawn in sequence: `random.next(bound)` and
+`random.sample(weights)` take the next of their sequences, `sample` drawing
+the tickets `axionomy_search`'s sampler of the same seed draws. Draws by
+event never move a sequence. `keyed(key, bound)`, the ticket
+`splitmix(seed ^ key, 1) % bound`, stays while a sample draws by it.
+
+Every generator of a run draws the world's events from the run's seed: a
+policy's, a plan's, a game's Nature's, and a game's players', whose own
+sequence is apart from Nature's. A tree search's rollouts draw from the
+search's seed, a world the search imagines rather than the run's.
 
 A script imports another the store keeps by its path,
 `import "exact-cover/algorithm-x" as algorithm;`, and calls its functions

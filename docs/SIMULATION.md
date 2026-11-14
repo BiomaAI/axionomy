@@ -295,7 +295,19 @@ search, and a seeded random generator.
 - Quantities enter Rhai as an exact type with checked operations, never as
   floats.
 - Randomness comes only from the host's seeded generator, so an experiment
-  replays from its seed.
+  replays from its seed. The world's chance is drawn by named event,
+  `random.next(event, bound)` and `random.sample(event, weights)`: the event
+  is a path naming the occurrence, such as `weather/direct-out/12`, and the
+  same event with the same seed gives the same outcome whatever else was
+  drawn before it, while different events are independent. A branch run
+  with the same seed that makes another choice so meets the same luck
+  wherever it meets the same event, and comparing it with the run it
+  branched from compares the choice. Every generator of a run draws events
+  from the run's seed (a trial's, in an experiment); a tree search's
+  rollouts draw from the search's own. A decision-maker's own randomness is
+  drawn in sequence, `random.next(bound)` and `random.sample(weights)`,
+  which events never move. Rust code draws the same events with
+  `axionomy_search::sampling::EventTickets`.
 - A package's manifest records the host API version its scripts were
   written against.
 - A script imports another kept in the same store by its path

@@ -4,9 +4,10 @@
 //!
 //! A script reads an economy through the host API and proposes exchanges; it
 //! never changes one. Quantities are exact ([`Quantity`], with checked
-//! arithmetic), and the only randomness is a [`Random`] the host seeds, so a
-//! script gives the same answer for the same arguments everywhere. Rhai's
-//! maps iterate in key order, and scripts have no clock.
+//! arithmetic), and the only randomness is a [`Random`] the host seeds, which
+//! draws the world's chance by named event, so a script gives the same answer
+//! for the same arguments everywhere. Rhai's maps iterate in key order, and
+//! scripts have no clock.
 //!
 //! A script imports another the store keeps by its path,
 //! `import "maze/routes" as routes;`, and calls its functions as
@@ -21,7 +22,10 @@ use axionomy::{
     path::Path,
     paths::{self, Paths},
 };
-use axionomy_search::sampling::{self, SeededSampler, WeightedExchange, splitmix};
+use axionomy_search::sampling::{
+    self, EventPath, EventTickets, SamplingError, SeededSampler, TicketSource, WeightedExchange,
+    splitmix,
+};
 use axionomy_store::{Store, StoreError};
 use rhai::{
     ASTNode, Array, Dynamic, EvalAltResult, Expr, ImmutableString, Map, Module, Position, Stmt,
@@ -119,22 +123,50 @@ impl ScriptState {
     }
 }
 
-/// The host's seeded random numbers: the only randomness a script has.
-/// Clones share one sequence, so a generator passed to a script call after
-/// call keeps drawing where it left off.
+/// The host's seeded random numbers: the only randomness a script has. It
+/// draws two kinds of chance.
+///
+/// The world's chance is drawn by named event: `random.next(event, bound)`
+/// and `random.sample(event, weights)`, where `event` is a path naming the
+/// occurrence the draw is for, such as `weather/direct-out/12`. The same
+/// event drawn with the same seed gives the same outcome whatever else was
+/// drawn before it, and different events are drawn independently, so a run
+/// that makes another choice meets the same luck wherever it meets the same
+/// event. A name must tell each occurrence apart: the weather of a road at
+/// each time it is travelled, not the road alone.
+///
+/// A decision-maker's own randomness, such as a rollout exploring, is drawn
+/// in sequence: `random.next(bound)` and `random.sample(weights)` take the
+/// next of their sequences, so they depend on everything drawn before. Draws
+/// by event never move a sequence. Clones share their sequences, so a
+/// generator passed to a script call after call keeps drawing where it left
+/// off.
 #[derive(Debug, Clone)]
 pub struct Random {
+    /// The seed of the world whose events this generator draws: the run's.
+    world: u64,
+    /// The seed of this generator's own sequences.
     seed: u64,
     drawn: Arc<AtomicU64>,
-    /// The tickets weighted samples draw, a sequence of their own: those
-    /// `axionomy_search`'s sampler of the same seed draws, so a script
-    /// samples weighted outcomes as Rust code seeded alike does.
+    /// The tickets weighted samples in sequence draw, a sequence of their
+    /// own: those `axionomy_search`'s sampler of the same seed draws, so a
+    /// script samples weighted outcomes as Rust code seeded alike does.
     tickets: Arc<Mutex<SeededSampler>>,
 }
 
 impl Random {
+    /// The generator of a run seeded `seed`: the world's events and its own
+    /// sequences are drawn from that seed.
     pub fn new(seed: u64) -> Self {
+        Self::apart(seed, seed)
+    }
+
+    /// A generator in the world of a run seeded `world`, drawing its events
+    /// as every generator of that run does, whose own sequences are seeded
+    /// `seed`: a decision-maker's randomness kept apart from Nature's.
+    pub fn apart(world: u64, seed: u64) -> Self {
         Self {
+            world,
             seed,
             drawn: Arc::new(AtomicU64::new(0)),
             tickets: Arc::new(Mutex::new(SeededSampler::new(seed))),
@@ -175,22 +207,65 @@ impl Random {
         splitmix(self.seed ^ key, 1) % bound
     }
 
+    /// The tickets of the event `event` in this generator's world.
+    fn event(&self, event: &str) -> Result<EventTickets, Failure> {
+        let event: EventPath = event.parse().map_err(|error| {
+            Failure::from(format!(
+                "`{event}` is not an event: {error}; name an event by a path such as `{}`",
+                <sampling::kind::Event as PathKind>::EXAMPLE
+            ))
+        })?;
+        Ok(EventTickets::new(self.world, &event))
+    }
+
+    /// The number below `bound` the event `event` draws: the same for the
+    /// same event and seed, whatever else is drawn. It is the index
+    /// `sample(event, weights)` draws from `bound` equal weights.
+    fn below_for(&self, event: &str, bound: u64) -> Result<u64, Failure> {
+        Ok(self.event(event)?.ticket(bound))
+    }
+
     /// The index of one of `weights`, integers or quantities, drawn by the
     /// next ticket as [`sampling::sample`] draws one of weighted outcomes.
     fn sample(&self, weights: Array) -> Result<i64, Failure> {
-        let outcomes = weights
-            .into_iter()
-            .enumerate()
-            .map(|(index, weight)| Ok(WeightedExchange::new(index, weight_of(weight)?)))
-            .collect::<Result<Vec<_>, Failure>>()?;
+        let outcomes = weighted(weights)?;
         let mut tickets = self
             .tickets
             .lock()
             .map_err(|_| Failure::from("the sampler failed while drawing"))?;
-        let drawn = sampling::sample(&outcomes, &mut *tickets)
-            .map_err(|error| Failure::from(error.to_string()))?;
-        i64::try_from(*drawn).map_err(|_| "an index out of range".into())
+        drawn(sampling::sample(&outcomes, &mut *tickets))
     }
+
+    /// The index of one of `weights`, integers or quantities, that the event
+    /// `event` draws, as [`sampling::sample`] draws one of weighted outcomes
+    /// with the event's tickets.
+    fn sample_for(&self, event: &str, weights: Array) -> Result<i64, Failure> {
+        let mut tickets = self.event(event)?;
+        drawn(sampling::sample(&weighted(weights)?, &mut tickets))
+    }
+}
+
+/// `weights`, integers or quantities, as the outcomes of their indices.
+fn weighted(weights: Array) -> Result<Vec<WeightedExchange<usize>>, Failure> {
+    weights
+        .into_iter()
+        .enumerate()
+        .map(|(index, weight)| Ok(WeightedExchange::new(index, weight_of(weight)?)))
+        .collect()
+}
+
+/// The index a weighted sample drew, or why it drew none.
+fn drawn(sampled: Result<&usize, SamplingError>) -> Result<i64, Failure> {
+    let index = sampled.map_err(|error| Failure::from(error.to_string()))?;
+    i64::try_from(*index).map_err(|_| "an index out of range".into())
+}
+
+/// `bound` as a bound a draw is below: a positive number.
+fn bound_of(bound: i64) -> Result<u64, Failure> {
+    u64::try_from(bound)
+        .ok()
+        .filter(|bound| *bound > 0)
+        .ok_or_else(|| Failure::from(format!("{bound} is not a positive bound")))
 }
 
 /// A weight a script gives: a non-negative integer or a quantity.
@@ -243,30 +318,35 @@ pub(crate) fn host(scripts: Scripts) -> rhai::Engine {
     states(&mut rhai);
     exchanges(&mut rhai);
     crate::view::register(&mut rhai);
+    let number =
+        |drawn: u64| i64::try_from(drawn).map_err(|_| Failure::from("a number out of range"));
     rhai.register_type_with_name::<Random>("Random")
-        .register_fn("next", |random: &mut Random, bound: i64| {
-            let bound = u64::try_from(bound)
-                .ok()
-                .filter(|bound| *bound > 0)
-                .ok_or_else(|| Failure::from(format!("{bound} is not a positive bound")))?;
-            Ok::<_, Failure>(random.below(bound) as i64)
+        .register_fn("next", move |random: &mut Random, bound: i64| {
+            number(random.below(bound_of(bound)?))
         })
+        .register_fn(
+            "next",
+            move |random: &mut Random, event: &str, bound: i64| {
+                number(random.below_for(event, bound_of(bound)?)?)
+            },
+        )
         .register_fn(
             "keyed",
             |random: &mut Random, key: i64, bound: i64| -> Result<i64, Failure> {
                 let key = u64::try_from(key).map_err(|_| {
                     Failure::from(format!("{key} is not a key: keys are not negative"))
                 })?;
-                let bound = u64::try_from(bound)
-                    .ok()
-                    .filter(|bound| *bound > 0)
-                    .ok_or_else(|| Failure::from(format!("{bound} is not a positive bound")))?;
-                i64::try_from(random.keyed(key, bound)).map_err(|_| "a number out of range".into())
+                i64::try_from(random.keyed(key, bound_of(bound)?))
+                    .map_err(|_| "a number out of range".into())
             },
         )
         .register_fn("sample", |random: &mut Random, weights: Array| {
             random.sample(weights)
-        });
+        })
+        .register_fn(
+            "sample",
+            |random: &mut Random, event: &str, weights: Array| random.sample_for(event, weights),
+        );
     rhai.register_fn("distances", distances);
     rhai
 }
