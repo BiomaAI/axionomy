@@ -327,7 +327,13 @@ committed state while producers keep writing.
   flips once ("when did this go wrong?") is a binary search over checkpoints,
   then replay within the last interval.
 - **Counterfactuals.** Fork a new run at any step, then diff the branches at
-  aligned steps or at their ends; equal roots mean they converged.
+  aligned steps or at their ends; equal roots mean they converged. The
+  engine's `divergence` does this for any two points: it finds the last
+  point both histories pass through by walking their runs back through the
+  runs they forked from, replays each side's exchanges after it, and at
+  every step of a paged window diffs the two states' trees, skipping the
+  subtrees they share, into the balances and accounts that differ; the first
+  step whose roots are equal is where they converged.
 - **Combining branches** is replaying one branch's exchanges onto the other,
   so the kernel validates each one. There is no tree-level merge of economic
   state, because a merged balance that no exchange produced would not be a

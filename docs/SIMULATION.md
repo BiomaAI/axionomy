@@ -65,6 +65,7 @@ is that overlaps stay few and no Axionomy term means two things.
 | Objective | A measure of a state with a direction, minimize or maximize |
 | Experiment | A start point, a goal, strategies as arms, objectives, an effort (a seed, a budget and turns) and a number of trials; it produces runs, recorded as a group |
 | Comparison | Objective vectors, dominance and the Pareto front, over any runs |
+| Divergence | How two points' histories compare: the last point both pass through, where they part, and for each step after it the exchange each side applied and the balances the two states differ in, exactly; the first step they are equal again, where they converged; objectives at both points. A branch against its parent, two trials, a run before and after a change all compare this way |
 | Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; the search observations of how a run was found |
 | Ref | A named label on a point, like a Git branch name on a commit. An application keeps a ref on the point its game or simulation is actually at, and moving the ref forward is what makes a step count; only the steps a ref is moved over are delivered |
 | Learning | Updating a policy from experience; done outside Axionomy, by the Autonomy Harness ([CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md)) |
@@ -236,6 +237,16 @@ Studio's study events, and with them `axionomy-study`.
   a new point; the point it started from never changes. Making a move,
   trying one out, branching and a counterfactual are this one operation.
 - Every point has one history: the exchanges that led to it.
+- Two histories compare by `divergence(left, right)`: they share every step
+  up to the last point on both and none after it, and two histories that
+  share no point, such as two economies authored apart, are refused. After
+  it, the two states are compared step by step by their trees' diff, so a
+  step costs what differs, not what the economy holds; a side whose history
+  has ended stays in its last state, and equal tree roots say where they
+  converged. What the two hold of an asset differs by exactly what their
+  exchanges since the shared point made of it, produced less consumed: no
+  difference arises that an exchange did not make (Lean:
+  `Divergence.difference_made`, `DivergenceKernel.replay_difference_made`).
 - A ref moves only by `advance(ref, expected, to)`, refused, with the point
   the ref is on, when it is no longer on `expected`, and is deleted the same
   way. Only the steps a ref is moved over are delivered, each with the point
@@ -824,10 +835,12 @@ name an earlier point of it, what each account holds at a point (its
 balances by the paths exchanges bind, `/api/points/{point}/balances`), the
 candidates a set offers at a point, assess and apply exchanges, the refs,
 run a strategy from a point toward a goal, run an experiment and read its
-results, and compare points (`compare` and `pick`).
+results, compare points (`compare` and `pick`), and compare two points'
+histories step by step (`divergence`).
 The Studio server serves them over HTTP (`/api/packages`,
 `/api/points/{point}/…`, `/api/experiments/{experiment}/…`,
-`/api/compare`, and the refs as before), in its OpenAPI contract, and the
+`/api/compare`, `/api/divergence`, and the refs as before), in its OpenAPI
+contract, and the
 Worker's `Engine` calls the same functions and gives the same JSON, so
 Studio talks to both through one TypeScript interface on the generated
 types. A point is a `PointId`; a seed, a budget or turns, which JSON's numbers
