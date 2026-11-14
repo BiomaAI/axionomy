@@ -128,13 +128,25 @@ fn scene(state, frame) {
             ["Durability", "durability"], ["Wear", "wear"], ["Revenue", "credit"],
         ];
     }
+    // The single order reads left to right: what the shop uses, then what it
+    // makes; scrap sits level with the top of the wood's three lines, so its
+    // line runs straight. Contracts keep a grid.
+    let flow = #{
+        wood: [80.0, 70.0], labor: [80.0, 220.0], tool: [80.0, 370.0],
+        waste: [380.0, 52.0], chair: [380.0, 220.0],
+    };
     let nodes = [];
     for (pair, index) in assets {
+        let place = if contracts {
+            [(index % 3).to_float() * 220.0 + 80.0, (index / 3).to_float() * 150.0 + 70.0]
+        } else {
+            flow[pair[1]]
+        };
         nodes.push(#{
             id: #{ key: pair[1], label: pair[0] },
             classes: if pair[1] == "chair" { ["goal"] } else { ["resource"] },
-            x: (index % 3).to_float() * 220.0 + 80.0,
-            y: (index / 3).to_float() * 150.0 + 70.0,
+            x: place[0],
+            y: place[1],
         });
     }
     let routes = if contracts {
@@ -158,6 +170,7 @@ fn scene(state, frame) {
             ["wood", "chair", "basic recipe"],
             ["wood", "chair", "batch recipe"],
             ["wood", "waste", "by-product"],
+            ["labor", "chair", "work"],
             ["tool", "chair", "preserved catalyst"],
         ]
     };

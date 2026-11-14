@@ -151,7 +151,9 @@ fn at_location(location) {
 }
 
 fn scene(state, frame) {
-    let locations = [["depot", 70.0, 150.0], ["junction", 320.0, 150.0], ["customer", 570.0, 150.0]];
+    // The direct road runs straight from the depot to the customer; the safe
+    // road dips through the junction below it, so neither hides the other.
+    let locations = [["depot", 70.0, 150.0], ["junction", 320.0, 330.0], ["customer", 570.0, 150.0]];
     let focus = logistics::location(state);
     let traveling = logistics::active_route(state);
     let nodes = locations.map(|location| #{
