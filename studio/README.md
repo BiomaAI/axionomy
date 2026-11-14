@@ -6,55 +6,64 @@ It opens on **packages**
 economies, refs, strategies, experiments and views a package carries, served
 by an engine, native or in the browser, that Studio asks the same way.
 
-- **Load a package** from a file (a store file or a zip of one), or open a
-  sample by choosing it (`packages/<name>.zip`, which `packages/index.json`
-  lists; with nothing loaded, Studio lists them on its first page); a link
-  such as `?package=packages/maze.zip` loads one when it opens, and a sample
-  is linked by that path. The link keeps the URL, the package, the ref or point, the step and
-  the view (`name`, `ref`, `point`, `step`, `view`), so a reload or a copied
-  link opens the same. A package is a release: loading another version of
-  one the store holds replaces what the held version shipped, and Studio
-  says so; loading the same version again changes nothing. Refs and runs of
-  your own stay. What an action did is said once, in place of what the last
-  one said: a confirmation goes by itself, and a caution (a package that
-  could not be reached, a version replaced, a ref or definition kept) stays
-  until it is dismissed.
-- **A package's refs are fixed**, so the package means what it shipped:
-  at one, **Name a ref here** names its point with a ref of yours
-  (`<package>/mine` unless you name it otherwise), which moves as you play. A ref of your own can be deleted; the
-  points it named stay.
-- **A ref or a point** draws its history with the package's view, in the
-  playback, the picture and the inspectors; a ref opens where it is, at the
-  end of its history. A point with no history yet says so in place of
-  playback, and how to make one.
-- **What to do here** sits beside the picture, so what an action does shows
-  at once: **Act**, **Continue from here** and **Follow**.
-- **Act** works at the step on screen. A candidate set's exchanges there are
-  listed, each assessed (applicable, infeasible or invalid, with what it
-  lacks), and an exchange can be written as JSON and assessed before it can
-  be applied. At the point a ref of your own is on, applying also moves the
-  ref over the new step, and is told where the ref went if another mover
-  came first; anywhere else, a package's ref's point among them, it makes a
-  branch, a new point no ref names, which **Name a ref here** names.
-- **Continue from here** runs a strategy from the step on screen toward a
-  goal picked from the package's goals, with a seed, a budget of expansions
-  for a search and the most turns a policy or a game plays (the goal and the
-  effort an experiment gives that strategy, when one runs it, and otherwise
-  the package's first goal, a budget of 1000000 and 1000 turns), reports its
-  progress (a policy's or a game's turns counted as a search counts
-  expansions), can be cancelled, whatever its kind, and shows how it ended,
-  where, and its thinking: what the search expanded, generated, left on its
-  frontier and visited, and the solution's depth. From the point of a ref of
-  your own, the ref can move to where it ended.
-- **Follow** delivers the steps a ref is moved over as they come, by this
-  page or any other proposer, each with the package's objectives there.
-- **Experiments** lists the package's experiments; running one reports its
-  progress and can be cancelled (a cancelled experiment keeps no results).
-  Each names its arms before it runs; each arm's trials are listed with
-  their seeds, how they ended, the step they ended at and their exact
-  objective values; **Pick by** orders the objectives, and the trial
-  ends no other dominates are marked, the pick highlighted. A trial's end
-  opens like any point.
+- **One Package picker** lists the packages in the store and, below them,
+  the samples not loaded yet (`packages/<name>.zip`, which
+  `packages/index.json` lists; with nothing loaded, Studio lists them on its
+  first page). Picking either opens it; **Load a file** opens a store file or
+  a zip of one. A link such as `?package=packages/maze.zip` loads one when it
+  opens. The link keeps the URL, the package, the ref or point and the step
+  (`name`, `ref`, `point`, `step`), so a reload or a copied link opens the
+  same. A package is a release: loading another version of one the store
+  holds replaces what the held version shipped, and Studio says so; loading
+  the same version again changes nothing. Refs and runs of your own stay.
+  What an action did is said once, in place of what the last one said: a
+  confirmation goes by itself, and a caution stays until it is dismissed.
+- **The history tree** is the page's spine: every history the package's
+  refs are on, and every branch grown from them, drawn as a timeline (steps
+  left to right, each branch on a row below the step it split off at, long
+  stretches drawn short with their steps counted). It is live: the engine
+  tells the page of every run recorded, ref moved and definition kept as it
+  happens, natively over a server-sent stream and in the browser from the
+  Worker, so a strategy's branch, an experiment's trials or another tab's
+  moves appear as they are made. Refs are labels on the steps they name
+  (a package's own, which are fixed, in steel; yours in brass), experiment
+  trials and branches made in this tab are labelled at their tips, and the
+  history on screen is drawn in brass with the play cursor on it. Hovering a
+  step says what its branch is; clicking it opens that branch at that step,
+  and clicking a step of the history on screen moves the cursor there.
+  `HistoryTree` knows only branches, steps and labels, so anything with a
+  branching history can draw one.
+- **Play** walks the history on screen in the picture and the inspectors.
+  Where nothing has happened yet, such as a package's first ref when it
+  opens, Play lets the strategy the package's first experiment runs find
+  the moves and plays them; pressed again while it searches, it stops. Space
+  plays and pauses, the arrow keys step.
+- **From here**, beside the picture, is everything one can do at the step
+  on screen, and says first what doing it does: at a ref of your own it
+  moves the ref forward; anywhere else, a package's ref among them, it makes
+  a branch.
+  - **Moves here**: the moves the package's rules offer, each checked
+    (applies, or what it lacks), each with **Apply**; a move opens its full
+    check when clicked.
+  - **Let a strategy play** picks a strategy and plays it from here toward
+    the goal and with the effort its experiment gives it (or the package's
+    first goal, a budget of 1000000 and 1000 turns); its branch opens at the
+    step it started from and plays.
+  - **Experiments from here**, for each experiment that starts at this
+    point: **Play each arm** plays every arm's trials, each a new branch of
+    the tree as it is recorded, and lists how each trial ended, in how many
+    steps, and its objective values, with **Watch** to open and play it.
+    Played again, it says whether the same seeds gave the same results.
+  - **Name this point** names it with a ref of yours (`<package>/mine`
+    unless you name it otherwise); at a ref of yours, **Follow it** delivers
+    each step it is moved over, by this page or any other proposer, and
+    **Delete it** deletes it, its history staying in the tree.
+  - **Write a move by hand**, folded away: an exchange checked before it can
+    be applied.
+- **Words explain themselves**: Studio's own words (package, history,
+  branch, ref, fixed, move, strategy, goal, experiment, arm, trial, seed,
+  budget, turns, follow) are dotted where they are met, and say what they
+  mean on hover or focus.
 
 Natively the store is the server's, so whatever another client does to a
 ref there shows here; in the browser it is the Worker's, on the origin

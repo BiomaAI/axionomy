@@ -7,7 +7,7 @@ function words(path: string): string {
   return path.replaceAll("-", " ").replaceAll("/", " · ");
 }
 
-export function PanelHeading({ kicker, title, aside, action }: { kicker: string; title: string; aside?: string; action?: ReactNode }) {
+export function PanelHeading({ kicker, title, aside, action }: { kicker: ReactNode; title: ReactNode; aside?: string; action?: ReactNode }) {
   return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div><div className="panel-heading-side">{aside && <small>{aside}</small>}{action}</div></div>;
 }
 

@@ -44,8 +44,8 @@ button { cursor: pointer; }
 .command-bar { display: flex; gap: 9px; align-items: end; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .field { min-width: 180px; display: grid; gap: 6px; }
 .field > select, .field > input { width: 100%; min-width: 0; }
-.numeric-field { min-width: 78px; width: 88px; }
-.field > span, .eyebrow, .panel-heading span, .rate-browser label > span { font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+.field > span, .panel-heading span, .rate-browser label > span { font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 select, input[type="number"], .file-button, button { border: 1px solid var(--line); color: var(--text); background: var(--surface-2); border-radius: 0; min-height: 38px; padding: 0 11px; }
 button:hover, .file-button:hover { border-color: #5a564e; }
 button:disabled { opacity: .42; cursor: not-allowed; }
@@ -67,69 +67,29 @@ button.danger { color: var(--debit); }
 .activity-heading strong { font-size: 12px; }
 .activity-heading span { margin-top: 3px; overflow: hidden; color: var(--muted); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .spinner { width: 20px; height: 20px; flex: 0 0 auto; border: 2px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
-.activity-progress { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
-.activity-progress progress { width: 100%; height: 7px; accent-color: var(--accent); }
-.activity-progress > span { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
+
 .indeterminate-progress { height: 5px; overflow: hidden; background: var(--surface-3); }
 .indeterminate-progress::after { content: ""; display: block; width: 35%; height: 100%; background: var(--accent); animation: seek 1.2s ease-in-out infinite alternate; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes seek { from { transform: translateX(-100%); } to { transform: translateX(285%); } }
-.problem-context { display: flex; justify-content: space-between; gap: 30px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.problem-context > div:first-child { display: flex; align-items: center; gap: 13px; min-width: 0; }
-.problem-context > div:first-child > span { color: var(--brass); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
-.problem-copy { min-width: 0; }
-.problem-copy p { color: var(--muted); margin: 0; font-size: 12px; }
-.problem-copy small { display: flex; flex-wrap: wrap; gap: 5px 9px; margin-top: 5px; color: var(--text); font: 10px var(--mono); }
-.problem-copy small strong { color: var(--brass); text-transform: uppercase; }
-.problem-copy small em { color: var(--steel); font-style: normal; }
+
 /* Capabilities describe the problem; they are a list of words, not buttons. */
-.capabilities { display: flex; flex-wrap: wrap; justify-content: end; align-content: center; gap: 4px 0; max-width: 46%; margin: 0; padding: 0; list-style: none; }
-.capabilities li { color: var(--muted); font: 10px var(--mono); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
-.capabilities li + li::before { content: "·"; padding: 0 7px; color: var(--line-strong); }
+
 .error-banner { margin: 14px 0; padding: 11px 14px; border: 1px solid #573530; background: #211416; color: #cf8b85; }
 
-.outcome-note { display: block; margin-top: 3px; color: var(--muted); font: 10px var(--mono); }
 button[aria-selected="true"] { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 
 /* Outcome comparison collapses once an outcome is chosen; opening it is a
    navigation act, so the disclosure may relayout (IC-6). */
-details.strategy-comparison { margin-top: 12px; border: 1px solid var(--line); background: var(--surface); }
-.strategy-comparison summary { display: flex; align-items: baseline; gap: 12px; padding: 10px 12px; cursor: pointer; list-style: none; }
-.strategy-comparison summary::-webkit-details-marker { display: none; }
-.strategy-comparison summary span { color: var(--brass); font: 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; }
-.strategy-comparison summary strong { font-size: 11px; }
-.strategy-comparison summary i { margin-left: auto; color: var(--muted); font: 10px var(--mono); font-style: normal; transition: transform .18s ease; }
-.strategy-comparison[open] summary { border-bottom: 1px solid var(--line); }
-.strategy-comparison[open] summary i { transform: rotate(90deg); }
-.comparison-scroll { overflow-x: auto; }
-.strategy-comparison table { width: 100%; border-collapse: collapse; font-size: 10px; }
-.strategy-comparison th { color: var(--muted); font: 10px var(--mono); letter-spacing: .08em; text-align: left; text-transform: uppercase; }
-.strategy-comparison th, .strategy-comparison td { padding: 8px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); white-space: nowrap; }
-.strategy-comparison tbody tr:last-child td { border-bottom: 0; }
-.strategy-comparison tr.selected { background: color-mix(in srgb, var(--accent) 5%, transparent); }
-.strategy-comparison td button { min-height: 26px; padding: 0 8px; color: var(--brass); font-size: 10px; }
-.document-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; padding: 16px 0 14px; }
+
 h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; margin: 6px 0 8px; }
-.document-heading p { color: var(--muted); max-width: 790px; margin: 0; font-size: 12px; }
+
 /* What is on screen, as terms and their values: a point and where it is, or an experiment. */
-.point-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 0; }
-.point-key > div { display: flex; align-items: baseline; gap: 6px; }
-.point-key dt { color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
-.point-key dd { margin: 0; color: var(--text); font: 11px var(--mono); font-variant-numeric: tabular-nums; }
-.point-key > div:first-child dd { color: var(--brass); }
+
 .objective { min-width: 112px; padding: 8px 11px; background: var(--surface); border: 1px solid var(--line); }
 .objective span, .objective small { color: var(--muted); display: block; font: 10px var(--mono); text-transform: uppercase; }
 .objective strong { display: block; font: 500 18px var(--mono); font-variant-numeric: tabular-nums; color: var(--brass); margin: 3px 0; }
 
-.view-tabs { display: flex; align-items: end; gap: 5px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
-.view-tabs button { min-width: 145px; border-radius: 0; border-bottom: 0; }
-.view-tabs button small { margin-left: 7px; color: var(--brass); font: 10px var(--mono); text-transform: uppercase; }
-.thinking-summary { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
-.thinking-summary > div { min-height: 70px; padding: 13px 15px; border-right: 1px solid var(--line); }
-.thinking-summary > div:last-child { border-right: 0; }
-.thinking-summary span, .thinking-summary strong { display: block; }
-.thinking-summary span { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
-.thinking-summary strong { margin-top: 7px; font: 12px var(--mono); color: var(--brass); text-transform: capitalize; }
 /* Rows take their content's height: a height-capped grid would otherwise hold
    every card at its minimum and let a wrapped label push metrics under the
    next card. */
@@ -155,10 +115,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .notice { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line-strong); border-left: 2px solid var(--credit); background: var(--surface); color: var(--text); font-size: 11px; }
 .notice-caution { border-color: color-mix(in srgb, var(--hold) 55%, var(--line)); border-left-color: var(--hold); background: color-mix(in srgb, var(--hold) 10%, var(--surface)); }
 .notice button { min-height: 28px; font-size: 10px; }
-.live-standings { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding-top: 9px; border-top: 1px solid color-mix(in srgb, var(--steel) 30%, var(--line)); }
-.live-standings > span { margin-right: auto; color: var(--brass); font: 10px var(--mono); text-transform: uppercase; }
-.live-standings > strong { padding: 4px 7px; border: 1px solid var(--line); font: 10px var(--mono); }
-.live-standings b { color: var(--brass); }
 
 /* ---------------------------------------------------------------- stage --
    One viewport-height cockpit: picture | standings rail | truth rail.
@@ -472,12 +428,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .delta-group.produced b { color: var(--credit); }
 .delta-group.preserved b { color: var(--steel); }
 
-
 .model-explorer { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(250px, .6fr); flex: 1; }
 .rate-browser, .model-rules { padding: 13px; min-width: 0; }
 .rate-browser { border-right: 1px solid var(--line); }
 .rate-browser label { display: grid; gap: 6px; }
-.rate-controls { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(220px, 1.3fr); gap: 7px; }
+.rate-controls { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: 7px; }
+.rate-controls label, .rate-controls select, .rate-controls input { min-width: 0; width: 100%; }
 .rate-controls input { min-height: 38px; border: 1px solid var(--line); color: var(--text); background: var(--surface-2); border-radius: 0; padding: 0 10px; }
 .rate-contract { margin-top: 11px; }
 .rate-contract > article { border: 1px solid var(--line); margin-bottom: 7px; }
@@ -524,8 +480,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
 @media (max-width: 880px) {
   .app-shell { padding: 0 14px; }
   .brand picture, .brand img { width: 155px; }
-  .problem-context, .document-heading { align-items: start; flex-direction: column; }
-  .capabilities { justify-content: start; max-width: none; }
+  
   .stage > .world-panel { height: min(70vh, 520px); }
   .truth-rail { grid-template-columns: minmax(0, 1fr); }
   .truth-rail > .panel { max-height: 420px; }
@@ -536,7 +491,6 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .rate-browser { border-right: 0; border-bottom: 1px solid var(--line); }
   .playback { grid-template-columns: auto 1fr; }
   .replay-proof { display: none; }
-  .thinking-summary { grid-template-columns: repeat(2, 1fr); }
   .status-layer { right: 10px; bottom: 10px; }
 }
 
@@ -545,10 +499,8 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .brand { align-items: start; flex-direction: column; gap: 4px; }
   .connection { font-size: 10px; }
   .field { width: 100%; min-width: 0; }
-  .numeric-field { width: calc(50% - 5px); }
-  .problem-context > div:first-child { flex-direction: column; align-items: flex-start; }
+  
   .activity { grid-template-columns: 1fr; }
-  .activity-progress { grid-template-columns: 1fr; }
   .timeline-lane { grid-template-columns: 100px 1fr; }
   .timeline-axis { margin-left: 115px; }
   .scene-composition:has(> .reserves-scene) > .scene-chrome { display: none; }
@@ -586,77 +538,36 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10
   .grid-scene > div.yellow { background: #ac9344; color: #23200f; }
 }
 
-
 /* Packages (P12): the workspace switch, a point's actions, experiments. */
 input[type="text"], textarea { border: 1px solid var(--line); color: var(--text); background: var(--surface-2); border-radius: 0; min-height: 38px; padding: 0 11px; }
 textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var(--mono); resize: vertical; }
 .package-field { min-width: 210px; }
-.ref-field { min-width: 260px; }
-.sample-field { min-width: 170px; }
+
 .packages-workspace .error-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .packages-workspace .error-banner button { min-height: 28px; font-size: 10px; }
 .empty-catalog { display: grid; gap: 8px; max-width: 720px; margin: 60px auto; padding: 22px 24px; border: 1px solid var(--line); background: var(--surface); }
 .empty-catalog strong { font: 400 18px var(--serif); }
 .empty-catalog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
-.empty-catalog code, .experiment-card code { font: 11px var(--mono); color: var(--text); }
-.keep-ref { display: flex; align-items: end; gap: 7px; }
-.keep-ref .field { min-width: 280px; }
+.empty-catalog code { font: 11px var(--mono); color: var(--text); }
+
 .packages-workspace .command-bar button { white-space: nowrap; }
 .action-panel { display: flex; flex-direction: column; }
-.action-tabs { display: flex; gap: 5px; padding: 10px 15px 0; }
-.action-tabs button { min-height: 30px; padding: 0 10px; color: var(--muted); font-size: 11px; }
-.action-tabs button[aria-selected="true"], .candidate[aria-pressed="true"] { color: var(--accent-contrast); background: var(--accent); border-color: var(--accent); }
-.action-body { display: contents; }
-.action-body[hidden] { display: none; }
-.act, .continue, .follow { display: grid; align-content: start; gap: 11px; padding: 12px 15px 15px; overflow: auto; min-height: 0; }
-.candidate-list { display: grid; gap: 5px; max-height: 260px; margin: 0; padding: 0; overflow: auto; list-style: none; }
-.candidate { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; align-items: baseline; gap: 10px; width: 100%; min-height: 34px; text-align: left; font-size: 11px; }
-.candidate span { overflow: hidden; color: var(--muted); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-.candidate small { font: 10px var(--mono); text-transform: uppercase; }
-.candidate-applicable small { color: var(--credit); }
-.candidate-infeasible small { color: var(--hold); }
-.candidate-invalid small { color: var(--debit); }
-.candidate[aria-pressed="true"] span, .candidate[aria-pressed="true"] small { color: inherit; }
-.candidate-detail { display: grid; gap: 8px; }
-.candidate-detail > button, .editor-actions > button { justify-self: start; }
+
 .exchange-editor { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
 .exchange-editor summary { cursor: pointer; color: var(--brass); font: 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
-.editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
-.continue-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
-.continue-controls .numeric-field { width: 130px; }
-.ran-summary { display: grid; gap: 10px; border: 1px solid var(--line); }
-.ran-summary .editor-actions { padding: 0 12px 10px; }
-.ran-summary .muted { margin: 0 12px; }
-.thinking-counters { display: flex; flex-wrap: wrap; gap: 7px 18px; padding: 0 12px; }
-.thinking-counters span { display: grid; gap: 3px; }
-.thinking-counters small { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
-.thinking-counters b { color: var(--brass); font: 12px var(--mono); }
+
 .delivered-frames { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .delivered-frames li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; padding: 6px 9px; border: 1px solid var(--line); font: 10px var(--mono); }
 .delivered-frames strong { color: var(--brass); }
 .delivered-frames small { color: var(--muted); font-size: 10px; }
-.experiments { display: grid; gap: 14px; margin-bottom: 14px; }
-.experiment-body { display: grid; gap: 10px; padding: 12px; }
-.experiment-body .point-key, .experiment-body > .muted { margin: 0; }
-.pick-field { min-width: 200px; margin-left: auto; }
-.experiment-card td small.outcome-note { margin-left: 8px; }
+
 @media (max-width: 880px) {
   .topbar { flex-wrap: wrap; gap: 8px 12px; }
-}
-@media (max-width: 520px) {
-  .keep-ref { flex-direction: column; align-items: stretch; }
-  .keep-ref .field { min-width: 0; }
 }
 
 /* The point's stage: the picture, what to do here, and what is true there. */
 .point-stage > .action-panel { display: flex; flex-direction: column; }
-.point-stage .candidate { grid-template-columns: minmax(0, 1fr) auto; row-gap: 3px; padding: 6px 9px; }
-.point-stage .candidate > strong { grid-column: 1; grid-row: 1; white-space: normal; }
-.point-stage .candidate > span { grid-column: 1 / -1; grid-row: 2; }
-.point-stage .candidate > small { grid-column: 2; grid-row: 1; }
-.point-stage .candidate-list { max-height: none; }
-.point-stage .continue-controls .field { min-width: 0; flex: 1 1 140px; }
-.point-stage .continue-controls .numeric-field { flex: 1 1 80px; width: auto; }
+
 .proof-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); height: clamp(420px, 56vh, 640px); }
 .transition-panel .transition, .transition-panel > .empty-state { flex: 1; min-height: 0; overflow: auto; }
 .sample-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
@@ -672,4 +583,89 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
   .point-stage > .world-panel { height: min(86vh, 700px); }
 }
 .point-stage .action-panel .panel-heading h2 { white-space: normal; line-height: 1.3; }
-.keep-ref button { font-size: 12px; white-space: nowrap; }
+
+/* ------------------------------------------------------------ history tree --
+   Every history of the package and its branches, live: steps run left to
+   right, each branch on its own row, the history on screen in brass. */
+.tree-panel { margin-bottom: 14px; }
+.history-tree { position: relative; overflow: auto; max-height: 320px; }
+.history-tree svg { display: block; }
+.tree-line { stroke: var(--line-strong); stroke-width: 2; }
+.tree-line.path-line { stroke: var(--brass); stroke-width: 3; }
+.tree-line.gap-line { stroke: var(--surface); stroke-width: 3; stroke-dasharray: 2 5; }
+.tree-link { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+.tree-link.on-path { stroke: var(--brass); stroke-width: 3; }
+.tree-track { fill: transparent; cursor: pointer; }
+.tree-step { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5; cursor: pointer; transition: stroke .12s; }
+.tree-step.tip { stroke-width: 2; }
+.tree-step.on-path { stroke: var(--brass); fill: color-mix(in srgb, var(--brass) 22%, var(--surface)); }
+.tree-step:hover, .tree-step:focus-visible { stroke: var(--text); outline: none; }
+.tree-cursor { fill: none; stroke: var(--accent); stroke-width: 2.5; pointer-events: none; transition: cx .18s ease, cy .18s ease; }
+.tree-label rect { fill: var(--surface-2); stroke: var(--line-strong); }
+.tree-label text { font: 11px var(--mono); fill: var(--text); }
+.tree-label.tone-named rect { stroke: var(--brass); }
+.tree-label.tone-fixed rect { stroke: var(--steel); }
+.tree-label.tone-trial rect { fill: transparent; stroke: none; }
+.tree-label.tone-trial text { fill: var(--muted); }
+.tree-label.clickable { cursor: pointer; }
+.tree-label.clickable:hover rect { stroke: var(--text); }
+.tree-gap { font: 9px var(--mono); fill: var(--muted); }
+.tree-hover { position: fixed; z-index: 80; width: max-content; min-width: 220px; max-width: 320px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 10px 26px #0009; }
+.branch-card { display: grid; gap: 4px; font-size: 12px; line-height: 1.45; color: var(--text); }
+.branch-card strong { font-size: 13px; }
+.branch-card small { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+
+/* A word explained where it is met: dotted, its meaning on hover or focus. */
+.term { border-bottom: 1px dotted color-mix(in srgb, currentColor 60%, transparent); cursor: help; }
+.term:focus-visible { outline: 1px solid var(--brass); outline-offset: 2px; }
+.term-tip { position: fixed; z-index: 90; width: max-content; max-width: 290px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 8px 20px #0008; color: var(--text); font: 400 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: 0; text-transform: none; white-space: normal; pointer-events: none; }
+
+/* ---------------------------------------------------------------- from here --
+   Everything one can do from the point on screen, one size of control. */
+.from-here { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px 16px; display: grid; gap: 18px; align-content: start; }
+.from-what { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.from-section { display: grid; gap: 8px; }
+.from-section h3 { margin: 0; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.from-here button, .from-here select, .from-here input, .from-here .file-button { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.from-here input { border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+.from-here .field { min-width: 0; gap: 4px; }
+.move-list, .trial-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.move { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.move-name { display: grid; gap: 2px; justify-items: start; text-align: left; padding: 5px 9px; background: transparent; }
+.from-here .move-name { min-height: 0; }
+.move-name strong { font-size: 12px; font-weight: 600; }
+.move-name small { font: 10px var(--mono); text-transform: uppercase; color: var(--credit); }
+.move:not(.move-applicable) .move-name small { color: var(--hold); }
+.move-detail { grid-column: 1 / -1; display: grid; gap: 6px; padding: 2px 0 4px 10px; border-left: 2px solid var(--line); font-size: 11px; }
+.let-play { display: flex; gap: 6px; align-items: center; }
+.let-play select, .let-play input { flex: 1; min-width: 0; }
+.settings summary, .exchange-editor summary { cursor: pointer; font-size: 11px; color: var(--muted); }
+.settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.exchange-editor { display: grid; gap: 8px; }
+.exchange-editor textarea { min-height: 96px; padding: 8px; font: 11px var(--mono); }
+.experiment-here { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.experiment-line, .trial-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.experiment-line > span, .trial-list li > span { min-width: 0; }
+.from-here .muted { font-size: 11px; }
+
+/* ---------------------------------------------------------------- compare --
+   The history on screen set against another: where they part, step by
+   step what each did and what differs, and how each ends. */
+.compare-panel { margin-bottom: 14px; }
+.compare-panel .panel-heading h2 { white-space: normal; }
+.versus { color: var(--muted); font: 11px var(--mono); text-transform: uppercase; margin: 0 6px; }
+.compare-panel .panel-heading button { min-height: 28px; font-size: 11px; }
+.compare-body { display: grid; gap: 10px; padding: 12px 15px 15px; }
+.compare-note { margin: 0; font-size: 12px; }
+.compare-ends { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
+.compare-ends > div { display: flex; align-items: baseline; gap: 8px; }
+.compare-ends dt { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.compare-ends dd { margin: 0; font: 12px var(--mono); }
+.compare-ends dd span:first-child { color: var(--brass); }
+.compare-scroll { overflow: auto; max-height: 340px; }
+.compare-scroll table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.compare-scroll th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; text-align: left; text-transform: uppercase; }
+.compare-scroll th, .compare-scroll td { padding: 6px 10px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); vertical-align: top; }
+.compare-scroll tr.clickable { cursor: pointer; }
+.compare-scroll tr.clickable:hover { background: color-mix(in srgb, var(--brass) 6%, transparent); }
+.branch-card button { justify-self: start; min-height: 28px; margin-top: 4px; font-size: 11px; }

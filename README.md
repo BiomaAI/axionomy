@@ -244,10 +244,12 @@ visually separate from transport failures.
 
 ### Reading Studio
 
+- Every history of a package, and every branch grown from it, appears in the **history tree**, live: a branch appears as it is recorded.
+- What can be done at the step on screen (a move, a strategy, an experiment, naming it) appears under **From here**, beside the picture.
 - Assets and accounts appear under **Source of truth**.
 - Rates, roles, goals, and invariants appear under **The rules**.
 - Each applied exchange appears under **Proof of this step** and in the replay scrubber.
-- An experiment's trials, their objective values and the front appear under **Experiments**.
+- An experiment's trials, how each ended and their objective values appear under **Experiments from here**, at the point it starts from, each trial a branch of the tree to watch.
 
 Studio, the CLI, the HTTP API, and MCP deliberately call the same engine.
 Their different usability demands pressure one engine API. A capability is
