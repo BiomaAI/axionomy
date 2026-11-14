@@ -6,7 +6,7 @@
 | --- | --- |
 | Status | Implemented foundation; living design |
 | Product | Axionomy Cargo workspace |
-| Version | `0.1.0` |
+| Version | `0.2.0` |
 | Rust edition | 2024 |
 | Minimum Rust | 1.99 |
 | Last updated | 2026-11-06 |
