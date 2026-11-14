@@ -19,6 +19,15 @@ goes.
   reach it.
 - `ancestor` names the point at an earlier step of a point's history, by its
   one name, in whichever run of that history took the step.
+- `divergence` compares two points' histories: the last point on both (refused
+  with `Unrelated` when there is none, as for economies authored apart), and
+  for each step after it in a window, paged like `frames` with `after` and a
+  limit, the exchange each side applied (none once its history has ended, its
+  state staying where it was), and the balances, exact, and the accounts
+  that differ between the two states after it, read from their trees' diff so
+  a step costs what differs, not what the economy holds. It names the first
+  step after which the two states are equal again, by their tree hashes,
+  wherever it is on the histories, and measures objectives at both points.
 - `assess` explains whether an exchange would apply at a point, and
   `present` gives exchanges as people read them at a point, with the view
   of its run's ontology, each assessed there, as Studio shows a candidate

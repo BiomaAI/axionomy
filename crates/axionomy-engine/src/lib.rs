@@ -2,6 +2,7 @@
 
 mod cache;
 pub mod definitions;
+mod divergence;
 mod experiment;
 mod histories;
 mod package;
@@ -14,6 +15,7 @@ pub use definitions::{
     CandidateSet, CandidatesPath, ExperimentPath, GoalPath, Measure, Objective, ObjectivePath,
     ScriptCall, ScriptFunction, StrategyPath,
 };
+pub use divergence::{AccountDifference, Aligned, BalanceDifference, Divergence, Side, Tip};
 pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Trial};
 pub use histories::{Change, Segment, Subscriber};
 pub use package::{
@@ -58,6 +60,14 @@ pub enum EngineError {
     UnknownPoint(Point),
     #[error("step {step} is not on the history of step {} of run {}", .at.step, .at.run)]
     NotOnHistory { at: Point, step: u64 },
+    /// Two points whose histories share no point: neither history runs
+    /// through the other's, nor do both start from a third, as for two
+    /// economies authored apart.
+    #[error(
+        "step {} of run {} and step {} of run {} share no history",
+        .left.step, .left.run, .right.step, .right.run
+    )]
+    Unrelated { left: Point, right: Point },
     /// An exchange of those applied together did not apply, so none was
     /// recorded. `index` counts from zero, and `assessment` explains the
     /// failure against the economy that exchange met.
