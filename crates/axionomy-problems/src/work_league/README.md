@@ -56,20 +56,24 @@ replayed snapshot.
 
 ## Required results
 
-- Showcase contains four agents, twelve finite jobs, eight locations, and at
-  least fifty accepted exchanges; Stress doubles the job pool and materially
-  lengthens the replay.
-- Each contract has at most one live claim and ends completed or expired.
-  Early outcomes, occupied service bays, duplicate handoffs, and late payments
-  are rejected without mutation. Worker time advances on the shared clock.
+The unit tests check the laws by applying exchanges:
+
+- Each contract has at most one live claim; arrivals, dependencies, leases
+  and deadlines are the economy's. Early outcomes, occupied service bays,
+  duplicate handoffs, and late payments are rejected without mutation.
+  Worker time advances on the shared clock, and travel follows the declared
+  roads one hop a turn.
 - Agent and job identity assets reject rebinding a valid-looking claim to the
   wrong participant.
-- Failure, repair, retry, recycling, and shared-facility effects replay through
-  ordinary atomic exchanges.
-- Energy, material, time, worker condition, and repair supply invariants hold
-  across the complete match.
-- Every snapshot carries all six leaderboards, and at least two different
-  agents lead the final set of objectives.
+- Activities overlap; a joint handoff moves the claim and payment once and
+  spends both workers' turns; recycling recovers material with a conserved
+  loss.
+
+The package's experiments find the rest, pinned in `tests/outcomes`: Micro's
+serial match completes every job, and every field's Showcase and Stress
+seasons end with each contract completed or expired, Stress materially
+longer than Showcase. Failure, repair, retry, recycling, and shared-facility
+effects replay through ordinary atomic exchanges, under every invariant.
 
 ## API pressure
 
@@ -86,7 +90,7 @@ replayed snapshot.
 ## In this folder
 
 - `mod.rs` is the model: the league's workers, jobs, locations, facilities
-  and policies, the Micro serial fixture, and the runner.
+  and policies, and the Micro serial fixture.
 - `continuous.rs` is the Showcase and Stress season on the shared clock:
   leases, deadlines, activity durations and facility occupancy as laws.
 - `package.rs` writes its package: its economies under refs, goals,

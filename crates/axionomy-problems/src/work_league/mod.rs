@@ -2,33 +2,15 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, ApplyError, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
-    Quantity, Rate, ReplayError, Trace, basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
+    basket,
 };
-use axionomy_search::sampling::{EventPath, EventTickets, TicketSource};
 
 mod continuous;
 #[cfg(feature = "packages")]
 pub mod package;
 
-/// Why a league season could not be played to its end.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum LeagueError {
-    #[error("{0:?} has no policy")]
-    MissingPolicy(AgentId),
-    #[error("{0:?} has no location")]
-    NoLocation(AgentId),
-    #[error("{rate:?} was rejected: {error}")]
-    Rejected {
-        rate: RateId,
-        error: ApplyError<Ontology>,
-    },
-    #[error("the season does not replay: {0}")]
-    Replay(#[from] ReplayError<Ontology>),
-    #[error("the season's replay reached a different state")]
-    Diverged,
-}
-pub use continuous::{clock, decision, proposal};
+pub use continuous::{clock, proposal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AgentId {
@@ -305,21 +287,6 @@ impl League {
     }
     pub fn jobs(&self) -> &[JobSpec] {
         &self.jobs
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct MatchOutcome {
-    trace: Trace<Ontology>,
-    final_world: World,
-}
-
-impl MatchOutcome {
-    pub const fn trace(&self) -> &Trace<Ontology> {
-        &self.trace
-    }
-    pub const fn final_world(&self) -> &World {
-        &self.final_world
     }
 }
 
@@ -748,91 +715,6 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
     }
 }
 
-pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, LeagueError> {
-    if league.initial.account(&AccountId::World).is_some() {
-        return continuous::run(league, seed);
-    }
-    let mut world = league.initial.clone();
-    let mut trace = Trace::new();
-    let mut available = league.jobs.iter().map(|spec| spec.id).collect::<Vec<_>>();
-    let mut turn = 0usize;
-
-    while !available.is_empty() {
-        let agent = league.agents[turn % league.agents.len()];
-        let policy = policy_of(&world, agent).ok_or(LeagueError::MissingPolicy(agent))?;
-        let job = choose_job(&available, policy);
-        available.retain(|candidate| *candidate != job);
-        let spec = job_spec(job);
-        apply(&mut world, &mut trace, action(RateId::Claim { agent, job }))?;
-
-        move_to(&mut world, &mut trace, agent, spec.location)?;
-        let mut mode = mode_for(policy);
-        let mut attempt = 0u64;
-        loop {
-            attempt += 1;
-            apply(
-                &mut world,
-                &mut trace,
-                action(RateId::Begin { agent, job, mode }),
-            )?;
-            let outcome = sampled_outcome(seed, job, mode, attempt, spec.risk);
-            apply(
-                &mut world,
-                &mut trace,
-                action(RateId::Resolve {
-                    agent,
-                    job,
-                    mode,
-                    outcome,
-                }),
-            )?;
-            apply(
-                &mut world,
-                &mut trace,
-                action(RateId::Finish {
-                    agent,
-                    job,
-                    mode,
-                    outcome,
-                }),
-            )?;
-            if outcome == Outcome::Success {
-                break;
-            }
-            move_to(&mut world, &mut trace, agent, Location::Workshop)?;
-            apply(
-                &mut world,
-                &mut trace,
-                action(RateId::Repair { agent })
-                    .bind(Role::Facility, AccountId::Facility(Facility::Workshop)),
-            )?;
-            move_to(&mut world, &mut trace, agent, spec.location)?;
-            mode = WorkMode::Safe;
-        }
-
-        if policy == Policy::Steward
-            && world
-                .balance(&AccountId::Agent(agent), &Asset::Waste)
-                .to_u64()
-                > 0
-        {
-            move_to(&mut world, &mut trace, agent, Location::Recycler)?;
-            apply(
-                &mut world,
-                &mut trace,
-                action(RateId::Recycle { agent })
-                    .bind(Role::Facility, AccountId::Facility(Facility::Recycler)),
-            )?;
-        }
-        turn += 1;
-    }
-
-    Ok(MatchOutcome {
-        trace,
-        final_world: world,
-    })
-}
-
 pub fn job_spec(job: JobId) -> JobSpec {
     let index = u64::from(job.0.saturating_sub(1));
     let locations = [
@@ -849,70 +731,6 @@ pub fn job_spec(job: JobId) -> JobSpec {
         time: 3 + (index * 3 % 6),
         material: 2 + (index * 2 % 4),
         risk: 1 + (index * 3 % 4),
-    }
-}
-
-pub fn policy(world: &World, agent: AgentId) -> Option<Policy> {
-    policy_of(world, agent)
-}
-
-pub fn location(world: &World, agent: AgentId) -> Option<Location> {
-    LOCATIONS.into_iter().find(|location| {
-        !world
-            .balance(&AccountId::Agent(agent), &Asset::At(*location))
-            .is_zero()
-    })
-}
-
-fn policy_of(world: &World, agent: AgentId) -> Option<Policy> {
-    [
-        Policy::Sprinter,
-        Policy::Steward,
-        Policy::ValueHunter,
-        Policy::Resilient,
-    ]
-    .into_iter()
-    .find(|policy| {
-        !world
-            .balance(&AccountId::Agent(agent), &Asset::Policy(*policy))
-            .is_zero()
-    })
-}
-
-fn choose_job(available: &[JobId], policy: Policy) -> JobId {
-    let mut jobs = available.to_vec();
-    jobs.sort_by_key(|job| {
-        let spec = job_spec(*job);
-        match policy {
-            Policy::Sprinter => (
-                spec.time,
-                u64::MAX - spec.value,
-                spec.risk,
-                u64::from(job.0),
-            ),
-            Policy::Steward => (spec.material, spec.energy, spec.risk, u64::from(job.0)),
-            Policy::ValueHunter => (
-                u64::MAX - spec.value,
-                spec.risk,
-                spec.time,
-                u64::from(job.0),
-            ),
-            Policy::Resilient => (
-                spec.risk,
-                spec.energy,
-                u64::MAX - spec.value,
-                u64::from(job.0),
-            ),
-        }
-    });
-    jobs[0]
-}
-
-fn mode_for(policy: Policy) -> WorkMode {
-    match policy {
-        Policy::Sprinter | Policy::ValueHunter => WorkMode::Rush,
-        Policy::Steward => WorkMode::Lean,
-        Policy::Resilient => WorkMode::Safe,
     }
 }
 
@@ -959,116 +777,9 @@ fn failure_weight(risk: u64, mode: WorkMode) -> u64 {
     }
 }
 
-/// A chance event of a match, which names the draw of its outcome.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
-enum Event {
-    /// The outcome of the `n`th attempt at a job, whoever makes it and in
-    /// whatever mode: each attempt at a job is counted, so every draw names
-    /// an occurrence of its own.
-    Attempt(JobId, u64),
-}
-
-/// Whether the `attempt`th attempt at `job` in the world seeded `seed`
-/// fails, `failure` times in `total`: the attempt's event draws a ticket
-/// below `total`, and a ticket below `failure` fails. A match whose lineup
-/// differs meets the same ticket at the same attempt at the same job, and
-/// only how likely its mode makes failure differs: common random numbers.
-fn attempt_fails(seed: u64, job: JobId, attempt: u64, failure: u64, total: u64) -> bool {
-    let event: EventPath = path::write(&Event::Attempt(job, attempt));
-    EventTickets::new(seed, &event).ticket(total) < failure
-}
-
-fn sampled_outcome(seed: u64, job: JobId, mode: WorkMode, attempt: u64, risk: u64) -> Outcome {
-    // The attempt's event draws its ticket without making an RNG part of
-    // authoritative state; the chances in ten are the distribution sampled.
-    if attempt_fails(seed, job, attempt, failure_weight(risk, mode), 10) {
-        Outcome::Failure
-    } else {
-        Outcome::Success
-    }
-}
-
-fn move_to(
-    world: &mut World,
-    trace: &mut Trace<Ontology>,
-    agent: AgentId,
-    to: Location,
-) -> Result<(), LeagueError> {
-    let from = location(world, agent).ok_or(LeagueError::NoLocation(agent))?;
-    if from != to {
-        apply(world, trace, action(RateId::Move { agent, from, to }))?;
-    }
-    Ok(())
-}
-
-fn action(rate: RateId) -> Action {
-    let mut exchange = Exchange::new(rate, Quantity::new(1));
-    let (agent, job, nature) = match rate {
-        RateId::Claim { agent, job }
-        | RateId::Begin { agent, job, .. }
-        | RateId::Finish { agent, job, .. } => (agent, Some(job), false),
-        RateId::Resolve { agent, .. } => (agent, None, true),
-        RateId::Move { agent, .. }
-        | RateId::Repair { agent }
-        | RateId::Recharge { agent }
-        | RateId::Recycle { agent } => (agent, None, false),
-        _ => return continuous::proposal(rate),
-    };
-    exchange = exchange.bind(Role::Agent, AccountId::Agent(agent));
-    if let Some(job) = job {
-        exchange = exchange.bind(Role::Job, AccountId::Job(job));
-    }
-    if nature {
-        exchange = exchange.bind(Role::Nature, AccountId::Nature);
-    }
-    exchange
-}
-
-fn apply(
-    world: &mut World,
-    trace: &mut Trace<Ontology>,
-    exchange: Action,
-) -> Result<(), LeagueError> {
-    world
-        .apply(exchange.clone())
-        .map_err(|error| LeagueError::Rejected {
-            rate: *exchange.rate(),
-            error,
-        })?;
-    trace.push(exchange);
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn showcase_is_a_substantial_replay_verified_competition() {
-        let league = league(Profile::Showcase, mixed_lineup());
-        let outcome = run(&league, 17).unwrap();
-        assert!(outcome.trace().exchanges().len() >= 50);
-        assert!(outcome.final_world().matches(league.goal()));
-        let mut replay = league.initial().clone();
-        replay.replay(outcome.trace()).unwrap();
-        assert_eq!(
-            replay.state_fingerprint(),
-            outcome.final_world().state_fingerprint()
-        );
-        assert!(
-            AGENTS
-                .into_iter()
-                .filter(|agent| {
-                    outcome
-                        .final_world()
-                        .balance(&AccountId::Agent(*agent), &Asset::Completed)
-                        .to_u64()
-                        > 0
-                })
-                .count()
-                >= 3
-        );
-    }
 
     #[test]
     fn identity_assets_reject_rebinding_a_claim_to_the_wrong_agent() {
@@ -1083,12 +794,5 @@ mod tests {
         .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
         .bind(Role::Job, AccountId::Job(JobId(1)));
         assert!(!league.initial().is_applicable(&wrong));
-    }
-
-    #[test]
-    fn stress_is_materially_larger_than_showcase() {
-        let showcase = run(&league(Profile::Showcase, mixed_lineup()), 17).unwrap();
-        let stress = run(&league(Profile::Stress, mixed_lineup()), 17).unwrap();
-        assert!(stress.trace().exchanges().len() > showcase.trace().exchanges().len() + 35);
     }
 }

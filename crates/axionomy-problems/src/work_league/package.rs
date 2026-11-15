@@ -32,8 +32,7 @@ use axionomy_store::{Checkpoints, RefPath};
 const SCRIPT: &str = include_str!("../../scripts/work-league.rhai");
 const VIEW: &str = include_str!("../../scripts/work-league-view.rhai");
 
-/// The seed the sample's Rust league runs with, from which Nature's events
-/// are drawn.
+/// The seed the league runs with, from which Nature's events are drawn.
 const SEED: u64 = 17;
 
 /// The most turns a season takes: at each of Stress's 79 clock readings,

@@ -1,5 +1,6 @@
-//! Shared-time work economy. The runner proposes events and worker decisions;
-//! time, deadlines, leases, activity duration and facility ownership are laws.
+//! Shared-time work economy. Events and worker decisions are proposed as
+//! exchanges; time, deadlines, leases, activity duration and facility
+//! ownership are laws.
 
 use super::*;
 use axionomy::path;
@@ -733,8 +734,9 @@ fn service_rate(agent: AgentId, facility: Facility, maintenance: bool) -> Rate<O
     }
 }
 
-/// Concrete bindings for the shared-time model. All callers still pass through
-/// the same assessment, identity checks, timing conditions, and invariants.
+/// The exchange of one unit of `rate` in a season, each of its roles bound to
+/// the account the rate names. All callers still pass through the same
+/// assessment, identity checks, timing conditions, and invariants.
 pub fn proposal(rate: RateId) -> Action {
     let mut action = Exchange::new(rate, Quantity::new(1)).bind(Role::World, AccountId::World);
     match rate {
@@ -785,348 +787,34 @@ pub fn proposal(rate: RateId) -> Action {
             }
         }
         RateId::EndSeason => {}
-        _ => return super::action(rate),
+        // Micro's own rates, which a season does not have, bind no world.
+        RateId::Resolve { agent, .. } => {
+            return Exchange::new(rate, Quantity::new(1))
+                .bind(Role::Agent, AccountId::Agent(agent))
+                .bind(Role::Nature, AccountId::Nature);
+        }
+        RateId::Repair { agent } | RateId::Recharge { agent } | RateId::Recycle { agent } => {
+            return Exchange::new(rate, Quantity::new(1))
+                .bind(Role::Agent, AccountId::Agent(agent));
+        }
     }
     action
 }
 
+/// The season's clock: the ticks that have passed.
 pub fn clock(world: &World) -> u64 {
     world.balance(&AccountId::World, &Asset::Tick).to_u64()
 }
-fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Agent(agent), &asset).to_u64()
-}
-fn job_balance(world: &World, id: JobId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Job(id), &asset).to_u64()
-}
-fn held_job(league: &League, world: &World, agent: AgentId) -> Option<JobId> {
-    league
-        .jobs
-        .iter()
-        .find(|spec| balance(world, agent, Asset::Claimed(spec.id)) > 0)
-        .map(|spec| spec.id)
-}
-fn preferred_modes(policy: Policy) -> [WorkMode; 3] {
-    match policy {
-        Policy::Sprinter | Policy::ValueHunter => [WorkMode::Rush, WorkMode::Safe, WorkMode::Lean],
-        Policy::Steward => [WorkMode::Lean, WorkMode::Safe, WorkMode::Rush],
-        Policy::Resilient => [WorkMode::Safe, WorkMode::Lean, WorkMode::Rush],
-    }
-}
-fn can_finish(world: &World, agent: AgentId, spec: JobSpec, mode: WorkMode, overhead: u64) -> bool {
-    let cost = work_cost(spec, mode);
-    clock(world) + overhead + cost.time <= job_balance(world, spec.id, Asset::Deadline)
-        && balance(world, agent, Asset::Material) >= cost.material
-        && balance(world, agent, Asset::Energy)
-            > cost.energy + route(world, agent, spec.location).map_or(100, |(_, distance)| distance)
-}
-fn route(world: &World, agent: AgentId, to: Location) -> Option<(Location, u64)> {
-    let from = location(world, agent)?;
-    let mut visited = std::collections::BTreeSet::from([from]);
-    let mut pending = std::collections::VecDeque::from([(from, from, 0)]);
-    while let Some((at, first, distance)) = pending.pop_front() {
-        if at == to {
-            return Some((first, distance));
-        }
-        for next in LOCATIONS {
-            if world
-                .rate(&RateId::Move {
-                    agent,
-                    from: at,
-                    to: next,
-                })
-                .is_some()
-                && visited.insert(next)
-            {
-                pending.push_back((next, if distance == 0 { next } else { first }, distance + 1));
-            }
-        }
-    }
-    None
-}
-fn travel(world: &World, agent: AgentId, to: Location) -> Option<Action> {
-    let from = location(world, agent)?;
-    let (to, _) = route(world, agent, to)?;
-    let action = proposal(RateId::Move { agent, from, to });
-    (from != to && world.is_applicable(&action)).then_some(action)
-}
-fn service(world: &World, agent: AgentId, facility: Facility) -> Option<Action> {
-    if location(world, agent) != Some(service_location(facility)) {
-        return travel(world, agent, service_location(facility));
-    }
-    let action = proposal(RateId::BeginService {
-        agent,
-        facility,
-        maintenance: facility == Facility::Workshop && balance(world, agent, Asset::Damage) == 0,
-    });
-    world.is_applicable(&action).then_some(action)
-}
-
-/// One state-responsive decision. The policy can be replaced without changing
-/// turn permissions, action duration, deadlines, or Nature's legal outcomes.
-pub fn decision(league: &League, world: &World, agent: AgentId) -> Option<Action> {
-    if world
-        .balance(&AccountId::World, &Asset::Permit(agent))
-        .is_zero()
-    {
-        return None;
-    }
-    let wait = || Some(proposal(RateId::Wait { agent }));
-    if balance(world, agent, Asset::Busy) > 0 {
-        return wait();
-    }
-    let policy = policy_of(world, agent)?;
-    let held = held_job(league, world, agent);
-    let maintenance =
-        balance(world, agent, Asset::Wear) >= if policy == Policy::Resilient { 4 } else { 6 };
-    if balance(world, agent, Asset::Damage) > 0 || maintenance {
-        if let Some(id) = held {
-            for recipient in AGENTS.into_iter().filter(|other| *other != agent) {
-                let exchange = proposal(RateId::Handoff {
-                    agent,
-                    recipient,
-                    job: id,
-                });
-                if world.is_applicable(&exchange)
-                    && preferred_modes(policy_of(world, recipient)?)
-                        .into_iter()
-                        .any(|mode| {
-                            can_finish(
-                                world,
-                                recipient,
-                                job_spec(id),
-                                mode,
-                                1 + route(world, recipient, job_spec(id).location)
-                                    .map_or(100, |(_, distance)| distance),
-                            )
-                        })
-                {
-                    return Some(exchange);
-                }
-            }
-        }
-        return service(world, agent, Facility::Workshop).or_else(wait);
-    }
-    if let Some(id) = held {
-        let spec = job_spec(id);
-        let travel_time = route(world, agent, spec.location)?.1;
-        let modes = preferred_modes(policy);
-        // Release impossible promises while another worker still has time.
-        if !modes.into_iter().any(|mode| {
-            clock(world) + travel_time + work_cost(spec, mode).time
-                <= job_balance(world, id, Asset::Deadline)
-        }) {
-            return Some(proposal(RateId::ReleaseClaim {
-                agent,
-                job: id,
-                expired: false,
-            }));
-        }
-        let minimum_energy = modes
-            .into_iter()
-            .map(|mode| work_cost(spec, mode).energy)
-            .min()?
-            + travel_time
-            + 1;
-        if balance(world, agent, Asset::Energy) < minimum_energy {
-            return service(world, agent, Facility::Charger).or_else(wait);
-        }
-        let minimum_material = modes
-            .into_iter()
-            .map(|mode| work_cost(spec, mode).material)
-            .min()?;
-        if balance(world, agent, Asset::Material) < minimum_material {
-            return service(world, agent, Facility::Recycler).or_else(|| {
-                Some(proposal(RateId::ReleaseClaim {
-                    agent,
-                    job: id,
-                    expired: false,
-                }))
-            });
-        }
-        if let Some(action) = travel(world, agent, spec.location) {
-            return Some(action);
-        }
-        for mode in modes {
-            let action = proposal(RateId::Begin {
-                agent,
-                job: id,
-                mode,
-            });
-            if world.is_applicable(&action) {
-                return Some(action);
-            }
-        }
-        return wait();
-    }
-    if world
-        .balance(&AccountId::World, &Asset::ContractsOpen)
-        .is_zero()
-    {
-        return wait();
-    }
-    if balance(world, agent, Asset::Energy) < 9 {
-        return service(world, agent, Facility::Charger).or_else(wait);
-    }
-    if balance(world, agent, Asset::Waste) >= 2
-        && (balance(world, agent, Asset::Material) < 5 || policy == Policy::Steward)
-    {
-        return service(world, agent, Facility::Recycler).or_else(wait);
-    }
-    let mut options = league
-        .jobs
-        .iter()
-        .filter_map(|spec| {
-            let claim = proposal(RateId::Claim {
-                agent,
-                job: spec.id,
-            });
-            let travel = route(world, agent, spec.location)?.1;
-            let mode = preferred_modes(policy)
-                .into_iter()
-                .find(|mode| can_finish(world, agent, *spec, *mode, 1 + travel))?;
-            if !world.is_applicable(&claim) {
-                return None;
-            }
-            let cost = work_cost(*spec, mode);
-            let urgency = job_balance(world, spec.id, Asset::Deadline) - clock(world);
-            let score = match policy {
-                Policy::Sprinter => (cost.time + travel, urgency, u64::MAX - spec.value),
-                Policy::ValueHunter => (
-                    u64::MAX - spec.value * 100 / (cost.time + travel + 1),
-                    urgency,
-                    spec.risk,
-                ),
-                Policy::Steward => (cost.material + cost.waste, travel, urgency),
-                Policy::Resilient => (failure_weight(spec.risk, mode), urgency, travel),
-            };
-            Some((score, spec.id, claim))
-        })
-        .collect::<Vec<_>>();
-    options.sort_by_key(|(score, id, _)| (*score, *id));
-    options
-        .into_iter()
-        .next()
-        .map(|(_, _, action)| action)
-        .or_else(wait)
-}
-
-fn sampled_result(world: &World, seed: u64, id: JobId, mode: WorkMode) -> Outcome {
-    // Common random numbers: the same job and attempt receive the same latent
-    // ticket across lineups, independently of actor, mode, and action ordering.
-    let attempt = job_balance(world, id, Asset::Attempts);
-    let failure = world
-        .balance(
-            &AccountId::Nature,
-            &Asset::OutcomeWeight(id, mode, Outcome::Failure),
-        )
-        .to_u64();
-    let success = world
-        .balance(
-            &AccountId::Nature,
-            &Asset::OutcomeWeight(id, mode, Outcome::Success),
-        )
-        .to_u64();
-    if attempt_fails(seed, id, attempt, failure, failure + success) {
-        Outcome::Failure
-    } else {
-        Outcome::Success
-    }
-}
-
-pub(super) fn run(league: &League, seed: u64) -> Result<MatchOutcome, LeagueError> {
-    let mut world = league.initial.clone();
-    let mut trace = Trace::new();
-    loop {
-        // Due events are proposed from balances; every early, stale, or wrongly
-        // bound event is independently rejected by the economy.
-        for spec in &league.jobs {
-            let owner = AGENTS
-                .into_iter()
-                .find(|agent| job_balance(&world, spec.id, Asset::Assigned(*agent)) > 0);
-            let mode = owner.and_then(|agent| {
-                MODES
-                    .into_iter()
-                    .find(|mode| balance(&world, agent, Asset::Awaiting(spec.id, *mode)) > 0)
-            });
-            if job_balance(&world, spec.id, Asset::Completed) > 0
-                || job_balance(&world, spec.id, Asset::Expired) > 0
-            {
-                continue;
-            }
-            if clock(&world) > job_balance(&world, spec.id, Asset::Deadline) {
-                apply(
-                    &mut world,
-                    &mut trace,
-                    proposal(RateId::Expire {
-                        job: spec.id,
-                        agent: owner,
-                        mode,
-                    }),
-                )?;
-            } else if let (Some(agent), Some(mode)) = (owner, mode) {
-                if clock(&world) >= balance(&world, agent, Asset::ReadyAt) {
-                    let outcome = sampled_result(&world, seed, spec.id, mode);
-                    apply(
-                        &mut world,
-                        &mut trace,
-                        proposal(RateId::Finish {
-                            agent,
-                            job: spec.id,
-                            mode,
-                            outcome,
-                        }),
-                    )?;
-                }
-            } else if let Some(agent) = owner {
-                let release = proposal(RateId::ReleaseClaim {
-                    agent,
-                    job: spec.id,
-                    expired: true,
-                });
-                if world.is_applicable(&release) {
-                    apply(&mut world, &mut trace, release)?;
-                }
-            }
-        }
-        for agent in AGENTS {
-            for facility in FACILITIES {
-                let finish = proposal(RateId::EndService { agent, facility });
-                if world.is_applicable(&finish) {
-                    apply(&mut world, &mut trace, finish)?;
-                }
-            }
-        }
-        let end = proposal(RateId::EndSeason);
-        if world.is_applicable(&end) {
-            apply(&mut world, &mut trace, end)?;
-            break;
-        }
-        // Rotate access to same-tick contention, reproducibly and independently
-        // of policy identity. Busy workers cannot freeze the other workers.
-        let first = clock(&world) as usize % AGENTS.len();
-        for offset in 0..AGENTS.len() {
-            let agent = AGENTS[(first + offset) % AGENTS.len()];
-            if let Some(action) = decision(league, &world, agent) {
-                apply(&mut world, &mut trace, action)?;
-            }
-        }
-        apply(&mut world, &mut trace, proposal(RateId::Tick))?;
-    }
-    let replay = league.initial.replayed(&trace)?;
-    if replay.state_key() != world.state_key() {
-        return Err(LeagueError::Diverged);
-    }
-    Ok(MatchOutcome {
-        trace,
-        final_world: world,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
+        world.balance(&AccountId::Agent(agent), &asset).to_u64()
+    }
+    fn job_balance(world: &World, id: JobId, asset: Asset) -> u64 {
+        world.balance(&AccountId::Job(id), &asset).to_u64()
+    }
     fn world() -> World {
         build(Profile::Showcase, mixed_lineup()).initial
     }
@@ -1279,8 +967,8 @@ mod tests {
     }
 
     #[test]
-    fn travel_uses_the_declared_road_network_and_policy_prices_each_hop() {
-        let world = world();
+    fn travel_uses_the_declared_road_network_one_hop_a_turn() {
+        let mut world = world();
         let agent = AgentId::Atlas;
         assert!(
             world
@@ -1290,18 +978,6 @@ mod tests {
                     to: Location::Workshop
                 })
                 .is_none()
-        );
-        let (first, distance) = route(&world, agent, Location::Workshop).unwrap();
-        assert_eq!(distance, 2);
-        assert!(matches!(first, Location::South | Location::West));
-        let action = travel(&world, agent, Location::Workshop).unwrap();
-        assert_eq!(
-            *action.rate(),
-            RateId::Move {
-                agent,
-                from: Location::Depot,
-                to: first
-            }
         );
         assert_eq!(
             world
@@ -1316,6 +992,33 @@ mod tests {
                 .count(),
             18
         );
+        // The workshop is two roads from the depot, one hop a turn.
+        act(
+            &mut world,
+            RateId::Move {
+                agent,
+                from: Location::Depot,
+                to: Location::West,
+            },
+        );
+        rejected_unchanged(
+            &mut world,
+            proposal(RateId::Move {
+                agent,
+                from: Location::West,
+                to: Location::Workshop,
+            }),
+        );
+        tick(&mut world);
+        act(
+            &mut world,
+            RateId::Move {
+                agent,
+                from: Location::West,
+                to: Location::Workshop,
+            },
+        );
+        assert_eq!(balance(&world, agent, Asset::At(Location::Workshop)), 1);
     }
 
     #[test]
@@ -1406,13 +1109,12 @@ mod tests {
             job_balance(&world, JobId(1), Asset::Assigned(AgentId::Bolt)),
             1
         );
-        assert!(
-            decision(
-                &build(Profile::Showcase, mixed_lineup()),
-                &world,
-                AgentId::Bolt
-            )
-            .is_none()
+        // The handoff spent Bolt's turn too.
+        rejected_unchanged(
+            &mut world,
+            proposal(RateId::Wait {
+                agent: AgentId::Bolt,
+            }),
         );
         tick(&mut world);
         rejected_unchanged(
@@ -1552,48 +1254,5 @@ mod tests {
                 .to_u64(),
             0
         );
-    }
-
-    #[test]
-    fn shared_scenarios_resolve_honestly_across_lineups_and_seeds() {
-        let mut has_handoff = false;
-        let mut has_recharge = false;
-        let mut has_expiry = false;
-        let mut has_overlap = false;
-        for profile in [Profile::Showcase, Profile::Stress] {
-            for lineup in [mixed_lineup(), throughput_lineup(), sustainable_lineup()] {
-                let league = build(profile, lineup);
-                for seed in [0, 1, 7, 11, 17, 29] {
-                    let outcome = run(&league, seed).unwrap();
-                    assert!(outcome.final_world.matches(&league.goal));
-                    for spec in &league.jobs {
-                        assert_eq!(
-                            job_balance(&outcome.final_world, spec.id, Asset::Completed)
-                                + job_balance(&outcome.final_world, spec.id, Asset::Expired),
-                            1
-                        );
-                    }
-                    let mut replay = league.initial.clone();
-                    for action in outcome.trace.exchanges() {
-                        replay.apply(action.clone()).unwrap();
-                        has_overlap |= replay
-                            .balance(&AccountId::World, &Asset::Activities)
-                            .to_u64()
-                            >= 2;
-                        has_handoff |= matches!(action.rate(), RateId::Handoff { .. });
-                        has_recharge |= matches!(
-                            action.rate(),
-                            RateId::BeginService {
-                                facility: Facility::Charger,
-                                ..
-                            }
-                        );
-                        has_expiry |= matches!(action.rate(), RateId::Expire { .. });
-                    }
-                    assert_eq!(replay.state_key(), outcome.final_world.state_key());
-                }
-            }
-        }
-        assert!(has_handoff && has_recharge && has_expiry && has_overlap);
     }
 }
