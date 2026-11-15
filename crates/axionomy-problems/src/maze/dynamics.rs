@@ -27,8 +27,11 @@ pub(super) fn build(source: World) -> World {
             .unwrap();
         builder = builder.account(*id, account);
     }
-    for id in source.rate_ids() {
-        let mut rate = source.rate(id).unwrap().clone();
+    for (key, rate) in source.rates() {
+        let id = key
+            .as_literal()
+            .expect("the static maze's rates are written out");
+        let mut rate = rate.clone();
         // Injuries persist and slow all ordinary work, including the last step.
         rate = rate
             .consume_computed(
@@ -167,6 +170,7 @@ mod tests {
         let from = position(world).unwrap();
         let move_id = world
             .rate_ids()
+            .filter_map(|rate| rate.as_literal())
             .find(|id| matches!(id, RateId::Move { from: f, to: t, .. } if *f == from && *t == to))
             .copied()
             .unwrap();

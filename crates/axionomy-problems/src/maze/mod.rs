@@ -444,10 +444,13 @@ pub fn action(rate: RateId) -> Action {
 /// The rooms the world's passages join.
 #[cfg(test)]
 fn nodes(world: &World) -> Vec<Node> {
-    let edges = world.rate_ids().filter_map(|rate| match rate {
-        RateId::Move { from, to, .. } => Some((*from, *to)),
-        _ => None,
-    });
+    let edges = world
+        .rate_ids()
+        .filter_map(|rate| rate.as_literal())
+        .filter_map(|rate| match rate {
+            RateId::Move { from, to, .. } => Some((*from, *to)),
+            _ => None,
+        });
     let mut nodes = std::collections::BTreeSet::new();
     for (from, to) in edges {
         nodes.insert(from);
@@ -538,6 +541,7 @@ mod tests {
             assert!(
                 solved
                     .rate_ids()
+                    .filter_map(|rate| rate.as_literal())
                     .all(|rate| !solved.is_applicable(&action(*rate)))
             );
         }

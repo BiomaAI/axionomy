@@ -74,7 +74,7 @@ fn goal() -> Goal<Test> {
 fn candidates(world: &World) -> Vec<Action> {
     world
         .rate_ids()
-        .copied()
+        .filter_map(|rate| rate.as_literal().copied())
         .map(|rate| Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Actor))
         .collect()
 }

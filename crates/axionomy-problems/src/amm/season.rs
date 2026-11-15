@@ -137,8 +137,11 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     }
     builder = builder.account(AccountId::World, Account::from(world));
 
-    for id in source.rate_ids() {
-        let mut rate = source.rate(id).unwrap().clone();
+    for (key, rate) in source.rates() {
+        let id = key
+            .as_literal()
+            .expect("the base market's rates are written out");
+        let mut rate = rate.clone();
         let role = match id {
             RateId::BuyEnergy | RateId::SellEnergy => Role::Trader,
             RateId::AddLiquidity | RateId::RemoveLiquidity => Role::LiquidityProvider,

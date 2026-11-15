@@ -388,7 +388,7 @@ mod tests {
     /// The sets `world` can select.
     fn sets(world: &World) -> Vec<SetId> {
         let mut values = BTreeSet::new();
-        for rate in world.rate_ids() {
+        for rate in world.rate_ids().filter_map(|rate| rate.as_literal()) {
             if let RateId::Select { set, .. } = rate {
                 values.insert(*set);
             }
@@ -403,8 +403,8 @@ mod tests {
             .and_then(|rate| rate.consumed(&Role::Problem))
             .into_iter()
             .flat_map(Basket::iter)
-            .filter_map(|(asset, _)| match asset {
-                Asset::Uncovered(element) => Some(*element),
+            .filter_map(|(asset, _)| match asset.as_literal() {
+                Some(Asset::Uncovered(element)) => Some(*element),
                 _ => None,
             })
             .collect()
@@ -485,6 +485,7 @@ mod tests {
         assert!(
             solved
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .all(|rate| !solved.is_applicable(&action(*rate)))
         );
     }

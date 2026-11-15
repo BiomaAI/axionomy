@@ -570,6 +570,7 @@ mod tests {
         assert!(
             solved
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .all(|rate| !solved.is_applicable(&action(*rate)))
         );
     }

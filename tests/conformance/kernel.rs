@@ -39,8 +39,11 @@ fn rate_builders_match_lean() {
     fn build(entries: &[(u64, String)]) -> Basket<u64> {
         Basket::try_from_entries(entries.iter().map(|(a, q)| (*a, number(q)))).unwrap()
     }
-    fn entries(assets: &Basket<u64>) -> Vec<(u64, String)> {
-        assets.iter().map(|(a, q)| (*a, q.to_string())).collect()
+    fn entries(assets: &Basket<axionomy::Pattern<u64>>) -> Vec<(u64, String)> {
+        assets
+            .iter()
+            .map(|(a, q)| (*a.as_literal().unwrap(), q.to_string()))
+            .collect()
     }
     let cases = fixtures().rate_merges;
     assert!(!cases.is_empty());

@@ -26,14 +26,14 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
     assert_eq!(
         warehouse_showcase
             .rate_ids()
-            .filter(|rate| matches!(rate, sokoban::RateId::Latch { .. }))
+            .filter(|rate| matches!(rate.as_literal(), Some(sokoban::RateId::Latch { .. })))
             .count(),
         1
     );
     assert_eq!(
         warehouse_stress
             .rate_ids()
-            .filter(|rate| matches!(rate, sokoban::RateId::Latch { .. }))
+            .filter(|rate| matches!(rate.as_literal(), Some(sokoban::RateId::Latch { .. })))
             .count(),
         2
     );

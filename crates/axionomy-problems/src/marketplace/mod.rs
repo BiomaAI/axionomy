@@ -414,6 +414,7 @@ fn goal_for(orders: &[OrderId]) -> Goal<Ontology> {
 pub fn orders(world: &World) -> Vec<OrderId> {
     let mut orders = world
         .rate_ids()
+        .filter_map(|rate| rate.as_literal())
         .filter_map(|rate| match rate {
             RateId::SettleOrder(order) => Some(*order),
             _ => None,

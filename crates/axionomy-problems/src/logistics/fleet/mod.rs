@@ -1138,7 +1138,11 @@ mod tests {
         apply_all(&mut b, &RELEASES);
         assert_ne!(a.state_key(), b.state_key());
         let catalog = |world: &World| {
-            let mut rates: Vec<_> = world.rate_ids().copied().collect();
+            let mut rates: Vec<_> = world
+                .rate_ids()
+                .filter_map(|rate| rate.as_literal())
+                .copied()
+                .collect();
             rates.sort();
             rates
         };

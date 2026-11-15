@@ -237,6 +237,7 @@ mod tests {
             // A finished shift has no recipe left.
             assert!(
                 made.rate_ids()
+                    .filter_map(|rate| rate.as_literal())
                     .all(|rate| !made.is_applicable(&action(*rate)))
             );
         }

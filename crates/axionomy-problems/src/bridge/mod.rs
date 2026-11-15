@@ -584,6 +584,7 @@ mod tests {
             assert!(
                 settled
                     .rate_ids()
+                    .filter_map(|rate| rate.as_literal())
                     .all(|rate| !settled.is_applicable(&action(*rate)))
             );
         }

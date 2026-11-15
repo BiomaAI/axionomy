@@ -11,6 +11,7 @@ pub mod economy;
 pub mod exchange;
 pub mod path;
 pub mod paths;
+pub mod pattern;
 pub mod quantity;
 pub mod rate;
 
@@ -28,8 +29,9 @@ pub use economy::{
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
 pub use path::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, OntologyPath, ParameterPath, PathError,
-    PathKind, RatePath, RolePath,
+    PathKind, RatePath, RolePath, VariablePath,
 };
+pub use pattern::{Arguments, Domain, Pattern, Segment, Variable};
 #[doc(hidden)]
 pub use serde as __serde;
 

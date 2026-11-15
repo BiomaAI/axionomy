@@ -11,7 +11,7 @@ use crate::{
     store::{Loaded, Origin},
 };
 use axionomy::{
-    AccountPath, AssetPath, Quantity, RatePath, RolePath,
+    AccountPath, AssetPath, Pattern, Quantity, RatePath, RolePath,
     paths::{self, Paths},
 };
 use axionomy_store::state;
@@ -323,9 +323,9 @@ fn read_economy(
         Target::Rates { asset, .. } => page(
             address,
             economy
-                .rate_ids()
+                .rates()
                 .enumerate()
-                .filter_map(|(position, id)| Some((position, id, economy.rate(id)?)))
+                .map(|(position, (id, rate))| (position, id, rate))
                 .filter(|(_, _, rate)| asset.as_ref().is_none_or(|asset| moves(rate, asset)))
                 .map(|(position, id, rate)| {
                     (
@@ -340,7 +340,7 @@ fn read_economy(
         )
         .and_then(|page| json(&page)),
         Target::Rate { rate: id, .. } => {
-            let rate = economy.rate(id).ok_or_else(|| no_rate(id))?;
+            let rate = economy.instance(id).map_err(|_| no_rate(id))?;
             json(&RateView {
                 economy_id,
                 rate: id,
@@ -352,16 +352,16 @@ fn read_economy(
                 parameters: rate.parameter_names().into_iter().collect(),
                 opens: rate.opened_roles().collect(),
                 closes: rate.closed_roles().collect(),
-                amounts: amounts(rate).count(),
+                amounts: amounts(&rate).count(),
                 conditions: rate.conditions().len(),
             })
         }
         Target::RateAmounts { rate: id, .. } => {
-            let rate = economy.rate(id).ok_or_else(|| no_rate(id))?;
-            page(address, amounts(rate).enumerate(), PAGE_ROWS).and_then(|page| json(&page))
+            let rate = economy.instance(id).map_err(|_| no_rate(id))?;
+            page(address, amounts(&rate).enumerate(), PAGE_ROWS).and_then(|page| json(&page))
         }
         Target::RateConditions { rate: id, .. } => {
-            let rate = economy.rate(id).ok_or_else(|| no_rate(id))?;
+            let rate = economy.instance(id).map_err(|_| no_rate(id))?;
             page(address, rate.conditions().iter().enumerate(), PAGE_ROWS)
                 .and_then(|page| json(&page))
         }
@@ -425,9 +425,11 @@ fn read_economy(
     }
 }
 
-/// Whether one unit of `rate` moves or requires `asset`.
+/// Whether one unit of `rate`, or of an instance of it, moves or requires
+/// `asset`.
 fn moves(rate: &paths::Rate, asset: &AssetPath) -> bool {
-    amounts(rate).any(|amount| amount.asset == asset)
+    let segments: Vec<_> = asset.segments().collect();
+    amounts(rate).any(|amount| amount.asset.read(&segments).is_some())
 }
 
 /// What one unit of a rate consumes, produces and preserves: fixed amounts by
@@ -524,7 +526,7 @@ enum DiffRow {
     },
     /// A rate added, removed or redefined.
     Rate {
-        rate: RatePath,
+        rate: Pattern<RatePath>,
     },
     Invariants,
 }
@@ -553,7 +555,7 @@ impl From<state::ChangeOf<Paths>> for DiffRow {
 
 #[derive(Serialize)]
 struct RateRow<'a> {
-    rate: &'a RatePath,
+    rate: &'a Pattern<RatePath>,
     roles: Vec<&'a RolePath>,
 }
 
@@ -578,7 +580,7 @@ struct RateView<'a> {
 pub(crate) struct AmountRow<'a> {
     direction: Direction,
     role: &'a RolePath,
-    asset: &'a AssetPath,
+    asset: &'a Pattern<AssetPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
     quantity: Option<Quantity>,
     #[serde(skip_serializing_if = "Option::is_none")]

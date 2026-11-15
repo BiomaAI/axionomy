@@ -727,9 +727,12 @@ mod tests {
 
     fn candidates(world: &World) -> Vec<Exchange<Test>> {
         world.applicable(
-            world.rate_ids().copied().map(|rate| {
-                Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
-            }),
+            world
+                .rate_ids()
+                .filter_map(|rate| rate.as_literal().copied())
+                .map(|rate| {
+                    Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
+                }),
         )
     }
 

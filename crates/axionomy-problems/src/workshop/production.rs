@@ -332,6 +332,7 @@ mod tests {
         assert!(
             world
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .all(|rate| !world.is_applicable(&action(*rate)))
         );
     }

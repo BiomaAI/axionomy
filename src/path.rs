@@ -35,6 +35,7 @@ pub mod kind {
     pub enum Parameter {}
     pub enum Condition {}
     pub enum Invariant {}
+    pub enum Variable {}
 
     impl PathKind for Account {
         const SCHEMA: &'static str = "AccountPath";
@@ -60,6 +61,10 @@ pub mod kind {
     impl PathKind for Invariant {
         const SCHEMA: &'static str = "InvariantPath";
     }
+    impl PathKind for Variable {
+        const SCHEMA: &'static str = "VariablePath";
+        const EXAMPLE: &'static str = "location";
+    }
 }
 
 pub type AccountPath = Path<kind::Account>;
@@ -76,6 +81,8 @@ pub type ParameterPath = Path<kind::Parameter>;
 pub type ConditionPath = Path<kind::Condition>;
 /// The name of a declared invariant, such as `money-accounting`.
 pub type InvariantPath = Path<kind::Invariant>;
+/// The name of a rate's variable, one segment, such as `location`.
+pub type VariablePath = Path<kind::Variable>;
 
 /// An identifier written as a path: one or more segments separated by `/`,
 /// such as `loans/42`, `agents/7/wallet` or `market/order-book`.
@@ -269,20 +276,26 @@ impl<K> PartialOrd for Path<K> {
 /// An identifier's `#[derive(Identifier)]` order is this order of its path.
 impl<K> Ord for Path<K> {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut left = self.0.split('/');
-        let mut right = other.0.split('/');
-        loop {
-            match (left.next(), right.next()) {
-                // Equal values written differently, such as `07` and `7`,
-                // still differ as paths.
-                (None, None) => return self.0.cmp(&other.0),
-                (None, Some(_)) => return Ordering::Less,
-                (Some(_), None) => return Ordering::Greater,
-                (Some(left), Some(right)) => match natural_segment(left, right) {
-                    Ordering::Equal => {}
-                    order => return order,
-                },
-            }
+        natural_order(&self.0, &other.0)
+    }
+}
+
+/// Text written as a path, in natural order: segment by segment, numbers by
+/// value and before words, a path before the longer paths it starts.
+pub(crate) fn natural_order(left: &str, right: &str) -> Ordering {
+    let mut segments = left.split('/');
+    let mut others = right.split('/');
+    loop {
+        match (segments.next(), others.next()) {
+            // Equal values written differently, such as `07` and `7`,
+            // still differ as paths.
+            (None, None) => return left.cmp(right),
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (Some(segment), Some(other)) => match natural_segment(segment, other) {
+                Ordering::Equal => {}
+                order => return order,
+            },
         }
     }
 }
@@ -464,13 +477,13 @@ pub fn read<K, T: Segments>(path: &Path<K>) -> Result<T, IdentifierError> {
     read_text(path.as_str())
 }
 
-fn written<T: Segments>(value: &T) -> String {
+pub(crate) fn written<T: Segments>(value: &T) -> String {
     let mut segments = Vec::new();
     value.write_segments(&mut segments);
     segments.join("/")
 }
 
-fn read_text<T: Segments>(text: &str) -> Result<T, IdentifierError> {
+pub(crate) fn read_text<T: Segments>(text: &str) -> Result<T, IdentifierError> {
     let mut segments = SegmentReader(text.split('/'));
     let value = T::read_segments(&mut segments)?;
     match segments.0.next() {

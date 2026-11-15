@@ -17,8 +17,8 @@
 
 use crate::{EngineError, ScriptFunction, cache::Cache, definitions::definition};
 use axionomy::{
-    AccountPath, AssessmentStatus, AssetPath, ObservationKey, PathKind, Quantity, RatePath,
-    RolePath, Rounding,
+    AccountPath, AssessmentStatus, AssetPath, Basket, ObservationKey, PathKind, Pattern, Quantity,
+    RatePath, RolePath, Rounding,
     path::Path,
     paths::{self, Paths},
 };
@@ -31,6 +31,7 @@ use rhai::{
     ASTNode, Array, Dynamic, EvalAltResult, Expr, ImmutableString, Map, Module, Position, Stmt,
 };
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, VecDeque, btree_map::Entry},
     sync::{
         Arc, Mutex,
@@ -279,19 +280,25 @@ fn effect(
     state: &ScriptState,
     rate: &str,
     role: &str,
-    select: impl for<'a> Fn(&'a paths::Rate, &RolePath) -> Option<&'a paths::Basket>,
+    select: impl for<'a> Fn(&'a paths::Rate, &RolePath) -> Option<&'a Basket<Pattern<AssetPath>>>,
 ) -> Result<Map, Failure> {
-    let rate: RatePath = parsed(rate)?;
     let role: RolePath = parsed(role)?;
-    let definition = state
-        .economy
-        .rate(&rate)
-        .ok_or_else(|| Failure::from(format!("the economy has no rate `{rate}`")))?;
-    Ok(select(definition, &role)
+    let definition = instance(state, rate)?;
+    Ok(select(&definition, &role)
         .into_iter()
         .flat_map(|basket| basket.iter())
-        .map(|(asset, quantity)| (asset.as_str().into(), Dynamic::from(*quantity)))
+        .map(|(asset, quantity)| (asset.text().into(), Dynamic::from(*quantity)))
         .collect())
+}
+
+/// The rate `rate` names: the rate itself, or an instance of one with
+/// variables.
+fn instance<'a>(state: &'a ScriptState, rate: &str) -> Result<Cow<'a, paths::Rate>, Failure> {
+    let rate: RatePath = parsed(rate)?;
+    state
+        .economy
+        .instance(&rate)
+        .map_err(|_| Failure::from(format!("the economy has no rate `{rate}`")))
 }
 
 /// The Rhai engine with the host API registered, shared by every call,
@@ -740,8 +747,9 @@ fn states(rhai: &mut rhai::Engine) {
             state
                 .economy
                 .rate_ids()
-                .filter(|rate| rate.as_str().starts_with(prefix))
-                .map(|rate| Dynamic::from(rate.to_string()))
+                .map(Pattern::text)
+                .filter(|rate| rate.starts_with(prefix))
+                .map(Dynamic::from)
                 .collect()
         })
         .register_fn(
@@ -765,12 +773,7 @@ fn states(rhai: &mut rhai::Engine) {
         .register_fn(
             "roles",
             |state: &mut ScriptState, rate: &str| -> Result<Array, Failure> {
-                let rate: RatePath = parsed(rate)?;
-                let definition = state
-                    .economy
-                    .rate(&rate)
-                    .ok_or_else(|| Failure::from(format!("the economy has no rate `{rate}`")))?;
-                Ok(definition
+                Ok(instance(state, rate)?
                     .roles()
                     .map(|role| Dynamic::from(role.to_string()))
                     .collect())

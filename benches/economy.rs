@@ -1,4 +1,6 @@
-use axionomy::{Account, Economy, EconomyBuilder, Exchange, Quantity, Rate, basket};
+use axionomy::{
+    Account, Economy, EconomyBuilder, Exchange, Pattern, Quantity, Rate, Variable, basket, paths,
+};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
@@ -111,5 +113,71 @@ fn world_with_unrelated_accounts(unrelated: u32) -> Economy<Test> {
         .unwrap()
 }
 
-criterion_group!(benches, benchmark);
+/// `count` rates `visit/{i}`, each turning a token into the asset
+/// `visited/{i}`: written one by one, or as one rate with a variable.
+fn visits(count: u64, variable: bool) -> paths::Economy {
+    let walker = || "walker".parse().unwrap();
+    let builder = paths::EconomyBuilder::new().account(
+        "walker".parse().unwrap(),
+        paths::Account::from(basket([("token".parse().unwrap(), u64::MAX)])),
+    );
+    let builder = if variable {
+        builder.rate_at(
+            "visit/{i}".parse().unwrap(),
+            paths::Rate::new()
+                .variable(Variable::range("i".parse().unwrap(), 0, count - 1))
+                .consume(walker(), basket([("token".parse().unwrap(), 1)]))
+                .produce_at(
+                    walker(),
+                    [(
+                        "visited/{i}".parse::<Pattern<_>>().unwrap(),
+                        Quantity::new(1),
+                    )],
+                ),
+        )
+    } else {
+        (0..count).fold(builder, |builder, i| {
+            builder.rate(
+                format!("visit/{i}").parse().unwrap(),
+                paths::Rate::new()
+                    .consume(walker(), basket([("token".parse().unwrap(), 1)]))
+                    .produce(
+                        walker(),
+                        basket([(format!("visited/{i}").parse().unwrap(), 1)]),
+                    ),
+            )
+        })
+    };
+    builder.build().unwrap()
+}
+
+/// What a rate with a variable costs beside the rates it stands for: building
+/// the economy, and applying one instance.
+fn variables(c: &mut Criterion) {
+    for count in [10, 1_000] {
+        let exchange = paths::Exchange::new(
+            format!("visit/{}", count / 2).parse().unwrap(),
+            Quantity::new(1),
+        )
+        .bind("walker".parse().unwrap(), "walker".parse().unwrap());
+        for variable in [false, true] {
+            let form = if variable { "variable" } else { "concrete" };
+            c.bench_function(&format!("build_{count}_visits_{form}"), |bencher| {
+                bencher.iter(|| black_box(visits(black_box(count), variable)));
+            });
+            let world = visits(count, variable);
+            c.bench_function(
+                &format!("fork_and_apply_one_of_{count}_visits_{form}"),
+                |bencher| {
+                    bencher.iter(|| {
+                        let mut branch = black_box(&world).clone();
+                        black_box(branch.apply(black_box(exchange.clone())).unwrap());
+                    });
+                },
+            );
+        }
+    }
+}
+
+criterion_group!(benches, benchmark, variables);
 criterion_main!(benches);

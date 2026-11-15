@@ -982,6 +982,7 @@ mod tests {
         assert_eq!(
             world
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .filter(|id| matches!(
                     id,
                     RateId::Move {

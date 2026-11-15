@@ -4,7 +4,7 @@
 
 use crate::messages::{Direction, EconomyEntries, RateEntries};
 use axionomy::InvariantPath;
-use axionomy::{AccountPath, AssetPath, RatePath, RolePath, paths};
+use axionomy::{AccountPath, AssetPath, Pattern, RatePath, RolePath, paths};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
@@ -80,9 +80,8 @@ pub(crate) fn entries(economy: &paths::Economy) -> usize {
         .map(|(_, account)| 1 + account.balances().len())
         .sum();
     let rates: usize = economy
-        .rate_ids()
-        .filter_map(|id| economy.rate(id))
-        .map(|rate| {
+        .rates()
+        .map(|(_, rate)| {
             1 + crate::read::amounts(rate).count()
                 + rate.distinct_roles().count()
                 + rate.conditions().len()
@@ -113,13 +112,10 @@ pub(crate) fn extend(
         .flat_map(paths::Economy::accounts)
         .map(|(id, account)| (id.clone(), account.clone()))
         .collect();
-    let mut rates: IndexMap<RatePath, paths::Rate> = base
+    let mut rates: IndexMap<Pattern<RatePath>, paths::Rate> = base
         .into_iter()
-        .flat_map(|economy| {
-            economy
-                .rate_ids()
-                .filter_map(|id| Some((id.clone(), economy.rate(id)?.clone())))
-        })
+        .flat_map(paths::Economy::rates)
+        .map(|(id, rate)| (id.clone(), rate.clone()))
         .collect();
     let mut invariants: IndexMap<InvariantPath, paths::LinearInvariant> = base
         .into_iter()
@@ -140,9 +136,9 @@ pub(crate) fn extend(
     }
 
     for (id, added) in entries.rates {
-        let rate = rates.shift_remove(&id).unwrap_or_default();
-        let rate = extend_rate(&id, rate, added)?;
-        rates.insert(id, rate);
+        let key = Pattern::literal(id.clone());
+        let rate = rates.shift_remove(&key).unwrap_or_default();
+        rates.insert(key, extend_rate(&id, rate, added)?);
     }
 
     for (path, weights) in entries.invariants {
@@ -172,7 +168,7 @@ pub(crate) fn extend(
         });
     let builder = rates
         .into_iter()
-        .fold(builder, |builder, (id, rate)| builder.rate(id, rate));
+        .fold(builder, |builder, (id, rate)| builder.rate_at(id, rate));
     let builder = invariants
         .into_values()
         .fold(builder, paths::EconomyBuilder::invariant);
@@ -198,10 +194,10 @@ fn extend_rate(
                 Direction::Produce => rate.produced(&role),
                 Direction::Preserve => rate.preserved(&role),
             };
-            if let Some(asset) = amounts
-                .keys()
-                .find(|asset| existing.is_some_and(|basket| basket.get(*asset).is_some()))
-            {
+            if let Some(asset) = amounts.keys().find(|asset| {
+                existing
+                    .is_some_and(|basket| basket.get(&Pattern::literal((*asset).clone())).is_some())
+            }) {
                 return Err(AuthoringError::RateHas {
                     rate: id.clone(),
                     direction,

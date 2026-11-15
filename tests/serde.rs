@@ -171,7 +171,7 @@ fn builder_reports_duplicate_model_identifiers() {
                 account: AccountId::Workshop,
             },
             ModelIssue::DuplicateRate {
-                rate: RateId::Build,
+                rate: axionomy::Pattern::literal(RateId::Build),
             },
         ]
     );
@@ -238,4 +238,109 @@ impl axionomy::Ontology for Bytes {
     type Asset = u8;
     type Rate = u8;
     type Role = u8;
+}
+
+/// An ontology whose identifiers carry a number, for a rate with a variable.
+mod visits {
+    use axionomy::{Account, Economy, EconomyBuilder, Pattern, Quantity, Rate, Variable, basket};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+    pub enum Asset {
+        Token,
+        Visited(u8),
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+    pub enum AccountId {
+        Walker,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+    pub enum RateId {
+        Visit(u8),
+        Rest,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+    pub enum Role {
+        Walker,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum Visits {}
+
+    impl axionomy::Ontology for Visits {
+        const NAME: &'static str = "visits";
+        type Account = AccountId;
+        type Asset = Asset;
+        type Rate = RateId;
+        type Role = Role;
+    }
+
+    pub fn world() -> Economy<Visits> {
+        EconomyBuilder::new()
+            .account(
+                AccountId::Walker,
+                Account::from(basket([(Asset::Token, 3)])),
+            )
+            .rate_at(
+                "visit/{place}".parse().unwrap(),
+                Rate::new()
+                    .variable(Variable::range("place".parse().unwrap(), 1, 4))
+                    .account(Role::Walker, Pattern::literal(AccountId::Walker))
+                    .consume(Role::Walker, basket([(Asset::Token, 1)]))
+                    .produce_at(
+                        Role::Walker,
+                        [(
+                            "visited/{place}".parse::<Pattern<Asset>>().unwrap(),
+                            Quantity::new(1),
+                        )],
+                    ),
+            )
+            .rate(
+                RateId::Rest,
+                Rate::new().produce(Role::Walker, basket([(Asset::Token, 1)])),
+            )
+            .build()
+            .expect("the visits model is valid")
+    }
+}
+
+/// A typed economy whose rate has a variable is written down as a `Paths`
+/// economy: the same JSON and postcard bytes read either way, and the same
+/// instance applied either way reaches the same economy.
+#[test]
+fn a_typed_rate_with_variables_written_down_is_a_paths_rate() {
+    use axionomy::paths;
+    use visits::{AccountId, RateId, Role};
+
+    let world = visits::world();
+    let json = serde_json::to_value(&world).unwrap();
+    let read: paths::Economy = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&read).unwrap(), json);
+    assert_eq!(
+        postcard::to_allocvec(&read).unwrap(),
+        postcard::to_allocvec(&world).unwrap()
+    );
+    let decoded: Economy<visits::Visits> =
+        postcard::from_bytes(&postcard::to_allocvec(&world).unwrap()).unwrap();
+    assert_eq!(decoded.state_key(), world.state_key());
+
+    let mut typed = world.clone();
+    typed
+        .apply(
+            Exchange::new(RateId::Visit(2), Quantity::new(1)).bind(Role::Walker, AccountId::Walker),
+        )
+        .unwrap();
+    let mut untyped = read;
+    untyped
+        .apply(
+            paths::Exchange::new(path!("visit/2"), Quantity::new(1))
+                .bind(path!("walker"), path!("walker")),
+        )
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&untyped).unwrap(),
+        serde_json::to_value(&typed).unwrap()
+    );
 }

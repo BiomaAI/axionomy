@@ -780,6 +780,7 @@ mod tests {
         assert!(
             solved
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .all(|rate| !solved.is_applicable(&exchange(&solved, *rate)))
         );
     }
@@ -790,6 +791,7 @@ mod tests {
         assert_eq!(
             world
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .filter(|rate| **rate == RateId::Finish)
                 .count(),
             1

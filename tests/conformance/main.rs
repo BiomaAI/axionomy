@@ -4,6 +4,7 @@
 mod baskets;
 mod invariants;
 mod kernel;
+mod parametric;
 mod paths;
 mod scripted_iterator;
 mod transactions;

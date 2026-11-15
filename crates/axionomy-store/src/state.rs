@@ -5,7 +5,7 @@
 //! | --- | --- |
 //! | `a` account | empty: the account exists |
 //! | `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
-//! | `r` rate | the rate, in postcard |
+//! | `r` rate | the rate, in postcard; a rate with variables keyed as its identifier is written, `move/{to}` |
 //! | `v` the invariant's position, 4 bytes big-endian | the invariant, in postcard |
 //!
 //! Every identifier in a key is written as its path (D-044). A path never
@@ -19,7 +19,7 @@
 
 use crate::ontology::{Id, Recordable};
 use axionomy::path::{self, Path, Segments};
-use axionomy::{AccountPath, AssetPath, Economy, LinearInvariant, Quantity, Receipt};
+use axionomy::{AccountPath, AssetPath, Economy, LinearInvariant, Pattern, Quantity, Receipt};
 use axionomy_tree::Tree;
 use serde::{Serialize, de::DeserializeOwned};
 use std::ops::Range;
@@ -44,9 +44,8 @@ pub fn tree<O: Recordable>(economy: &Economy<O>) -> Tree {
             entries.push((balance_key(account, asset), quantity.to_be_bytes().to_vec()));
         }
     }
-    for rate in economy.rate_ids() {
-        let definition = economy.rate(rate).expect("listed rates exist");
-        entries.push((key(RATE, rate), encode(definition)));
+    for (rate, definition) in economy.rates() {
+        entries.push((rate_key(rate), encode(definition)));
     }
     for (position, invariant) in economy.invariants().enumerate() {
         entries.push((invariant_key(position), encode(invariant)));
@@ -115,7 +114,7 @@ pub fn economy<O: Recordable>(tree: &Tree) -> Result<Economy<O>, StateError> {
     }
     for (key, value) in tree.prefix(&[RATE]) {
         read += 1;
-        builder = builder.rate(identifier(&key[1..], "a rate")?, decode(value, "a rate")?);
+        builder = builder.rate_at(rate_identifier(&key[1..])?, decode(value, "a rate")?);
     }
     for (position, (key, value)) in tree.prefix(&[INVARIANT]).enumerate() {
         read += 1;
@@ -204,7 +203,7 @@ pub enum Change<Account, Asset, Rate> {
 pub type ChangeOf<O> = Change<
     <O as axionomy::Ontology>::Account,
     <O as axionomy::Ontology>::Asset,
-    <O as axionomy::Ontology>::Rate,
+    Pattern<<O as axionomy::Ontology>::Rate>,
 >;
 
 /// What changed from `before` to `after`, in key order: accounts opened and
@@ -236,7 +235,7 @@ pub fn changes<O: Recordable>(before: &Tree, after: &Tree) -> Result<Vec<ChangeO
                     after: held(change.after)?,
                 });
             }
-            RATE => changes.push(Change::Rate(identifier(rest, "a rate")?)),
+            RATE => changes.push(Change::Rate(rate_identifier(rest)?)),
             INVARIANT => invariants = true,
             _ => return Err(StateError("an entry holds nothing an economy has")),
         }
@@ -289,6 +288,21 @@ fn written(identifier: &impl Segments) -> Vec<u8> {
 
 fn key(space: u8, identifier: &impl Segments) -> Vec<u8> {
     [&[space][..], &written(identifier)].concat()
+}
+
+/// A rate's key: its identifier as it is written, variables and all.
+fn rate_key<T: Segments>(rate: &Pattern<T>) -> Vec<u8> {
+    [&[RATE][..], rate.text().as_bytes()].concat()
+}
+
+/// The identifier a rate's key writes, as written by [`rate_key`] alone.
+fn rate_identifier<T: Id>(bytes: &[u8]) -> Result<Pattern<T>, StateError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| StateError("a rate"))?;
+    let rate: Pattern<T> = text.parse().map_err(|_| StateError("a rate"))?;
+    if rate.text().as_bytes() != bytes {
+        return Err(StateError("an entry is not in the store's encoding"));
+    }
+    Ok(rate)
 }
 
 fn account_key(account: &impl Id) -> Vec<u8> {

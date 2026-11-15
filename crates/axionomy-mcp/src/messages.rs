@@ -7,7 +7,7 @@
 use crate::handles::{AssessmentId, EconomyId, RefId};
 use axionomy::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Quantity,
-    RatePath, RolePath, paths,
+    RatePath, RolePath, VariablePath, paths,
 };
 use axionomy_engine::{
     Ended, ExperimentPath, GoalPath, ObjectivePath, PackagePath, StrategyPath, Version,
@@ -261,6 +261,22 @@ pub struct Issue {
 pub enum IssueKind {
     /// The economy has no rate of this path.
     MissingRate { rate: RatePath },
+    /// The rate's identifier gives a variable a value outside its domain.
+    OutsideDomain {
+        rate: RatePath,
+        variable: VariablePath,
+    },
+    /// The rate's identifier gives two variables that must differ one value.
+    VariablesMustDiffer {
+        rate: RatePath,
+        left: VariablePath,
+        right: VariablePath,
+    },
+    /// A role the rate fixes an account for binds another account.
+    WrongAccount {
+        role: RolePath,
+        expected: AccountPath,
+    },
     /// The exchange binds no account to one of the rate's roles.
     MissingBinding { role: RolePath },
     /// The exchange binds a role the rate does not have.

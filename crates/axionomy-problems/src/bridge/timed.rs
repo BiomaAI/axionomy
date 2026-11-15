@@ -52,13 +52,13 @@ pub(super) fn build(source: World) -> World {
             .unwrap();
         builder = builder.account(*id, account);
     }
-    for id in source.rate_ids() {
-        let mut rate = source.rate(id).unwrap().clone().condition(
-            path!("one-event"),
-            Q::units(),
-            C::Equal,
-            Q::constant(1),
-        );
+    for (key, rate) in source.rates() {
+        let id = key
+            .as_literal()
+            .expect("the untimed bridge's rates are written out");
+        let mut rate =
+            rate.clone()
+                .condition(path!("one-event"), Q::units(), C::Equal, Q::constant(1));
         match *id {
             RateId::SubmitBid { .. } => rate = arrived(rate, Role::Traveler),
             RateId::ClaimFirst { .. }

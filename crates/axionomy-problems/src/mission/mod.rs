@@ -624,6 +624,7 @@ mod tests {
         assert!(
             replayed
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .all(|rate| !replayed.is_applicable(&action(*rate)))
         );
     }

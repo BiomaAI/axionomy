@@ -1,17 +1,19 @@
 use crate::Ontology;
 use crate::accounts::Accounts;
-use crate::rate::Measure;
+use crate::path;
+use crate::pattern::{Arguments, Domain, Pattern, Variable};
+use crate::rate::{InstanceFailure, Measure};
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, ConditionPath, Exchange,
     InvariantPath, LinearInvariant, ParameterPath, Quantity, QuantityComparison,
-    QuantityExpression, Rate, RateCondition, Receipt, Rounding, Trace,
+    QuantityExpression, Rate, RateCondition, Receipt, Rounding, Trace, VariablePath,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
@@ -62,8 +64,56 @@ impl<O: Ontology> Goal<O> {
 #[derive(Debug, Clone)]
 pub struct Economy<O: Ontology> {
     accounts: Accounts<O::Account, O::Asset>,
-    rates: Arc<IndexMap<O::Rate, Rate<O>>>,
+    rates: Arc<Rates<O>>,
     invariants: Arc<Vec<LinearInvariant<O::Asset>>>,
+}
+
+/// An economy's rates in the natural order of their identifiers, those
+/// written out found by their identifier at once, those with variables by
+/// matching it.
+#[derive(Debug)]
+struct Rates<O: Ontology> {
+    entries: IndexMap<Pattern<O::Rate>, Rate<O>>,
+    concrete: HashMap<O::Rate, usize>,
+    written: Vec<usize>,
+}
+
+impl<O: Ontology> Rates<O> {
+    fn new(mut entries: IndexMap<Pattern<O::Rate>, Rate<O>>) -> Self {
+        entries.sort_unstable_keys();
+        let mut concrete = HashMap::new();
+        let mut written = Vec::new();
+        for (index, key) in entries.keys().enumerate() {
+            match key.as_literal() {
+                Some(id) => {
+                    concrete.insert(id.clone(), index);
+                }
+                None => written.push(index),
+            }
+        }
+        Self {
+            entries,
+            concrete,
+            written,
+        }
+    }
+
+    /// The rate an identifier names, with the values it gives the rate's
+    /// variables.
+    fn find(&self, id: &O::Rate) -> Option<(&Rate<O>, Arguments)> {
+        if let Some(&index) = self.concrete.get(id) {
+            return Some((&self.entries[index], Arguments::default()));
+        }
+        if self.written.is_empty() {
+            return None;
+        }
+        let text = path::written(id);
+        let segments: Vec<&str> = text.split('/').collect();
+        self.written.iter().find_map(|&index| {
+            let (key, rate) = self.entries.get_index(index).expect("an index of a rate");
+            key.read(&segments).map(|arguments| (rate, arguments))
+        })
+    }
 }
 
 /// The logical state of an economy's accounts, independent of creation order:
@@ -98,8 +148,6 @@ impl StateFingerprint {
         self.0
     }
 }
-
-type StructuralValidationResult<'a, O> = Result<&'a Rate<O>, Vec<ApplyError<O>>>;
 
 pub type ApplyResult<O> = Result<Receipt<O>, ApplyError<O>>;
 
@@ -287,7 +335,7 @@ impl<O: Ontology> ExchangeAssessment<O> {
 #[derive(Debug)]
 pub struct EconomyBuilder<O: Ontology> {
     accounts: IndexMap<O::Account, Account<O::Asset>>,
-    rates: IndexMap<O::Rate, Rate<O>>,
+    rates: IndexMap<Pattern<O::Rate>, Rate<O>>,
     invariants: Vec<LinearInvariant<O::Asset>>,
     issues: Vec<ModelIssue<O>>,
 }
@@ -312,11 +360,18 @@ impl<O: Ontology> EconomyBuilder<O> {
         self
     }
 
-    pub fn rate(mut self, id: O::Rate, rate: Rate<O>) -> Self {
-        if self.rates.contains_key(&id) {
-            self.issues.push(ModelIssue::DuplicateRate { rate: id });
+    /// Adds the rate `id` names.
+    pub fn rate(self, id: O::Rate, rate: Rate<O>) -> Self {
+        self.rate_at(Pattern::literal(id), rate)
+    }
+
+    /// Adds a rate whose identifier is `key`, which may name its variables:
+    /// `stabilize/{patient}/{location}`.
+    pub fn rate_at(mut self, key: Pattern<O::Rate>, rate: Rate<O>) -> Self {
+        if self.rates.contains_key(&key) {
+            self.issues.push(ModelIssue::DuplicateRate { rate: key });
         } else {
-            self.rates.insert(id, rate);
+            self.rates.insert(key, rate);
         }
         self
     }
@@ -330,22 +385,119 @@ impl<O: Ontology> EconomyBuilder<O> {
     /// identifiers, however they were added: an economy is the same economy
     /// whichever order it was written in, and reads the same once stored.
     pub fn build(mut self) -> ModelBuildResult<O> {
+        self.rates.sort_unstable_keys();
+        if self.issues.is_empty() {
+            self.issues = rate_issues(&self.rates);
+        }
         if !self.issues.is_empty() {
             return Err(ModelBuildError {
                 issues: self.issues,
             });
         }
-        self.rates.sort_unstable_keys();
         Ok(Economy {
             accounts: Accounts::new(
                 self.accounts
                     .into_iter()
                     .map(|(id, account)| (id, Arc::new(account))),
             ),
-            rates: Arc::new(self.rates),
+            rates: Arc::new(Rates::new(self.rates)),
             invariants: Arc::new(self.invariants),
         })
     }
+}
+
+/// What is wrong with rates, in the order of their identifiers: each rate's
+/// own issues, then every pair an identifier matches both of.
+fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<ModelIssue<O>> {
+    let mut issues = Vec::new();
+    for (key, rate) in rates {
+        let read: Vec<&VariablePath> = key.variables().collect();
+        let declared: Vec<&VariablePath> = rate.variables().iter().map(Variable::name).collect();
+        let issue = |make: fn(Pattern<O::Rate>, VariablePath) -> ModelIssue<O>,
+                     name: &VariablePath| { make(key.clone(), name.clone()) };
+        for (index, name) in read.iter().enumerate() {
+            if read[..index].contains(name) {
+                issues.push(issue(
+                    |rate, variable| ModelIssue::RepeatedVariable { rate, variable },
+                    name,
+                ));
+            }
+        }
+        let mut named: Vec<&VariablePath> = Vec::new();
+        for name in read.iter().copied().chain(rate.named_variables()) {
+            if !named.contains(&name) {
+                named.push(name);
+            }
+        }
+        for name in named.into_iter().filter(|name| !declared.contains(name)) {
+            issues.push(issue(
+                |rate, variable| ModelIssue::UndeclaredVariable { rate, variable },
+                name,
+            ));
+        }
+        for name in declared.iter().filter(|name| !read.contains(name)) {
+            issues.push(issue(
+                |rate, variable| ModelIssue::UnreadVariable { rate, variable },
+                name,
+            ));
+        }
+        let mut naturals: Vec<&VariablePath> = Vec::new();
+        for name in rate.natural_variables() {
+            if !naturals.contains(&name) {
+                naturals.push(name);
+            }
+        }
+        for name in naturals {
+            let listed = rate.variables().iter().any(|variable| {
+                variable.name() == name && matches!(variable.domain(), Domain::Values(_))
+            });
+            if listed {
+                issues.push(issue(
+                    |rate, variable| ModelIssue::NotNatural { rate, variable },
+                    name,
+                ));
+            }
+        }
+        for variable in rate.variables() {
+            if let Domain::Values(values) = variable.domain()
+                && values
+                    .iter()
+                    .enumerate()
+                    .any(|(index, value)| values[..index].contains(value))
+            {
+                issues.push(issue(
+                    |rate, variable| ModelIssue::RepeatedValue { rate, variable },
+                    variable.name(),
+                ));
+            }
+        }
+    }
+    // Two identifiers written out overlap only when equal, which keys never
+    // are, so only pairs with a rate with variables are compared; the pairs
+    // are reported in the rates' order.
+    let keys: Vec<&Pattern<O::Rate>> = rates.keys().collect();
+    let mut overlapping = Vec::new();
+    for (index, key) in keys.iter().enumerate() {
+        if key.as_literal().is_some() {
+            continue;
+        }
+        for (other_index, other) in keys.iter().enumerate() {
+            let counted = other_index > index || other.as_literal().is_some();
+            if other_index != index && counted && !key.disjoint(other) {
+                overlapping.push((index.min(other_index), index.max(other_index)));
+            }
+        }
+    }
+    overlapping.sort_unstable();
+    issues.extend(
+        overlapping
+            .into_iter()
+            .map(|(rate, other)| ModelIssue::OverlappingRates {
+                rate: keys[rate].clone(),
+                other: keys[other].clone(),
+            }),
+    );
+    issues
 }
 
 impl<O: Ontology> Default for EconomyBuilder<O> {
@@ -360,8 +512,42 @@ impl<O: Ontology> Default for EconomyBuilder<O> {
     deserialize = "O::Account: Deserialize<'de>, O::Rate: Deserialize<'de>",
 ))]
 pub enum ModelIssue<O: Ontology> {
-    DuplicateAccount { account: O::Account },
-    DuplicateRate { rate: O::Rate },
+    DuplicateAccount {
+        account: O::Account,
+    },
+    DuplicateRate {
+        rate: Pattern<O::Rate>,
+    },
+    /// A variable appears twice in a rate's identifier.
+    RepeatedVariable {
+        rate: Pattern<O::Rate>,
+        variable: VariablePath,
+    },
+    /// A rate names a variable it does not declare.
+    UndeclaredVariable {
+        rate: Pattern<O::Rate>,
+        variable: VariablePath,
+    },
+    /// A rate declares a variable its identifier does not have.
+    UnreadVariable {
+        rate: Pattern<O::Rate>,
+        variable: VariablePath,
+    },
+    /// A quantity reads as a number a variable whose values are not numbers.
+    NotNatural {
+        rate: Pattern<O::Rate>,
+        variable: VariablePath,
+    },
+    /// A variable's listed values repeat one.
+    RepeatedValue {
+        rate: Pattern<O::Rate>,
+        variable: VariablePath,
+    },
+    /// An identifier matches both rates.
+    OverlappingRates {
+        rate: Pattern<O::Rate>,
+        other: Pattern<O::Rate>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
@@ -396,7 +582,7 @@ where
             .iter()
             .map(|(id, account)| (id, account.as_ref()))
             .collect::<Vec<_>>();
-        let rates = self.rates.iter().collect::<Vec<_>>();
+        let rates = self.rates.entries.iter().collect::<Vec<_>>();
         let mut state = serializer.serialize_struct("Economy", 3)?;
         state.serialize_field("accounts", &accounts)?;
         state.serialize_field("rates", &rates)?;
@@ -411,7 +597,7 @@ where
 ))]
 struct EconomyData<O: Ontology> {
     accounts: Vec<(O::Account, Account<O::Asset>)>,
-    rates: Vec<(O::Rate, Rate<O>)>,
+    rates: Vec<(Pattern<O::Rate>, Rate<O>)>,
     invariants: Vec<LinearInvariant<O::Asset>>,
 }
 
@@ -431,8 +617,8 @@ where
         for (id, account) in data.accounts {
             builder = builder.account(id, account);
         }
-        for (id, rate) in data.rates {
-            builder = builder.rate(id, rate);
+        for (key, rate) in data.rates {
+            builder = builder.rate_at(key, rate);
         }
         for invariant in data.invariants {
             builder = builder.invariant(invariant);
@@ -467,7 +653,7 @@ where
         )]
         struct EconomySchema<O: Ontology> {
             accounts: Vec<(O::Account, Account<O::Asset>)>,
-            rates: Vec<(O::Rate, Rate<O>)>,
+            rates: Vec<(Pattern<O::Rate>, Rate<O>)>,
             invariants: Vec<LinearInvariant<O::Asset>>,
         }
 
@@ -503,13 +689,78 @@ impl<O: Ontology> Economy<O> {
             .map(|(id, account)| (id, account.as_ref()))
     }
 
+    /// The rate an identifier names: the rate keyed by it, or the rate
+    /// with variables whose identifier it matches.
     pub fn rate(&self, id: &O::Rate) -> Option<&Rate<O>> {
-        self.rates.get(id)
+        self.rates.find(id).map(|(rate, _)| rate)
     }
 
-    /// The rates' identifiers, in their order.
-    pub fn rate_ids(&self) -> impl Iterator<Item = &O::Rate> {
-        self.rates.keys()
+    /// The rates' identifiers, in their order; those of rates with variables
+    /// name them.
+    pub fn rate_ids(&self) -> impl Iterator<Item = &Pattern<O::Rate>> {
+        self.rates.entries.keys()
+    }
+
+    /// Every rate with its identifier, in their order.
+    pub fn rates(&self) -> impl Iterator<Item = (&Pattern<O::Rate>, &Rate<O>)> {
+        self.rates.entries.iter()
+    }
+
+    /// The instance an identifier names: the rate keyed by it, or the
+    /// instance of the rate with variables whose identifier it matches, for
+    /// the values it gives them. Refused where no rate matches, a value lies
+    /// outside its variable's values, variables that must differ do not, or
+    /// the instance's entries add up beyond the largest quantity.
+    pub fn instance(&self, id: &O::Rate) -> Result<Cow<'_, Rate<O>>, Vec<ApplyError<O>>> {
+        let Some((rate, arguments)) = self.rates.find(id) else {
+            return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
+        };
+        if rate.variables().is_empty() {
+            return Ok(Cow::Borrowed(rate));
+        }
+        for variable in rate.variables() {
+            let inside = arguments
+                .get(variable.name())
+                .is_some_and(|value| variable.domain().contains(value));
+            if !inside {
+                return Err(vec![ApplyError::OutsideDomain {
+                    rate: id.clone(),
+                    variable: variable.name().clone(),
+                }]);
+            }
+        }
+        let alike: Vec<_> = rate
+            .distinct_variable_pairs()
+            .filter(|(left, right)| arguments.get(left) == arguments.get(right))
+            .map(|(left, right)| ApplyError::VariablesMustDiffer {
+                rate: id.clone(),
+                left: left.clone(),
+                right: right.clone(),
+            })
+            .collect();
+        if !alike.is_empty() {
+            return Err(alike);
+        }
+        rate.instantiate(&arguments)
+            .map(Cow::Owned)
+            .map_err(|failure| {
+                vec![match failure {
+                    InstanceFailure::Overflow(asset) => ApplyError::RateOverflow {
+                        rate: id.clone(),
+                        asset,
+                    },
+                    InstanceFailure::Unwritten(_) | InstanceFailure::NotNatural(_) => {
+                        ApplyError::RateLawEvaluation {
+                            rate: id.clone(),
+                            message: "a rate names a value it does not have".into(),
+                        }
+                    }
+                    InstanceFailure::Unreadable(text) => ApplyError::RateLawEvaluation {
+                        rate: id.clone(),
+                        message: format!("`{text}` names no identifier of its kind"),
+                    },
+                }]
+            })
     }
 
     /// Returns the model's declared conservation laws.
@@ -531,7 +782,7 @@ impl<O: Ontology> Economy<O> {
             .accounts
             .values()
             .flat_map(|account| account.balances().iter().map(|(asset, _)| asset));
-        let rates = self.rates.values().flat_map(Rate::asset_keys);
+        let rates = self.rates.entries.values().flat_map(Rate::asset_keys);
         let invariants = self
             .invariants
             .iter()
@@ -719,21 +970,19 @@ impl<O: Ontology> Apply<O> for Economy<O> {
 }
 
 impl<O: Ontology> Economy<O> {
+    /// Whether the exchange binds and names what its rate's instance
+    /// `rule` needs: every role, no other, every parameter and no other,
+    /// different accounts where the rate requires them, and accounts that
+    /// exist.
     pub(crate) fn validate_structure(
         &self,
         proposal: &Exchange<O>,
-    ) -> StructuralValidationResult<'_, O> {
+        rule: &Rate<O>,
+    ) -> Result<(), Vec<ApplyError<O>>> {
         let mut issues = Vec::new();
         if proposal.units().is_zero() {
             issues.push(ApplyError::ZeroUnits);
         }
-
-        let Some(rule) = self.rates.get(proposal.rate()) else {
-            issues.push(ApplyError::MissingRate {
-                rate: proposal.rate().clone(),
-            });
-            return Err(issues);
-        };
 
         for role in rule.roles() {
             if !proposal.bindings().contains_key(role) {
@@ -783,7 +1032,7 @@ impl<O: Ontology> Economy<O> {
         }
 
         if issues.is_empty() {
-            Ok(rule)
+            Ok(())
         } else {
             Err(issues)
         }
@@ -812,11 +1061,12 @@ impl<O: Ontology> Economy<O> {
                 .expect("computed rate roles were checked")
                 .clone();
             let effect = effects.entry(account_id).or_default();
-            let merged = effect.merge_computed(direction, amount.asset().clone(), value);
+            let asset = written(amount.asset());
+            let merged = effect.merge_computed(direction, asset.clone(), value);
             if merged.is_err() {
                 return Err(ApplyError::RateOverflow {
                     rate: proposal.rate().clone(),
-                    asset: amount.asset().clone(),
+                    asset: asset.clone(),
                 });
             }
         }
@@ -886,7 +1136,7 @@ impl<O: Ontology> Economy<O> {
                 });
             }
             if let Some(preserve) = rule.preserved(role)
-                && let Err(asset) = effect.preserve.checked_add(preserve)
+                && let Err(asset) = merge_scaled(&mut effect.preserve, preserve, Quantity::new(1))
             {
                 return Err(ApplyError::RateOverflow {
                     rate: proposal.rate().clone(),
@@ -1020,10 +1270,31 @@ impl<O: Ontology> Economy<O> {
             opened: Vec::new(),
             closed: Vec::new(),
         };
-        let Some(rule) = self.rates.get(proposal.rate()) else {
-            return unchanged(self.analyze_transition(proposal));
+        let first = |failures: Vec<ApplyError<O>>| {
+            let zero = proposal.units().is_zero().then_some(ApplyError::ZeroUnits);
+            invalid_analysis(zero.into_iter().chain(failures).collect())
+        };
+        let rule = match self.instance(proposal.rate()) {
+            Ok(rule) => rule,
+            Err(failures) => return unchanged(first(failures)),
         };
         let bindings = proposal.bindings();
+        let wrong: Vec<_> = rule
+            .fixed_accounts()
+            .filter_map(|(role, account)| {
+                let bound = bindings.get(role)?;
+                let expected = account
+                    .as_literal()
+                    .expect("an instance writes its accounts");
+                (bound != expected).then(|| ApplyError::WrongAccount {
+                    role: role.clone(),
+                    expected: expected.clone(),
+                })
+            })
+            .collect();
+        if !wrong.is_empty() {
+            return unchanged(first(wrong));
+        }
         let opening: Vec<_> = rule
             .opened_roles()
             .filter_map(|role| {
@@ -1060,7 +1331,7 @@ impl<O: Ontology> Economy<O> {
             extended
         });
         let economy = extended.as_ref().unwrap_or(self);
-        let mut analysis = economy.analyze_transition(proposal);
+        let mut analysis = economy.analyze_transition(proposal, &rule);
         let closing: Vec<_> = match (&analysis.assessment, &analysis.prepared_accounts) {
             (ExchangeAssessment::Applicable { .. }, Some(prepared)) => closed
                 .iter()
@@ -1095,11 +1366,10 @@ impl<O: Ontology> Economy<O> {
     }
 
     /// The exchange analyzed against this economy's accounts as they are.
-    fn analyze_transition(&self, proposal: &Exchange<O>) -> Analysis<O> {
-        let rule = match self.validate_structure(proposal) {
-            Ok(rule) => rule,
-            Err(issues) => return invalid_analysis(issues),
-        };
+    fn analyze_transition(&self, proposal: &Exchange<O>, rule: &Rate<O>) -> Analysis<O> {
+        if let Err(issues) = self.validate_structure(proposal, rule) {
+            return invalid_analysis(issues);
+        }
         if let Err(error) = self.check_conditions(rule, proposal) {
             return invalid_analysis(vec![error]);
         }
@@ -1245,6 +1515,19 @@ pub struct ReplayError<O: Ontology> {
 pub enum ApplyError<O: Ontology> {
     #[error("rate does not exist")]
     MissingRate { rate: O::Rate },
+    #[error("the rate's identifier gives a variable a value outside its values")]
+    OutsideDomain {
+        rate: O::Rate,
+        variable: VariablePath,
+    },
+    #[error("the rate's identifier gives variables that must differ one value")]
+    VariablesMustDiffer {
+        rate: O::Rate,
+        left: VariablePath,
+        right: VariablePath,
+    },
+    #[error("a role is bound to an account other than the one its rate fixes")]
+    WrongAccount { role: O::Role, expected: O::Account },
     #[error("exchange is missing a role binding")]
     MissingBinding { role: O::Role },
     #[error("exchange contains an unknown role")]
@@ -1369,15 +1652,31 @@ struct Lifecycle<E, O: Ontology> {
     closed: Vec<O::Account>,
 }
 
+/// The asset an instance's pattern names: an instance writes every asset
+/// out.
+fn written<A>(pattern: &Pattern<A>) -> &A {
+    pattern
+        .as_literal()
+        .expect("an instance writes every asset out")
+}
+
+/// Adds an instance's basket, scaled by `units`, to `target`: the first asset
+/// whose scaled quantity or sum overflows is refused, and `target` is then
+/// unchanged.
 pub(crate) fn merge_scaled<A>(
     target: &mut Basket<A>,
-    source: &Basket<A>,
+    source: &Basket<Pattern<A>>,
     units: Quantity,
 ) -> Result<(), A>
 where
     A: Clone + Eq + Hash,
 {
-    let scaled = source.checked_scale(units)?;
+    let mut scaled = Basket::new();
+    for (pattern, quantity) in source.iter() {
+        let asset = written(pattern);
+        let quantity = quantity.checked_mul(units).ok_or_else(|| asset.clone())?;
+        scaled.insert(asset.clone(), quantity);
+    }
     target.checked_add(&scaled)
 }
 
@@ -1396,6 +1695,8 @@ where
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ExpressionError {
     MissingParameter(ParameterPath),
+    /// A variable read outside an instance, which writes each as a number.
+    UnwrittenVariable(VariablePath),
     UnboundRole,
     MissingAccount,
     AdditionOverflow,
@@ -1408,6 +1709,7 @@ impl ExpressionError {
     pub(crate) fn into_message(self) -> String {
         match self {
             Self::MissingParameter(name) => format!("missing parameter `{name}`"),
+            Self::UnwrittenVariable(name) => format!("the variable `{name}` has no value"),
             Self::UnboundRole => "expression references an unbound role".to_owned(),
             Self::MissingAccount => "expression references a missing account".to_owned(),
             Self::AdditionOverflow => "addition overflow".to_owned(),
@@ -1436,10 +1738,22 @@ pub(crate) fn evaluate_expression<O: Ontology>(
                 .bindings()
                 .get(role)
                 .ok_or(ExpressionError::UnboundRole)?;
+            let asset = asset.as_literal().ok_or_else(|| {
+                ExpressionError::UnwrittenVariable(
+                    asset
+                        .variables()
+                        .next()
+                        .expect("a pattern that is no identifier has a variable")
+                        .clone(),
+                )
+            })?;
             let account = accounts
                 .get(account_id)
                 .ok_or(ExpressionError::MissingAccount)?;
             Ok(account.balance(asset))
+        }
+        QuantityExpression::Variable { name } => {
+            Err(ExpressionError::UnwrittenVariable(name.clone()))
         }
         QuantityExpression::Add { left, right } => evaluate_binary(
             left,
@@ -1709,9 +2023,15 @@ mod evaluation_conformance {
             let source = amounts(&case.source);
             let source_before = source.clone();
             let mut target = amounts(&case.target);
+            let written = Basket::try_from_entries(
+                source
+                    .iter()
+                    .map(|(asset, quantity)| (Pattern::literal(asset.clone()), *quantity)),
+            )
+            .unwrap();
             let actual = merge_scaled(
                 &mut target,
-                &source,
+                &written,
                 case.units.parse::<Quantity>().unwrap(),
             );
             assert_eq!(actual.err(), case.scale_error, "{case:?}");
@@ -1790,7 +2110,9 @@ mod construction_conformance {
                 0 => ModelIssue::DuplicateAccount {
                     account: Holder(id),
                 },
-                1 => ModelIssue::DuplicateRate { rate: Rule(id) },
+                1 => ModelIssue::DuplicateRate {
+                    rate: Pattern::literal(Rule(id)),
+                },
                 _ => panic!("unknown model issue"),
             })
             .collect()
@@ -1841,10 +2163,10 @@ mod construction_conformance {
                             .rates
                             .iter()
                             .map(|(id, rule)| (
-                                id.0,
+                                id.as_literal().unwrap().0,
                                 rule.produced(&Role(0))
                                     .unwrap()
-                                    .quantity(&Asset(0))
+                                    .quantity(&Pattern::literal(Asset(0)))
                                     .to_u64()
                             ))
                             .collect::<Vec<_>>(),
@@ -1885,13 +2207,12 @@ mod construction_conformance {
                             );
                             assert_eq!(
                                 model
-                                    .rates
-                                    .iter()
+                                    .rates()
                                     .map(|(id, rule)| (
-                                        id.0,
+                                        id.as_literal().unwrap().0,
                                         rule.produced(&Role(0))
                                             .unwrap()
-                                            .quantity(&Asset(0))
+                                            .quantity(&Pattern::literal(Asset(0)))
                                             .to_u64()
                                     ))
                                     .collect::<Vec<_>>(),
@@ -2098,11 +2419,23 @@ mod validation_conformance {
                     kinds.insert(issue.kind.clone());
                 }
                 let before = serde_json::to_value(&model).unwrap();
-                match model.validate_structure(&proposal) {
+                // An exchange's rate is found first, its structure checked
+                // against it after: no rate is reported after zero units.
+                let structure = match model.instance(proposal.rate()) {
+                    Ok(rule) => model.validate_structure(&proposal, &rule).map(|()| rule),
+                    Err(failures) => Err(proposal
+                        .units()
+                        .is_zero()
+                        .then_some(Error::ZeroUnits)
+                        .into_iter()
+                        .chain(failures)
+                        .collect()),
+                };
+                match structure {
                     Ok(selected) => {
                         assert!(case.accepted, "{case:?}");
                         assert!(expected.is_empty());
-                        assert!(std::ptr::eq(selected, model.rates.get(&case.rate).unwrap()));
+                        assert!(std::ptr::eq(&*selected, model.rate(&case.rate).unwrap()));
                         outcomes[0] += 1;
                     }
                     Err(errors) => {

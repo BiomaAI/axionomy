@@ -47,7 +47,6 @@ impl axionomy::Ontology for Test {
 
 type World = Economy<Test>;
 type Proposal = Exchange<Test>;
-type Failure = ApplyError<Test>;
 type Amounts = Vec<(Asset, String)>;
 type Expression = QuantityExpression<Test>;
 
@@ -138,7 +137,18 @@ fn basket(entries: &Amounts) -> Basket<Asset> {
     .unwrap()
 }
 
-fn balances(basket: &Basket<Asset>) -> Value {
+/// An ontology whose identifiers are written in fixtures as they serialize.
+pub(crate) trait Written:
+    axionomy::Ontology<Account: Serialize, Asset: Serialize, Rate: Serialize, Role: Serialize>
+{
+}
+
+impl<O> Written for O where
+    O: axionomy::Ontology<Account: Serialize, Asset: Serialize, Rate: Serialize, Role: Serialize>
+{
+}
+
+pub(crate) fn balances<A: Serialize + Clone + Eq + std::hash::Hash>(basket: &Basket<A>) -> Value {
     json!(
         basket
             .iter()
@@ -147,7 +157,7 @@ fn balances(basket: &Basket<Asset>) -> Value {
     )
 }
 
-fn snapshot(world: &World) -> Value {
+pub(crate) fn snapshot<O: Written>(world: &axionomy::Economy<O>) -> Value {
     json!(
         world
             .accounts()
@@ -156,7 +166,7 @@ fn snapshot(world: &World) -> Value {
     )
 }
 
-fn deltas(entries: &[AccountDelta<Test>]) -> Value {
+fn deltas<O: Written>(entries: &[AccountDelta<O>]) -> Value {
     json!(
         entries
             .iter()
@@ -168,7 +178,7 @@ fn deltas(entries: &[AccountDelta<Test>]) -> Value {
     )
 }
 
-fn shortfalls(entries: &[AccountShortfall<Test>]) -> Value {
+fn shortfalls<O: Written>(entries: &[AccountShortfall<O>]) -> Value {
     json!(
         entries
             .iter()
@@ -179,14 +189,14 @@ fn shortfalls(entries: &[AccountShortfall<Test>]) -> Value {
     )
 }
 
-fn assessed_accounts(entries: &[AccountAssessment<Test>]) -> Value {
+fn assessed_accounts<O: Written>(entries: &[AccountAssessment<O>]) -> Value {
     json!(entries.iter().map(|entry| json!({
         "account": entry.account(), "available": balances(entry.available()), "required": balances(entry.required()),
         "consumed": balances(entry.consumed()), "produced": balances(entry.produced()), "preserved": balances(entry.preserved()),
     })).collect::<Vec<_>>())
 }
 
-fn failure(error: &Failure) -> Value {
+pub(crate) fn failure<O: Written>(error: &ApplyError<O>) -> Value {
     match error {
         ApplyError::MissingRate { rate } => json!({"kind": "missing_rate", "rate": rate}),
         ApplyError::MissingBinding { role } => json!({"kind": "missing_binding", "role": role}),
@@ -198,6 +208,15 @@ fn failure(error: &Failure) -> Value {
             json!({"kind": "missing_account", "account": account})
         }
         ApplyError::ZeroUnits => json!({"kind": "zero_units"}),
+        ApplyError::OutsideDomain { rate, variable } => {
+            json!({"kind": "outside_domain", "rate": rate, "variable": variable})
+        }
+        ApplyError::VariablesMustDiffer { rate, left, right } => {
+            json!({"kind": "variables_must_differ", "rate": rate, "left": left, "right": right})
+        }
+        ApplyError::WrongAccount { role, expected } => {
+            json!({"kind": "wrong_account", "role": role, "expected": expected})
+        }
         ApplyError::MissingParameter { name } => {
             json!({"kind": "missing_parameter", "parameter": name})
         }
@@ -236,7 +255,7 @@ fn failure(error: &Failure) -> Value {
     }
 }
 
-fn assessment(value: &ExchangeAssessment<Test>) -> Value {
+pub(crate) fn assessment<O: Written>(value: &ExchangeAssessment<O>) -> Value {
     match value {
         ExchangeAssessment::Applicable {
             accounts,
@@ -256,7 +275,7 @@ fn assessment(value: &ExchangeAssessment<Test>) -> Value {
     }
 }
 
-fn proposal(value: &Proposal) -> Value {
+fn proposal<O: Written>(value: &Exchange<O>) -> Value {
     json!({
         "rate": value.rate(), "units": value.units().to_string(),
         "bindings": value.bindings().iter().collect::<Vec<_>>(),
@@ -332,7 +351,7 @@ fn build_proposal(case: &ProposalCase) -> Proposal {
     action
 }
 
-fn receipt(value: &Receipt<Test>) -> Value {
+pub(crate) fn receipt<O: Written>(value: &Receipt<O>) -> Value {
     json!({
         "proposal": proposal(value.exchange()), "deltas": deltas(value.deltas()),
         "opened": value.opened(), "closed": value.closed(),

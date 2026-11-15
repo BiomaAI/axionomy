@@ -569,6 +569,7 @@ mod tests {
         assert!(
             replay
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .all(|rate| !replay.is_applicable(&action(*rate)))
         );
     }
@@ -578,6 +579,7 @@ mod tests {
         let scenarios = |world: &World| {
             world
                 .rate_ids()
+                .filter_map(|rate| rate.as_literal())
                 .filter(|rate| {
                     matches!(rate, RateId::Instantiate { .. })
                         && world.is_applicable(&action(**rate))

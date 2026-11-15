@@ -54,6 +54,25 @@ impl Issue {
                 ),
                 IssueKind::MissingRate { rate },
             ),
+            Error::OutsideDomain { rate, variable } => (
+                format!(
+                    "rate `{rate}` gives variable `{variable}` a value outside its domain; its variables are listed at {}",
+                    rate_uri(&rate)
+                ),
+                IssueKind::OutsideDomain { rate, variable },
+            ),
+            Error::VariablesMustDiffer { rate, left, right } => (
+                format!(
+                    "rate `{rate}` gives variables `{left}` and `{right}` one value; they must differ"
+                ),
+                IssueKind::VariablesMustDiffer { rate, left, right },
+            ),
+            Error::WrongAccount { role, expected } => (
+                format!(
+                    "rate `{rate}` fixes role `{role}` to account `{expected}`; bind that account"
+                ),
+                IssueKind::WrongAccount { role, expected },
+            ),
             Error::MissingBinding { role } => (
                 format!(
                     "the exchange binds no account to role `{role}`; bind every role of rate `{rate}`, listed at {}",

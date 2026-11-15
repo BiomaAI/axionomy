@@ -7,7 +7,8 @@
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, ConditionPath, Economy, Exchange,
     ExchangeAssessment, Goal, InvariantPath, Ontology, OntologyPath, ParameterPath, PathKind,
-    Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path, path::Path,
+    Pattern, Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path,
+    path::Path, pattern::Piece,
 };
 
 mod fronts;
@@ -291,6 +292,9 @@ pub enum AssessmentStatusView {
 #[serde(rename_all = "snake_case")]
 pub enum AssessmentIssueKindView {
     MissingRate,
+    OutsideDomain,
+    VariablesMustDiffer,
+    WrongAccount,
     MissingBinding,
     UnknownBinding,
     RolesMustDiffer,
@@ -1596,6 +1600,33 @@ pub trait ViewOntology<O: Ontology> {
     fn rate(&self, id: &O::Rate) -> ViewId;
     fn role(&self, id: &O::Role) -> ViewId;
 
+    /// An asset a rate names through a pattern: the asset itself where the
+    /// pattern names one, else [`pattern_id`].
+    fn asset_pattern(&self, pattern: &Pattern<O::Asset>) -> ViewId {
+        pattern.as_literal().map_or_else(
+            || pattern_id::<O, _>("asset", pattern),
+            |asset| self.asset(asset),
+        )
+    }
+
+    /// A rate's identifier: the rate itself where it has no variable, else
+    /// [`pattern_id`].
+    fn rate_pattern(&self, pattern: &Pattern<O::Rate>) -> ViewId {
+        pattern.as_literal().map_or_else(
+            || pattern_id::<O, _>("rate", pattern),
+            |rate| self.rate(rate),
+        )
+    }
+
+    /// The account a rate fixes for a role: the account itself where the
+    /// pattern names one, else [`pattern_id`].
+    fn account_pattern(&self, pattern: &Pattern<O::Account>) -> ViewId {
+        pattern.as_literal().map_or_else(
+            || pattern_id::<O, _>("account", pattern),
+            |account| self.account(account),
+        )
+    }
+
     /// How people read quantities of `asset`; a count unless it says
     /// otherwise.
     fn format(&self, _asset: &O::Asset) -> QuantityFormat {
@@ -1673,6 +1704,29 @@ impl<O: WrittenOntology> ViewOntology<O> for PathOntology<O> {
     fn role(&self, id: &O::Role) -> ViewId {
         self.id("role", id)
     }
+}
+
+/// A pattern with variables, keyed under the ontology's name and `category`
+/// by the path its variables' names write in their places and labeled as it
+/// is written: `at/{location}` of the ontology `rescue` is keyed
+/// `rescue/asset/at/location` and labeled `at/{location}`. Rates with
+/// variables never overlap, so no two in one economy share a key.
+pub fn pattern_id<O: Ontology, T: axionomy::path::Segments>(
+    category: &str,
+    pattern: &Pattern<T>,
+) -> ViewId {
+    let mut key = format!("{}/{category}", OntologyPath::of::<O>());
+    for piece in pattern.pieces().iter() {
+        key.push('/');
+        match piece {
+            Piece::Segment(segment) => key.push_str(segment.as_str()),
+            Piece::Variable(name) => key.push_str(name.as_str()),
+        }
+    }
+    let key = key
+        .parse()
+        .unwrap_or_else(|error| panic!("a pattern is keyed `{key}`, not a path: {error}"));
+    ViewId::new(key, pattern.text())
 }
 
 /// A value's `Debug` output as words people read, for a label: brackets and
@@ -1855,22 +1909,21 @@ where
     V: ViewOntology<O>,
 {
     let mut rates = economy
-        .rate_ids()
-        .filter_map(|id| {
-            let rate = economy.rate(id)?;
+        .rates()
+        .map(|(id, rate)| {
             let roles = rate
                 .roles()
                 .map(|role| RateRoleView {
                     role: ontology.role(role),
                     consumed: rate
                         .consumed(role)
-                        .map_or_else(Vec::new, |basket| basket_view(basket, ontology)),
+                        .map_or_else(Vec::new, |basket| rule_basket_view(basket, ontology)),
                     produced: rate
                         .produced(role)
-                        .map_or_else(Vec::new, |basket| basket_view(basket, ontology)),
+                        .map_or_else(Vec::new, |basket| rule_basket_view(basket, ontology)),
                     preserved: rate
                         .preserved(role)
-                        .map_or_else(Vec::new, |basket| basket_view(basket, ontology)),
+                        .map_or_else(Vec::new, |basket| rule_basket_view(basket, ontology)),
                 })
                 .collect();
             let distinct_roles = rate
@@ -1882,13 +1935,13 @@ where
                     .iter()
                     .map(|amount| ComputedRateAmountView {
                         role: ontology.role(amount.role()),
-                        asset: ontology.asset(amount.asset()),
+                        asset: ontology.asset_pattern(amount.asset()),
                         quantity: expression_view(amount.quantity(), ontology),
                     })
                     .collect::<Vec<_>>()
             };
-            Some(RateView {
-                rate: ontology.rate(id),
+            RateView {
+                rate: ontology.rate_pattern(id),
                 roles,
                 distinct_roles,
                 computed_consumed: computed_amounts(rate.computed_consumed()),
@@ -1908,7 +1961,7 @@ where
                         right: expression_view(condition.right(), ontology),
                     })
                     .collect(),
-            })
+            }
         })
         .collect::<Vec<_>>();
     rates.sort_by(|left, right| left.rate.key.cmp(&right.rate.key));
@@ -1959,9 +2012,10 @@ where
             format!(
                 "{}.{}",
                 ontology.role(role).label,
-                ontology.asset(asset).label
+                ontology.asset_pattern(asset).label
             )
         }
+        QuantityExpression::Variable { name } => format!("{{{name}}}"),
         QuantityExpression::Add { left, right } => format!(
             "({} + {})",
             expression_view(left, ontology),
@@ -2120,6 +2174,24 @@ where
     entries
 }
 
+fn rule_basket_view<O: Ontology, V>(
+    basket: &Basket<Pattern<O::Asset>>,
+    ontology: &V,
+) -> Vec<AssetQuantityView>
+where
+    V: ViewOntology<O>,
+{
+    let mut entries = basket
+        .iter()
+        .map(|(asset, quantity)| AssetQuantityView {
+            asset: ontology.asset_pattern(asset),
+            quantity: quantity.into(),
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.asset.key.cmp(&right.asset.key));
+    entries
+}
+
 fn exchange_view<O: Ontology, V>(exchange: &Exchange<O>, ontology: &V) -> ExchangeView
 where
     V: ViewOntology<O>,
@@ -2255,6 +2327,40 @@ where
                 AssessmentIssueKindView::MissingRate,
                 format!("Rate `{}` does not exist.", rate.label),
                 vec![rate],
+            )
+        }
+        ApplyError::OutsideDomain { rate, variable } => {
+            let rate = ontology.rate(rate);
+            (
+                AssessmentIssueKindView::OutsideDomain,
+                format!(
+                    "Rate `{}` gives `{variable}` a value outside its domain.",
+                    rate.label
+                ),
+                vec![rate],
+            )
+        }
+        ApplyError::VariablesMustDiffer { rate, left, right } => {
+            let rate = ontology.rate(rate);
+            (
+                AssessmentIssueKindView::VariablesMustDiffer,
+                format!(
+                    "Rate `{}` gives `{left}` and `{right}` one value; they must differ.",
+                    rate.label
+                ),
+                vec![rate],
+            )
+        }
+        ApplyError::WrongAccount { role, expected } => {
+            let role = ontology.role(role);
+            let expected = ontology.account(expected);
+            (
+                AssessmentIssueKindView::WrongAccount,
+                format!(
+                    "Role `{}` must be bound to account `{}`.",
+                    role.label, expected.label
+                ),
+                vec![role, expected],
             )
         }
         ApplyError::MissingBinding { role } => {
