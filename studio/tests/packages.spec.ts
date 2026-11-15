@@ -205,12 +205,12 @@ test("stops a game mid-play, and nothing else notices", async ({ page }) => {
   const start = await playFrom(page, "connect-four/stress", live);
   await fromHere(page).getByRole("button", { name: "Follow it" }).click();
   const play = fromHere(page).getByRole("region", { name: "Strategy", exact: true });
-  await play.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/self-play");
+  // Against the minimax opponent the game takes long enough to be stopped.
+  await play.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/search-opponent");
   await play.getByRole("button", { name: "Run" }).click();
   await expect(page.locator(".scrubber-label")).toContainText("Finding moves");
-  await expect(activity(page)).toContainText(`Running connect-four/mcts-32/self-play from step ${start}`);
+  await expect(activity(page)).toContainText(`Running connect-four/mcts-32/search-opponent from step ${start}`);
   await expect(activity(page)).toContainText(`Following ${live}`);
-  await page.waitForTimeout(1_500);
   await activity(page).getByRole("button", { name: "Stop", exact: true }).click();
   await expect(play.getByRole("button", { name: "Run" })).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
