@@ -516,8 +516,8 @@ fn one<const N: usize>(assets: [AssetPattern; N]) -> Vec<(Pattern<Asset>, Quanti
 /// What an order trades and on what terms: the item, the gross price its
 /// buyer pays, its seller's proceeds, the tax, the platform's commission,
 /// the carrier's shipping fee, and the utility its buyer and its seller gain
-/// when it settles at that price. Its laws read them from the relation
-/// [`priced`] writes.
+/// when it settles at that price. Its laws read them from a relation with a
+/// row for each order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Terms {
     pub item: Item,
