@@ -442,7 +442,7 @@ fn read_economy(
 /// A rate, and where it is an instance, the rate it is one of as written and
 /// the values it gives.
 type Definition<'e> = (
-    std::borrow::Cow<'e, paths::Rate>,
+    axionomy::Instance<'e, Paths>,
     Option<(&'e Pattern<RatePath>, axionomy::Arguments)>,
 );
 
@@ -461,7 +461,7 @@ fn definition<'e>(economy: &'e paths::Economy, id: &Pattern<RatePath>) -> Option
         None => economy
             .rates()
             .find(|(key, _)| *key == id)
-            .map(|(_, rate)| (std::borrow::Cow::Borrowed(rate), None)),
+            .map(|(_, rate)| (axionomy::Instance::Written(rate), None)),
     }
 }
 

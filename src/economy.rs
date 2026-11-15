@@ -15,7 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -76,6 +76,28 @@ struct Rates<O: Ontology> {
     entries: IndexMap<Pattern<O::Rate>, Rate<O>>,
     concrete: HashMap<O::Rate, usize>,
     written: Vec<usize>,
+    /// The instances of rates with variables made so far. An instance
+    /// depends only on the rates, so every fork shares them.
+    made: RwLock<HashMap<O::Rate, Arc<Rate<O>>>>,
+}
+
+/// The rate an exchange names: a rate as written, or an instance of one with
+/// variables, made once and shared.
+#[derive(Debug, Clone)]
+pub enum Instance<'a, O: Ontology> {
+    Written(&'a Rate<O>),
+    Made(Arc<Rate<O>>),
+}
+
+impl<O: Ontology> std::ops::Deref for Instance<'_, O> {
+    type Target = Rate<O>;
+
+    fn deref(&self) -> &Rate<O> {
+        match self {
+            Self::Written(rate) => rate,
+            Self::Made(rate) => rate,
+        }
+    }
 }
 
 impl<O: Ontology> Rates<O> {
@@ -95,6 +117,7 @@ impl<O: Ontology> Rates<O> {
             entries,
             concrete,
             written,
+            made: RwLock::default(),
         }
     }
 
@@ -993,13 +1016,40 @@ impl<O: Ontology> Economy<O> {
     /// the values it gives them. Refused where no rate matches, a value lies
     /// outside its variable's values, variables that must differ do not, or
     /// the instance's entries add up beyond the largest quantity.
-    pub fn instance(&self, id: &O::Rate) -> Result<Cow<'_, Rate<O>>, Vec<ApplyError<O>>> {
+    pub fn instance(&self, id: &O::Rate) -> Result<Instance<'_, O>, Vec<ApplyError<O>>> {
+        let made = |rates: &Rates<O>| {
+            rates
+                .made
+                .read()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(id)
+                .cloned()
+        };
+        if let Some(rate) = made(&self.rates) {
+            return Ok(Instance::Made(rate));
+        }
         let Some((rate, arguments)) = self.rates.find(id) else {
             return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
         };
         if rate.variables().is_empty() && rate.derived().is_empty() {
-            return Ok(Cow::Borrowed(rate));
+            return Ok(Instance::Written(rate));
         }
+        let rate = Arc::new(self.made_instance(id, rate, arguments)?);
+        self.rates
+            .made
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(id.clone(), Arc::clone(&rate));
+        Ok(Instance::Made(rate))
+    }
+
+    /// The instance of `rate` an identifier names, for the values it gives.
+    fn made_instance(
+        &self,
+        id: &O::Rate,
+        rate: &Rate<O>,
+        arguments: Arguments,
+    ) -> Result<Rate<O>, Vec<ApplyError<O>>> {
         for variable in rate.variables() {
             let inside = arguments
                 .get(variable.name())
@@ -1039,26 +1089,24 @@ impl<O: Ontology> Economy<O> {
                 variable,
             }]
         })?;
-        rate.instantiate(&arguments)
-            .map(Cow::Owned)
-            .map_err(|failure| {
-                vec![match failure {
-                    InstanceFailure::Overflow(asset) => ApplyError::RateOverflow {
+        rate.instantiate(&arguments).map_err(|failure| {
+            vec![match failure {
+                InstanceFailure::Overflow(asset) => ApplyError::RateOverflow {
+                    rate: id.clone(),
+                    asset,
+                },
+                InstanceFailure::Unwritten(_) | InstanceFailure::NotNatural(_) => {
+                    ApplyError::RateLawEvaluation {
                         rate: id.clone(),
-                        asset,
-                    },
-                    InstanceFailure::Unwritten(_) | InstanceFailure::NotNatural(_) => {
-                        ApplyError::RateLawEvaluation {
-                            rate: id.clone(),
-                            message: "a rate names a value it does not have".into(),
-                        }
+                        message: "a rate names a value it does not have".into(),
                     }
-                    InstanceFailure::Unreadable(text) => ApplyError::RateLawEvaluation {
-                        rate: id.clone(),
-                        message: format!("`{text}` names no identifier of its kind"),
-                    },
-                }]
-            })
+                }
+                InstanceFailure::Unreadable(text) => ApplyError::RateLawEvaluation {
+                    rate: id.clone(),
+                    message: format!("`{text}` names no identifier of its kind"),
+                },
+            }]
+        })
     }
 
     /// Returns the model's declared conservation laws.

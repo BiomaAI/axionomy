@@ -22,7 +22,7 @@ pub use axionomy_derive::{Identifier, Segments};
 pub use basket::{Basket, BasketError};
 pub use economy::{
     AccountAssessment, AccountShortfall, Apply, ApplyError, ApplyResult, AssessmentStatus,
-    EconomicView, Economy, EconomyBuilder, ExchangeAssessment, Goal, ModelBuildError,
+    EconomicView, Economy, EconomyBuilder, ExchangeAssessment, Goal, Instance, ModelBuildError,
     ModelBuildResult, ModelIssue, ObservationKey, ReplayError, ReplayResult, StateFingerprint,
     StateKey,
 };

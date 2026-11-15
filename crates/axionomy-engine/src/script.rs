@@ -21,8 +21,8 @@ use crate::{
     definitions::{definition, exchange_of, instance_exchanges},
 };
 use axionomy::{
-    AccountPath, AssessmentStatus, AssetPath, Basket, ObservationKey, PathKind, Pattern, Quantity,
-    RatePath, RolePath, Rounding,
+    AccountPath, AssessmentStatus, AssetPath, Basket, Instance, ObservationKey, PathKind, Pattern,
+    Quantity, RatePath, RolePath, Rounding,
     path::Path,
     paths::{self, Paths},
 };
@@ -35,7 +35,6 @@ use rhai::{
     ASTNode, Array, Dynamic, EvalAltResult, Expr, ImmutableString, Map, Module, Position, Stmt,
 };
 use std::{
-    borrow::Cow,
     collections::{BTreeMap, BTreeSet, VecDeque, btree_map::Entry},
     sync::{
         Arc, Mutex,
@@ -297,7 +296,7 @@ fn effect(
 
 /// The rate `rate` names: the rate itself, or an instance of one with
 /// variables.
-fn instance<'a>(state: &'a ScriptState, rate: &str) -> Result<Cow<'a, paths::Rate>, Failure> {
+fn instance<'a>(state: &'a ScriptState, rate: &str) -> Result<Instance<'a, Paths>, Failure> {
     let rate: RatePath = parsed(rate)?;
     state
         .economy
