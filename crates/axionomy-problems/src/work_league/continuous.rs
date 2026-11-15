@@ -273,11 +273,11 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         );
     }
     for mode in MODES {
-        let cost = cost(mode);
-        let begin = occupy(
+        let (begin, cost) = working(
             clear(prerequisite(job(turn())), Role::Job, Asset::LeaseUntil),
-            cost.time.clone(),
+            mode,
         );
+        let begin = occupy(begin, cost.time.clone());
         let begin = at_the_contract(begin)
             .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
             .preserve_at(Role::Agent, one([claimed()]))

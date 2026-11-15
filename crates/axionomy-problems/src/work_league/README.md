@@ -25,10 +25,13 @@ A contract's terms never change, so they are law structure: a relation's
 row for each contract gives where its work is done, `{place}`, a word a
 begin writes into `at/{place}`, what it pays, `{reward}`, and the energy,
 time and material its work takes, `{energy}`, `{time}` and `{material}`,
-from which each mode's law computes its costs, and in a season when it
-opens and its deadline, `{release}` and `{deadline}`. A begin names only
-the worker, the contract and the mode, `begin/{agent}/{job}/{mode}`, and
-the scripts read a contract's place from its terms (`state.values`). A
+from which each mode's law derives what working in it takes,
+`{takes-energy}`, `{takes-time}`, `{takes-material}` and `{leaves-waste}`,
+and in a season when it opens and its deadline, `{release}` and
+`{deadline}`. A begin names only the worker, the contract and the mode,
+`begin/{agent}/{job}/{mode}`. The policies keep no copy of any of this:
+they read a contract's terms, each mode's costs and Nature's odds from the
+law (`state.values` of a begin and of a resolution). A
 season's length is one for the whole world and never changes, so it is a
 constant, `{season-length}`, which the tick and every activity read.
 Nature's weight of each outcome of an attempt at a contract in a mode is a

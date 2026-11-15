@@ -487,12 +487,49 @@ fn possible(rate: Rate<Ontology>) -> Rate<Ontology> {
 }
 
 /// What working a contract in a mode takes and leaves behind, from the
-/// contract's terms: the law of the mode.
+/// contract's terms: the law of the mode, or the names a beginning's law
+/// gives it ([`working`]).
 struct Cost {
     energy: Q<Ontology>,
     time: Q<Ontology>,
     material: Q<Ontology>,
     waste: Q<Ontology>,
+}
+
+/// What working in a mode takes, as a beginning's law names it: the energy,
+/// `{takes-energy}`, the ticks, `{takes-time}`, the material,
+/// `{takes-material}`, and the waste it leaves, `{leaves-waste}`.
+fn takes_energy() -> Param<u64> {
+    Param::new(path!("takes-energy"))
+}
+fn takes_time() -> Param<u64> {
+    Param::new(path!("takes-time"))
+}
+fn takes_material() -> Param<u64> {
+    Param::new(path!("takes-material"))
+}
+fn leaves_waste() -> Param<u64> {
+    Param::new(path!("leaves-waste"))
+}
+
+/// `rate`, a beginning of work in `mode`, with what working in that mode
+/// takes named as its derived values, and that cost as its amounts and
+/// conditions read it: the law says the numbers once, and a policy reads
+/// them from the law (`state.values`).
+fn working(rate: Rate<Ontology>, mode: WorkMode) -> (Rate<Ontology>, Cost) {
+    let cost = cost(mode);
+    let rate = rate
+        .derive(takes_energy().name().clone(), cost.energy)
+        .derive(takes_time().name().clone(), cost.time)
+        .derive(takes_material().name().clone(), cost.material)
+        .derive(leaves_waste().name().clone(), cost.waste);
+    let named = Cost {
+        energy: takes_energy().quantity(),
+        time: takes_time().quantity(),
+        material: takes_material().quantity(),
+        waste: leaves_waste().quantity(),
+    };
+    (rate, named)
 }
 
 /// Rush spends two more energy and one more material to finish a tick
@@ -626,7 +663,7 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             ),
     );
     for mode in [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe] {
-        let cost = cost(mode);
+        let (begin, cost) = working(on_contract(worker(Rate::new()), &jobs), mode);
         builder = builder.rate_at(
             RateIdPattern::Begin {
                 agent: agent().var(),
@@ -634,7 +671,7 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 mode: Slot::Is(mode),
             }
             .into(),
-            at_the_contract(on_contract(worker(Rate::new()), &jobs))
+            at_the_contract(begin)
                 .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
                 .preserve_at(Role::Agent, one([claimed()]))
                 .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())

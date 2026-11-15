@@ -246,30 +246,35 @@ fn worker(state, agent, continuous) {
 
 fn contract(state, number, continuous, tick) {
     let account = `job/${number}`;
-    let spec = league::job_spec(number);
+    // The job as a worker beginning it lean reads its law, every worker's
+    // alike, and the chance such an attempt fails.
+    let settles = if continuous { "finish" } else { "resolve" };
+    let worker = league::competitors(state)[0];
+    let job = league::work(state, worker, number, "lean");
+    let risk = league::failure(state, settles, worker, number, "lean");
     let assigned = league::first_held(state.balances(account), "assigned", league::workers());
     let shown = if val(state, account, "completed") > 0 {
         ["success", "completed"]
     } else if val(state, account, "expired") > 0 {
         ["danger", "deadline missed"]
-    } else if continuous && tick < league::terms_of(state, number).release {
-        ["neutral", `opens at ${league::terms_of(state, number).release}`]
+    } else if continuous && tick < job.release {
+        ["neutral", `opens at ${job.release}`]
     } else if assigned != () {
         let work = if val(state, account, "in-progress") > 0 { "being worked" } else { "claimed" };
         ["active", `${work} by ${capital(assigned)}`]
     } else {
-        ["neutral", `${spec.value} credits · risk ${spec.risk}`]
+        ["neutral", `${job.reward} credits · risk ${risk}`]
     };
     let drawn = entity(
-        `league/job/${number}`, `Job ${number}`, "task", league::place_of(state, number), "attachment",
+        `league/job/${number}`, `Job ${number}`, "task", job.place, "attachment",
         shown[0], shown[1], account,
     );
     drawn.metrics = [
-        asset_metric("value", "Value", "value", spec.value),
-        metric("risk", "Failure weight", spec.risk, "of 10"),
+        asset_metric("value", "Value", "value", job.reward),
+        metric("risk", "Failure weight", risk, "of 10"),
     ];
     if continuous {
-        drawn.metrics.push(metric("deadline", "Deadline", league::terms_of(state, number).deadline, "ticks"));
+        drawn.metrics.push(metric("deadline", "Deadline", job.deadline, "ticks"));
         if assigned != () && val(state, account, "pending") > 0 {
             drawn.metrics.push(asset_metric(
                 "lease", "Claim expires after", "lease-until", val(state, account, "lease-until"),

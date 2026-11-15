@@ -73,60 +73,32 @@ fn first_held(balances, kind, names) {
     ()
 }
 
-// What a job is: what it pays and what it costs, and its risk.
-fn job_spec(id) {
-    let index = id - 1;
-    #{
-        id: id,
-        value: 8 + index * 7 % 17,
-        energy: 3 + index * 3 % 5,
-        time: 3 + index * 3 % 6,
-        material: 2 + index * 2 % 4,
-        risk: 1 + index * 3 % 4,
+// What working contract `id` in `mode` is, as the law of `worker`
+// beginning it has it, every worker's alike: where its work is done
+// (`place`), what it pays on delivery (`reward`), the energy, ticks and
+// material its work takes before a mode's adjustments (`energy`, `time`,
+// `material`), what it takes in `mode` (`takes-energy`, `takes-time`,
+// `takes-material`) and the waste it leaves (`leaves-waste`); in a season
+// also when it opens for claims (`release`) and its deadline. Numbers are
+// whole numbers here.
+fn work(state, worker, id, mode) {
+    let values = state.values(`begin/${worker}/${id}/${mode}`);
+    for name in values.keys() {
+        if type_of(values[name]) != "string" { values[name] = values[name].to_int(); }
     }
+    values
 }
 
-// What working a job in `mode` costs and leaves as waste.
-fn work_cost(spec, mode) {
-    switch mode {
-        "rush" => #{
-            energy: spec.energy + 2,
-            time: larger(spec.time - 1, 1),
-            material: spec.material + 1,
-            waste: 2,
-        },
-        "lean" => #{
-            energy: spec.energy,
-            time: spec.time + 2,
-            material: spec.material,
-            waste: spec.id % 2,
-        },
-        _ => #{
-            energy: spec.energy + 1,
-            time: spec.time + 1,
-            material: spec.material,
-            waste: 1,
-        },
-    }
+// The chances in ten that `worker`'s attempt at contract `id` in `mode`
+// fails, as Nature's odds give them to the law `settles` by: `resolve` in
+// the serial match, `finish` in a season.
+fn failure(state, settles, worker, id, mode) {
+    state.values(`${settles}/${worker}/${id}/${mode}/failure`).weight.to_int()
 }
 
-// The chances in ten that working a job of `risk` in `mode` fails.
-fn failure_weight(risk, mode) {
-    switch mode {
-        "rush" => smaller(risk + 2, 8),
-        "lean" => smaller(risk, 7),
-        _ => smaller(larger(risk - 1, 0), 4),
-    }
-}
-
-// What the laws of contract `id` read of its terms: where its work is done
-// (`place`), what it pays on delivery (`reward`), the energy, time and
-// material its work takes before its mode's adjustments, when it opens for
-// claims (`release`) and its deadline, as its expiry has them.
+// What contract `id`'s expiry reads of its terms: its deadline, when it
+// opens for claims and where its work is done.
 fn terms_of(state, id) { state.values(`expire/${id}/none/none`) }
-
-// Where contract `id`'s work is done, as its terms give it to a claim on it.
-fn place_of(state, id) { state.values(`claim/${competitors(state)[0]}/${id}`).place }
 
 // `proposal`, or `otherwise` when there is none.
 fn or_else(proposal, otherwise) { if proposal == () { otherwise } else { proposal } }
@@ -141,17 +113,19 @@ fn first_mode(policy) {
     }
 }
 
-// The job of `open`, in job order, that `policy` takes first.
-fn chosen_job(open, policy) {
+// The job of `open`, in job order, that `worker`'s `policy` takes first:
+// its risk is the chance it fails worked lean.
+fn chosen_job(state, worker, open, policy) {
     let best = ();
     let best_key = ();
     for id in open {
-        let spec = job_spec(id);
+        let job = work(state, worker, id, "lean");
+        let risk = failure(state, "resolve", worker, id, "lean");
         let key = switch policy {
-            "sprinter" => [spec.time, -spec.value, spec.risk],
-            "steward" => [spec.material, spec.energy, spec.risk],
-            "value-hunter" => [-spec.value, spec.risk, spec.time],
-            _ => [spec.risk, spec.energy, -spec.value],
+            "sprinter" => [job.time, -job.reward, risk],
+            "steward" => [job.material, job.energy, risk],
+            "value-hunter" => [-job.reward, risk, job.time],
+            _ => [risk, job.energy, -job.reward],
         };
         if best == () || before(key, best_key) {
             best = id;
@@ -161,11 +135,12 @@ fn chosen_job(open, policy) {
     best
 }
 
-// Nature's outcome for the `attempt`th attempt at a job in `mode`: a number
-// below ten the attempt's event draws, failing below the chances in ten.
-fn serial_outcome(random, spec, mode, attempt) {
-    let drawn = random.next(`attempt/${spec.id}/${attempt}`, 10);
-    if drawn < failure_weight(spec.risk, mode) { "failure" } else { "success" }
+// Nature's outcome for `worker`'s `attempt`th attempt at job `id` in
+// `mode`: a number below ten the attempt's event draws, failing below the
+// chances in ten.
+fn serial_outcome(state, random, worker, id, mode, attempt) {
+    let drawn = random.next(`attempt/${id}/${attempt}`, 10);
+    if drawn < failure(state, "resolve", worker, id, mode) { "failure" } else { "success" }
 }
 
 // `worker`'s walk from `from` to `to`: one move, or none when there.
@@ -194,14 +169,13 @@ fn serial(state, random) {
     let turn = 0;
     while open.len() > 0 {
         let worker = crew[turn % crew.len()];
-        let id = chosen_job(open, policy[worker]);
+        let id = chosen_job(state, worker, open, policy[worker]);
         let still_open = [];
         for other in open {
             if other != id { still_open.push(other); }
         }
         open = still_open;
-        let spec = job_spec(id);
-        let place = place_of(state, id);
+        let place = work(state, worker, id, "lean").place;
         plan.push(state.exchange_of(`claim/${worker}/${id}`));
         plan += walk(state, worker, at[worker], place);
         at[worker] = place;
@@ -210,8 +184,8 @@ fn serial(state, random) {
         loop {
             attempt += 1;
             plan.push(state.exchange_of(`begin/${worker}/${id}/${mode}`));
-            waste[worker] += work_cost(spec, mode).waste;
-            let outcome = serial_outcome(random, spec, mode, attempt);
+            waste[worker] += work(state, worker, id, mode)["leaves-waste"];
+            let outcome = serial_outcome(state, random, worker, id, mode, attempt);
             plan.push(state.exchange_of(`resolve/${worker}/${id}/${mode}/${outcome}`));
             plan.push(state.exchange_of(`finish/${worker}/${id}/${mode}/${outcome}`));
             if outcome == "success" { break; }
@@ -280,14 +254,13 @@ fn worker_in(state, worker) {
     }
 }
 
-// Whether `who` can still reach a job at `place` in `mode` and finish it by
+// Whether `who` can still reach `job`, worked in its mode, and finish it by
 // its deadline, `overhead` ticks from now, with the material and energy it
 // holds.
-fn can_finish(who, spec, place, mode, clock, deadline, overhead) {
-    let cost = work_cost(spec, mode);
-    clock + overhead + cost.time <= deadline
-        && who.material >= cost.material
-        && who.energy > cost.energy + who.routes[place][1]
+fn can_finish(who, job, clock, overhead) {
+    clock + overhead + job["takes-time"] <= job.deadline
+        && who.material >= job["takes-material"]
+        && who.energy > job["takes-energy"] + who.routes[job.place][1]
 }
 
 // `who`'s first move toward `to`, if it can make one.
@@ -365,17 +338,15 @@ fn decision(state, worker, clock, count, world) {
     let wear_limit = if policy == "resilient" { 4 } else { 6 };
     if held(me.balances, "damage") > 0 || held(me.balances, "wear") >= wear_limit {
         if claimed != () {
-            let spec = job_spec(claimed);
-            let terms = terms_of(state, claimed);
-            let deadline = terms.deadline.to_int();
             for recipient in workers() {
                 if recipient == worker { continue; }
                 let handoff = state.exchange_of(`handoff/${worker}/${recipient}/${claimed}`);
                 if !state.applicable(handoff) { continue; }
                 let other = worker_in(state, recipient);
-                let overhead = 1 + other.routes[terms.place][1];
                 for mode in preferred_modes(other.policy) {
-                    if can_finish(other, spec, terms.place, mode, clock, deadline, overhead) { return handoff; }
+                    let job = work(state, recipient, claimed, mode);
+                    let overhead = 1 + other.routes[job.place][1];
+                    if can_finish(other, job, clock, overhead) { return handoff; }
                 }
             }
         }
@@ -384,20 +355,20 @@ fn decision(state, worker, clock, count, world) {
     // Holding a claim: release an impossible promise, recharge or reclaim
     // material for it, head for it, or begin it.
     if claimed != () {
-        let spec = job_spec(claimed);
-        let terms = terms_of(state, claimed);
-        let deadline = terms.deadline.to_int();
-        let distance = me.routes[terms.place][1];
         let preferred = preferred_modes(policy);
+        let place = work(state, worker, claimed, preferred[0]).place;
+        let distance = me.routes[place][1];
         let release = state.exchange_of(`release-claim/${worker}/${claimed}/false`);
         let possible = false;
         let minimum_energy = ();
         let minimum_material = ();
         for mode in preferred {
-            let cost = work_cost(spec, mode);
-            if clock + distance + cost.time <= deadline { possible = true; }
-            minimum_energy = if minimum_energy == () { cost.energy } else { smaller(minimum_energy, cost.energy) };
-            minimum_material = if minimum_material == () { cost.material } else { smaller(minimum_material, cost.material) };
+            let job = work(state, worker, claimed, mode);
+            if clock + distance + job["takes-time"] <= job.deadline { possible = true; }
+            let energy = job["takes-energy"];
+            let material = job["takes-material"];
+            minimum_energy = if minimum_energy == () { energy } else { smaller(minimum_energy, energy) };
+            minimum_material = if minimum_material == () { material } else { smaller(minimum_material, material) };
         }
         if !possible { return release; }
         if me.energy < minimum_energy + distance + 1 {
@@ -406,7 +377,7 @@ fn decision(state, worker, clock, count, world) {
         if me.material < minimum_material {
             return or_else(service(state, me, "recycler"), release);
         }
-        let heading = travel(state, me, terms.place);
+        let heading = travel(state, me, place);
         if heading != () { return heading; }
         for mode in preferred {
             let begin = state.exchange_of(`begin/${worker}/${claimed}/${mode}`);
@@ -426,14 +397,13 @@ fn decision(state, worker, clock, count, world) {
         let contract = state.balances(`job/${id}`);
         // What a claim needs: an open contract that has arrived.
         if held(contract, "available") == 0 { continue; }
-        let terms = terms_of(state, id);
-        if clock < terms.release { continue; }
-        let spec = job_spec(id);
-        let deadline = terms.deadline.to_int();
-        let distance = me.routes[terms.place][1];
+        let job = ();
         let mode = ();
         for each in preferred_modes(policy) {
-            if can_finish(me, spec, terms.place, each, clock, deadline, 1 + distance) {
+            let worked = work(state, worker, id, each);
+            if clock < worked.release { break; }
+            if can_finish(me, worked, clock, 1 + me.routes[worked.place][1]) {
+                job = worked;
                 mode = each;
                 break;
             }
@@ -441,13 +411,14 @@ fn decision(state, worker, clock, count, world) {
         if mode == () { continue; }
         let claim = state.exchange_of(`claim/${worker}/${id}`);
         if !state.applicable(claim) { continue; }
-        let cost = work_cost(spec, mode);
-        let urgency = deadline - clock;
+        let distance = me.routes[job.place][1];
+        let time = job["takes-time"];
+        let urgency = job.deadline - clock;
         let score = switch policy {
-            "sprinter" => [cost.time + distance, urgency, -spec.value],
-            "value-hunter" => [-(spec.value * 100 / (cost.time + distance + 1)), urgency, spec.risk],
-            "steward" => [cost.material + cost.waste, distance, urgency],
-            _ => [failure_weight(spec.risk, mode), urgency, distance],
+            "sprinter" => [time + distance, urgency, -job.reward],
+            "value-hunter" => [-(job.reward * 100 / (time + distance + 1)), urgency, failure(state, "finish", worker, id, "lean")],
+            "steward" => [job["takes-material"] + job["leaves-waste"], distance, urgency],
+            _ => [failure(state, "finish", worker, id, mode), urgency, distance],
         };
         if best == () || before(score, best_score) {
             best = claim;
