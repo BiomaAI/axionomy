@@ -530,7 +530,6 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
