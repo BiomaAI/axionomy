@@ -23,6 +23,7 @@ fn kind(rate) { rate.split("/")[0] }
 // due before the clock runs out.
 fn next_time(state) {
     let now = clock(state);
+    let last = now + state.balance("bridge", "time-remaining").to_int();
     let next = ();
     for agent in ["a", "b"] {
         let events = [];
@@ -36,7 +37,7 @@ fn next_time(state) {
             events.push(held(state, agent, "lease-until") + 1);
         }
         for time in events {
-            if time > now && time <= 64 && (next == () || time < next) { next = time; }
+            if time > now && time <= last && (next == () || time < next) { next = time; }
         }
     }
     next
@@ -135,11 +136,12 @@ fn adaptive_claim(state, choices) {
     for choice in choices {
         let parts = choice.rate().split("/");
         if parts[0] != "detour" { continue; }
+        let detour = state.constant("detour-time").to_int();
         let agent = parts[1];
         let deadline = held(state, agent, "deadline");
         let occupied = held(state, other(agent), "ready-at");
         if occupied < now { occupied = now; }
-        if now + 3 <= deadline && occupied + duration(state, agent) > deadline { return choice; }
+        if now + detour <= deadline && occupied + duration(state, agent) > deadline { return choice; }
     }
     let earliest = ();
     let chosen = ();

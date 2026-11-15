@@ -37,8 +37,14 @@ pub fn duration(agent: AgentId) -> u64 {
     if agent == AgentId::A { 3 } else { 2 }
 }
 
+/// How many ticks the paid detour takes, `{detour-time}`: the same for
+/// either traveller, a constant.
+fn detour_time() -> Param<u64> {
+    Param::new(path!("detour-time"))
+}
+
 pub(super) fn build(source: World) -> World {
-    let mut builder = EconomyBuilder::new();
+    let mut builder = EconomyBuilder::new().constant(&detour_time(), 3);
     for (id, account) in source.accounts() {
         let mut account = account.clone();
         account
@@ -235,7 +241,11 @@ pub(super) fn build(source: World) -> World {
                         (Asset::SpentCredit, 1),
                     ]),
                 )
-                .produce_computed(Role::Traveler, Asset::ReadyAt, clock() + Q::constant(3)),
+                .produce_computed(
+                    Role::Traveler,
+                    Asset::ReadyAt,
+                    clock() + detour_time().quantity(),
+                ),
         );
     }
     builder = builder

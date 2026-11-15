@@ -178,7 +178,7 @@ fn scene(state, frame) {
     if timed {
         routes += [
             ["west", "detour", "1 credit"],
-            ["detour", "east", "3 ticks · independent capacity"],
+            ["detour", "east", `${state.constant("detour-time")} ticks · independent capacity`],
         ];
     }
     let edges = routes.map(|route| #{
