@@ -52,8 +52,6 @@ fn label(item) {
             "left-count" => "Patients left behind",
             "saved-vitality" => "Vitality at hospital arrival",
             "at" => `At ${place(parts[2])}`,
-            "site" => `Incident site: ${place(parts[2])}`,
-            "distance" => `Roads from ${place(parts[2])} to ${place(parts[3])}`,
             "surveyed" => `${place(parts[2])} searched`,
             "unsearched" => `${place(parts[2])} not yet searched`,
             "known" => `${patient(parts[2])} found at ${place(parts[3])}`,
@@ -154,18 +152,20 @@ fn entity(key, label, glyph, node, role, tone, status, account) {
     }
 }
 
-// Whether the incident takes place at `location`: the base, or a site.
-fn present(state, location) {
-    location == "base" || incident::value(state, "world", `site/${location}`) > 0
+// Whether the incident takes place at `location`: the base, or one of its
+// `sites`.
+fn present(sites, location) {
+    location == "base" || location in sites
 }
 
 fn scene(state, frame) {
+    let sites = incident::sites(state);
     let nodes = [];
     for spot in [
         ["base", 420.0, 280.0], ["north", 120.0, 80.0], ["east", 720.0, 80.0],
         ["harbor", 720.0, 480.0], ["south", 120.0, 480.0], ["west", 420.0, 650.0],
     ] {
-        if !present(state, spot[0]) { continue; }
+        if !present(sites, spot[0]) { continue; }
         nodes.push(#{
             id: #{ key: spot[0], label: if spot[0] == "base" { "Base hospital" } else { place(spot[0]) } },
             classes: ["location"],
@@ -240,7 +240,7 @@ fn scene(state, frame) {
         asset_metric("fuel", "Fuel remaining", "fuel", state.balance("responder", "fuel")),
     ];
     for location in incident::locations() {
-        if !present(state, location) { continue; }
+        if !present(sites, location) { continue; }
         for index in 0..scene.entities.len() {
             if scene.entities[index].id.key != location { continue; }
             scene.entities[index].status = if location == "base" {

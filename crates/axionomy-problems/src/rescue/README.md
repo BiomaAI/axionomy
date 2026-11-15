@@ -14,14 +14,18 @@ including deaths and people left behind; closure is not universal success.
 
 The incident's rates have variables: one law serves every patient and site,
 `stabilize/{patient}/{location}/true`, and laws split only where their shape
-differs, restoring vitality or not, each cause and phase of a loss, driving
-fast or not. A drive between any two places costs their road distance,
-which the world's map holds as `Distance(from, to)` facts; the policies read
-the same map. Each role is fixed to its account, the world, the crew,
-Nature or the patient its identifier names, so no identity token pins a
-binding. Nature takes, patient by patient, the first loss or decline that
-applies, then a discovery or a report (`state.moves`); the responder's
-choice is its rate's exchange (`state.exchange_of`).
+differs, restoring vitality or not, each cause and phase of a loss. One law
+drives between any two places, fast or not, `drive/{from}/{to}/{fast}`: the
+world's map is its relation over every two places, giving how many roads
+apart they are, and another gives each pace's ticks and fuel per road, from
+which it derives the drive's `{time}` and `{fuel}`. The policies read the
+same map (`state.values`), and the view finds the sites and roads among the
+rates' instances (`state.instances`). Each role is fixed to its account,
+the world, the crew, Nature or the patient its identifier names, so no
+identity token pins a binding. Nature takes, patient by patient, the first
+loss or decline that applies, then a discovery or a report
+(`state.moves`); the responder's choice is its rate's exchange
+(`state.exchange_of`).
 
 The package's three incident policies play the same seeded hidden scenario
 and read only the responder's account, public incident state and discovered
@@ -88,6 +92,9 @@ model.
   stochastic runs.
 - Rates with variables whose accounts their identifiers name, and a derived
   value (`report/{round}/{location}` advances to round `{next}`).
+- Relations that give numbers: the incident's map gives each drive's road
+  distance and its pace the ticks and fuel per road, never balances an
+  exchange could change.
 
 ## In this folder
 

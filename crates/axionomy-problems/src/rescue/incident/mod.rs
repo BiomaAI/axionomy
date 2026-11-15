@@ -2,7 +2,7 @@
 use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Slot, basket,
+    QuantityComparison as C, QuantityExpression as Q, Rate, Relation, Slot, basket,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -43,9 +43,6 @@ pub enum Asset {
     LeftCount,
     SavedVitality,
     At(Location),
-    Site(Location),
-    /// How far apart two places are by road: a fact of the world's map.
-    Distance(Location, Location),
     Surveyed(Location),
     Unsearched(Location),
     Known(u8, Location),
@@ -297,7 +294,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .into_iter()
         .filter(|place| *place == Location::Base || sites.contains(place))
         .collect();
-    let mut world = basket([
+    let world = basket([
         (Asset::Active, 1),
         (Asset::Horizon, horizon),
         (Asset::TimeRemaining, horizon),
@@ -307,11 +304,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::MedicalKit, 1),
         (Asset::SupplyAvailable, 1),
     ]);
-    for &from in &places {
-        for &to in places.iter().filter(|to| **to != from) {
-            world.insert(Asset::Distance(from, to), Quantity::new(distance(from, to)));
-        }
-    }
     let mut responder = basket([
         (Asset::At(Location::Base), 1),
         (Asset::Ready, 1),
@@ -323,7 +315,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::Seat, 1),
     ]);
     for site in sites {
-        world.insert(Asset::Site(*site), Quantity::new(1));
         responder.insert(Asset::Unsearched(*site), Quantity::new(1));
     }
     let mut nature = axionomy::Basket::new();
@@ -588,56 +579,58 @@ pub fn initial(stress: bool, seed: u64) -> World {
             );
         }
     }
-    // A drive between two places takes the road distance between them, as
-    // the world records it; driving fast takes half the time for twice the
-    // fuel.
-    let road = || {
-        Q::balance_at(
-            Role::World,
-            AssetPattern::Distance(from.var(), to.var()).into(),
-        )
-    };
-    for fast in [false, true] {
-        let (time, fuel) = if fast { (1, 2) } else { (2, 1) };
-        builder = builder.rate_at(
-            RateIdPattern::Drive {
-                from: from.var(),
-                to: to.var(),
-                fast: Slot::Is(fast),
-            }
-            .into(),
-            busy()
-                .variable(from.values(places.iter().copied()))
-                .variable(to.values(places.iter().copied()))
-                .distinct_variables(from.name().clone(), to.name().clone())
-                .preserve_at(
-                    Role::World,
-                    one([AssetPattern::Distance(from.var(), to.var()).into()]),
-                )
-                .consume_computed_at(
-                    Role::World,
-                    Pattern::literal(Asset::TimeRemaining),
-                    road() * Q::constant(time),
-                )
-                .produce_computed_at(
-                    Role::World,
-                    Pattern::literal(Asset::Time),
-                    road() * Q::constant(time),
-                )
-                .consume_at(Role::Responder, one([at(&from)]))
-                .consume_computed_at(
-                    Role::Responder,
-                    Pattern::literal(Asset::Fuel),
-                    road() * Q::constant(fuel),
-                )
-                .produce_at(Role::Responder, one([at(&to)]))
-                .produce_computed_at(
-                    Role::Responder,
-                    Pattern::literal(Asset::SpentFuel),
-                    road() * Q::constant(fuel),
-                ),
-        );
-    }
+    // A drive between two places takes the road distance between them: the
+    // world's map relates every two places and gives how many roads apart
+    // they are. Each road takes two ticks and a unit of fuel, or, driving
+    // fast, one tick and two units.
+    let (fast, apart) = (
+        Param::new(path!("fast")),
+        Param::<u64>::new(path!("distance")),
+    );
+    let (pace, burn) = (
+        Param::<u64>::new(path!("ticks-per-road")),
+        Param::<u64>::new(path!("fuel-per-road")),
+    );
+    let (time, fuel) = (
+        Param::<u64>::new(path!("time")),
+        Param::<u64>::new(path!("fuel")),
+    );
+    let map = places
+        .iter()
+        .flat_map(|&start| places.iter().map(move |&end| (start, end)))
+        .filter(|(start, end)| start != end)
+        .map(|(start, end)| (start, end, [distance(start, end)]));
+    builder = builder.rate_at(
+        RateIdPattern::Drive {
+            from: from.var(),
+            to: to.var(),
+            fast: fast.var(),
+        }
+        .into(),
+        busy()
+            .variable(from.values(places.iter().copied()))
+            .variable(to.values(places.iter().copied()))
+            .variable(fast.every())
+            .relation(Relation::pairs_giving(
+                &from,
+                &to,
+                [apart.name().clone()],
+                map,
+            ))
+            .relation(Relation::each_giving(
+                &fast,
+                [pace.name().clone(), burn.name().clone()],
+                [(false, [2u64, 1]), (true, [1, 2])],
+            ))
+            .derive(time.name().clone(), apart.quantity() * pace.quantity())
+            .derive(fuel.name().clone(), apart.quantity() * burn.quantity())
+            .consume_computed(Role::World, Asset::TimeRemaining, time.quantity())
+            .produce_computed(Role::World, Asset::Time, time.quantity())
+            .consume_at(Role::Responder, one([at(&from)]))
+            .consume_computed(Role::Responder, Asset::Fuel, fuel.quantity())
+            .produce_at(Role::Responder, one([at(&to)]))
+            .produce_computed(Role::Responder, Asset::SpentFuel, fuel.quantity()),
+    );
     builder = builder.rate_at(
         RateIdPattern::Search(location.var()).into(),
         work(1, 1)

@@ -8,19 +8,24 @@ fn locations() { ["base", "north", "south", "east", "harbor", "west"] }
 
 fn value(state, account, asset) { state.balance(account, asset).to_int() }
 
-// How many roads apart two places are, as the world's map records it.
+// How many roads apart two places are, as the world's map gives it.
 fn distance(state, from, to) {
-    if from == to { 0 } else { value(state, "world", `distance/${from}/${to}`) }
+    if from == to { 0 } else { state.values(`drive/${from}/${to}/false`).distance.to_int() }
 }
 
+// The sites the incident takes place at: the places its searches cover.
+fn sites(state) { state.instances("search").map(|search| search.split("/")[1]) }
+
 // The roads between the places the incident takes place at, each once: the
-// places the map records one road apart.
+// drives the map gives one road long, from the earlier place to the later.
 fn roads(state) {
     let places = locations();
     let roads = [];
-    for (from, index) in places {
-        for to in places.extract(index + 1) {
-            if distance(state, from, to) == 1 { roads.push([from, to]); }
+    for drive in state.instances("drive") {
+        let parts = drive.split("/");
+        if parts[3] == "false" && places.index_of(parts[1]) < places.index_of(parts[2])
+            && state.values(drive).distance == 1 {
+            roads.push([parts[1], parts[2]]);
         }
     }
     roads
@@ -60,8 +65,11 @@ fn visible(state) {
     visible
 }
 
+// The drive from `from` to `to`: fast when urgent or rapid and the
+// responder has the fuel a fast drive burns.
 fn drive(seen, from, to, urgent, rapid) {
-    let fast = (urgent || rapid) && value(seen, "responder", "fuel") >= distance(seen, from, to) * 2;
+    let fast = (urgent || rapid)
+        && seen.balance("responder", "fuel") >= seen.values(`drive/${from}/${to}/true`).fuel;
     seen.exchange_of(`drive/${from}/${to}/${fast}`)
 }
 
