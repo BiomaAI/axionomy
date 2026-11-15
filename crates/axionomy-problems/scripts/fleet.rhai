@@ -154,11 +154,16 @@ fn decision(state, van, policy) {
     for id in cargo {
         if cold(id) { carries_cold = true; }
     }
-    for id in cargo {
-        // A cold load is never delivered late: it expires.
-        for late in if cold(id) { [false] } else { [false, true] } {
-            let delivery = applying(state, `deliver/${van}/${id}/${late}`);
-            if delivery != () { return delivery; }
+    // The first delivery of what it carries that applies, most urgent first,
+    // within the window or late: the rates deliver a cold load only on time.
+    if !cargo.is_empty() {
+        let deliveries = state.moves("deliver");
+        for id in cargo {
+            for delivery in deliveries {
+                if delivery.account("vehicle") == own && delivery.account("order") == `order/${id}` {
+                    return delivery;
+                }
+            }
         }
     }
     if relay && from == "hub" && van == "cold" && carries_cold {
