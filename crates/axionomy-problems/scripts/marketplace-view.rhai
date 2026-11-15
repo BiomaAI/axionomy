@@ -15,6 +15,9 @@ fn letter(name) { name.to_upper() }
 // discount.
 fn priced(discounted) { if discounted == "true" { "discounted" } else { "full-price" } }
 
+// What an agreement at `discounted` price is called.
+fn agreed(discounted) { if discounted == "true" { "at a 10-credit discount" } else { "at full price" } }
+
 fn label(item) {
     let parts = item.split("/");
     let category = parts[0];
@@ -65,15 +68,10 @@ fn label(item) {
             "booking" => `Carrier booked for Order ${letter(parts[2])}`,
             "delivered-by" => `Delivered Order ${letter(parts[2])}`,
             "agreed-price" => `Agreed price of ${parts[2]} credits`,
-            "arrival" => "Order release time",
-            "deadline" => "Delivery deadline",
             "lease-until" => "Dispatch reservation expires at",
             "ready-at" => "Delivery available at",
             "now" => "World time",
             "time-remaining" => "Time remaining",
-            "transit-time" => "Base shipping duration",
-            "delay-risk" => "Exposure to route delays",
-            "route-delay" => "Route delay",
             "on-time" => "On-time deliveries",
             "late" => "Late deliveries",
             "refunded" => "Expired reservations refunded",
@@ -82,12 +80,12 @@ fn label(item) {
     }
     switch name {
         "settle-order" => `Agree Order ${letter(parts[2])} at full price`,
-        "discounted-contract" => `Agree Order ${letter(parts[2])} at a 10-credit discount`,
-        "dispatch" => `Dispatch Order ${letter(parts[2])}`,
-        "deliver" => `Deliver ${priced(parts[3])} Order ${letter(parts[2])} ${
-            if parts[4] == "true" { "late with a rebate" } else { "on time" }
+        "contract" => `Agree Order ${letter(parts[2])} ${agreed(parts[4])}`,
+        "dispatch" => `Dispatch Order ${letter(parts[2])} with Carrier ${letter(parts[3])}`,
+        "deliver" => `Deliver ${priced(parts[4])} Order ${letter(parts[2])} ${
+            if parts[5] == "true" { "late with a rebate" } else { "on time" }
         }`,
-        "cancel" => `Refund the expired ${priced(parts[3])} reservation for Order ${letter(parts[2])}`,
+        "cancel" => `Refund the expired ${priced(parts[4])} reservation for Order ${letter(parts[2])}`,
         "advance" => `Advance market time to ${parts[2]}`,
         _ => (),
     }
@@ -99,8 +97,7 @@ fn label(item) {
 fn unit(asset) {
     switch asset {
         "money" => "credits",
-        "arrival" | "deadline" | "lease-until" | "ready-at" | "now" | "time-remaining"
-            | "transit-time" | "route-delay" => "ticks",
+        "lease-until" | "ready-at" | "now" | "time-remaining" => "ticks",
         _ => (),
     }
 }
@@ -127,10 +124,11 @@ fn holder(state, prefix, ids, asset) {
     ()
 }
 
-// The settlement of `order` binding a buyer, a seller and a carrier.
-fn settlement(order, buyer, seller, carrier) {
+// `deal`'s agreement at its price binding a buyer, a seller and a carrier:
+// Micro's settlement, or a market's contract.
+fn settlement(deal, buyer, seller, carrier) {
     let party = #{ buyer: `buyer/${buyer}`, seller: `seller/${seller}`, carrier: `carrier/${carrier}` };
-    marketplace::bound(`settle-order/${order}`, order, party)
+    marketplace::bound(deal.rate, deal.order, party)
 }
 
 // The id of each account under `prefix`, in identifier order.
@@ -160,6 +158,7 @@ fn entity(key, label, glyph, node, tone, status, account) {
 fn scene(state, frame) {
     let timed = !state.rates("dispatch/").is_empty();
     let orders = marketplace::order_ids(state);
+    let deals = marketplace::deals(state);
     let nodes = [];
     for (buyer, index) in ["a", "b", "c"] {
         nodes.push(node(`buyer/${buyer}`, `Buyer ${letter(buyer)}`, "buyer", 30.0, 60.0 + index.to_float() * 95.0));
@@ -190,7 +189,7 @@ fn scene(state, frame) {
         for buyer in buyers {
             for seller in sellers {
                 for carrier in carriers {
-                    if state.applicable(settlement(order, buyer, seller, carrier)) {
+                    if state.applicable(settlement(deals[order], buyer, seller, carrier)) {
                         feasible += 1;
                         matches.push(`${order}/${buyer}/${seller}/${carrier}`);
                     }
@@ -255,7 +254,7 @@ fn scene(state, frame) {
         if timed {
             token.metrics = [
                 metric("escrow", "Funds held", state.balance(account, "money"), "credits"),
-                metric("deadline", "Deadline", state.balance(account, "deadline"), "ticks"),
+                metric("deadline", "Deadline", deals[order].deadline, "ticks"),
             ];
         }
         entities.push(token);

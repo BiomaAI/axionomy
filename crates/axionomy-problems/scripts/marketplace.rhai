@@ -4,26 +4,45 @@
 // settles each order in one exchange; Showcase and Stress fund contracts that
 // are dispatched and delivered over time.
 
-// What an order's rates encode: the item it trades, its gross price, and the
-// utility its buyer and seller gain when it settles at that price.
-fn terms(order) {
-    switch order {
-        "a" => #{ item: "widget", gross: 100, buyer: 30, seller: 20 },
-        "b" => #{ item: "gadget", gross: 90, buyer: 25, seller: 18 },
-        "c" => #{ item: "widget", gross: 110, buyer: 34, seller: 17 },
-        "d" => #{ item: "gadget", gross: 95, buyer: 22, seller: 24 },
-        "e" => #{ item: "widget", gross: 105, buyer: 28, seller: 21 },
-        "f" => #{ item: "gadget", gross: 115, buyer: 31, seller: 19 },
+// The id an account's path ends with: `a` for `buyer/a`.
+fn id(account) { account.split("/")[1] }
+
+// The market's orders, in identifier order: each has an account of its own.
+fn order_ids(state) { state.accounts("order/").map(|account| id(account)) }
+
+// The instance agreeing to each order at its price, by order: Micro's
+// settlement, `settle-order/<order>/<item>`, or a market's contract not
+// conceded, `contract/<order>/<item>/false`.
+fn agreements(state) {
+    let found = #{};
+    for rate in state.instances("settle-order") + state.instances("contract") {
+        if !rate.ends_with("/true") {
+            found[rate.split("/")[1]] = rate;
+        }
     }
+    found
 }
 
-// The market's orders, one for each settlement rate, in identifier order.
-fn order_ids(state) {
-    let orders = [];
-    for rate in state.rates("settle-order/") {
-        orders.push(rate.sub_string(13));
+// The item an order's agreement trades, which its identifier names.
+fn traded(agreement) { agreement.split("/")[2] }
+
+// What `agreement` reads of its order's terms: the item it trades, its
+// gross price, the utility its buyer and seller gain at that price and, in
+// a market, its schedule; with `rate`, the agreement.
+fn terms_of(state, agreement) {
+    let terms = state.values(agreement);
+    terms.rate = agreement;
+    terms
+}
+
+// Every order's terms, by order.
+fn deals(state) {
+    let deals = #{};
+    for agreement in agreements(state).values() {
+        let terms = terms_of(state, agreement);
+        deals[terms.order] = terms;
     }
-    orders
+    deals
 }
 
 // The exchange of `rate` for `order`, binding the buyer, seller and carrier
@@ -40,24 +59,23 @@ fn bound(rate, order, party) {
     exchange(rate, bindings, 1)
 }
 
-// The buyers, sellers and carriers who might take part in `order`, each in
-// the order of the accounts, every buyer with every seller with every
-// carrier: buyers holding the order's purchase intent, sellers offering its
-// item and carriers with capacity, which a settlement or contract consumes.
-// Whether one applies is the kernel's to say; this only skips parties it
-// would refuse.
-fn parties(state, order) {
-    let item = terms(order).item;
+// The buyers, sellers and carriers who might take part in `deal`'s order,
+// each in the order of the accounts, every buyer with every seller with
+// every carrier: buyers holding the order's purchase intent, sellers
+// offering its item and carriers with capacity, which a settlement or
+// contract consumes. Whether one applies is the kernel's to say; this only
+// skips parties it would refuse.
+fn parties(state, deal) {
     let buyers = [];
     for buyer in state.accounts("buyer/") {
-        if state.balance(buyer, `purchase-intent/${order}`) > 0 {
+        if state.balance(buyer, `purchase-intent/${deal.order}`) > 0 {
             buyers.push(buyer);
         }
     }
     let sellers = [];
     for seller in state.accounts("seller/") {
         let held = state.balances(seller);
-        if `sale-offer/${item}` in held && `item/${item}` in held {
+        if `sale-offer/${deal.item}` in held && `item/${deal.item}` in held {
             sellers.push(seller);
         }
     }
@@ -82,9 +100,10 @@ fn parties(state, order) {
 // buyer, seller and carrier, in the order of their accounts.
 fn settlements(state) {
     let proposals = [];
-    for order in order_ids(state) {
-        for party in parties(state, order) {
-            let proposal = bound(`settle-order/${order}`, order, party);
+    for rate in state.instances("settle-order") {
+        let deal = state.values(rate);
+        for party in parties(state, deal) {
+            let proposal = bound(rate, deal.order, party);
             if state.applicable(proposal) {
                 proposals.push(proposal);
             }
@@ -122,13 +141,14 @@ fn booking(state, order) {
 // Showcase and Stress: what a funded market may do next, as a
 // planner proposes it; nothing once every order has settled. A dispatch or a
 // delivery that applies goes first, alone: the first, order by order, of a
-// reservation's dispatch, then its delivery at the order's price on time and
-// late, then at the conceded price on time and late. Otherwise every
-// contract an open order may sign, at its price and then ten credits less,
-// with each buyer, seller and carrier in turn; a reservation's cancellation,
-// at either price, once it has expired; and advancing the clock to the next
-// arrival, expiry or delivery to come, whichever apply.
+// reservation's dispatch with its carrier, then its delivery at the order's
+// price on time and late, then at the conceded price on time and late.
+// Otherwise every contract an open order may sign, at its price and then ten
+// credits less, with each buyer, seller and carrier in turn; a reservation's
+// cancellation, at either price, once it has expired; and advancing the
+// clock to the next arrival, expiry or delivery to come, whichever apply.
 fn fulfillment(state) {
+    let agreements = agreements(state);
     let orders = order_ids(state);
     let settled = 0;
     let open = #{};
@@ -139,7 +159,7 @@ fn fulfillment(state) {
             settled += 1;
         }
         if `open-order/${order}` in held {
-            open[order] = true;
+            open[order] = terms_of(state, agreements[order]);
         }
         let party = booking(state, order);
         if party != () {
@@ -152,12 +172,13 @@ fn fulfillment(state) {
     for order in orders {
         if order in booked {
             let party = booked[order].party;
+            let deal = `${order}/${traded(agreements[order])}`;
             for rate in [
-                `dispatch/${order}`,
-                `deliver/${order}/false/false`,
-                `deliver/${order}/false/true`,
-                `deliver/${order}/true/false`,
-                `deliver/${order}/true/true`,
+                `dispatch/${order}/${id(party.carrier)}`,
+                `deliver/${deal}/false/false`,
+                `deliver/${deal}/false/true`,
+                `deliver/${deal}/true/false`,
+                `deliver/${deal}/true/true`,
             ] {
                 let proposal = bound(rate, order, party);
                 if state.applicable(proposal) {
@@ -169,9 +190,10 @@ fn fulfillment(state) {
     let proposed = [];
     for order in orders {
         if order in open {
-            for party in parties(state, order) {
-                proposed.push(bound(`settle-order/${order}`, order, party));
-                proposed.push(bound(`discounted-contract/${order}`, order, party));
+            let deal = open[order];
+            for party in parties(state, deal) {
+                proposed.push(bound(`contract/${order}/${deal.item}/false`, order, party));
+                proposed.push(bound(`contract/${order}/${deal.item}/true`, order, party));
             }
         }
     }
@@ -180,13 +202,14 @@ fn fulfillment(state) {
     for order in orders {
         let times = [];
         if order in open {
-            times.push(state.balance(`order/${order}`, "arrival"));
+            times.push(open[order].arrival);
         }
         if order in booked {
             let party = booked[order].party;
             let held = booked[order].held;
-            proposed.push(bound(`cancel/${order}/false`, order, party));
-            proposed.push(bound(`cancel/${order}/true`, order, party));
+            let item = traded(agreements[order]);
+            proposed.push(bound(`cancel/${order}/${item}/false`, order, party));
+            proposed.push(bound(`cancel/${order}/${item}/true`, order, party));
             if `contract/${order}` in held {
                 times.push(state.balance(`order/${order}`, "lease-until") + 1);
             }
@@ -238,13 +261,17 @@ fn planned(state, preference) {
             settled += 1;
         }
         if `contract/${order}` in held || `in-shipment/${order}` in held {
-            let deal = terms(order);
+            // The item the order holds in escrow names its contract.
+            let item = held.keys().filter(|asset| asset.starts_with("item/"))[0];
+            let deal = state.values(`contract/${order}/${id(item)}/false`);
+            let buyer = deal["buyer-utility"].to_int();
+            let seller = deal["seller-utility"].to_int();
             let cut = if `agreed-price/${deal.gross - 10}` in held { 10 } else { 0 };
             value += 40000;
             value += switch preference {
-                "buyers" => (deal.buyer + cut) * 20,
-                "sellers" => (deal.seller - cut) * 20,
-                _ => deal.buyer + deal.seller,
+                "buyers" => (buyer + cut) * 20,
+                "sellers" => (seller - cut) * 20,
+                _ => buyer + seller,
             };
         }
     }
@@ -255,23 +282,24 @@ fn volume(state) { planned(state, "volume") }
 fn favor_buyers(state) { planned(state, "buyers") }
 fn favor_sellers(state) { planned(state, "sellers") }
 
-// The value `order`'s settlement records: at its gross price, ten credits
-// less, or twenty less once a concession and a late rebate both apply.
-fn settled_value(state, order) {
-    let gross = terms(order).gross;
+// What a clearing forgoes of `deal`'s order: its gross price less the value
+// its settlement records, at that price, ten credits less, or twenty less
+// once a concession and a late rebate both apply.
+fn forgone_of(state, deal) {
+    let gross = deal.gross.to_int();
     let value = 0;
     for price in [gross, gross - 10, gross - 20] {
-        value += state.balance(`order/${order}`, `settled-value/${price}`).to_int() * price;
+        value += state.balance(`order/${deal.order}`, `settled-value/${price}`).to_int() * price;
     }
-    value
+    gross - value
 }
 
 // The gross value a clearing forgoes: what every order would pay at its gross
 // price, less the value its settlements record.
 fn forgone(state) {
     let total = 0;
-    for order in order_ids(state) {
-        total += terms(order).gross - settled_value(state, order);
+    for deal in deals(state).values() {
+        total += forgone_of(state, deal);
     }
     total
 }
@@ -280,9 +308,9 @@ fn forgone(state) {
 // no clearing that continues from here forgoes less.
 fn forgone_settled(state) {
     let total = 0;
-    for order in order_ids(state) {
-        if state.balance(`order/${order}`, `settled-order/${order}`) > 0 {
-            total += terms(order).gross - settled_value(state, order);
+    for deal in deals(state).values() {
+        if state.balance(`order/${deal.order}`, `settled-order/${deal.order}`) > 0 {
+            total += forgone_of(state, deal);
         }
     }
     total

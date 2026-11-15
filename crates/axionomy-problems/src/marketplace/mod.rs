@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity, Rate,
-    basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
+    QuantityExpression as Q, Rate, Relation, basket,
 };
 
 pub mod fulfillment;
@@ -130,18 +130,35 @@ pub enum Role {
     Order,
 }
 
+/// The market's laws. An order's names the item it trades, which its
+/// terms relate to it; a contract, its cancellation and its delivery whether
+/// its price was conceded; a dispatch the carrier that booked it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum RateId {
-    SettleOrder(OrderId),
-    DiscountedContract(OrderId),
-    Dispatch(OrderId),
+    /// Micro's settlement of an order in one exchange.
+    SettleOrder {
+        order: OrderId,
+        item: Item,
+    },
+    /// A funded contract: money, goods and capacity locked until delivery.
+    Contract {
+        order: OrderId,
+        item: Item,
+        discounted: bool,
+    },
+    Dispatch {
+        order: OrderId,
+        carrier: CarrierId,
+    },
     Deliver {
         order: OrderId,
+        item: Item,
         discounted: bool,
         late: bool,
     },
     Cancel {
         order: OrderId,
+        item: Item,
         discounted: bool,
     },
     Advance {
@@ -332,13 +349,19 @@ fn build(size: MarketSize) -> World {
         .account(AccountId::Platform, Account::from(basket([])))
         .account(AccountId::TaxAuthority, Account::from(basket([])));
     for &order in orders {
-        builder = builder
-            .account(
-                AccountId::Order(order),
-                Account::from(basket([(Asset::OpenOrder(order), 1)])),
-            )
-            .rate(RateId::SettleOrder(order), settlement_rate(order));
+        builder = builder.account(
+            AccountId::Order(order),
+            Account::from(basket([(Asset::OpenOrder(order), 1)])),
+        );
     }
+    builder = builder.rate_at(
+        RateIdPattern::SettleOrder {
+            order: order().var(),
+            item: item().var(),
+        }
+        .into(),
+        settlement_rate(orders),
+    );
     let buyer_lifecycle = orders.iter().copied().fold(
         LinearInvariant::new(path!("buyer-order-lifecycle")),
         |invariant, order| {
@@ -401,102 +424,209 @@ fn goal_for(orders: &[OrderId]) -> Goal<Ontology> {
     })
 }
 
+/// The market's orders, in identifier order: each has an account of its own.
 pub fn orders(world: &World) -> Vec<OrderId> {
-    let mut orders = world
-        .rate_ids()
-        .filter_map(|rate| rate.as_literal())
-        .filter_map(|rate| match rate {
-            RateId::SettleOrder(order) => Some(*order),
+    world
+        .accounts()
+        .filter_map(|(account, _)| match account {
+            AccountId::Order(order) => Some(*order),
             _ => None,
         })
-        .collect::<Vec<_>>();
-    orders.sort();
-    orders.dedup();
-    orders
+        .collect()
 }
 
 pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
-    Exchange::new(RateId::SettleOrder(order), Quantity::new(1))
-        .bind(Role::Buyer, AccountId::Buyer(buyer))
-        .bind(Role::Seller, AccountId::Seller(seller))
-        .bind(Role::Platform, AccountId::Platform)
-        .bind(Role::TaxAuthority, AccountId::TaxAuthority)
-        .bind(Role::Carrier, AccountId::Carrier(carrier))
-        .bind(Role::Order, AccountId::Order(order))
+    Exchange::new(
+        RateId::SettleOrder {
+            order,
+            item: terms(order).item,
+        },
+        Quantity::new(1),
+    )
+    .bind(Role::Buyer, AccountId::Buyer(buyer))
+    .bind(Role::Seller, AccountId::Seller(seller))
+    .bind(Role::Platform, AccountId::Platform)
+    .bind(Role::TaxAuthority, AccountId::TaxAuthority)
+    .bind(Role::Carrier, AccountId::Carrier(carrier))
+    .bind(Role::Order, AccountId::Order(order))
 }
 
-fn settlement_rate(order: OrderId) -> Rate<Ontology> {
-    let (item, gross, seller_proceeds, tax, commission, shipping) = order_terms(order);
-    let (buyer_utility, seller_utility) = utility_terms(order);
-    among(platform(), Pattern::literal(AccountId::Order(order)))
-        .consume(
+/// Micro's settlement of any of `orders`, `settle-order/{order}/{item}`:
+/// the buyer pays the gross price for the item and a receipt, the seller is
+/// paid its proceeds for the item and its offer, the platform its
+/// commission, the tax authority the tax and the carrier its shipping fee
+/// for a unit of its capacity, and the order settles at its gross price,
+/// each amount per unit as the order's terms give it.
+fn settlement_rate(orders: &[OrderId]) -> Rate<Ontology> {
+    let (order, item) = (order(), item());
+    let per_unit = |amount: Param<u64>| amount.quantity() * Q::units();
+    among(platform(), AccountIdPattern::Order(order.var()).into())
+        .variable(order.values(orders.iter().copied()))
+        .variable(item.every())
+        .relation(priced(orders))
+        .consume_at(
             Role::Buyer,
-            basket([(Asset::Money, gross), (Asset::PurchaseIntent(order), 1)]),
+            one([AssetPattern::PurchaseIntent(order.var())]),
         )
-        .produce(
+        .consume_computed(Role::Buyer, Asset::Money, per_unit(gross()))
+        .produce_at(
             Role::Buyer,
-            basket([
-                (Asset::Item(item), 1),
-                (Asset::PurchaseReceipt(order), 1),
-                (Asset::Utility, buyer_utility),
+            one([
+                AssetPattern::Item(item.var()),
+                AssetPattern::PurchaseReceipt(order.var()),
             ]),
         )
-        .consume(
+        .produce_computed(Role::Buyer, Asset::Utility, per_unit(buyer_utility()))
+        .consume_at(
             Role::Seller,
-            basket([(Asset::Item(item), 1), (Asset::SaleOffer(item), 1)]),
-        )
-        .produce(
-            Role::Seller,
-            basket([
-                (Asset::Money, seller_proceeds),
-                (Asset::CompletedSale(order), 1),
-                (Asset::Utility, seller_utility),
+            one([
+                AssetPattern::Item(item.var()),
+                AssetPattern::SaleOffer(item.var()),
             ]),
         )
-        .produce(Role::Platform, basket([(Asset::Money, commission)]))
-        .produce(Role::TaxAuthority, basket([(Asset::Money, tax)]))
+        .produce_at(
+            Role::Seller,
+            one([AssetPattern::CompletedSale(order.var())]),
+        )
+        .produce_computed(Role::Seller, Asset::Money, per_unit(proceeds()))
+        .produce_computed(Role::Seller, Asset::Utility, per_unit(seller_utility()))
+        .produce_computed(Role::Platform, Asset::Money, per_unit(commission()))
+        .produce_computed(Role::TaxAuthority, Asset::Money, per_unit(tax()))
         .consume(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
-        .produce(
-            Role::Carrier,
-            basket([(Asset::Money, shipping), (Asset::UsedShippingCapacity, 1)]),
-        )
-        .consume(Role::Order, basket([(Asset::OpenOrder(order), 1)]))
-        .produce(
+        .produce(Role::Carrier, basket([(Asset::UsedShippingCapacity, 1)]))
+        .produce_computed(Role::Carrier, Asset::Money, per_unit(shipping()))
+        .consume_at(Role::Order, one([AssetPattern::OpenOrder(order.var())]))
+        .produce_at(
             Role::Order,
-            basket([
-                (Asset::SettledOrder(order), 1),
-                (Asset::SettledValue(gross), 1),
+            one([
+                AssetPattern::SettledOrder(order.var()),
+                AssetPattern::SettledValue(gross().var()),
             ]),
         )
 }
 
-const fn utility_terms(order: OrderId) -> (u64, u64) {
-    match order {
-        OrderId::A => (30, 20),
-        OrderId::B => (25, 18),
-        OrderId::C => (34, 17),
-        OrderId::D => (22, 24),
-        OrderId::E => (28, 21),
-        OrderId::F => (31, 19),
+/// One unit of each asset `assets` names.
+fn one<const N: usize>(assets: [AssetPattern; N]) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset.into(), Quantity::new(1)))
+        .collect()
+}
+
+/// What an order trades and on what terms: the item, the gross price its
+/// buyer pays, its seller's proceeds, the tax, the platform's commission,
+/// the carrier's shipping fee, and the utility its buyer and its seller gain
+/// when it settles at that price. Its laws read them from the relation
+/// [`priced`] writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Terms {
+    pub item: Item,
+    pub gross: u64,
+    pub proceeds: u64,
+    pub tax: u64,
+    pub commission: u64,
+    pub shipping: u64,
+    pub buyer_utility: u64,
+    pub seller_utility: u64,
+}
+
+pub const fn terms(order: OrderId) -> Terms {
+    let (item, gross, proceeds, tax, commission, shipping, buyer_utility, seller_utility) =
+        match order {
+            OrderId::A => (
+                Item::Widget,
+                GROSS_PAYMENT,
+                SELLER_PROCEEDS,
+                TAX,
+                PLATFORM_COMMISSION,
+                SHIPPING_FEE,
+                30,
+                20,
+            ),
+            OrderId::B => (Item::Gadget, SECOND_GROSS_PAYMENT, 72, 9, 5, 4, 25, 18),
+            OrderId::C => (Item::Widget, 110, 86, 11, 7, 6, 34, 17),
+            OrderId::D => (Item::Gadget, 95, 75, 10, 5, 5, 22, 24),
+            OrderId::E => (Item::Widget, 105, 83, 10, 6, 6, 28, 21),
+            OrderId::F => (Item::Gadget, 115, 90, 12, 7, 6, 31, 19),
+        };
+    Terms {
+        item,
+        gross,
+        proceeds,
+        tax,
+        commission,
+        shipping,
+        buyer_utility,
+        seller_utility,
     }
 }
 
-const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
-    match order {
-        OrderId::A => (
-            Item::Widget,
-            GROSS_PAYMENT,
-            SELLER_PROCEEDS,
-            TAX,
-            PLATFORM_COMMISSION,
-            SHIPPING_FEE,
-        ),
-        OrderId::B => (Item::Gadget, SECOND_GROSS_PAYMENT, 72, 9, 5, 4),
-        OrderId::C => (Item::Widget, 110, 86, 11, 7, 6),
-        OrderId::D => (Item::Gadget, 95, 75, 10, 5, 5),
-        OrderId::E => (Item::Widget, 105, 83, 10, 6, 6),
-        OrderId::F => (Item::Gadget, 115, 90, 12, 7, 6),
-    }
+/// The order a law's identifier names, `{order}`.
+fn order() -> Param<OrderId> {
+    Param::new(path!("order"))
+}
+
+/// The item an order's law trades, `{item}`, as its terms relate it.
+fn item() -> Param<Item> {
+    Param::new(path!("item"))
+}
+
+/// The numbers an order's terms give its laws, by the names they read.
+fn gross() -> Param<u64> {
+    Param::new(path!("gross"))
+}
+fn proceeds() -> Param<u64> {
+    Param::new(path!("proceeds"))
+}
+fn tax() -> Param<u64> {
+    Param::new(path!("tax"))
+}
+fn commission() -> Param<u64> {
+    Param::new(path!("commission"))
+}
+fn shipping() -> Param<u64> {
+    Param::new(path!("shipping"))
+}
+fn buyer_utility() -> Param<u64> {
+    Param::new(path!("buyer-utility"))
+}
+fn seller_utility() -> Param<u64> {
+    Param::new(path!("seller-utility"))
+}
+
+/// The item each of `orders` trades and the numbers of its terms: law
+/// structure that never changes, a row for each order.
+fn priced(orders: &[OrderId]) -> Relation {
+    Relation::pairs_giving(
+        &order(),
+        &item(),
+        [
+            gross(),
+            proceeds(),
+            tax(),
+            commission(),
+            shipping(),
+            buyer_utility(),
+            seller_utility(),
+        ]
+        .map(|number| number.name().clone()),
+        orders.iter().map(|&order| {
+            let terms = terms(order);
+            (
+                order,
+                terms.item,
+                [
+                    terms.gross,
+                    terms.proceeds,
+                    terms.tax,
+                    terms.commission,
+                    terms.shipping,
+                    terms.buyer_utility,
+                    terms.seller_utility,
+                ],
+            )
+        }),
+    )
 }
 
 /// The parties an order's exchange chooses: its buyer, seller and carrier.
@@ -535,6 +665,23 @@ mod tests {
     use super::*;
     use axionomy::{ApplyError, AssessmentStatus, ExchangeAssessment, Trace};
 
+    /// Order A's settlement: of a widget, as its terms relate.
+    const SETTLE_A: RateId = RateId::SettleOrder {
+        order: OrderId::A,
+        item: Item::Widget,
+    };
+
+    #[test]
+    fn an_order_settles_only_the_item_its_terms_relate() {
+        let world = initial();
+        let gadget = RateId::SettleOrder {
+            order: OrderId::A,
+            item: Item::Gadget,
+        };
+        assert!(world.instance(&SETTLE_A).is_ok());
+        assert!(world.instance(&gadget).is_err());
+    }
+
     /// Every binding of a settlement of each of the market's orders: each
     /// buyer, seller and carrier the market has.
     fn every_settlement(world: &World) -> Vec<Action> {
@@ -564,7 +711,9 @@ mod tests {
 
         for exchange in exact {
             match exchange.rate() {
-                RateId::SettleOrder(OrderId::A) => {
+                RateId::SettleOrder {
+                    order: OrderId::A, ..
+                } => {
                     assert!(matches!(
                         exchange.bindings().get(&Role::Buyer),
                         Some(AccountId::Buyer(BuyerId::A | BuyerId::B))
@@ -574,7 +723,9 @@ mod tests {
                         Some(AccountId::Seller(SellerId::A | SellerId::B))
                     ));
                 }
-                RateId::SettleOrder(OrderId::B) => {
+                RateId::SettleOrder {
+                    order: OrderId::B, ..
+                } => {
                     assert_eq!(
                         exchange.bindings().get(&Role::Buyer),
                         Some(&AccountId::Buyer(BuyerId::A))
@@ -584,7 +735,10 @@ mod tests {
                         Some(&AccountId::Seller(SellerId::C))
                     );
                 }
-                RateId::SettleOrder(OrderId::C | OrderId::D | OrderId::E | OrderId::F) => {
+                RateId::SettleOrder {
+                    order: OrderId::C | OrderId::D | OrderId::E | OrderId::F,
+                    ..
+                } => {
                     unreachable!("micro fixture only has two orders")
                 }
                 _ => unreachable!("Micro settles directly"),
@@ -751,7 +905,7 @@ mod tests {
     #[test]
     fn rejects_one_account_bound_to_distinct_market_roles() {
         let world = initial();
-        let exchange = Exchange::new(RateId::SettleOrder(OrderId::A), Quantity::new(1))
+        let exchange = Exchange::new(SETTLE_A, Quantity::new(1))
             .bind(Role::Buyer, AccountId::Buyer(BuyerId::A))
             .bind(Role::Seller, AccountId::Buyer(BuyerId::A))
             .bind(Role::Platform, AccountId::Platform)
@@ -774,7 +928,7 @@ mod tests {
     #[test]
     fn fixed_accounts_reject_swapped_institutions() {
         let world = initial();
-        let rebound = Exchange::new(RateId::SettleOrder(OrderId::A), Quantity::new(1))
+        let rebound = Exchange::new(SETTLE_A, Quantity::new(1))
             .bind(Role::Buyer, AccountId::Buyer(BuyerId::A))
             .bind(Role::Seller, AccountId::Seller(SellerId::A))
             .bind(Role::Platform, AccountId::TaxAuthority)

@@ -51,9 +51,16 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
     let market_showcase = marketplace::initial_showcase();
     let market_stress = marketplace::initial_stress();
     assert_ne!(market_showcase.state_key(), market_stress.state_key());
+    // Their laws are written alike; Stress's answer to more orders.
+    let market_instances = |world: &marketplace::World| -> usize {
+        world
+            .rate_ids()
+            .map(|key| world.instances_of(key).count())
+            .sum()
+    };
     assert_ne!(
-        market_showcase.rate_ids().count(),
-        market_stress.rate_ids().count()
+        market_instances(&market_showcase),
+        market_instances(&market_stress)
     );
 
     let rescue_showcase = rescue::uniform_uncertain_showcase();
