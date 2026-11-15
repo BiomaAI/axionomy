@@ -42,13 +42,17 @@ assets        = cash + ⌊debt supply · index ÷ WAD⌋ − reserves
 
 Cash, collateral (free plus posted), vault shares (holders plus locked
 against supply) and debt shares (holders against supply) are declared
-invariants. Identity witnesses bind the market, clock, oracle and borrower;
-the supplier's invoice and the customer's purchase orders bind the
-counterparties.
+invariants. Every rate fixes the market, clock, oracle, borrower, supplier
+and customer to their roles' accounts, so no identity token pins them; a
+depositor or a keeper is the exchange's to choose. Collecting revenue is one
+rate over the installments, `collect-revenue/{installment}`: each
+installment's amount and the periods it is due after are terms of its
+purchase order, balances the customer holds.
 
 The package's moves borrow exactly the bill's shortfall while it is unpaid,
 repay everything owed or all available cash after, and return collateral
-once the loan is closed. These are candidate choices, not semantics; the
+once the loan is closed; then every installment that is due
+(`state.moves`), and the keeper's, oracle's and clock's moves. These are candidate choices, not semantics; the
 kernel still assesses every exchange. Its Dijkstra search charges each
 closed period's interest to the plan; breadth-first search counts exchanges.
 

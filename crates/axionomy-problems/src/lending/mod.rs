@@ -3,8 +3,8 @@
 use axionomy::ConditionPath;
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression, Rate, Rounding, basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern,
+    Quantity, QuantityComparison, QuantityExpression, Rate, Rounding, basket,
 };
 
 #[cfg(feature = "packages")]
@@ -74,17 +74,17 @@ pub enum Asset {
     LiquidationThreshold,
     /// Extra collateral a keeper receives, as a share of the debt it repays.
     LiquidationBonus,
-    /// Identifies the market's one borrower.
-    CreditLine,
     /// The supplier's claim on the borrower's bill.
     Invoice,
     /// The borrower settled its bill.
     BillPaid,
     /// A customer's commitment to pay one revenue installment.
     PurchaseOrder(u8),
-    MarketIdentity,
-    ClockIdentity,
-    OracleIdentity,
+    /// The cash an installment pays: a term of its purchase order.
+    InstallmentAmount(u8),
+    /// Closed periods after which an installment is collectable: a term of
+    /// its purchase order.
+    InstallmentDue(u8),
     Period,
     ElapsedPeriod,
     /// One while the scheduled price drop has not happened.
@@ -414,18 +414,25 @@ fn one_unit(rate: Rate<Ontology>, name: ConditionPath) -> Rate<Ontology> {
     rate.condition(name, Q::units(), QuantityComparison::Equal, Q::constant(1))
 }
 
+/// `rate` with `role` fixed to `account`, the one account that may take it.
+fn fixed(rate: Rate<Ontology>, role: Role, account: AccountId) -> Rate<Ontology> {
+    rate.account(role, Pattern::literal(account))
+}
+
 fn market_rate() -> Rate<Ontology> {
-    Rate::new().preserve(Role::Market, basket([(Asset::MarketIdentity, 1)]))
+    fixed(Rate::new(), Role::Market, AccountId::Market)
 }
 
 fn borrower_rate() -> Rate<Ontology> {
-    market_rate()
-        .preserve(Role::Borrower, basket([(Asset::CreditLine, 1)]))
-        .distinct(Role::Market, Role::Borrower)
+    fixed(market_rate(), Role::Borrower, AccountId::Borrower)
 }
 
 fn clock_bound(rate: Rate<Ontology>) -> Rate<Ontology> {
-    rate.preserve(Role::Clock, basket([(Asset::ClockIdentity, 1)]))
+    fixed(rate, Role::Clock, AccountId::Clock)
+}
+
+fn oracle_bound(rate: Rate<Ontology>) -> Rate<Ontology> {
+    fixed(rate, Role::Oracle, AccountId::Oracle)
 }
 
 fn deposit_rate() -> Rate<Ontology> {
@@ -536,49 +543,57 @@ fn repay_shares_rate() -> Rate<Ontology> {
 }
 
 fn pay_bill_rate(bill: Payment) -> Rate<Ontology> {
-    clock_bound(
-        Rate::new()
-            .preserve(Role::Borrower, basket([(Asset::CreditLine, 1)]))
-            .consume(Role::Borrower, basket([(Asset::Cash, bill.amount)]))
-            .consume(Role::Supplier, basket([(Asset::Invoice, 1)]))
-            .produce(Role::Supplier, basket([(Asset::Cash, bill.amount)]))
-            .produce(Role::Borrower, basket([(Asset::BillPaid, 1)])),
+    fixed(
+        clock_bound(fixed(Rate::new(), Role::Borrower, AccountId::Borrower)),
+        Role::Supplier,
+        AccountId::Supplier,
     )
+    .consume(Role::Borrower, basket([(Asset::Cash, bill.amount)]))
+    .consume(Role::Supplier, basket([(Asset::Invoice, 1)]))
+    .produce(Role::Supplier, basket([(Asset::Cash, bill.amount)]))
+    .produce(Role::Borrower, basket([(Asset::BillPaid, 1)]))
     .condition(
         path!("paid-before-the-deadline"),
         elapsed() + Q::constant(1),
         QuantityComparison::LessThanOrEqual,
         Q::constant(bill.period),
     )
-    .distinct(Role::Borrower, Role::Supplier)
 }
 
-fn collect_revenue_rate(installment: u8, payment: Payment) -> Rate<Ontology> {
-    clock_bound(
-        Rate::new()
-            .preserve(Role::Borrower, basket([(Asset::CreditLine, 1)]))
-            .consume(
-                Role::Customer,
-                basket([
-                    (Asset::PurchaseOrder(installment), 1),
-                    (Asset::Cash, payment.amount),
-                ]),
-            )
-            .produce(Role::Borrower, basket([(Asset::Cash, payment.amount)])),
+/// Collecting any of the customer's `installments`,
+/// `collect-revenue/{installment}`: its purchase order pays the cash its
+/// amount says once the periods it is due after have closed.
+fn collect_revenue_rate(installment: &Param<u8>, installments: u8) -> Rate<Ontology> {
+    let term = |asset: fn(axionomy::Slot<u8>) -> AssetPattern| {
+        Q::balance_at(Role::Customer, asset(installment.var()).into())
+    };
+    let amount = term(AssetPattern::InstallmentAmount);
+    fixed(
+        clock_bound(fixed(Rate::new(), Role::Borrower, AccountId::Borrower)),
+        Role::Customer,
+        AccountId::Customer,
     )
+    .variable(installment.range(0, installments - 1))
+    .consume_at(
+        Role::Customer,
+        [(
+            AssetPattern::PurchaseOrder(installment.var()).into(),
+            Quantity::new(1),
+        )],
+    )
+    .consume_computed(Role::Customer, Asset::Cash, amount.clone())
+    .produce_computed(Role::Borrower, Asset::Cash, amount)
     .condition(
         path!("the-installment-is-due"),
         elapsed(),
         QuantityComparison::GreaterThanOrEqual,
-        Q::constant(payment.period),
+        term(AssetPattern::InstallmentDue),
     )
-    .distinct(Role::Borrower, Role::Customer)
 }
 
 fn accrue_rate() -> Rate<Ontology> {
     let pending = Q::balance(Role::Oracle, Asset::PendingShock);
-    let rate = clock_bound(borrower_rate())
-        .preserve(Role::Oracle, basket([(Asset::OracleIdentity, 1)]))
+    let rate = oracle_bound(clock_bound(borrower_rate()))
         .consume(Role::Clock, basket([(Asset::Period, 1)]))
         .produce(Role::Clock, basket([(Asset::ElapsedPeriod, 1)]))
         .produce_computed(Role::Market, Asset::BorrowIndex, index_growth())
@@ -595,18 +610,12 @@ fn accrue_rate() -> Rate<Ontology> {
             pending * (elapsed() + Q::constant(1)),
             QuantityComparison::LessThanOrEqual,
             Q::balance(Role::Oracle, Asset::ShockAfter),
-        )
-        .distinct(Role::Market, Role::Clock)
-        .distinct(Role::Market, Role::Oracle)
-        .distinct(Role::Borrower, Role::Clock)
-        .distinct(Role::Borrower, Role::Oracle)
-        .distinct(Role::Clock, Role::Oracle);
+        );
     one_unit(rate, path!("one-period-at-a-time"))
 }
 
 fn reprice_rate() -> Rate<Ontology> {
-    let rate = clock_bound(market_rate())
-        .preserve(Role::Oracle, basket([(Asset::OracleIdentity, 1)]))
+    let rate = oracle_bound(clock_bound(market_rate()))
         .consume(Role::Oracle, basket([(Asset::PendingShock, 1)]))
         .consume_computed(
             Role::Market,
@@ -618,10 +627,7 @@ fn reprice_rate() -> Rate<Ontology> {
             elapsed(),
             QuantityComparison::Equal,
             Q::balance(Role::Oracle, Asset::ShockAfter),
-        )
-        .distinct(Role::Market, Role::Oracle)
-        .distinct(Role::Market, Role::Clock)
-        .distinct(Role::Clock, Role::Oracle);
+        );
     one_unit(rate, path!("one-price-drop"))
 }
 
@@ -663,11 +669,18 @@ pub fn world(config: &Config) -> World {
     let terms = config.terms;
     let customer: Basket<Asset> = (0_u8..)
         .zip(&config.revenue)
-        .map(|(installment, _)| (Asset::PurchaseOrder(installment), Quantity::new(1)))
+        .flat_map(|(installment, payment)| {
+            [
+                (Asset::PurchaseOrder(installment), 1),
+                (Asset::InstallmentAmount(installment), payment.amount),
+                (Asset::InstallmentDue(installment), payment.period),
+            ]
+        })
         .chain([(
             Asset::Cash,
-            Quantity::new(config.revenue.iter().map(|payment| payment.amount).sum()),
+            config.revenue.iter().map(|payment| payment.amount).sum(),
         )])
+        .map(|(asset, quantity)| (asset, Quantity::new(quantity)))
         .collect();
     let mut builder = EconomyBuilder::new()
         .account(
@@ -686,32 +699,26 @@ pub fn world(config: &Config) -> World {
                 (Asset::LoanToValue, terms.loan_to_value),
                 (Asset::LiquidationThreshold, terms.liquidation_threshold),
                 (Asset::LiquidationBonus, terms.liquidation_bonus),
-                (Asset::MarketIdentity, 1),
             ])),
         )
         .account(
             AccountId::Clock,
-            Account::from(basket([
-                (Asset::ClockIdentity, 1),
-                (Asset::Period, config.periods),
-            ])),
+            Account::from(basket([(Asset::Period, config.periods)])),
         )
         .account(
             AccountId::Oracle,
             Account::from(match config.shock {
                 Some(shock) => basket([
-                    (Asset::OracleIdentity, 1),
                     (Asset::PendingShock, 1),
                     (Asset::ShockAfter, shock.after),
                     (Asset::PriceDrop, shock.drop),
                 ]),
-                None => basket([(Asset::OracleIdentity, 1)]),
+                None => basket([]),
             }),
         )
         .account(
             AccountId::Borrower,
             Account::from(basket([
-                (Asset::CreditLine, 1),
                 (Asset::Cash, config.borrower_cash),
                 (Asset::Collateral, config.collateral),
             ])),
@@ -747,10 +754,12 @@ pub fn world(config: &Config) -> World {
         .rate(RateId::Accrue, accrue_rate())
         .rate(RateId::Reprice, reprice_rate())
         .rate(RateId::Liquidate, liquidate_rate());
-    for (installment, payment) in (0_u8..).zip(&config.revenue) {
-        builder = builder.rate(
-            RateId::CollectRevenue(installment),
-            collect_revenue_rate(installment, *payment),
+    let installments = u8::try_from(config.revenue.len()).expect("few installments");
+    if installments > 0 {
+        let installment = Param::<u8>::new(path!("installment"));
+        builder = builder.rate_at(
+            RateIdPattern::CollectRevenue(installment.var()).into(),
+            collect_revenue_rate(&installment, installments),
         );
     }
     builder

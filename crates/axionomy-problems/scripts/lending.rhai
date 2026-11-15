@@ -20,7 +20,9 @@ fn limit(state, term) {
     mul_div(value, state.balance("market", term), wad(), "floor")
 }
 
-// The exchanges, each bound to the accounts its roles name.
+// The exchanges whose amounts or parties the caller chooses, each bound to
+// the accounts its roles name; a rate whose law fixes every role's account
+// is taken as `state.exchange_of` binds it.
 fn with_market(name, bindings, units) {
     bindings.market = "market";
     exchange(name, bindings, units)
@@ -32,17 +34,6 @@ fn withdraw_collateral(units) { for_borrower("withdraw-collateral", units) }
 fn borrow(cash) { for_borrower("borrow", cash) }
 fn repay(cash) { for_borrower("repay", cash) }
 fn repay_shares(debt_shares) { for_borrower("repay-shares", debt_shares) }
-fn pay_bill() {
-    exchange("pay-bill", #{ borrower: "borrower", supplier: "supplier", clock: "clock" }, 1)
-}
-fn collect_revenue(installment) {
-    exchange(`collect-revenue/${installment}`,
-        #{ borrower: "borrower", customer: "customer", clock: "clock" }, 1)
-}
-fn accrue() {
-    with_market("accrue", #{ borrower: "borrower", clock: "clock", oracle: "oracle" }, 1)
-}
-fn reprice() { with_market("reprice", #{ clock: "clock", oracle: "oracle" }, 1) }
 fn liquidate() { with_market("liquidate", #{ borrower: "borrower", keeper: "keeper" }, 1) }
 fn deposit(depositor, cash, min_shares) {
     with_market("deposit", #{ depositor: `depositor/${depositor}` }, cash)
@@ -80,6 +71,9 @@ fn lots(state) {
     if free > lot { [free, lot] } else { [free] }
 }
 
+// Those of `proposals` that apply.
+fn applying(state, proposals) { proposals.filter(|proposal| state.applicable(proposal)) }
+
 // The borrower's moves, then the keeper, oracle and clock, those that apply.
 // The bill is paid at once, so the borrower borrows exactly its shortfall
 // while it is unpaid; afterwards it repays everything it owes, or all the
@@ -97,7 +91,7 @@ fn candidates(state) {
     if !bill_paid {
         let bill = state.consumed("pay-bill", "borrower")["cash"];
         if cash < bill { proposals.push(borrow(bill - cash)); }
-        proposals.push(pay_bill());
+        proposals.push(state.exchange_of("pay-bill"));
     } else if debt_shares > 0 {
         if cash >= owed(state) {
             proposals.push(repay_shares(debt_shares));
@@ -107,12 +101,8 @@ fn candidates(state) {
     } else if posted > 0 {
         proposals.push(withdraw_collateral(posted));
     }
-    let installments = state.rates("collect-revenue/").len();
-    for installment in 0..installments { proposals.push(collect_revenue(installment)); }
-    proposals.push(liquidate());
-    proposals.push(reprice());
-    proposals.push(accrue());
-    proposals.filter(|proposal| state.applicable(proposal))
+    let later = [liquidate(), state.exchange_of("reprice"), state.exchange_of("accrue")];
+    applying(state, proposals) + state.moves("collect-revenue") + applying(state, later)
 }
 
 // The interest an exchange charges the borrower: only closing a period
@@ -149,9 +139,9 @@ fn over_borrowed(state, random) {
                 if state.applicable(loan) { return loan; }
             }
         }
-        return pay_bill();
+        return state.exchange_of("pay-bill");
     }
-    for proposal in [liquidate(), reprice(), accrue()] {
+    for proposal in [liquidate(), state.exchange_of("reprice"), state.exchange_of("accrue")] {
         if state.applicable(proposal) { return proposal; }
     }
     ()
