@@ -1245,8 +1245,8 @@ fn searches_without_a_session_of_their_own_stop_as_they_expand() {
 
 /// A walker on a line of four cells, a rate with variables for every step
 /// between cells that adjoin, each giving its effort (a step back is
-/// harder), which fixes the walker's account, and the point the economy
-/// starts at.
+/// harder), which fixes the walker's account, named by a constant, and the
+/// point the economy starts at.
 fn line_economy() -> paths::Economy {
     use axionomy::{Pattern, Relation, Variable};
 
@@ -1261,6 +1261,8 @@ fn line_economy() -> paths::Economy {
     ];
     paths::EconomyBuilder::new()
         .account(path("walker"), basket([(path("at/1"), 1)]).into())
+        .constant_value(path("who"), "walker".parse().unwrap())
+        .constant_value(path("last"), "4".parse().unwrap())
         .rate_at(
             "step/{from}/{to}".parse().unwrap(),
             Rate::new()
@@ -1271,7 +1273,7 @@ fn line_economy() -> paths::Economy {
                     [path("effort")],
                     steps.map(|row| row.map(u64::into)),
                 ))
-                .account(path("walker"), Pattern::literal(path("walker")))
+                .account(path("walker"), "{who}".parse::<Pattern<_>>().unwrap())
                 .consume_at(
                     path("walker"),
                     [("at/{from}".parse().unwrap(), Quantity::new(1))],
@@ -1309,6 +1311,8 @@ fn line() -> (Engine, Point) {
                     state.exchange_of(rate)
                 }
             }
+            // The economy's constants: the walker's account and the last cell.
+            fn constants(state) { [state.constant("who"), state.constant("last")] }
             fn where(state) {
                 let at = 0;
                 for asset in state.balances("walker").keys() { at = parse_int(asset.split("/")[1]); }
@@ -1373,4 +1377,8 @@ fn a_rate_with_variables_offers_its_instances_that_apply() {
     let efforts: rhai::Array = engine.call(&path("line"), "efforts", (state,)).unwrap();
     let efforts: Vec<Quantity> = efforts.into_iter().map(rhai::Dynamic::cast).collect();
     assert_eq!(efforts, [1, 2, 1, 2, 1, 2].map(Quantity::new));
+    let state = axionomy_engine::ScriptState::new(line_economy());
+    let constants: rhai::Array = engine.call(&path("line"), "constants", (state,)).unwrap();
+    assert_eq!(constants[0].clone().cast::<String>(), "walker");
+    assert_eq!(constants[1].clone().cast::<Quantity>(), Quantity::new(4));
 }

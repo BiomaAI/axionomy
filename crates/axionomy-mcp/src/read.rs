@@ -11,7 +11,7 @@ use crate::{
     store::{Loaded, Origin},
 };
 use axionomy::{
-    AccountPath, AssetPath, Pattern, Quantity, RatePath, RolePath, VariablePath,
+    AccountPath, AssetPath, Pattern, Quantity, RatePath, RolePath, Segment, VariablePath,
     paths::{self, Paths},
 };
 use axionomy_store::state;
@@ -20,7 +20,7 @@ use rmcp::{
     model::{CompleteRequestParams, CompleteResult, CompletionInfo},
 };
 use serde::Serialize;
-use std::{ops::Range, sync::Arc};
+use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
 impl AxionomyMcp {
     /// The JSON content of one resource page.
@@ -287,6 +287,7 @@ fn read_economy(
             },
             root: StateRoot(loaded.state().root()),
             counts: counts(economy),
+            constants: economy.constants().collect(),
         }),
         Target::Accounts { prefix, .. } => tree_page(
             address,
@@ -527,6 +528,9 @@ struct EconomyView<'a> {
     /// Equal roots mean equal states, however they were made.
     root: StateRoot,
     counts: EconomyCounts,
+    /// The values every rate reads as it reads its variables.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    constants: BTreeMap<&'a VariablePath, &'a Segment>,
 }
 
 #[derive(Serialize)]

@@ -1060,6 +1060,7 @@ impl AxionomyMcp {
                 | AuthoringError::RateHas { .. }
                 | AuthoringError::RateDeclares { .. }
                 | AuthoringError::RateFixes { .. }
+                | AuthoringError::ConstantNamed { .. }
                 | AuthoringError::InvariantWeights { .. } => FailureCode::Conflict,
                 AuthoringError::Model(_) => FailureCode::InvalidRequest,
             };

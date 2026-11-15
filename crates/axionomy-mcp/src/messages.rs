@@ -7,7 +7,7 @@
 use crate::handles::{AssessmentId, EconomyId, RefId};
 use axionomy::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Pattern,
-    Quantity, RatePath, Relation, RolePath, Variable, VariablePath, paths,
+    Quantity, RatePath, Relation, RolePath, Segment, Variable, VariablePath, paths,
 };
 use axionomy_engine::{
     Ended, ExperimentPath, GoalPath, ObjectivePath, PackagePath, StrategyPath, Version,
@@ -35,6 +35,12 @@ pub struct EconomyEntries {
     /// it empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub accounts: BTreeMap<AccountPath, Amounts>,
+    /// Constants by name: values every rate reads as it reads its
+    /// variables, `{season-length}`, and no exchange changes, such as
+    /// `{"season-length": "12", "home": "depot"}`. A quantity reads only a
+    /// whole number; a word goes in assets and accounts.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub constants: BTreeMap<VariablePath, Segment>,
     /// Rates by rate ID. A new rate ID adds that rate; an existing one gains
     /// the given amounts, role pairs and conditions. An ID may name the
     /// rate's variables, one segment each, as `stabilize/{patient}`: an
@@ -62,8 +68,10 @@ pub struct RateEntries {
     /// Variable pairs that must take different values.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub distinct_variables: Vec<(VariablePath, VariablePath)>,
-    /// Rows of values some variables may take together:
-    /// `{"variables": ["from", "to"], "rows": [["a", "b"], ["b", "c"]]}`.
+    /// Rows of values some variables may take together, each followed by
+    /// the values it gives: `{"variables": ["from", "to"], "gives":
+    /// ["distance"], "rows": [["a", "b", "4"], ["b", "c", "7"]]}`. A value
+    /// given is a whole number or a word, named as a variable is.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relations: Vec<Relation>,
     /// Whole numbers computed from the variables' values, in order, each

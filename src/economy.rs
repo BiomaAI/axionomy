@@ -1,12 +1,12 @@
 use crate::Ontology;
 use crate::accounts::Accounts;
 use crate::path;
-use crate::pattern::{Arguments, Domain, Pattern, Relation, Variable};
+use crate::pattern::{Arguments, Domain, OneSegment, Param, Pattern, Relation, Variable};
 use crate::rate::{Derived, InstanceFailure, Measure};
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, ConditionPath, Exchange,
     InvariantPath, LinearInvariant, ParameterPath, Quantity, QuantityComparison,
-    QuantityExpression, Rate, RateCondition, Receipt, Rounding, Trace, VariablePath,
+    QuantityExpression, Rate, RateCondition, Receipt, Rounding, Segment, Trace, VariablePath,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -68,14 +68,19 @@ pub struct Economy<O: Ontology> {
     invariants: Arc<Vec<LinearInvariant<O::Asset>>>,
 }
 
-/// An economy's rates in the natural order of their identifiers, those
-/// written out found by their identifier at once, those with variables by
-/// matching it.
+/// An economy's law: its constants in the natural order of their names,
+/// and its rates in the natural order of their identifiers, those written
+/// out found by their identifier at once, those with variables by matching
+/// it.
 #[derive(Debug)]
 struct Rates<O: Ontology> {
+    /// The values every rate names as it names its variables.
+    constants: Vec<(VariablePath, Segment)>,
     entries: IndexMap<Pattern<O::Rate>, Rate<O>>,
     concrete: HashMap<O::Rate, usize>,
     written: Vec<usize>,
+    /// The rates that name no value, each its own one instance.
+    literal: HashSet<usize>,
     /// The instances of rates with variables made so far. An instance
     /// depends only on the rates, so every fork shares them.
     made: RwLock<HashMap<O::Rate, Arc<Rate<O>>>>,
@@ -101,22 +106,35 @@ impl<O: Ontology> std::ops::Deref for Instance<'_, O> {
 }
 
 impl<O: Ontology> Rates<O> {
-    fn new(mut entries: IndexMap<Pattern<O::Rate>, Rate<O>>) -> Self {
+    fn new(
+        constants: Vec<(VariablePath, Segment)>,
+        mut entries: IndexMap<Pattern<O::Rate>, Rate<O>>,
+    ) -> Self {
         entries.sort_unstable_keys();
         let mut concrete = HashMap::new();
         let mut written = Vec::new();
-        for (index, key) in entries.keys().enumerate() {
+        let mut literal = HashSet::new();
+        for (index, (key, rate)) in entries.iter().enumerate() {
             match key.as_literal() {
                 Some(id) => {
                     concrete.insert(id.clone(), index);
                 }
                 None => written.push(index),
             }
+            if rate.variables().is_empty()
+                && rate.relations().is_empty()
+                && rate.derived().is_empty()
+                && rate.named_variables().is_empty()
+            {
+                literal.insert(index);
+            }
         }
         Self {
+            constants,
             entries,
             concrete,
             written,
+            literal,
             made: RwLock::default(),
         }
     }
@@ -129,6 +147,7 @@ impl<O: Ontology> Rates<O> {
             return Some(Named {
                 key,
                 rate,
+                literal: self.literal.contains(&index),
                 arguments: Arguments::default(),
             });
         }
@@ -142,6 +161,7 @@ impl<O: Ontology> Rates<O> {
             key.read(&segments).map(|arguments| Named {
                 key,
                 rate,
+                literal: self.literal.contains(&index),
                 arguments,
             })
         })
@@ -152,13 +172,23 @@ impl<O: Ontology> Rates<O> {
     fn find(&self, id: &O::Rate) -> Option<(&Rate<O>, Arguments)> {
         self.named(id).map(|named| (named.rate, named.arguments))
     }
+
+    /// `arguments` followed by the constants.
+    fn with_constants(&self, arguments: Arguments) -> Arguments {
+        self.constants
+            .iter()
+            .fold(arguments, |known, (name, value)| {
+                known.with(name.clone(), value.clone())
+            })
+    }
 }
 
-/// The rate an identifier names, the identifier it is written with, and the
-/// values the identifier gives its variables.
+/// The rate an identifier names, the identifier it is written with, whether
+/// it names no value, and the values the identifier gives its variables.
 struct Named<'a, O: Ontology> {
     key: &'a Pattern<O::Rate>,
     rate: &'a Rate<O>,
+    literal: bool,
     arguments: Arguments,
 }
 
@@ -381,6 +411,7 @@ impl<O: Ontology> ExchangeAssessment<O> {
 #[derive(Debug)]
 pub struct EconomyBuilder<O: Ontology> {
     accounts: IndexMap<O::Account, Account<O::Asset>>,
+    constants: Vec<(VariablePath, Segment)>,
     rates: IndexMap<Pattern<O::Rate>, Rate<O>>,
     invariants: Vec<LinearInvariant<O::Asset>>,
     issues: Vec<ModelIssue<O>>,
@@ -390,10 +421,25 @@ impl<O: Ontology> EconomyBuilder<O> {
     pub fn new() -> Self {
         Self {
             accounts: IndexMap::new(),
+            constants: Vec::new(),
             rates: IndexMap::new(),
             invariants: Vec::new(),
             issues: Vec::new(),
         }
+    }
+
+    /// Names `value` `name`: a constant every rate reads as it reads its
+    /// variables, `{name}`, which no exchange changes. A season's length or
+    /// a market's terms are law, not anything an account holds.
+    pub fn constant<T: OneSegment>(self, name: &Param<T>, value: T) -> Self {
+        self.constant_value(name.name().clone(), value.segment())
+    }
+
+    /// Names the segment `value` `name`, a whole number or a word: what
+    /// [`EconomyBuilder::constant`] names, for a constant of no Rust type.
+    pub fn constant_value(mut self, name: VariablePath, value: Segment) -> Self {
+        self.constants.push((name, value));
+        self
     }
 
     pub fn account(mut self, id: O::Account, account: Account<O::Asset>) -> Self {
@@ -432,8 +478,12 @@ impl<O: Ontology> EconomyBuilder<O> {
     /// whichever order it was written in, and reads the same once stored.
     pub fn build(mut self) -> ModelBuildResult<O> {
         self.rates.sort_unstable_keys();
+        self.constants
+            .sort_by(|(left, _), (right, _)| left.cmp(right));
         if self.issues.is_empty() {
-            self.issues = rate_issues(&self.rates);
+            self.issues = constant_issues(&self.constants);
+            self.issues
+                .extend(rate_issues(&self.rates, &self.constants));
         }
         if !self.issues.is_empty() {
             return Err(ModelBuildError {
@@ -446,15 +496,40 @@ impl<O: Ontology> EconomyBuilder<O> {
                     .into_iter()
                     .map(|(id, account)| (id, Arc::new(account))),
             ),
-            rates: Arc::new(Rates::new(self.rates)),
+            rates: Arc::new(Rates::new(self.constants, self.rates)),
             invariants: Arc::new(self.invariants),
         })
     }
 }
 
-/// What is wrong with rates, in the order of their identifiers: each rate's
-/// own issues, then every pair an identifier matches both of.
-fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<ModelIssue<O>> {
+/// What is wrong with constants, in the order of their names: a name given
+/// twice, then a number no quantity can hold.
+fn constant_issues<O: Ontology>(constants: &[(VariablePath, Segment)]) -> Vec<ModelIssue<O>> {
+    let names: Vec<&VariablePath> = constants.iter().map(|(name, _)| name).collect();
+    let repeated = names
+        .iter()
+        .enumerate()
+        .filter(|(index, name)| names[..*index].contains(name))
+        .map(|(_, name)| ModelIssue::RepeatedConstant {
+            constant: (*name).clone(),
+        });
+    let malformed = constants
+        .iter()
+        .filter(|(_, value)| !value.is_word() && value.quantity().is_none())
+        .map(|(name, _)| ModelIssue::MalformedConstant {
+            constant: name.clone(),
+        });
+    repeated.chain(malformed).collect()
+}
+
+/// What is wrong with rates, in the order of their identifiers, in an
+/// economy whose constants are `constants`: each rate's own issues, then
+/// every pair an identifier matches both of.
+fn rate_issues<O: Ontology>(
+    rates: &IndexMap<Pattern<O::Rate>, Rate<O>>,
+    constants: &[(VariablePath, Segment)],
+) -> Vec<ModelIssue<O>> {
+    let fixed: Vec<&VariablePath> = constants.iter().map(|(name, _)| name).collect();
     let mut issues = Vec::new();
     for (key, rate) in rates {
         let read: Vec<&VariablePath> = key.variables().collect();
@@ -469,8 +544,9 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 ));
             }
         }
-        // A number a relation gives and a derived value are each named
-        // once, and never as a variable is.
+        // A value a relation gives and a derived value are each named
+        // once, and never as a variable is; no variable, value given or
+        // derived value is named as a constant.
         let given: Vec<&VariablePath> = rate.relations().iter().flat_map(Relation::gives).collect();
         let derived: Vec<&VariablePath> = rate.derived().iter().map(Derived::name).collect();
         let fresh: Vec<&VariablePath> = given.iter().chain(&derived).copied().collect();
@@ -482,15 +558,28 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 ));
             }
         }
+        let mut shadowing: Vec<&VariablePath> = Vec::new();
+        for name in declared.iter().chain(&fresh) {
+            if fixed.contains(name) && !shadowing.contains(name) {
+                shadowing.push(name);
+            }
+        }
+        for name in shadowing {
+            issues.push(issue(
+                |rate, variable| ModelIssue::RepeatedVariable { rate, variable },
+                name,
+            ));
+        }
         // The identifier, relations' keys and distinct pairs name variables;
-        // assets, accounts and quantities also the numbers relations give
-        // and derived values; a derived value only the variables, those
-        // numbers and the derived values before it.
+        // assets, accounts and quantities also the values relations give,
+        // the constants and derived values; a derived value only the
+        // variables, those values, the constants and the derived values
+        // before it.
         let known = |name: &&VariablePath, derived: &[&VariablePath]| {
             declared.contains(name) || derived.contains(name)
         };
         let known_after = |name: &&VariablePath, derived: &[&VariablePath]| {
-            known(name, derived) || given.contains(name)
+            known(name, derived) || given.contains(name) || fixed.contains(name)
         };
         let mut unknown: Vec<&VariablePath> = Vec::new();
         let mut note = |name| {
@@ -534,11 +623,23 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 naturals.push(name);
             }
         }
+        // A quantity reads only what is always a number.
+        let words: Vec<&VariablePath> = rate
+            .relations()
+            .iter()
+            .flat_map(Relation::words)
+            .chain(
+                constants
+                    .iter()
+                    .filter(|(_, value)| value.is_word())
+                    .map(|(name, _)| name),
+            )
+            .collect();
         for name in naturals {
             let listed = rate.variables().iter().any(|variable| {
                 variable.name() == name && matches!(variable.domain(), Domain::Values(_))
             });
-            if listed {
+            if listed || words.contains(&name) {
                 issues.push(issue(
                     |rate, variable| ModelIssue::NotNatural { rate, variable },
                     name,
@@ -558,15 +659,16 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 ));
             }
         }
-        // A row holds a value for each variable, then a whole number a
-        // quantity can hold for each name the relation gives.
+        // A row holds a value for each variable, then a value for each
+        // name the relation gives: a word, or a whole number a quantity can
+        // hold.
         for relation in rate.relations() {
             let width = relation.variables().len();
             if relation.rows().iter().any(|row| {
                 row.len() != width + relation.gives().len()
                     || row[width.min(row.len())..]
                         .iter()
-                        .any(|value| value.quantity().is_none())
+                        .any(|value| !value.is_word() && value.quantity().is_none())
             }) {
                 issues.push(ModelIssue::MalformedRelation {
                     rate: key.clone(),
@@ -783,7 +885,9 @@ pub enum ModelIssue<O: Ontology> {
     DuplicateRate {
         rate: Pattern<O::Rate>,
     },
-    /// A variable appears twice in a rate's identifier.
+    /// A rate gives a name two values: its identifier names it twice, or
+    /// it is at once two of a variable, a value a relation gives, a derived
+    /// value and a constant.
     RepeatedVariable {
         rate: Pattern<O::Rate>,
         variable: VariablePath,
@@ -798,7 +902,9 @@ pub enum ModelIssue<O: Ontology> {
         rate: Pattern<O::Rate>,
         variable: VariablePath,
     },
-    /// A quantity reads as a number a variable whose values are not numbers.
+    /// A quantity reads as a number a value that may be a word: a variable
+    /// with listed values, a value a relation gives a word for, or a word
+    /// constant.
     NotNatural {
         rate: Pattern<O::Rate>,
         variable: VariablePath,
@@ -814,8 +920,8 @@ pub enum ModelIssue<O: Ontology> {
         other: Pattern<O::Rate>,
     },
     /// A row of a relation holds other than one value for each of its
-    /// variables, then a whole number a quantity can hold for each name it
-    /// gives.
+    /// variables, then one for each name it gives: a word, or a whole
+    /// number a quantity can hold.
     MalformedRelation {
         rate: Pattern<O::Rate>,
         variables: Vec<VariablePath>,
@@ -830,6 +936,14 @@ pub enum ModelIssue<O: Ontology> {
     DerivedReads {
         rate: Pattern<O::Rate>,
         variable: VariablePath,
+    },
+    /// Two constants have one name.
+    RepeatedConstant {
+        constant: VariablePath,
+    },
+    /// A constant is a number no quantity can hold.
+    MalformedConstant {
+        constant: VariablePath,
     },
 }
 
@@ -866,8 +980,21 @@ where
             .map(|(id, account)| (id, account.as_ref()))
             .collect::<Vec<_>>();
         let rates = self.rates.entries.iter().collect::<Vec<_>>();
-        let mut state = serializer.serialize_struct("Economy", 3)?;
+        let readable = serializer.is_human_readable();
+        let mut state = serializer.serialize_struct("Economy", 4)?;
         state.serialize_field("accounts", &accounts)?;
+        // An economy without constants is written as it always was.
+        if readable && self.rates.constants.is_empty() {
+            state.skip_field("constants")?;
+        } else {
+            let constants: BTreeMap<&VariablePath, &Segment> = self
+                .rates
+                .constants
+                .iter()
+                .map(|(name, value)| (name, value))
+                .collect();
+            state.serialize_field("constants", &constants)?;
+        }
         state.serialize_field("rates", &rates)?;
         state.serialize_field("invariants", self.invariants.as_ref())?;
         state.end()
@@ -880,6 +1007,8 @@ where
 ))]
 struct EconomyData<O: Ontology> {
     accounts: Vec<(O::Account, Account<O::Asset>)>,
+    #[serde(default)]
+    constants: BTreeMap<VariablePath, Segment>,
     rates: Vec<(Pattern<O::Rate>, Rate<O>)>,
     invariants: Vec<LinearInvariant<O::Asset>>,
 }
@@ -899,6 +1028,9 @@ where
         let mut builder = EconomyBuilder::new();
         for (id, account) in data.accounts {
             builder = builder.account(id, account);
+        }
+        for (name, value) in data.constants {
+            builder = builder.constant_value(name, value);
         }
         for (key, rate) in data.rates {
             builder = builder.rate_at(key, rate);
@@ -936,6 +1068,8 @@ where
         )]
         struct EconomySchema<O: Ontology> {
             accounts: Vec<(O::Account, Account<O::Asset>)>,
+            #[serde(default)]
+            constants: BTreeMap<VariablePath, Segment>,
             rates: Vec<(Pattern<O::Rate>, Rate<O>)>,
             invariants: Vec<LinearInvariant<O::Asset>>,
         }
@@ -1046,13 +1180,13 @@ impl<O: Ontology> Economy<O> {
         if let Some(rate) = made(&self.rates) {
             return Ok(Instance::Made(rate));
         }
-        let Some((rate, arguments)) = self.rates.find(id) else {
+        let Some(named) = self.rates.named(id) else {
             return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
         };
-        if rate.variables().is_empty() && rate.relations().is_empty() && rate.derived().is_empty() {
-            return Ok(Instance::Written(rate));
+        if named.literal {
+            return Ok(Instance::Written(named.rate));
         }
-        let rate = Arc::new(self.made_instance(id, rate, arguments)?);
+        let rate = Arc::new(self.made_instance(id, named.rate, named.arguments)?);
         self.rates
             .made
             .write()
@@ -1062,14 +1196,35 @@ impl<O: Ontology> Economy<O> {
     }
 
     /// The values of the instance an identifier names: those it gives the
-    /// rate's variables, then the numbers the rate's relations' rows give
-    /// for them, then its derived values, in order. Refused as
+    /// rate's variables, then the values the rate's relations' rows give
+    /// for them, then its derived values, in order; the constants it reads
+    /// are the economy's ([`Economy::constants`]). Refused as
     /// [`Economy::instance`] refuses it, short of building the instance.
     pub fn values(&self, id: &O::Rate) -> Result<Arguments, Vec<ApplyError<O>>> {
         let Some((rate, arguments)) = self.rates.find(id) else {
             return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
         };
-        Self::instance_values(id, rate, arguments)
+        let values = self.instance_values(id, rate, arguments)?;
+        Ok(values
+            .iter()
+            .filter(|(name, _)| {
+                !self
+                    .rates
+                    .constants
+                    .iter()
+                    .any(|(constant, _)| constant == *name)
+            })
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect())
+    }
+
+    /// The economy's constants, in the order of their names: values every
+    /// rate reads as it reads its variables, which no exchange changes.
+    pub fn constants(&self) -> impl Iterator<Item = (&VariablePath, &Segment)> {
+        self.rates
+            .constants
+            .iter()
+            .map(|(name, value)| (name, value))
     }
 
     /// The instance of `rate` an identifier names, for the values it gives.
@@ -1079,7 +1234,7 @@ impl<O: Ontology> Economy<O> {
         rate: &Rate<O>,
         arguments: Arguments,
     ) -> Result<Rate<O>, Vec<ApplyError<O>>> {
-        let arguments = Self::instance_values(id, rate, arguments)?;
+        let arguments = self.instance_values(id, rate, arguments)?;
         rate.instantiate(&arguments).map_err(|failure| {
             vec![match failure {
                 InstanceFailure::Overflow(asset) => ApplyError::RateOverflow {
@@ -1102,8 +1257,10 @@ impl<O: Ontology> Economy<O> {
 
     /// The values `arguments` give `rate`'s variables, checked against
     /// their domains, the rate's relations and the pairs that must differ,
-    /// followed by the numbers the relations give and the derived values.
+    /// followed by the values the relations give, the constants and the
+    /// derived values.
     fn instance_values(
+        &self,
         id: &O::Rate,
         rate: &Rate<O>,
         arguments: Arguments,
@@ -1137,12 +1294,13 @@ impl<O: Ontology> Economy<O> {
         if !alike.is_empty() {
             return Err(alike);
         }
-        rate.derive_values(related).map_err(|variable| {
-            vec![ApplyError::DerivedFails {
-                rate: id.clone(),
-                variable,
-            }]
-        })
+        rate.derive_values(self.rates.with_constants(related))
+            .map_err(|variable| {
+                vec![ApplyError::DerivedFails {
+                    rate: id.clone(),
+                    variable,
+                }]
+            })
     }
 
     /// Returns the model's declared conservation laws.

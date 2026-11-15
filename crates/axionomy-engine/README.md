@@ -123,7 +123,8 @@ roles and what it fixes for a role to consume, produce or preserve,
 `moves(prefix)` for every instance under a prefix that fixes all its roles
 and applies, `instances(prefix)` for every instance under a prefix,
 `values(rate)` for the values an instance has, its variables',
-the numbers its relations give and its derived values, `applicable`,
+the values its relations give and its derived values, `constant(name)` for
+one of the economy's constants, `applicable`,
 `assess`, `distances` over a list of edges),
 and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;

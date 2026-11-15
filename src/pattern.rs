@@ -47,6 +47,12 @@ impl Segment {
         self.canonical().then(|| self.0.parse().ok()).flatten()
     }
 
+    /// Whether the segment is a word, not a whole number written
+    /// canonically: a quantity never reads it.
+    pub fn is_word(&self) -> bool {
+        !self.canonical()
+    }
+
     fn canonical(&self) -> bool {
         self.0.bytes().all(|byte| byte.is_ascii_digit())
             && (&*self.0 == "0" || !self.0.starts_with('0'))
@@ -276,11 +282,14 @@ impl JsonSchema for Variable {
 }
 
 /// The values some of a rate's variables may take together, one row each,
-/// and the whole numbers each row gives: law structure that never changes,
-/// such as which cells of a board adjoin and how far apart they are. A row
-/// holds its variables' values, its key, then the numbers it gives, named
-/// as `gives` names them; a rate names those as it names derived values.
-/// What exchanges can change belongs in the economy's accounts instead.
+/// and the values each row gives: law structure that never changes, such as
+/// which cells of a board adjoin and how far apart they are, or which depot
+/// a parcel goes to. A row holds its variables' values, its key, then the
+/// values it gives, named as `gives` names them; a rate names those as it
+/// names derived values. A value given is a segment, a whole number or a
+/// word: a rate writes either into its patterns, and reads only numbers in
+/// its quantities. What exchanges can change belongs in the economy's
+/// accounts instead.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Relation {
@@ -315,8 +324,8 @@ impl Relation {
         Self::giving(variables, [], rows)
     }
 
-    /// The rows `variables` may take together, each followed by the whole
-    /// numbers it gives the names `gives` lists.
+    /// The rows `variables` may take together, each followed by the values
+    /// it gives the names `gives` lists.
     pub fn giving(
         variables: impl IntoIterator<Item = VariablePath>,
         gives: impl IntoIterator<Item = VariablePath>,
@@ -336,9 +345,24 @@ impl Relation {
         &self.variables
     }
 
-    /// The names of the numbers each row gives, in their columns' order.
+    /// The names of the values each row gives, in their columns' order.
     pub fn gives(&self) -> &[VariablePath] {
         &self.gives
+    }
+
+    /// The names it gives a word for in some row, in their columns' order:
+    /// those a quantity cannot read.
+    pub fn words(&self) -> impl Iterator<Item = &VariablePath> {
+        let width = self.variables.len();
+        self.gives
+            .iter()
+            .enumerate()
+            .filter_map(move |(index, name)| {
+                self.rows
+                    .iter()
+                    .any(|row| row.get(width + index).is_some_and(Segment::is_word))
+                    .then_some(name)
+            })
     }
 
     pub fn rows(&self) -> &[Vec<Segment>] {
@@ -361,7 +385,7 @@ impl Relation {
             .map(Vec::as_slice)
     }
 
-    /// The numbers `row` gives, by name.
+    /// The values `row` gives, by name.
     pub fn given<'a>(
         &'a self,
         row: &'a [Segment],

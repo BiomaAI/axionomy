@@ -503,9 +503,20 @@ pub struct InvariantView {
     pub terms: Vec<InvariantTermView>,
 }
 
+/// One of an economy's constants: a value every rate reads as it reads its
+/// variables, which no exchange changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ConstantView {
+    pub name: VariablePath,
+    pub value: Segment,
+}
+
 /// Read-only explanation of the authoritative economy definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ModelView {
+    /// The values every rate reads by name, in the order of their names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<ConstantView>,
     pub rates: Vec<RateView>,
     pub goal: Vec<GoalRequirementView>,
     pub invariants: Vec<InvariantView>,
@@ -2124,6 +2135,13 @@ where
         .collect();
 
     ModelView {
+        constants: economy
+            .constants()
+            .map(|(name, value)| ConstantView {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect(),
         rates,
         goal,
         invariants,

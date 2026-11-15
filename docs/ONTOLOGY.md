@@ -204,10 +204,12 @@ rate written with `from = hall` and `to = kitchen`, exactly as a rate
 written by hand for that pair. Beside domains, a rate can:
 
 - allow some variables only the rows of a **relation** (`relation`), each
-  row keyed by their values and possibly giving whole numbers named after
-  them (`Relation::each_giving`, `Relation::pairs_giving`), such as the
-  length of the road between two places, named `{distance}` as a derived
-  value is; scripts read an instance's values with `state.values(rate)`;
+  row keyed by their values and possibly giving values named after them,
+  whole numbers or words (`Relation::each_giving`, `Relation::giving`):
+  the length of the road between two places, named `{distance}` as a
+  derived value is, or the depot a parcel goes to, `{destination}`, written
+  into `at/{destination}`; a quantity reads only numbers; scripts read an
+  instance's values with `state.values(rate)`;
 - require two variables to differ (`distinct_variables`);
 - **derive** a whole number from the variables (`derive`), such as
   `next = row + 1`, named `{next}` in assets and quantities but never in the
@@ -215,11 +217,23 @@ written by hand for that pair. Beside domains, a rate can:
 - **fix** the account a role is bound to (`account`), such as
   `patient/{patient}`.
 
-**Law structure is a relation; what changes is state.** Which cells adjoin,
-which seed follows which, which rooms a door joins, how long each road is:
-these never change and belong in a relation. A road that can close, a door that can be locked, a
-column's height: exchanges change these, so they are balances the rate
-preserves, consumes or reads in a condition.
+An economy can also name **constants** (`EconomyBuilder::constant`): one
+value each, a whole number or a word, that every rate reads by name as it
+reads its variables, `{season-length}`.
+
+**Where a value goes.**
+
+| The value… | Goes in | Example |
+| --- | --- | --- |
+| differs by case and never changes | a relation's row | job 3's place and reward; how long each road is |
+| is one for the whole world and never changes | a constant | a season's length, a late fee |
+| is changed by exchanges | a balance | money, stock, where a van is now |
+| is hidden until observed | a balance, Nature's | which scenario is true |
+
+Which cells adjoin, which seed follows which, which rooms a door joins: law
+structure, a relation's rows. A road that can close, a door that can be
+locked, a column's height: exchanges change these, so they are balances the
+rate preserves, consumes or reads in a condition.
 
 ### 4. Roles: the parts of a law
 
@@ -413,8 +427,8 @@ own types, written down, also reads as a `Paths` economy.
 - [ ] Rates are laws over roles; who takes part is bound by each exchange.
 - [ ] One rate with variables per law, not one rate per value: its
       identifier, assets and fixed accounts written with the `…Pattern`
-      mirrors, law structure that never changes as relations, what exchanges
-      change as state.
+      mirrors, law structure that never changes as relations, the world's
+      single values as constants, what exchanges change as state.
 - [ ] Nothing relies on an identifier's order for a domain order.
 - [ ] Roles that must be a particular account are fixed to it
       (`Rate::account`), not checked through an identity asset.

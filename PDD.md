@@ -1412,9 +1412,10 @@ The current foundation is intentionally bounded:
   guard. Relations list their rows, keyed by their variables' values, and
   may give whole numbers per row; derived values are whole numbers. Data
   that exchanges change is state, never a relation (D-054, D-058). A row
-  gives numbers only, so a case that differs by a name (where a contract's
-  work is done, which item an order sells) keeps that name as a variable
-  of the rate's identifier, pinned by a relation.
+  gives whole numbers and words (D-059); a quantity reads only numbers.
+- An economy's constants are one value each, whole number or word, read by
+  name in every rate (D-059). Values that differ per case are a relation's;
+  constants are never computed from one another.
 - The kernel lists a rate's instances (`instances_of`) and the engine offers
   those whose roles the rate fixes (`CandidateSet::Instances`, D-055); an
   instance with a free role is proposed by a script, which binds it. The
@@ -2442,6 +2443,28 @@ number a quantity can hold, and a given name that repeats a variable, a
 derived value or another given name are refused when the economy is built.
 A relation giving nothing is written as before in JSON; the store's binary
 form always writes the field (format 6).
+
+### D-059: A relation's rows give words too; an economy has constants
+
+Decided with the user after D-058. A row could give only numbers, so a case
+that differed by a name, such as where a contract's work is done or which
+item an order sells, kept that name in the rate's identifier
+(`begin/{agent}/{job}/{place}/{mode}`), pinned there by a relation, and a
+script had to know the name to name the move. And a value the whole world
+shares, a season's length or a market's terms, had to be a balance: state
+an exchange could change, read through a role bound to the account holding
+it. Now a row gives any segment, a word as well as a whole number; the rows
+say which, and a quantity naming a value some row gives a word for is
+refused when the economy is built, as one naming a variable with listed
+values is. And an economy names constants, each a segment, which every
+rate reads by name as it reads its variables (`{season-length}`), in its
+patterns, accounts, quantities and derived values, never in its
+identifier. A constant is law: no account holds it, no role reads it, and
+no exchange changes it (`apply_keeps_law`). A variable, a value given or a
+derived value named as a constant is refused, as is a constant named twice
+or a number no quantity holds. The store keeps constants in the state's
+tree under `c` (format 7); an economy without them is written as before in
+JSON.
 
 ## 16. Success criteria
 

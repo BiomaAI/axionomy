@@ -126,6 +126,7 @@ A stored economy is one tree, whose keys say what each entry holds:
 | --- | --- |
 | `a` account | empty: the account exists |
 | `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
+| `c` constant | its value, the segment's text (`12`, `depot`) |
 | `r` rate, as written (`visit/{place}`) | the rate, in postcard |
 | `v` the invariant's position, 4 bytes big-endian | the invariant, in postcard |
 
@@ -144,11 +145,11 @@ breaking several is refused for the first. Values and the store's
 records (runs, steps, groups, members, refs) are postcard, the kernel's
 binary form: every field written, quantities as big-endian bytes, expressions
 tagged by variant; a step's receipt digest is the hash of the receipt's
-postcard. The store records the format it is written in (format 6, which
+postcard. The store records the format it is written in (format 7, which
 indexes every fork by the run and step it forked from, keys invariants by
-position, keys rates by their identifiers as written, variables and all, and
-writes each rate's variables, relations and the numbers their rows give,
-derived values and fixed accounts)
+position, keys rates by their identifiers as written, variables and all,
+writes each rate's variables, relations and the values their rows give,
+derived values and fixed accounts, and keeps the economy's constants)
 and refuses a store in any other, or from before formats were recorded. The **state root** is the
 tree's hash. The tree holds the logical state, and an economy lists its
 accounts in key order (D-051), so an economy rebuilt from a root is the

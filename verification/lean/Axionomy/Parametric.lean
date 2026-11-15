@@ -13,6 +13,10 @@ only that rate would apply it: every theorem about an exchange carries over
 unchanged. Before it does, the values must lie in their domains, variables
 the law requires to differ must, and every role the law fixes to an account
 must be bound to it.
+
+An economy may also name constants: values every law reads as it reads its
+variables, `{season-length}`, which no exchange changes. They are law, not
+holdings: no account holds them and no role is bound to read them.
 -/
 
 namespace Axionomy.Parametric
@@ -30,6 +34,8 @@ structure Model (Role : Type) where
   accounts : List (Written × Balances Written)
   rates : List (Law Role)
   invariants : List (Invariant Written)
+  /-- The values every law names as it names its variables. -/
+  constants : Arguments := []
 
 abbrev Proposal (Role : Type) := Transaction.Proposal Written Written Role
 abbrev Failure (Role : Type) := Transaction.Failure Written Written Written Role
@@ -69,7 +75,7 @@ def resolve (cmpRole : Role → Role → Ordering) (model : Model Role) (id : Wr
         match mustDiffer id law arguments with
         | issue :: issues => .error (issue :: issues)
         | [] =>
-          match law.schema.derive (arguments ++ given) with
+          match law.schema.derive (arguments ++ (given ++ model.constants)) with
           | .error name => .error [.structural (.derivedFails id name)]
           | .ok values =>
             match law.schema.instantiate cmpRole values with
@@ -80,8 +86,8 @@ def resolve (cmpRole : Role → Role → Ordering) (model : Model Role) (id : Wr
 omit [DecidableEq Role] in
 /-- An identifier resolves only to an instance its rate allows: the rate it
 matches, with each value in its variable's domain and keying a row of every
-relation, the values that must differ apart, and the numbers those rows give
-and the derived values computed after them. -/
+relation, the values that must differ apart, and the values those rows give,
+the economy's constants and the derived values computed after them. -/
 theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Role} {id : Written}
     {rule : Rule Role Written} {fixed : List (Role × Written)}
     (resolved : resolve cmpRole model id = .ok (rule, fixed)) :
@@ -92,7 +98,7 @@ theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Ro
         relation.names.mapM (lookup arguments) = some (row.take relation.names.length)) ∧
       (∀ pair ∈ law.schema.distinctVariables, lookup arguments pair.1 ≠ lookup arguments pair.2) ∧
       law.schema.relate arguments = .ok given ∧
-      law.schema.derive (arguments ++ given) = .ok values ∧
+      law.schema.derive (arguments ++ (given ++ model.constants)) = .ok values ∧
       law.schema.instantiate cmpRole values = .ok rule ∧ fixed = law.schema.fixed values := by
   unfold resolve at resolved
   cases found : find model.rates id with
@@ -112,7 +118,7 @@ theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Ro
     | cons _ _ => simp [differ] at resolved
     | nil =>
     simp only [differ] at resolved
-    cases derived : law.schema.derive (arguments ++ given) with
+    cases derived : law.schema.derive (arguments ++ (given ++ model.constants)) with
     | error _ => simp [derived] at resolved
     | ok values =>
     simp only [derived] at resolved
@@ -177,13 +183,41 @@ def apply (cmpRole : Role → Role → Ordering) (model : Model Role) (proposal 
 
 omit [DecidableEq Role] in
 /-- An exchange refused for its first failure changes nothing. -/
-theorem head_rejected {α : Type} {failures : List (Failure Role)} {model after : Model Role}
-    {error : Failure Role}
-    (rejected : failures.head?.map (fun failure => ((Except.error failure : Except (Failure Role) α), model)) =
-      some (.error error, after)) : after = model := by
+theorem head_keeps {α : Type} {failures : List (Failure Role)} {model after : Model Role}
+    {result : Except (Failure Role) α}
+    (refused : failures.head?.map (fun failure => ((Except.error failure : Except (Failure Role) α), model)) =
+      some (result, after)) : after = model := by
   cases first : failures.head? with
-  | none => simp [first] at rejected
-  | some failure => simp [first] at rejected; exact rejected.2.symm
+  | none => simp [first] at refused
+  | some failure => simp [first] at refused; exact refused.2.symm
+
+/-- No exchange changes the law: an economy's constants, rates and
+conservation laws are those it had, whatever an exchange does. -/
+theorem apply_keeps_law (cmpRole : Role → Role → Ordering) (model after : Model Role)
+    (proposal : Proposal Role) (result : Except (Failure Role) (Lifecycle.Receipt Written Written Written Role))
+    (applied : apply cmpRole model proposal = some (result, after)) :
+    after.constants = model.constants ∧ after.rates = model.rates ∧ after.invariants = model.invariants := by
+  unfold apply at applied
+  cases resolved : resolve cmpRole model proposal.rate with
+  | error failures =>
+    simp only [resolved] at applied
+    rw [head_keeps applied]; exact ⟨rfl, rfl, rfl⟩
+  | ok found =>
+    obtain ⟨rule, fixed⟩ := found
+    simp only [resolved] at applied
+    cases wrong : wrongAccounts cmpRole proposal fixed with
+    | cons issue issues =>
+      simp only [wrong] at applied
+      rw [head_keeps applied]; exact ⟨rfl, rfl, rfl⟩
+    | nil =>
+      simp only [wrong] at applied
+      cases lifecycle : Lifecycle.apply Path.compare cmpRole (instanceModel model proposal.rate rule) proposal with
+      | none => rw [lifecycle] at applied; simp at applied
+      | some outcome =>
+        rw [lifecycle] at applied
+        simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at applied
+        rw [← applied.2]
+        exact ⟨rfl, rfl, rfl⟩
 
 omit [DecidableEq Role] in
 /-- An exchange refused for its first failure is not accepted. -/
@@ -201,12 +235,12 @@ theorem rejection_atomic (cmpRole : Role → Role → Ordering) (model after : M
     (rejected : apply cmpRole model proposal = some (.error error, after)) : after = model := by
   unfold apply at rejected
   cases resolved : resolve cmpRole model proposal.rate with
-  | error failures => simp only [resolved] at rejected; exact head_rejected rejected
+  | error failures => simp only [resolved] at rejected; exact head_keeps rejected
   | ok found =>
     obtain ⟨rule, fixed⟩ := found
     simp only [resolved] at rejected
     cases wrong : wrongAccounts cmpRole proposal fixed with
-    | cons issue issues => simp only [wrong] at rejected; exact head_rejected rejected
+    | cons issue issues => simp only [wrong] at rejected; exact head_keeps rejected
     | nil =>
       simp only [wrong] at rejected
       cases applied : Lifecycle.apply Path.compare cmpRole (instanceModel model proposal.rate rule) proposal with
@@ -313,54 +347,81 @@ theorem find_written {rates : List (Law Role)} {id : Written} {law : Law Role}
 
 /-- What makes an economy's rates unusable, found when it is built. -/
 inductive ModelIssue where
-  /-- A variable appears twice in a rate's identifier. -/
+  /-- A rate gives a name two values: its identifier names it twice, or it
+  is at once two of a variable, a value a relation gives, a derived value
+  and a constant. -/
   | repeatedVariable (rate : Pattern) (name : String)
   /-- A rate names a variable its identifier does not have. -/
   | undeclaredVariable (rate : Pattern) (name : String)
   /-- A rate declares a variable its identifier does not have. -/
   | unreadVariable (rate : Pattern) (name : String)
-  /-- A quantity names a variable whose values are not whole numbers. -/
+  /-- A quantity names a value that may be a word: a variable with listed
+  values, a value a relation gives a word for, or a word constant. -/
   | notNatural (rate : Pattern) (name : String)
   /-- A variable's values repeat one. -/
   | repeatedValue (rate : Pattern) (name : String)
   /-- An identifier matches both rates. -/
   | overlapping (rate other : Pattern)
   /-- A row of a relation holds other than a value for each of its
-  variables, then a whole number a quantity can hold for each it gives. -/
+  variables, then a value for each it gives: a word, or a whole number a
+  quantity can hold. -/
   | malformedRelation (rate : Pattern) (names : List String)
   /-- Two rows of a relation are keyed by the same values. -/
   | repeatedRow (rate : Pattern) (names : List String)
   /-- A derived value reads what only an exchange has. -/
   | derivedReads (rate : Pattern) (name : String)
+  /-- Two constants have one name. -/
+  | repeatedConstant (name : String)
+  /-- A constant is a number no quantity can hold. -/
+  | malformedConstant (name : String)
   deriving DecidableEq, Repr
 
-/-- What is wrong with one rate on its own: its identifier's variables, the
-variables it names and declares, and their values. -/
-def Law.issues (law : Law Role) : List ModelIssue :=
+/-- A value a quantity cannot read as a number: a word. -/
+def word : Path.Segment → Bool
+  | .number _ => false
+  | .word _ => true
+
+/-- The names a relation gives a word for in some row. -/
+def Relation.words (relation : Relation) : List String :=
+  relation.gives.zipIdx.filterMap fun (name, index) =>
+    if relation.rows.any (fun row => (row[relation.names.length + index]?).any word) then some name
+    else none
+
+/-- What is wrong with one rate on its own, in an economy whose constants
+are `constants`: its identifier's variables, the values it names and
+declares, and their values. -/
+def Law.issues (constants : Arguments) (law : Law Role) : List ModelIssue :=
   let read := Pattern.variables law.id
   let declared := law.schema.variables.map (·.name)
   let given := law.schema.relations.flatMap (·.gives)
   let derived := law.schema.derived.map (·.name)
+  let fixed := constants.map Prod.fst
   let repeated := (read.zipIdx.filter fun (name, index) => name ∈ read.take index).map
     fun (name, _) => ModelIssue.repeatedVariable law.id name
-  -- A number a relation gives and a derived value are each named once, and
-  -- never as a variable is.
+  -- A value a relation gives and a derived value are each named once, and
+  -- never as a variable is; no variable, value given or derived value is
+  -- named as a constant.
   let fresh := given ++ derived
   let renamed := (fresh.zipIdx.filter fun (name, index) =>
     name ∈ declared || name ∈ fresh.take index).map
     fun (name, _) => ModelIssue.repeatedVariable law.id name
+  let shadowing := ((declared ++ fresh).eraseDups.filter (· ∈ fixed)).map
+    (ModelIssue.repeatedVariable law.id)
   -- The identifier, relations' keys and distinct pairs name variables;
-  -- assets, accounts and quantities also the numbers relations give and
-  -- derived values; a derived value only the variables, those numbers and
-  -- the derived values before it.
+  -- assets, accounts and quantities also the values relations give, the
+  -- constants and derived values; a derived value only the variables,
+  -- those values, the constants and the derived values before it.
   let unknown := (read ++ law.schema.identifying).filter (· ∉ declared) ++
-    law.schema.named.filter (· ∉ declared ++ given ++ derived) ++
+    law.schema.named.filter (· ∉ declared ++ given ++ fixed ++ derived) ++
     (law.schema.derived.zipIdx.flatMap fun (value, index) =>
-      value.value.variables.filter (· ∉ declared ++ given ++ derived.take index))
+      value.value.variables.filter (· ∉ declared ++ given ++ fixed ++ derived.take index))
   let undeclared := unknown.eraseDups.map (ModelIssue.undeclaredVariable law.id)
   let unread := (declared.filter (· ∉ read)).map (ModelIssue.unreadVariable law.id)
+  -- A quantity reads only what is always a number.
+  let words := law.schema.relations.flatMap Relation.words ++
+    (constants.filter (word ·.2)).map Prod.fst
   let natural := law.schema.naturals.eraseDups.filter fun name =>
-    law.schema.variables.any fun declared => declared.name = name &&
+    name ∈ words || law.schema.variables.any fun declared => declared.name = name &&
       match declared.domain with | .values _ => true | .range _ _ => false
   let values := law.schema.variables.filter fun declared =>
     match declared.domain with | .values listed => !listed.Nodup | .range _ _ => false
@@ -368,11 +429,12 @@ def Law.issues (law : Law Role) : List ModelIssue :=
     relation.rows.any fun row =>
       row.length != relation.names.length + relation.gives.length ||
         (row.drop relation.names.length).any fun value =>
-          match value with | .number value => value > Quantity.limit | .word _ => true
+          match value with | .number value => value > Quantity.limit | .word _ => false
   let rows := law.schema.relations.filter fun relation =>
     !(relation.rows.map (·.take relation.names.length)).Nodup
   let reads := law.schema.derived.filter (·.value.reads)
-  repeated ++ renamed ++ undeclared ++ unread ++ natural.map (ModelIssue.notNatural law.id) ++
+  repeated ++ renamed ++ shadowing ++ undeclared ++ unread ++
+    natural.map (ModelIssue.notNatural law.id) ++
     values.map (fun declared => ModelIssue.repeatedValue law.id declared.name) ++
     malformed.map (fun relation => ModelIssue.malformedRelation law.id relation.names) ++
     rows.map (fun relation => ModelIssue.repeatedRow law.id relation.names) ++
@@ -385,14 +447,25 @@ def overlaps : List (Law Role) → List ModelIssue
   | law :: rest => (rest.filter fun other => !disjoint law.id other.id).map
       (fun other => ModelIssue.overlapping law.id other.id) ++ overlaps rest
 
-/-- What is wrong with an economy's rates: each rate's own issues, then the
-rates an identifier matches two of. -/
-def check (rates : List (Law Role)) : List ModelIssue :=
-  rates.flatMap Law.issues ++ overlaps rates
+/-- What is wrong with an economy's constants: a name given twice, and a
+number no quantity can hold. -/
+def constantIssues (constants : Arguments) : List ModelIssue :=
+  let names := constants.map Prod.fst
+  ((names.zipIdx.filter fun (name, index) => name ∈ names.take index).map
+    fun (name, _) => ModelIssue.repeatedConstant name) ++
+  (constants.filter fun (_, value) => match value with
+    | .number value => value > Quantity.limit | .word _ => false).map
+    fun (name, _) => ModelIssue.malformedConstant name
+
+/-- What is wrong with an economy's constants and rates: the constants',
+each rate's own issues, then the rates an identifier matches two of. -/
+def check (constants : Arguments) (rates : List (Law Role)) : List ModelIssue :=
+  constantIssues constants ++ rates.flatMap (Law.issues constants) ++ overlaps rates
 
 omit [DecidableEq Role] in
 /-- An economy whose rates check clean names each identifier's rate once. -/
-theorem check_apart {rates : List (Law Role)} (clean : check rates = []) : Apart rates := by
+theorem check_apart {constants : Arguments} {rates : List (Law Role)}
+    (clean : check constants rates = []) : Apart rates := by
   have none : overlaps rates = [] := by
     simp only [check, List.append_eq_nil_iff] at clean
     exact clean.2

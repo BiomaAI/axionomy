@@ -22,7 +22,7 @@ use crate::{
 };
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Basket, Instance, ObservationKey, PathKind, Pattern,
-    Quantity, RatePath, RolePath, Rounding,
+    Quantity, RatePath, RolePath, Rounding, VariablePath,
     path::Path,
     paths::{self, Paths},
 };
@@ -856,6 +856,22 @@ fn states(rhai: &mut rhai::Engine) {
                         (name.as_str().into(), value)
                     })
                     .collect())
+            },
+        )
+        .register_fn(
+            "constant",
+            |state: &mut ScriptState, name: &str| -> Result<Dynamic, Failure> {
+                let name: VariablePath = parsed(name)?;
+                let (_, value) = state
+                    .economy
+                    .constants()
+                    .find(|(constant, _)| **constant == name)
+                    .ok_or_else(|| {
+                        Failure::from(format!("the economy has no constant `{name}`"))
+                    })?;
+                Ok(value
+                    .quantity()
+                    .map_or_else(|| Dynamic::from(value.as_str().to_owned()), Dynamic::from))
             },
         )
         .register_fn(

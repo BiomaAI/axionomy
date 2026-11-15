@@ -150,11 +150,16 @@ quantities name them the same way; an exchange names an instance,
 
 A variable takes a `range` of whole numbers or the `values` listed; a
 `relation` lists the rows some variables may take together, keyed by their
-values, each followed by the whole numbers named in its `gives`, if any;
+values, each followed by the values named in its `gives`, if any, whole
+numbers or words (`["p17", "lisbon", "12"]` gives a parcel's destination and
+weight; only numbers are read in quantities);
 `distinct_variables` pairs must differ; `derived` values are whole numbers
 computed from the variables, usable as `{name}` after them; `accounts` fixes
-the account a role must be bound to. A rate whose variables are undeclared,
-unread or overlap another rate makes no economy: `invalid_request`.
+the account a role must be bound to. An economy's `constants`, such as
+`{"season-length": "12", "home": "depot"}`, are read by every rate as its
+variables are, and no exchange changes them. A rate whose variables are
+undeclared, unread or overlap another rate makes no economy:
+`invalid_request`.
 
 ## Resources
 
@@ -165,7 +170,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 
 | Template | Content |
 | --- | --- |
-| `axionomy://economy/{economy_id}` | Origin, parent, root and counts |
+| `axionomy://economy/{economy_id}` | Origin, parent, root, counts and constants |
 | `…/accounts{?prefix,cursor}` | Accounts in path order and how many assets each holds, optionally by path prefix such as `agents/7/` |
 | `…/accounts/{+account}{?prefix,cursor}` | An account's nonzero balances in asset path order, optionally by asset-path prefix |
 | `…/rates{?asset,cursor}` | Rates and their roles, optionally only those that move `asset` |

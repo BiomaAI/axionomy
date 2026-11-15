@@ -44,10 +44,12 @@ structure Check (Role : Type) where
   right : Term Role
 
 /-- The values some of a rate's variables may take together, one row each,
-and the whole numbers each row gives: law structure that never changes,
-such as which cells of a board adjoin and how far apart they are. A row
-holds its variables' values, then the numbers it gives, named as `gives`
-names them; its variables' values are its key. -/
+and the values each row gives: law structure that never changes, such as
+which cells of a board adjoin and how far apart they are, or which depot a
+parcel goes to. A row holds its variables' values, then the values it
+gives, named as `gives` names them; its variables' values are its key. A
+value given is a segment, a whole number or a word: a rate writes either
+into its patterns, and reads only numbers in its quantities. -/
 structure Relation where
   names : List String
   gives : List String := []
@@ -61,7 +63,7 @@ def Relation.row (relation : Relation) (arguments : Arguments) : Option (List Se
   | some values => relation.rows.find? (·.take relation.names.length == values)
   | none => none
 
-/-- The numbers a row gives, by name. -/
+/-- The values a row gives, by name. -/
 def Relation.given (relation : Relation) (row : List Segment) : Arguments :=
   relation.gives.zip (row.drop relation.names.length)
 
@@ -247,7 +249,7 @@ theorem derive_extends {schema : Schema Role} {arguments values : Arguments}
       obtain ⟨added, same⟩ := ih _ result done
       exact ⟨(head.name, .number value) :: added, by simp [same]⟩
 
-/-- The numbers every relation's row for `arguments` gives, in the
+/-- The values every relation's row for `arguments` gives, in the
 relations' order; or the variables of the first relation no row of which is
 keyed by the values `arguments` give them. -/
 def Schema.relate (schema : Schema Role) (arguments : Arguments) : Except (List String) Arguments :=

@@ -25,6 +25,10 @@ impl axionomy::Ontology for Mixed {
 
 type Amounts = Vec<(AssetPath, String)>;
 
+/// An economy's constants as the fixtures write them, each name and value in
+/// their order.
+type Constants = Vec<(axionomy::VariablePath, String)>;
+
 #[derive(Debug, Deserialize)]
 struct ProposalCase {
     rate: RatePath,
@@ -37,6 +41,7 @@ struct ProposalCase {
 struct Case {
     label: String,
     accounts: Vec<(AccountPath, Amounts)>,
+    constants: Constants,
     rates: Vec<(String, Value)>,
     proposal: ProposalCase,
     expected: Value,
@@ -45,6 +50,7 @@ struct Case {
 #[derive(Debug, Deserialize)]
 struct ModelCase {
     label: String,
+    constants: Constants,
     rates: Vec<(String, Value)>,
     issues: Vec<Value>,
 }
@@ -61,9 +67,17 @@ fn fixtures() -> Fixtures {
     serde_json::from_str(crate::FIXTURES).unwrap()
 }
 
-/// Each rate as the kernel reads one written down: its identifier, which may
-/// name variables, and the rate in its JSON form.
-fn rates(builder: EconomyBuilder<Mixed>, rates: &[(String, Value)]) -> EconomyBuilder<Mixed> {
+/// Each rate as the kernel reads one written down, after the economy's
+/// constants: its identifier, which may name variables, and the rate in its
+/// JSON form.
+fn rates(
+    builder: EconomyBuilder<Mixed>,
+    constants: &Constants,
+    rates: &[(String, Value)],
+) -> EconomyBuilder<Mixed> {
+    let builder = constants.iter().fold(builder, |builder, (name, value)| {
+        builder.constant_value(name.clone(), value.parse().unwrap())
+    });
     rates.iter().fold(builder, |builder, (key, rate)| {
         let key: Pattern<RatePath> = key.parse().unwrap();
         let rate: Rate<Mixed> =
@@ -73,7 +87,7 @@ fn rates(builder: EconomyBuilder<Mixed>, rates: &[(String, Value)]) -> EconomyBu
 }
 
 fn economy(case: &Case) -> Economy<Mixed> {
-    let mut builder = rates(EconomyBuilder::new(), &case.rates);
+    let mut builder = rates(EconomyBuilder::new(), &case.constants, &case.rates);
     for (id, entries) in &case.accounts {
         let basket = Basket::try_from_entries(
             entries
@@ -163,7 +177,7 @@ fn rates_that_cannot_make_an_economy_are_refused_as_lean_refuses_them() {
     let cases = fixtures().models;
     assert!(!cases.is_empty());
     for case in &cases {
-        let built = rates(EconomyBuilder::new(), &case.rates).build();
+        let built = rates(EconomyBuilder::new(), &case.constants, &case.rates).build();
         let issues: Vec<Value> = match built {
             Ok(_) => Vec::new(),
             Err(error) => error.issues().iter().map(issue).collect(),
@@ -194,6 +208,12 @@ fn issue(issue: &ModelIssue<Mixed>) -> Value {
             json!({"kind": "repeated_row", "rate": rate.text(), "variables": variables})
         }
         ModelIssue::DerivedReads { rate, variable } => named("derived_reads", rate, variable),
+        ModelIssue::RepeatedConstant { constant } => {
+            json!({"kind": "repeated_constant", "constant": constant})
+        }
+        ModelIssue::MalformedConstant { constant } => {
+            json!({"kind": "malformed_constant", "constant": constant})
+        }
         ModelIssue::DuplicateAccount { .. } | ModelIssue::DuplicateRate { .. } => {
             panic!("no fixture names an identifier twice: {issue:?}")
         }
@@ -215,4 +235,27 @@ fn a_rate_with_variables_is_written_down_and_read_back() {
     }
     let error: ApplyError<Mixed> = ApplyError::ZeroUnits;
     assert_eq!(failure(&error), json!({"kind": "zero_units"}));
+}
+
+/// An economy's constants are written down with it and read back, in JSON
+/// and in the store's binary form; an economy without any is written as it
+/// always was.
+#[test]
+fn an_economys_constants_are_written_down_and_read_back() {
+    let case = &fixtures().transactions[0];
+    assert!(!case.constants.is_empty());
+    let world = economy(case);
+    let written = serde_json::to_value(&world).unwrap();
+    assert_eq!(
+        written["constants"],
+        json!({"home": "east", "season-length": "3"})
+    );
+    let read: Economy<Mixed> = serde_json::from_value(written.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&read).unwrap(), written);
+    let bytes = postcard::to_allocvec(&world).unwrap();
+    let read: Economy<Mixed> = postcard::from_bytes(&bytes).unwrap();
+    assert_eq!(serde_json::to_value(&read).unwrap(), written);
+    let plain = EconomyBuilder::<Mixed>::new().build().unwrap();
+    let written = serde_json::to_value(plain).unwrap();
+    assert!(written.get("constants").is_none());
 }

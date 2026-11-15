@@ -4,7 +4,7 @@
 
 use crate::messages::{Direction, EconomyEntries, RateEntries};
 use axionomy::InvariantPath;
-use axionomy::{AccountPath, AssetPath, Pattern, RatePath, RolePath, VariablePath, paths};
+use axionomy::{AccountPath, AssetPath, Pattern, RatePath, RolePath, Segment, VariablePath, paths};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
@@ -40,6 +40,8 @@ pub(crate) enum AuthoringError {
         rate: Pattern<RatePath>,
         role: RolePath,
     },
+    #[error("the economy already names the constant `{constant}`")]
+    ConstantNamed { constant: VariablePath },
     #[error("the entries make no economy: {0}")]
     Model(String),
     #[error("invariant `{invariant}` already weights `{asset}`")]
@@ -64,7 +66,7 @@ impl EconomyEntries {
             .values()
             .map(|weights| 1 + weights.len())
             .sum();
-        accounts + rates + invariants
+        accounts + self.constants.len() + rates + invariants
     }
 }
 
@@ -115,7 +117,7 @@ pub(crate) fn entries(economy: &paths::Economy) -> usize {
         .invariants()
         .map(|invariant| 1 + invariant.weights().count())
         .sum();
-    accounts + rates + invariants
+    accounts + economy.constants().count() + rates + invariants
 }
 
 /// The economy `base` becomes with `entries` added; `None` starts from an empty
@@ -133,6 +135,11 @@ pub(crate) fn extend(
         .into_iter()
         .flat_map(paths::Economy::accounts)
         .map(|(id, account)| (id.clone(), account.clone()))
+        .collect();
+    let mut constants: BTreeMap<VariablePath, Segment> = base
+        .into_iter()
+        .flat_map(paths::Economy::constants)
+        .map(|(name, value)| (name.clone(), value.clone()))
         .collect();
     let mut rates: IndexMap<Pattern<RatePath>, paths::Rate> = base
         .into_iter()
@@ -155,6 +162,13 @@ pub(crate) fn extend(
             balances.insert(asset, quantity);
         }
         *account = paths::Account::new(balances);
+    }
+
+    for (name, value) in entries.constants {
+        if constants.contains_key(&name) {
+            return Err(AuthoringError::ConstantNamed { constant: name });
+        }
+        constants.insert(name, value);
     }
 
     for (id, added) in entries.rates {
@@ -187,6 +201,11 @@ pub(crate) fn extend(
         .into_iter()
         .fold(paths::EconomyBuilder::new(), |builder, (id, account)| {
             builder.account(id, account)
+        });
+    let builder = constants
+        .into_iter()
+        .fold(builder, |builder, (name, value)| {
+            builder.constant_value(name, value)
         });
     let builder = rates
         .into_iter()

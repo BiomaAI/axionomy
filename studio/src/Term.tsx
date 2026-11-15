@@ -19,6 +19,7 @@ export const GLOSSARY = {
   keeps: "What an account must hold for an exchange, and still holds after it.",
   gets: "What an account receives in an exchange: it holds more of it after.",
   strategy: "A way of choosing moves: a search such as A*, or a policy, or a game player. It plays from a point toward a goal.",
+  constant: "A value every rule reads by name, such as a season's length: law, not anything an account holds, so no exchange changes it.",
   goal: "What a strategy plays toward: a state the economy can reach, such as the maze solved.",
   experiment: "Several strategies played from the same point toward the same goal, with the same effort and the same luck, and measured alike.",
   arm: "One of the strategies an experiment compares, with the point it starts from.",

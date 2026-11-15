@@ -204,17 +204,26 @@ def account (id : String) (holdings : List (String × Nat)) : Written × List (W
 def proposal (rate : String) (bindings : List (Role × String)) (units : Nat := 1) : Parametric.Proposal Role :=
   ⟨written rate, bindings.map (fun (role, account) => (role, written account)), units, []⟩
 
-def scenario (label : String) (accounts : List (Written × List (Written × Nat))) (rates : List (Law Role))
-    (proposal : Parametric.Proposal Role) : Json :=
+/-- An economy's constants as the kernel writes a `paths` economy's: each
+name with its value, in order. -/
+def constantsJson (constants : Arguments) : Json :=
+  toJson (constants.map fun (name, value) => (name, segmentText value))
+
+def constant (name value : String) : String × Path.Segment := (name, Path.segmentOf value)
+
+def scenario (label : String) (accounts : List (Written × List (Written × Nat))) (constants : Arguments)
+    (rates : List (Law Role)) (proposal : Parametric.Proposal Role) : Json :=
   -- Built as the kernel builds an economy: its accounts in their order.
-  let model : Parametric.Model Role := ⟨Ordered.ordered Path.compare accounts, rates, []⟩
+  let model : Parametric.Model Role :=
+    { accounts := Ordered.ordered Path.compare accounts, rates, invariants := [], constants }
   let expected := match Parametric.analyze compare model proposal, Parametric.apply compare model proposal with
     | some analyzed, some (applied, after) => Json.mkObj [
         ("assessment", assessmentJson analyzed.assessment), ("after", accountsJson after.accounts),
         ("error", match applied with | .ok _ => Json.null | .error error => failureJson error),
         ("receipt", match applied with | .error _ => Json.null | .ok receipt => receiptJson receipt)]
     | _, _ => tagged "panic"
-  Json.mkObj [("label", toJson label), ("accounts", accountsJson accounts), ("rates", ratesJson rates),
+  Json.mkObj [("label", toJson label), ("accounts", accountsJson accounts),
+    ("constants", constantsJson constants), ("rates", ratesJson rates),
     ("proposal", proposalJson proposal), ("expected", expected)]
 
 -- A responder stabilizes a patient where both are: the patient is fixed by
@@ -284,6 +293,24 @@ def toll : Law Role := law "toll" { blank with
   produce := [(0, entries [("paid/{fee}", 1)])]
   computedConsume := [⟨0, pattern "kit", .var "fee"⟩] }
 
+-- Delivering a parcel to where it goes: each parcel's destination, a word,
+-- and its weight, a number, are law structure, a relation's row; the
+-- courier must be at the destination and burns the weight in fuel.
+def deliver : Law Role := law "deliver/{parcel}" { blank with
+  variables := [range "parcel" 1 3]
+  relations := [relation ["parcel"] [["1", "east", "4"], ["2", "north", "2"]] ["destination", "weight"]]
+  preserve := [(0, entries [("at/{destination}", 1)])]
+  produce := [(0, entries [("delivered/{parcel}", 1)])]
+  computedConsume := [⟨0, pattern "fuel", .var "weight"⟩] }
+
+-- A day of the season: how long the season is and where every day is
+-- spent are the economy's constants, read as variables are.
+def season : Law Role := law "season/{day}" { blank with
+  variables := [range "day" 1 9]
+  conditions := [⟨"in-season", .var "day", .lessOrEqual, .var "season-length"⟩]
+  preserve := [(0, entries [("at/{home}", 1)])]
+  produce := [(0, entries [("day/{day}", 1)])] }
+
 -- Climbing from a row to the next: the next row is derived from the row,
 -- and so is the cost.
 def climb : Law Role := law "climb/{row}" { blank with
@@ -315,10 +342,14 @@ def world : List (Written × List (Written × Nat)) := [
   account "cell/0/1" [],
   account "cell/0/0" [("piece", 1)],
   account "climber" [("row/0", 1), ("row/1", 1), ("kit", 6), ("at/a", 1)],
-  account "hauler" [("at/a", 1), ("at/b", 1), ("fuel", 10)]]
+  account "hauler" [("at/a", 1), ("at/b", 1), ("fuel", 10)],
+  account "courier" [("at/east", 1), ("fuel", 5)]]
+
+def constants : Arguments := [constant "season-length" "3", constant "home" "east"]
 
 def fixtures : Array Json := Id.run do
-  let rates := [stabilize, drive, pile, brim, drop, admit, step, haul, toll, climb, descend, rest]
+  let rates := [stabilize, drive, pile, brim, drop, admit, step, haul, toll, deliver, season, climb,
+    descend, rest]
   let mut cases := #[]
   for (label, proposal) in [
       ("instance", proposal "stabilize/1/east" [(0, "responder"), (1, "patient/1")]),
@@ -347,13 +378,19 @@ def fixtures : Array Json := Id.run do
       ("given-outside-a-relation", proposal "haul/a/c" [(0, "hauler")]),
       ("given-without-variables", proposal "toll" [(0, "climber")]),
       ("given-without-variables-infeasible", proposal "toll" [(0, "responder")]),
+      ("given-a-word", proposal "deliver/1" [(0, "courier")]),
+      ("given-a-word-elsewhere", proposal "deliver/2" [(0, "courier")]),
+      ("given-a-word-outside-a-relation", proposal "deliver/3" [(0, "courier")]),
+      ("constant", proposal "season/2" [(0, "responder")]),
+      ("constant-in-a-condition", proposal "season/4" [(0, "responder")]),
+      ("constant-in-a-pattern", proposal "season/1" [(0, "hauler")]),
       ("derived", proposal "climb/1" [(0, "climber")]),
       ("derived-amount-infeasible", proposal "climb/0" [(0, "climber")] 2),
       ("derived-fails", proposal "descend/0" [(0, "climber")]),
       ("derived-after-domain", proposal "descend/4" [(0, "climber")]),
       ("derived-zero-units-first", proposal "descend/0" [(0, "climber")] 0),
       ("no-variables", proposal "rest" [(0, "responder")])] do
-    cases := cases.push (scenario label world rates proposal)
+    cases := cases.push (scenario label world constants rates proposal)
   return cases
 
 def issueJson : ModelIssue → Json
@@ -366,16 +403,20 @@ def issueJson : ModelIssue → Json
   | .malformedRelation rate names => tagged "malformed_relation" [("rate", toJson (patternText rate)), ("variables", toJson names)]
   | .repeatedRow rate names => tagged "repeated_row" [("rate", toJson (patternText rate)), ("variables", toJson names)]
   | .derivedReads rate name => tagged "derived_reads" [("rate", toJson (patternText rate)), ("variable", toJson name)]
+  | .repeatedConstant name => tagged "repeated_constant" [("constant", toJson name)]
+  | .malformedConstant name => tagged "malformed_constant" [("constant", toJson name)]
 
-/-- A model's rates, in the order the kernel keeps them, and what is wrong
-with them. -/
-def model (label : String) (rates : List (Law Role)) : Json :=
+/-- A model's constants and rates, in the order the kernel keeps them, and
+what is wrong with them. -/
+def model (label : String) (rates : List (Law Role)) (constants : Arguments := []) : Json :=
   let ordered := (Ordered.ordered Path.compareText (rates.map fun law => (patternText law.id, law))).map Prod.snd
-  Json.mkObj [("label", toJson label), ("rates", ratesJson rates),
-    ("issues", toJson ((check ordered).map issueJson))]
+  let kept := Ordered.ordered Path.compareText constants
+  Json.mkObj [("label", toJson label), ("constants", constantsJson constants), ("rates", ratesJson rates),
+    ("issues", toJson ((check kept ordered).map issueJson))]
 
 def models : Array Json := #[
-  model "clean" [stabilize, drive, pile, drop, admit, step, haul, toll, climb, descend, rest],
+  model "clean" [stabilize, drive, pile, drop, admit, step, haul, toll, deliver, season, climb, descend,
+    rest] constants,
   model "relation-names-an-undeclared-variable" [law "step/{from}" { blank with
     variables := [values "from" ["a"]], relations := [relation ["from", "to"] [["a", "b"]]] }],
   model "malformed-relation" [law "step/{from}/{to}" { blank with
@@ -387,9 +428,15 @@ def models : Array Json := #[
   model "repeated-key" [law "haul/{from}/{to}" { blank with
     variables := [values "from" ["a"], values "to" ["b"]],
     relations := [relation ["from", "to"] [["a", "b", "4"], ["a", "b", "5"]] ["distance"]] }],
-  model "gives-a-word" [law "haul/{from}/{to}" { blank with
+  model "gives-a-word-read-as-a-number" [law "haul/{from}/{to}" { blank with
     variables := [values "from" ["a"], values "to" ["b"]],
-    relations := [relation ["from", "to"] [["a", "b", "far"]] ["distance"]] }],
+    relations := [relation ["from", "to"] [["a", "b", "far"]] ["distance"]],
+    computedConsume := [⟨0, pattern "fuel", .var "distance"⟩] }],
+  model "gives-words-and-numbers-read-as-a-number" [law "haul/{from}" { blank with
+    variables := [values "from" ["a", "b"]],
+    relations := [relation ["from"] [["a", "4"], ["b", "far"]] ["distance"]],
+    produce := [(0, entries [("leg/{distance}", 1)])],
+    conditions := [⟨"short", .var "distance", .lessOrEqual, .constant 9⟩] }],
   model "gives-too-much" [law "haul/{from}/{to}" { blank with
     variables := [values "from" ["a"], values "to" ["b"]],
     relations := [relation ["from", "to"] [["a", "b", toString (Quantity.limit + 1)]] ["distance"]] }],
@@ -432,6 +479,19 @@ def models : Array Json := #[
   model "overlapping" [law "advance/{to}" { blank with variables := [range "to" 1 3] }, law "advance/final" blank],
   model "apart-by-a-written-segment" [law "move/{to}/fast" { blank with variables := [values "to" ["x"]] },
     law "move/{to}/slow" { blank with variables := [values "to" ["x"]] }],
+  model "constant-named-as-a-variable" [law "season/{home}" { blank with
+    variables := [values "home" ["east"]] }] constants,
+  model "constant-named-as-a-derived-value" [law "climb/{row}" { blank with
+    variables := [range "row" 0 1], derived := [⟨"season-length", .constant 2⟩] }] constants,
+  model "constant-in-the-identifier" [law "go/{home}" blank] constants,
+  model "word-constant-read-as-a-number" [law "count" { blank with
+    computedConsume := [⟨0, pattern "kit", .var "home"⟩] }] constants,
+  model "constant-read-by-a-derived-value" [law "climb/{row}" { blank with
+    variables := [range "row" 0 1],
+    derived := [⟨"last", .binary .add (.var "row") (.var "season-length")⟩],
+    produce := [(0, entries [("row/{last}", 1)])] }] constants,
+  model "repeated-constant" [rest] [constant "fee" "1", constant "fee" "2"],
+  model "constant-too-large" [rest] [constant "fee" (toString (Quantity.limit + 1)), constant "home" "east"],
   model "apart-by-length" [law "move/{to}" { blank with variables := [values "to" ["x"]] },
     law "move/{to}/{how}" { blank with variables := [values "to" ["x"], values "how" ["y"]] }]]
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconMaximize } from "@tabler/icons-react";
 import { ActivityStrip, type Activity, type Said } from "./Activity";
@@ -707,7 +707,8 @@ export function PackagesApp() {
               <PanelHeading kicker="Rules" title={document.title} aside={counted(model.rates.length, "rate")} action={<button type="button" onClick={() => setRulesOpen(false)}>Close</button>} />
               <div className="rules-body">
                 <RateTable rates={model.rates} />
-                {(model.goal.length > 0 || model.invariants.length > 0) && <div className="rules-side">
+                {((model.constants ?? []).length > 0 || model.goal.length > 0 || model.invariants.length > 0) && <div className="rules-side">
+                  {(model.constants ?? []).length > 0 && <section className="view-section"><h4><Term name="constant">Constants</Term></h4><dl className="facts">{model.constants?.map((constant) => <Fragment key={constant.name}><dt>{constant.name}</dt><dd>{constant.value}</dd></Fragment>)}</dl></section>}
                   {model.goal.length > 0 && <section className="view-section"><h4><Term name="goal">Goal</Term></h4>{model.goal.map((goal) => <div className="effect" key={goal.account.key}><IdLink subject={{ kind: "account", id: goal.account }} /><div className="holdings">{goal.required.map((required) => <Holding key={required.asset.key} value={required} />)}</div></div>)}</section>}
                   {model.invariants.length > 0 && <section className="view-section"><h4>Invariants</h4><dl className="facts">{model.invariants.map((invariant) => <InvariantRow key={invariant.name} invariant={invariant} />)}</dl></section>}
                 </div>}

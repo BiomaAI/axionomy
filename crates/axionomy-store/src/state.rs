@@ -5,6 +5,7 @@
 //! | --- | --- |
 //! | `a` account | empty: the account exists |
 //! | `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
+//! | `c` constant | its value, the segment's text |
 //! | `r` rate | the rate, in postcard; a rate with variables keyed as its identifier is written, `move/{to}` |
 //! | `v` the invariant's position, 4 bytes big-endian | the invariant, in postcard |
 //!
@@ -27,6 +28,7 @@ use thiserror::Error;
 
 const ACCOUNT: u8 = b'a';
 const BALANCE: u8 = b'b';
+const CONSTANT: u8 = b'c';
 const RATE: u8 = b'r';
 const INVARIANT: u8 = b'v';
 
@@ -43,6 +45,12 @@ pub fn tree<O: Recordable>(economy: &Economy<O>) -> Tree {
         for (asset, quantity) in holdings.balances().iter() {
             entries.push((balance_key(account, asset), quantity.to_be_bytes().to_vec()));
         }
+    }
+    for (name, value) in economy.constants() {
+        entries.push((
+            [&[CONSTANT][..], name.as_str().as_bytes()].concat(),
+            value.as_str().as_bytes().to_vec(),
+        ));
     }
     for (rate, definition) in economy.rates() {
         entries.push((rate_key(rate), encode(definition)));
@@ -112,6 +120,12 @@ pub fn economy<O: Recordable>(tree: &Tree) -> Result<Economy<O>, StateError> {
     if balances.next().is_some() {
         return Err(StateError("a balance belongs to no account"));
     }
+    for (key, value) in tree.prefix(&[CONSTANT]) {
+        read += 1;
+        let name = segment(&key[1..], "a constant's name is not one segment")?;
+        let value = segment(value, "a constant's value is not one segment")?;
+        builder = builder.constant_value(name, value);
+    }
     for (key, value) in tree.prefix(&[RATE]) {
         read += 1;
         builder = builder.rate_at(rate_identifier(&key[1..])?, decode(value, "a rate")?);
@@ -130,6 +144,14 @@ pub fn economy<O: Recordable>(tree: &Tree) -> Result<Economy<O>, StateError> {
     builder
         .build()
         .map_err(|_| StateError("the entries do not make a valid economy"))
+}
+
+/// The one segment `bytes` write, such as a constant's name or value.
+fn segment<T: std::str::FromStr>(bytes: &[u8], what: &'static str) -> Result<T, StateError> {
+    std::str::from_utf8(bytes)
+        .ok()
+        .and_then(|text| text.parse().ok())
+        .ok_or(StateError(what))
 }
 
 /// The positions in a state's tree of the accounts whose paths start with
@@ -387,9 +409,12 @@ mod tests {
                     .closes(path("gone")),
             )
             .invariant(paths::LinearInvariant::new(path!("cash")).weight(path("cash"), 1))
+            .constant_value(path("fee"), "10".parse().unwrap())
+            .constant_value(path("home"), "bank".parse().unwrap())
             .build()
             .unwrap();
         let mut stored = tree::<Paths>(&economy);
+        assert_eq!(stored.get(b"cfee"), Some(&b"10"[..]));
         let initial = stored.clone();
         let steps = [
             paths::Exchange::new(open, Quantity::new(1)).bind(path("new"), path("agents/1")),
@@ -471,6 +496,10 @@ mod tests {
             (b"a bank/vault", b""),
             (b"a\"bank\"", b""),
             (b"abank//vault", b""),
+            // A constant whose name or value is not one segment.
+            (b"cFee", b"1"),
+            (b"cfee", b"a/b"),
+            (b"cfee", b""),
             // An account entry with a value, and a space no economy has.
             (b"abank/vault", b"x"),
             (b"zother", b""),
