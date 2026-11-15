@@ -46,7 +46,8 @@ test("a Worker loads a package from a URL, runs its experiment, and finds both a
   expect(again.results).toEqual(first.results);
   // Asked only whether it changed: the URL answers 304 and nothing is downloaded.
   expect(again.fetched).toEqual({ url: first.fetched.url, got: "current", status: 304, packages: ["maze"] });
-  expect(served).toEqual([200, 304]);
+  // The page hears of a Worker's responses after the Worker has them.
+  await expect.poll(() => served).toEqual([200, 304]);
 });
 
 test("a follower waits in the Worker for its ref to move, asking nothing in the meantime", async ({ page }) => {
