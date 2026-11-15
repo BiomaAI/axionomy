@@ -329,7 +329,11 @@ mod tests {
                 .to_u64(),
             1
         );
-        assert!(candidates(&world).is_empty());
+        assert!(
+            world
+                .rate_ids()
+                .all(|rate| !world.is_applicable(&action(*rate)))
+        );
     }
     #[test]
     fn upgraded_chain_and_salvage_remain_mass_conserving() {
@@ -389,44 +393,6 @@ mod tests {
                 .balance(&AccountId::Workshop, &Asset::Durability)
                 .to_u64(),
             2
-        );
-    }
-
-    #[test]
-    fn exact_plans_trade_contract_revenue_against_time_and_waste() {
-        let world = initial_showcase();
-        let front = pareto_front(&world).unwrap();
-        let mut revenues = std::collections::BTreeSet::new();
-        let mut upgraded = false;
-        for entry in front.front().entries() {
-            let replay = world.replayed(entry.payload()).unwrap();
-            assert!(replay.matches(&goal()));
-            assert_eq!(&objectives(&replay), entry.objectives());
-            revenues.insert(
-                replay
-                    .balance(&AccountId::Workshop, &Asset::Credit)
-                    .to_u64(),
-            );
-            upgraded |= !replay
-                .balance(&AccountId::Workshop, &Asset::Upgraded)
-                .is_zero();
-        }
-        assert!(
-            revenues.len() >= 2,
-            "contracts must create a real outcome tradeoff"
-        );
-        assert!(upgraded, "the upgrade must be economically useful");
-        let shortest = solve_bfs(&world).unwrap();
-        let leanest = minimize_waste(&world).unwrap();
-        for trace in [shortest.trace(), leanest.trace()] {
-            assert!(world.replayed(trace).unwrap().matches(&goal()));
-        }
-        let stress = initial_stress();
-        assert!(
-            stress
-                .replayed(solve_bfs(&stress).unwrap().trace())
-                .unwrap()
-                .matches(&goal())
         );
     }
 }

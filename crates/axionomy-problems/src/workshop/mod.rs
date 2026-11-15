@@ -9,11 +9,6 @@ use axionomy::{
 pub mod package;
 mod production;
 
-use axionomy_search::{
-    SearchSolution, best_first, bfs,
-    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
-};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AccountId {
     Workshop,
@@ -94,16 +89,7 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Solution = SearchSolution<Ontology>;
 pub type Failure = ApplyError<Ontology>;
-pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectiveKey {
-    Waste,
-    Time,
-    Revenue,
-}
 
 pub fn initial() -> World {
     build(6, 4, 3, 2)
@@ -216,49 +202,8 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Workshop, basket([(Asset::Solved, 1)]))
 }
 
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut ids: Vec<_> = world.rate_ids().copied().collect();
-    ids.sort();
-    world.applicable(ids.into_iter().map(action))
-}
-
-pub fn solve_bfs(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), candidates)
-}
-
-pub fn minimize_waste(world: &World) -> Option<Solution> {
-    best_first(world, &goal(), candidates, waste, |_| 0)
-}
-
-/// Exhaustively exposes the valid waste/time recipe tradeoffs.
-pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    pareto::search(world, &goal(), candidates, objectives)
-}
-
-pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    let mut values = vec![
-        Objective::minimize(ObjectiveKey::Waste, waste(world)),
-        Objective::minimize(ObjectiveKey::Time, spent_time(world)),
-    ];
-    if world.account(&AccountId::Customer(0)).is_some() {
-        values.push(Objective::maximize(
-            ObjectiveKey::Revenue,
-            world.balance(&AccountId::Workshop, &Asset::Credit).to_u64(),
-        ));
-    }
-    ObjectiveVector::try_new(values).expect("workshop objective schema is static and unique")
-}
-
-pub fn waste(world: &World) -> u64 {
-    world.balance(&AccountId::Workshop, &Asset::Waste).to_u64()
-}
-
-pub fn spent_time(world: &World) -> u64 {
-    world
-        .balance(&AccountId::Workshop, &Asset::SpentTime)
-        .to_u64()
-}
-
+/// The exchange applying `rate` once in the workshop, a delivery to the
+/// order's own customer.
 pub fn action(rate: RateId) -> Action {
     let action = Exchange::new(rate, Quantity::new(1)).bind(Role::Shop, AccountId::Workshop);
     if let RateId::Deliver(order) = rate {
@@ -273,19 +218,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn search_uses_the_more_efficient_recipe() {
-        let world = initial();
-        let bfs = solve_bfs(&world).expect("workshop can make two chairs");
-        let optimized = minimize_waste(&world).expect("workshop can make two chairs");
-        assert_eq!(optimized.cost(), 1);
-        assert_eq!(bfs.trace().exchanges().len(), 2);
-
-        let mut replay = initial();
-        replay
-            .replay(optimized.trace())
-            .expect("optimized proposal must replay");
-        assert!(replay.matches(&goal()));
-        assert!(candidates(&replay).is_empty());
+    fn the_efficient_batch_wastes_less_and_two_basic_chairs_take_less_time() {
+        for (recipes, waste, time) in [
+            (&[RateId::EfficientBatch, RateId::Finish][..], 1, 3),
+            (
+                &[RateId::BasicChair, RateId::BasicChair, RateId::Finish],
+                2,
+                2,
+            ),
+        ] {
+            let made = initial()
+                .replayed(&recipes.iter().copied().map(action).collect())
+                .expect("the recipes replay");
+            assert!(made.matches(&goal()));
+            let held = |asset| made.balance(&AccountId::Workshop, &asset).to_u64();
+            assert_eq!(held(Asset::Waste), waste);
+            assert_eq!(held(Asset::SpentTime), time);
+            // A finished shift has no recipe left.
+            assert!(
+                made.rate_ids()
+                    .all(|rate| !made.is_applicable(&action(*rate)))
+            );
+        }
     }
 
     #[test]
@@ -304,22 +258,5 @@ mod tests {
             } if invariant.as_str() == "material-mass" && before.to_string() == "6" && after.to_string() == "7"
         ));
         assert_eq!(world.state_key(), before);
-    }
-
-    #[test]
-    fn pareto_front_retains_fast_and_low_waste_recipes() {
-        let initial = initial();
-        let result = pareto_front(&initial).unwrap();
-        let mut outcomes = Vec::new();
-
-        for entry in result.front().entries() {
-            let replayed = initial.replayed(entry.payload()).unwrap();
-            assert!(replayed.matches(&goal()));
-            assert_eq!(&objectives(&replayed), entry.objectives());
-            outcomes.push((waste(&replayed), spent_time(&replayed)));
-        }
-
-        outcomes.sort_unstable();
-        assert_eq!(outcomes, [(1, 3), (2, 2)]);
     }
 }

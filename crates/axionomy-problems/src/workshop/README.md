@@ -35,10 +35,16 @@ The rate book deliberately includes a malformed proposal:
 
 ## Required results
 
+The package's experiments find these, pinned in `tests/outcomes`:
+
 - Waste minimization chooses the efficient batch with waste 1.
-- BFS also reaches the two-chair goal.
-- Exact Pareto search retains the efficient `(waste=1,time=3)` batch and the
-  two-basic `(waste=2,time=2)` plan, and every retained trace replays.
+- Breadth-first search also reaches the two-chair goal.
+- Exact Pareto search, ranked by waste or by time, finds the efficient
+  `(waste=1,time=3)` batch and the two-basic `(waste=2,time=2)` plan.
+
+The model's tests apply the rules directly:
+
+- Both plans replay at those costs.
 - The malformed rate is rejected by the material invariant.
 - Rejection is atomic.
 - Completion consumes `Active`; no recipe remains applicable afterward.
@@ -53,18 +59,12 @@ The rate book deliberately includes a malformed proposal:
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro recipes and the searches over every
-  instance.
+- `mod.rs` is the model: the Micro recipes.
 - `production.rs` builds the Showcase and Stress workshops: contracts, the
   single workbench, tool wear, repair, upgrades and recycling.
-- `package.rs` writes its package: its economies under refs, goals,
-  strategies, experiments and view, whose scripts are `scripts/workshop.rhai`
-  and `scripts/workshop-view.rhai`.
-
-[`examples/workshop.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/workshop.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example workshop
-```
+- `package.rs` writes its package, the workshop's only implementation of its
+  searches: its economies under refs, goals, strategies, experiments and
+  view, whose scripts are `scripts/workshop.rhai` and
+  `scripts/workshop-view.rhai`.
 
 The workshop is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
