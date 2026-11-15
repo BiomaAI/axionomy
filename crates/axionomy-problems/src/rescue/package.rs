@@ -25,13 +25,13 @@ const INCIDENT: &str = include_str!("../../scripts/incident.rhai");
 const VIEW: &str = include_str!("../../scripts/rescue-view.rhai");
 const INCIDENT_VIEW: &str = include_str!("../../scripts/incident-view.rhai");
 
-/// The seed the sample's Rust runs play: the incidents' scenario, and the Monte Carlo's
-/// samples.
+/// The seed the sample's experiments play: the incidents' scenario, and the
+/// Monte Carlo's samples.
 const SEED: u64 = 17;
 /// How many scenarios Micro's Monte Carlo samples.
 const SAMPLES: u64 = 128;
-/// The turns a Micro run may take: Nature's draw and the eight a Rust
-/// rollout may take after it. None takes more than six.
+/// The turns a Micro run may take: Nature's draw and eight after it. None
+/// takes more than six.
 const MICRO_TURNS: u64 = 1 + 8;
 
 /// Writes the rescue's package into `engine`'s store, everything named
@@ -136,7 +136,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         1,
     )?;
     // Each trial draws its scenario from the prior by the event `scenario`
-    // with its seed, as the Rust Monte Carlo draws it for the same sample.
+    // with its seed.
     micro.experiment(engine, "rescue/micro/monte-carlo", None, SAMPLES)?;
 
     for (instance, stress) in [("showcase", false), ("stress", true)] {

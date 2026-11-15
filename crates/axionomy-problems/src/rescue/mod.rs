@@ -2,22 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Apply, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
-    Quantity, Rate, Trace, basket,
-};
-use axionomy_search::rollout::{
-    Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal,
-};
-use axionomy_search::{
-    monte_carlo::{
-        BernoulliStatistics, MonteCarloConfig, PolicyEstimate, VectorStatistics, VectorSummary,
-        evaluate,
-    },
-    pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
-    sampling::{
-        EventTickets, SamplingError, WeightedExchange, choose_by_ticket, sample, sample_seed,
-        systematic_ticket, total_weight,
-    },
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
+    basket,
 };
 
 pub mod incident;
@@ -100,64 +86,6 @@ pub enum RateId {
     Finish,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Policy {
-    ObserveThenFollow,
-    NorthWithoutObserving,
-}
-
-#[derive(Debug, Clone)]
-pub struct Rollout {
-    trace: Trace<Ontology>,
-    succeeded: bool,
-    spent_energy: u64,
-    used_sensor: bool,
-}
-
-impl Rollout {
-    pub fn trace(&self) -> &Trace<Ontology> {
-        &self.trace
-    }
-
-    pub fn succeeded(&self) -> bool {
-        self.succeeded
-    }
-
-    pub fn spent_energy(&self) -> u64 {
-        self.spent_energy
-    }
-
-    pub fn used_sensor(&self) -> bool {
-        self.used_sensor
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PolicyComparison {
-    chosen: Policy,
-    observe_successes: usize,
-    direct_successes: usize,
-    samples: usize,
-}
-
-impl PolicyComparison {
-    pub fn chosen(&self) -> Policy {
-        self.chosen
-    }
-
-    pub fn observe_successes(&self) -> usize {
-        self.observe_successes
-    }
-
-    pub fn direct_successes(&self) -> usize {
-        self.direct_successes
-    }
-
-    pub fn samples(&self) -> usize {
-        self.samples
-    }
-}
-
 pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `rescue` where economies are
@@ -173,15 +101,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type AgentView<'a> = EconomicView<'a, Ontology>;
-pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PolicyObjective {
-    SuccessProbability,
-    SensorUseProbability,
-    MeanSpentEnergy,
-}
 
 /// Builds one already-resolved deterministic world.
 pub fn scenario(truth: Location, seed: u8) -> World {
@@ -496,314 +415,6 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Agent, basket([(Asset::Solved, 1)]))
 }
 
-pub fn agent_view(world: &World) -> AgentView<'_> {
-    world.view([AccountId::Agent])
-}
-
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut ids: Vec<_> = world.rate_ids().copied().collect();
-    ids.sort();
-    world.applicable(ids.into_iter().map(action))
-}
-
-/// Nature resolves an observation request by selecting the only observation
-/// whose encoded preconditions match its hidden truth and seed.
-pub fn nature_observation(world: &World) -> Option<Action> {
-    candidates(world)
-        .into_iter()
-        .find(|exchange| matches!(exchange.rate(), RateId::ResolveObservation { .. }))
-}
-
-pub fn instantiate(world: &World, truth: Location, seed: u8) -> Option<Action> {
-    candidates(world)
-        .into_iter()
-        .find(|exchange| exchange.rate() == &RateId::Instantiate { truth, seed })
-}
-
-/// Runs a policy on `world`, which is left where the rollout ended.
-pub fn run_policy(world: &mut impl Apply<Ontology>, policy: Policy) -> Rollout {
-    let goal = goal();
-    let result = run_to_goal(
-        world,
-        &goal,
-        RolloutConfig::new(8).with_retention(TraceRetention::Trace),
-        |state, _| match policy_action(state, policy) {
-            Some(exchange) => RolloutDecision::Propose(exchange),
-            None => RolloutDecision::Stop(RolloutStop::NoProposal),
-        },
-    );
-    let end = world.economy();
-    Rollout {
-        spent_energy: end.balance(&AccountId::Agent, &Asset::SpentEnergy).to_u64(),
-        trace: result
-            .trace()
-            .cloned()
-            .expect("rescue rollouts retain their trace"),
-        succeeded: end.matches(&goal),
-        used_sensor: !end.balance(&AccountId::Agent, &Asset::UsedSensor).is_zero(),
-    }
-}
-
-/// Runs a policy on `world`, an unresolved model, after one explicit Nature
-/// instantiation, and returns a trace that begins at the model.
-pub fn run_sampled_policy(
-    world: &mut impl Apply<Ontology>,
-    sample: &Action,
-    policy: Policy,
-) -> Option<Rollout> {
-    world.apply(sample.clone()).ok()?;
-    let rollout = run_policy(world, policy);
-    let mut trace = Trace::new();
-    trace.push(sample.clone());
-    trace.extend(rollout.trace.into_exchanges());
-    Some(Rollout {
-        trace,
-        succeeded: rollout.succeeded,
-        spent_energy: rollout.spent_energy,
-        used_sensor: rollout.used_sensor,
-    })
-}
-
-/// One episode of `policy` from the model through `sample`, stepped where
-/// `episodes` keeps it.
-fn episode(
-    model: &World,
-    sample: &Action,
-    policy: &Policy,
-    index: usize,
-    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
-) -> Option<Rollout> {
-    let mut world = episodes.begin(policy, index, model.clone());
-    let rollout = run_sampled_policy(&mut world, sample, *policy)?;
-    episodes.end(policy, index, world, &rollout);
-    Some(rollout)
-}
-
-/// Exhaustively evaluates every integer-weighted scenario encoded by Nature.
-pub fn evaluate_scenarios(
-    model: &World,
-    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
-) -> Option<PolicyComparison> {
-    let weighted_scenarios = encoded_scenarios(model);
-    let total_weight = total_weight(&weighted_scenarios).ok()?;
-    let samples = usize::try_from(total_weight).ok()?;
-    let estimates = evaluate(
-        [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let ticket = systematic_ticket(sample_index, total_weight);
-            let sample = choose_by_ticket(&weighted_scenarios, ticket).map_err(|_| ())?;
-            episode(model, sample, policy, sample_index, episodes)
-                .map(|rollout| rollout.succeeded())
-                .ok_or(())
-        },
-        BernoulliStatistics::new,
-    )
-    .ok()?;
-    comparison(estimates, samples)
-}
-
-/// The scenario of `support`, Nature's prior, that the world seeded `seed`
-/// draws: the event `scenario`, drawn once, as a run begins.
-fn drawn_scenario(
-    support: &[WeightedExchange<Action>],
-    seed: u64,
-) -> Result<&Action, SamplingError> {
-    sample(support, &mut EventTickets::new(seed, &path!("scenario")))
-}
-
-/// Estimates both policies from reproducible random draws over Nature's prior.
-pub fn monte_carlo(
-    model: &World,
-    samples: usize,
-    seed: u64,
-    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
-) -> Option<PolicyComparison> {
-    let weighted_scenarios = encoded_scenarios(model);
-    let estimates = evaluate(
-        [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let sampled = drawn_scenario(&weighted_scenarios, sample_seed(seed, sample_index))
-                .map_err(|_| ())?;
-            episode(model, sampled, policy, sample_index, episodes)
-                .map(|rollout| rollout.succeeded())
-                .ok_or(())
-        },
-        BernoulliStatistics::new,
-    )
-    .ok()?;
-    comparison(estimates, samples)
-}
-
-/// Estimates the success/resource tradeoff across sampled encoded scenarios.
-pub fn policy_front(
-    model: &World,
-    samples: usize,
-    seed: u64,
-    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
-) -> Option<PolicyFront> {
-    if samples == 0 {
-        return None;
-    }
-    let weighted_scenarios = encoded_scenarios(model);
-    let estimates = evaluate(
-        [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let sampled = drawn_scenario(&weighted_scenarios, sample_seed(seed, sample_index))
-                .map_err(|_| ())?;
-            let rollout = episode(model, sampled, policy, sample_index, episodes).ok_or(())?;
-            Ok::<_, ()>(vec![
-                f64::from(rollout.succeeded()),
-                f64::from(rollout.used_sensor()),
-                rollout.spent_energy() as f64,
-            ])
-        },
-        || VectorStatistics::new(3),
-    )
-    .ok()?;
-
-    let mut front = ParetoFront::approximate();
-    for estimate in estimates {
-        let objectives = policy_objectives(estimate.summary())?;
-        front.insert(estimate, objectives).ok()?;
-    }
-    debug_assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
-    Some(front)
-}
-
-pub fn policy_objectives(summary: &VectorSummary) -> Option<ObjectiveVector<PolicyObjective, f64>> {
-    let dimensions = summary.dimensions();
-    (dimensions.len() == 3).then_some(())?;
-    ObjectiveVector::try_new([
-        Objective::maximize(PolicyObjective::SuccessProbability, dimensions[0].mean()),
-        Objective::minimize(PolicyObjective::SensorUseProbability, dimensions[1].mean()),
-        Objective::minimize(PolicyObjective::MeanSpentEnergy, dimensions[2].mean()),
-    ])
-    .ok()
-}
-
-fn comparison(
-    estimates: Vec<
-        axionomy_search::monte_carlo::PolicyEstimate<
-            Policy,
-            axionomy_search::monte_carlo::BernoulliSummary,
-        >,
-    >,
-    samples: usize,
-) -> Option<PolicyComparison> {
-    let observe_successes = estimates
-        .iter()
-        .find(|estimate| estimate.policy() == &Policy::ObserveThenFollow)?
-        .summary()
-        .successes();
-    let direct_successes = estimates
-        .iter()
-        .find(|estimate| estimate.policy() == &Policy::NorthWithoutObserving)?
-        .summary()
-        .successes();
-    let chosen = if observe_successes >= direct_successes {
-        Policy::ObserveThenFollow
-    } else {
-        Policy::NorthWithoutObserving
-    };
-    Some(PolicyComparison {
-        chosen,
-        observe_successes,
-        direct_successes,
-        samples,
-    })
-}
-
-fn encoded_scenarios(model: &World) -> Vec<WeightedExchange<Action>> {
-    let mut scenarios: Vec<_> = candidates(model)
-        .into_iter()
-        .filter_map(|exchange| match *exchange.rate() {
-            RateId::Instantiate { truth, seed } => Some((
-                exchange,
-                model
-                    .balance(&AccountId::Nature, &Asset::ScenarioWeight(truth, seed))
-                    .to_u64(),
-            )),
-            _ => None,
-        })
-        .filter(|(_, weight)| *weight > 0)
-        .collect();
-    scenarios.sort_by_key(|(exchange, _)| *exchange.rate());
-    scenarios
-        .into_iter()
-        .map(|(exchange, weight)| WeightedExchange::new(exchange, weight))
-        .collect()
-}
-
-fn policy_action(world: &World, policy: Policy) -> Option<Action> {
-    if !world
-        .balance(&AccountId::Agent, &Asset::AwaitingObservation)
-        .is_zero()
-    {
-        return nature_observation(world);
-    }
-    if !world.balance(&AccountId::Agent, &Asset::Rescued).is_zero()
-        && let Some(evacuate) = candidates(world)
-            .into_iter()
-            .find(|exchange| matches!(exchange.rate(), RateId::Evacuate { .. }))
-    {
-        return Some(evacuate);
-    }
-    public_policy_action(&agent_view(world), policy)
-}
-
-fn public_policy_action(view: &AgentView<'_>, policy: Policy) -> Option<Action> {
-    if view_has(view, Asset::Evacuated) || view_has(view, Asset::Rescued) {
-        return Some(action(RateId::Finish));
-    }
-
-    for location in [
-        Location::North,
-        Location::South,
-        Location::East,
-        Location::West,
-        Location::Harbor,
-        Location::Hills,
-    ] {
-        if view_has(view, Asset::At(location)) {
-            return Some(action(RateId::Rescue { location }));
-        }
-    }
-
-    if !view_has(view, Asset::At(Location::Base)) {
-        return None;
-    }
-
-    if policy == Policy::ObserveThenFollow && view_has(view, Asset::Sensor) {
-        return Some(action(RateId::BeginObserve));
-    }
-
-    let destination = match policy {
-        Policy::NorthWithoutObserving => Location::North,
-        Policy::ObserveThenFollow => [
-            Location::North,
-            Location::South,
-            Location::East,
-            Location::West,
-            Location::Harbor,
-            Location::Hills,
-        ]
-        .into_iter()
-        .find(|location| view_has(view, Asset::Belief(*location)))?,
-    };
-    Some(action(RateId::Move {
-        from: Location::Base,
-        to: destination,
-    }))
-}
-
-fn view_has(view: &AgentView<'_>, asset: Asset) -> bool {
-    view.balance(&AccountId::Agent, &asset)
-        .is_some_and(|quantity| !quantity.is_zero())
-}
-
 fn signal(truth: Location, seed: u8) -> Location {
     if seed == 0 {
         match truth {
@@ -835,7 +446,9 @@ fn assert_rescue_location(location: Location) {
     );
 }
 
-fn action(rate: RateId) -> Action {
+/// The exchange of one unit of `rate`, each of its roles bound to the
+/// account that plays it.
+pub fn action(rate: RateId) -> Action {
     match rate {
         RateId::Instantiate { .. } => {
             Exchange::new(rate, Quantity::new(1)).bind(Role::Nature, AccountId::Nature)
@@ -855,64 +468,50 @@ fn action(rate: RateId) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy_search::rollout::Unrecorded;
+    use axionomy::Trace;
+
+    /// Observing, then following the report, with the survivor south and
+    /// the sensor's seed 1: the public intent, Nature's resolution, the move
+    /// the report points to, the rescue and the finish.
+    const SENSED_SOUTH: [RateId; 5] = [
+        RateId::BeginObserve,
+        RateId::ResolveObservation {
+            truth: Location::South,
+            seed: 1,
+            report: Location::South,
+            next_seed: 2,
+        },
+        RateId::Move {
+            from: Location::Base,
+            to: Location::South,
+        },
+        RateId::Rescue {
+            location: Location::South,
+        },
+        RateId::Finish,
+    ];
+
+    fn trace(rates: impl IntoIterator<Item = RateId>) -> Trace<Ontology> {
+        rates.into_iter().map(action).collect()
+    }
 
     #[test]
-    fn nature_is_hidden_but_its_observation_is_replayable() {
+    fn nature_resolves_an_observation_only_after_its_public_intent_and_replays() {
         let world = scenario(Location::South, 1);
-        let view = agent_view(&world);
-        assert!(view.account(&AccountId::Nature).is_none());
-        assert_eq!(
-            view.balance(&AccountId::Agent, &Asset::Energy),
-            Some(Quantity::new(2))
-        );
+        assert!(!world.is_applicable(&action(SENSED_SOUTH[1])));
 
-        let rollout = run_policy(&mut world.clone(), Policy::ObserveThenFollow);
-        assert!(rollout.succeeded());
-        assert_eq!(rollout.spent_energy(), 2);
-        assert_eq!(rollout.trace().exchanges()[0].rate(), &RateId::BeginObserve);
-        assert!(matches!(
-            rollout.trace().exchanges()[1].rate(),
-            RateId::ResolveObservation { .. }
-        ));
-
-        let replay = scenario(Location::South, 1)
-            .replayed(rollout.trace())
-            .expect("sampled trace must replay deterministically");
+        let replay = world
+            .replayed(&trace(SENSED_SOUTH))
+            .expect("the observed rescue replays deterministically");
         assert!(replay.matches(&goal()));
-    }
-
-    #[test]
-    fn exact_scenario_evaluation_prefers_the_encoded_prior() {
-        let model = uniform_uncertain();
-        let estimate =
-            evaluate_scenarios(&model, &mut Unrecorded).expect("prior has positive weight");
-        assert_eq!(estimate.observe_successes(), 6);
-        assert_eq!(estimate.direct_successes(), 4);
-        assert_eq!(estimate.chosen(), Policy::ObserveThenFollow);
-    }
-
-    #[test]
-    fn seeded_monte_carlo_is_reproducible() {
-        let model = uniform_uncertain();
         assert_eq!(
-            monte_carlo(&model, 64, 19, &mut Unrecorded),
-            monte_carlo(&model, 64, 19, &mut Unrecorded)
+            replay.balance(&AccountId::Agent, &Asset::SpentEnergy),
+            Quantity::new(2)
         );
-    }
-
-    #[test]
-    fn sampled_policy_front_keeps_success_sensor_tradeoff_approximate() {
-        let front = policy_front(&uniform_uncertain(), 64, 19, &mut Unrecorded).unwrap();
-        assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
-        assert_eq!(front.len(), 2);
-        for entry in front.entries() {
-            assert_eq!(entry.payload().summary().dimensions()[0].samples(), 64);
-            assert_eq!(
-                &policy_objectives(entry.payload().summary()).unwrap(),
-                entry.objectives()
-            );
-        }
+        assert_eq!(
+            replay.balance(&AccountId::Agent, &Asset::UsedSensor),
+            Quantity::new(1)
+        );
     }
 
     #[test]
@@ -938,47 +537,55 @@ mod tests {
     }
 
     #[test]
-    fn public_observation_intent_does_not_depend_on_hidden_truth() {
+    fn the_agent_holds_the_same_before_observing_whatever_the_truth() {
         let north = scenario(Location::North, 1);
         let south = scenario(Location::South, 0);
-        let north_view = agent_view(&north);
-        let south_view = agent_view(&south);
 
-        assert_eq!(north_view.observation_key(), south_view.observation_key());
+        assert_ne!(north.state_key(), south.state_key());
         assert_eq!(
-            public_policy_action(&north_view, Policy::ObserveThenFollow),
-            Some(action(RateId::BeginObserve))
+            north.view([AccountId::Agent]).observation_key(),
+            south.view([AccountId::Agent]).observation_key()
         );
-        assert_eq!(
-            public_policy_action(&south_view, Policy::ObserveThenFollow),
-            Some(action(RateId::BeginObserve))
-        );
+        let intent = action(RateId::BeginObserve);
+        assert!(north.is_applicable(&intent));
+        assert!(south.is_applicable(&intent));
     }
 
     #[test]
     fn sampled_trace_replays_from_the_uncertain_model() {
         let model = uniform_uncertain();
-        let sample = instantiate(&model, Location::South, 1).expect("scenario is encoded");
-        let rollout = run_sampled_policy(&mut model.clone(), &sample, Policy::ObserveThenFollow)
-            .expect("scenario can be instantiated");
-        assert!(rollout.succeeded());
+        let sampled = trace(
+            std::iter::once(RateId::Instantiate {
+                truth: Location::South,
+                seed: 1,
+            })
+            .chain(SENSED_SOUTH),
+        );
 
         let replay = model
-            .replayed(rollout.trace())
-            .expect("sample and policy must replay together");
+            .replayed(&sampled)
+            .expect("sample and rescue must replay together");
         assert!(replay.matches(&goal()));
-        assert!(candidates(&replay).is_empty());
+        assert!(
+            replay
+                .rate_ids()
+                .all(|rate| !replay.is_applicable(&action(*rate)))
+        );
     }
 
     #[test]
     fn stress_profile_encodes_more_hidden_scenarios() {
-        let showcase = uniform_uncertain_showcase();
-        let stress = uniform_uncertain_stress();
-        assert_eq!(encoded_scenarios(&showcase).len(), 32);
-        assert_eq!(encoded_scenarios(&stress).len(), 72);
-        assert_eq!(
-            monte_carlo(&stress, 96, 41, &mut Unrecorded),
-            monte_carlo(&stress, 96, 41, &mut Unrecorded)
-        );
+        let scenarios = |world: &World| {
+            world
+                .rate_ids()
+                .filter(|rate| {
+                    matches!(rate, RateId::Instantiate { .. })
+                        && world.is_applicable(&action(**rate))
+                })
+                .count()
+        };
+        assert_eq!(scenarios(&uniform_uncertain()), 8);
+        assert_eq!(scenarios(&uniform_uncertain_showcase()), 32);
+        assert_eq!(scenarios(&uniform_uncertain_stress()), 72);
     }
 }

@@ -1,10 +1,9 @@
 //! Repeated search, clinical decline and capacity-one evacuation.
 use axionomy::path;
 use axionomy::{
-    Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
-    Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
+    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
-use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Location {
@@ -140,12 +139,6 @@ pub enum RateId {
     Wait,
     Close,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Policy {
-    Triage,
-    RapidNorth,
-    StabilizeFirst,
-}
 pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `rescue/incident` where economies are
@@ -161,7 +154,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type ResponderView<'a> = EconomicView<'a, Ontology>;
 
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
     world.balance(&account, &asset).to_u64()
@@ -762,348 +754,63 @@ pub fn action(rate: RateId) -> Action {
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
 }
-pub fn responder_view(world: &World) -> ResponderView<'_> {
-    let mut visible = vec![AccountId::Responder, AccountId::World];
-    for id in 0..value(world, AccountId::World, Asset::PatientCount) as u8 {
-        if LOCATIONS
-            .into_iter()
-            .any(|location| value(world, AccountId::World, Asset::Known(id, location)) > 0)
-        {
-            visible.push(AccountId::Patient(id));
-        }
-    }
-    world.view(visible)
-}
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut rates: Vec<_> = world.rate_ids().copied().collect();
-    rates.sort();
-    world.applicable(rates.into_iter().map(action))
-}
-/// Environmental responses may inspect hidden accounts. The decision policy
-/// below receives only the responder's explicit economic view.
-pub fn nature_response(world: &World) -> Option<Action> {
-    let count = value(world, AccountId::World, Asset::PatientCount) as u8;
-    for id in 0..count {
-        for cause in [Loss::Deterioration, Loss::Deadline, Loss::Horizon] {
-            for phase in [Phase::Hidden, Phase::Found, Phase::Onboard] {
-                let exchange = action(RateId::Lose {
-                    patient: id,
-                    phase,
-                    cause,
-                });
-                if world.is_applicable(&exchange) {
-                    return Some(exchange);
-                }
-            }
-        }
-        let exchange = action(RateId::Deteriorate(id));
-        if world.is_applicable(&exchange) {
-            return Some(exchange);
-        }
-    }
-    for id in 0..count {
-        for location in LOCATIONS {
-            let exchange = action(RateId::Discover {
-                patient: id,
-                location,
-            });
-            if world.is_applicable(&exchange) {
-                return Some(exchange);
-            }
-        }
-    }
-    for round in 0..2 {
-        for location in LOCATIONS {
-            let exchange = action(RateId::Report { round, location });
-            if world.is_applicable(&exchange) {
-                return Some(exchange);
-            }
-        }
-    }
-    None
-}
-pub fn decision(view: &ResponderView<'_>, policy: Policy) -> Option<Action> {
-    let val = |account, asset| view.balance(&account, &asset).map_or(0, Quantity::to_u64);
-    let count = val(AccountId::World, Asset::PatientCount) as u8;
-    if val(AccountId::World, Asset::Resolved) == u64::from(count) {
-        return Some(action(RateId::Close));
-    }
-    let from = LOCATIONS
-        .into_iter()
-        .find(|location| val(AccountId::Responder, Asset::At(*location)) > 0)?;
-    let now = val(AccountId::World, Asset::Time);
-    let drive = |to, urgent| {
-        let distance = distance(from, to);
-        let fast = (urgent || policy == Policy::RapidNorth)
-            && val(AccountId::Responder, Asset::Fuel) >= distance * 2;
-        action(RateId::Drive { from, to, fast })
-    };
-    if let Some(id) = (0..count).find(|id| val(AccountId::Responder, Asset::Carrying(*id)) > 0) {
-        if from == Location::Base {
-            return Some(action(RateId::Unload(id)));
-        }
-        let urgent = val(AccountId::Patient(id), Asset::Vitality) <= 1
-            || val(AccountId::Patient(id), Asset::NextDecline)
-                <= now + distance(from, Location::Base) * 2 + 1;
-        return Some(drive(Location::Base, urgent));
-    }
-    let mut found: Vec<_> = (0..count)
-        .filter(|id| {
-            val(AccountId::Patient(*id), Asset::Found) > 0
-                && val(AccountId::Patient(*id), Asset::Alive) > 0
-        })
-        .collect();
-    found.sort_by_key(|id| {
-        (
-            val(AccountId::Patient(*id), Asset::Vitality),
-            val(AccountId::Patient(*id), Asset::NextDecline),
-        )
-    });
-    for id in found.iter().copied() {
-        if val(AccountId::Patient(id), Asset::At(from)) == 0 {
-            continue;
-        }
-        let vitality = val(AccountId::Patient(id), Asset::Vitality);
-        let arrival = now
-            + 2
-            + distance(from, Location::Base) * if policy == Policy::RapidNorth { 1 } else { 2 };
-        let decline = val(AccountId::Patient(id), Asset::NextDecline);
-        let projected_loss = if arrival >= decline {
-            (arrival - decline) / 3 + 1
-        } else {
-            0
-        };
-        if policy != Policy::RapidNorth
-            && val(AccountId::Responder, Asset::MedicalKit) > 0
-            && val(AccountId::Patient(id), Asset::Treatable) > 0
-            && (policy == Policy::StabilizeFirst || vitality <= projected_loss)
-        {
-            return Some(action(RateId::Stabilize {
-                patient: id,
-                location: from,
-                restore: val(AccountId::Patient(id), Asset::Harm) > 0,
-            }));
-        }
-        return Some(action(RateId::Load {
-            patient: id,
-            location: from,
-        }));
-    }
-    if val(AccountId::Responder, Asset::Unsearched(from)) > 0 {
-        return Some(action(RateId::Search(from)));
-    }
-    if from == Location::Base {
-        if val(AccountId::World, Asset::SupplyAvailable) > 0
-            && (val(AccountId::Responder, Asset::Fuel) < 4
-                || val(AccountId::Responder, Asset::Energy) < 4
-                || val(AccountId::Responder, Asset::MedicalKit) == 0)
-        {
-            return Some(action(RateId::Resupply));
-        }
-        if policy != Policy::RapidNorth
-            && val(AccountId::Responder, Asset::Sensor) > 0
-            && val(AccountId::Responder, Asset::UsedSensor)
-                <= val(AccountId::World, Asset::SavedCount)
-        {
-            return Some(action(RateId::Scan));
-        }
-    }
-    if let Some(id) = found.first()
-        && let Some(to) = LOCATIONS
-            .into_iter()
-            .find(|location| val(AccountId::Patient(*id), Asset::At(*location)) > 0)
-    {
-        return Some(drive(to, true));
-    }
-    let mut destinations: Vec<_> = LOCATIONS
-        .into_iter()
-        .filter(|location| val(AccountId::Responder, Asset::Unsearched(*location)) > 0)
-        .collect();
-    destinations.sort_by_key(|location| {
-        (
-            if policy == Policy::RapidNorth {
-                u64::from(*location != Location::North)
-            } else {
-                u64::from(val(AccountId::Responder, Asset::Hint(*location)) == 0)
-            },
-            distance(from, *location),
-            *location,
-        )
-    });
-    if let Some(to) = destinations.first().copied() {
-        let needed = distance(from, to) + distance(to, Location::Base);
-        if from != Location::Base
-            && (val(AccountId::Responder, Asset::Fuel) < needed
-                || val(AccountId::Responder, Asset::Energy) < 3)
-        {
-            return Some(drive(Location::Base, false));
-        }
-        return Some(drive(to, val(AccountId::Responder, Asset::Hint(to)) > 0));
-    }
-    Some(action(RateId::Wait))
-}
 /// The most steps an incident takes before it is cut short.
 pub const HORIZON: usize = 250;
-
-/// Runs `policy` on `world` until the incident ends: Nature responds first,
-/// then the responder acts on what it can see if that applies, and otherwise
-/// it waits.
-pub fn run(world: &mut impl Apply<Ontology>, policy: Policy) -> RolloutResult<Ontology> {
-    run_to_goal(world, &goal(), RolloutConfig::new(HORIZON), |world, _| {
-        RolloutDecision::Propose(
-            nature_response(world)
-                .or_else(|| {
-                    decision(&responder_view(world), policy)
-                        .filter(|proposal| world.is_applicable(proposal))
-                })
-                .unwrap_or_else(|| action(RateId::Wait)),
-        )
-    })
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::Trace;
 
-    /// The trace of a run of `policy` from `source`, which must end at the
-    /// goal.
-    fn trace_of(source: &World, policy: Policy) -> Trace<Ontology> {
-        let result = run(&mut source.clone(), policy);
-        assert!(
-            result.termination().is_terminal(),
-            "{policy:?}: {:?}",
-            result.termination()
-        );
-        result.trace().cloned().expect("runs keep their trace")
-    }
-    fn settle(world: &mut World) {
-        while let Some(exchange) = nature_response(world) {
-            world.apply(exchange).unwrap();
+    fn apply_all(world: &mut World, rates: &[RateId]) {
+        for rate in rates {
+            world
+                .apply(action(*rate))
+                .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
         }
     }
+
     #[test]
-    fn policies_repeatedly_search_and_replay_across_common_scenarios() {
-        let mut results = std::collections::BTreeSet::new();
-        let mut saved_multiple = false;
-        let mut treated = false;
-        let mut resupplied = false;
-        for stress in [false, true] {
-            for seed in [0, 3, 17, u64::MAX] {
-                for policy in [Policy::Triage, Policy::RapidNorth, Policy::StabilizeFirst] {
-                    let source = initial(stress, seed);
-                    let before = source.state_key();
-                    let trace = trace_of(&source, policy);
-                    assert_eq!(trace.exchanges(), trace_of(&source, policy).exchanges());
-                    let mut replay = source.clone();
-                    for exchange in trace.exchanges() {
-                        replay.apply(exchange.clone()).unwrap();
-                        assert_eq!(
-                            LOCATIONS
-                                .into_iter()
-                                .map(|location| value(
-                                    &replay,
-                                    AccountId::Responder,
-                                    Asset::At(location)
-                                ))
-                                .sum::<u64>(),
-                            1
-                        );
-                        let occupied: u64 =
-                            (0..value(&replay, AccountId::World, Asset::PatientCount) as u8)
-                                .map(|id| value(&replay, AccountId::Responder, Asset::Carrying(id)))
-                                .sum();
-                        assert_eq!(
-                            occupied + value(&replay, AccountId::Responder, Asset::Seat),
-                            1
-                        );
-                    }
-                    assert!(replay.matches(&goal()));
-                    assert_eq!(source.state_key(), before);
-                    assert_eq!(
-                        value(&replay, AccountId::World, Asset::Resolved),
-                        value(&source, AccountId::World, Asset::PatientCount)
-                    );
-                    saved_multiple |= value(&replay, AccountId::World, Asset::SavedCount) >= 2;
-                    treated |= trace
-                        .exchanges()
-                        .iter()
-                        .any(|action| matches!(action.rate(), RateId::Stabilize { .. }));
-                    resupplied |= trace
-                        .exchanges()
-                        .iter()
-                        .any(|action| action.rate() == &RateId::Resupply);
-                    results.insert((
-                        value(&replay, AccountId::World, Asset::SavedCount),
-                        value(&replay, AccountId::World, Asset::DeathCount),
-                        value(&replay, AccountId::Responder, Asset::SpentFuel),
-                    ));
-                    if seed == 17 {
-                        eprintln!(
-                            "{stress:?} {policy:?}: saved {} vitality {} dead {} fuel {} time {}",
-                            value(&replay, AccountId::World, Asset::SavedCount),
-                            value(&replay, AccountId::World, Asset::SavedVitality),
-                            value(&replay, AccountId::World, Asset::DeathCount),
-                            value(&replay, AccountId::Responder, Asset::SpentFuel),
-                            now(&replay)
-                        );
-                    }
-                }
-            }
-        }
-        assert!(saved_multiple && treated && resupplied);
-        assert!(results.len() >= 4);
-    }
-    #[test]
-    fn decisions_cannot_read_undiscovered_patients_or_nature() {
+    fn hidden_scenarios_differ_only_in_what_the_responder_cannot_see() {
         let left = initial(false, 0);
         let right = initial(false, 17);
+        let seen = [AccountId::Responder, AccountId::World];
         assert_ne!(left.state_key(), right.state_key());
         assert_eq!(
-            responder_view(&left).observation_key(),
-            responder_view(&right).observation_key()
-        );
-        for policy in [Policy::Triage, Policy::RapidNorth, Policy::StabilizeFirst] {
-            assert_eq!(
-                decision(&responder_view(&left), policy),
-                decision(&responder_view(&right), policy)
-            );
-        }
-        assert!(responder_view(&left).account(&AccountId::Nature).is_none());
-        assert!(
-            responder_view(&left)
-                .account(&AccountId::Patient(0))
-                .is_none()
+            left.view(seen).observation_key(),
+            right.view(seen).observation_key()
         );
     }
+
     #[test]
     fn clinical_updates_and_treatment_are_authoritative_and_finite() {
         let mut world = initial(false, 0);
-        world
-            .apply(action(RateId::Drive {
-                from: Location::Base,
-                to: Location::North,
-                fast: true,
-            }))
-            .unwrap();
-        world
-            .apply(action(RateId::Search(Location::North)))
-            .unwrap();
-        settle(&mut world);
-        assert!(
-            responder_view(&world)
-                .account(&AccountId::Patient(0))
-                .is_some()
+        apply_all(
+            &mut world,
+            &[
+                RateId::Drive {
+                    from: Location::Base,
+                    to: Location::North,
+                    fast: true,
+                },
+                RateId::Search(Location::North),
+                RateId::Discover {
+                    patient: 0,
+                    location: Location::North,
+                },
+            ],
         );
-        while now(&world) < 4 {
-            world.apply(action(RateId::Wait)).unwrap();
-        }
+        assert_eq!(
+            value(&world, AccountId::World, Asset::Known(0, Location::North)),
+            1
+        );
+        apply_all(&mut world, &[RateId::Wait, RateId::Wait]);
+        assert_eq!(now(&world), 4);
         let load = action(RateId::Load {
             patient: 0,
             location: Location::North,
         });
         assert!(!world.is_applicable(&load));
-        settle(&mut world);
+        apply_all(&mut world, &[RateId::Deteriorate(0)]);
         assert_eq!(value(&world, AccountId::Patient(0), Asset::Vitality), 2);
         let treatment = action(RateId::Stabilize {
             patient: 0,
@@ -1117,10 +824,46 @@ mod tests {
         world.apply(load.clone()).unwrap();
         assert!(!world.is_applicable(&load));
         assert_eq!(value(&world, AccountId::Responder, Asset::Seat), 0);
-        while now(&world) < 21 {
-            world.apply(action(RateId::Wait)).unwrap();
-            settle(&mut world);
-        }
+        // The clock runs on to 21, each tick followed by what Nature then
+        // owes: every patient's decline, and the deaths it brings.
+        let lose = |patient, phase| RateId::Lose {
+            patient,
+            phase,
+            cause: Loss::Deterioration,
+        };
+        apply_all(
+            &mut world,
+            &[
+                RateId::Wait,
+                RateId::Deteriorate(1),
+                RateId::Wait,
+                RateId::Deteriorate(2),
+                RateId::Wait,
+                RateId::Deteriorate(1),
+                RateId::Wait,
+                RateId::Wait,
+                RateId::Deteriorate(0),
+                RateId::Deteriorate(2),
+                RateId::Wait,
+                RateId::Deteriorate(1),
+                lose(1, Phase::Hidden),
+                RateId::Wait,
+                RateId::Wait,
+                RateId::Deteriorate(0),
+                RateId::Deteriorate(2),
+                lose(2, Phase::Hidden),
+                RateId::Wait,
+                RateId::Wait,
+                RateId::Wait,
+                RateId::Deteriorate(0),
+                lose(0, Phase::Onboard),
+                RateId::Wait,
+                RateId::Wait,
+                RateId::Wait,
+                RateId::Wait,
+            ],
+        );
+        assert_eq!(now(&world), 21);
         assert_eq!(value(&world, AccountId::Patient(0), Asset::Dead), 1);
         assert_eq!(value(&world, AccountId::Responder, Asset::Seat), 1);
         assert!(!world.is_applicable(&action(RateId::Unload(0))));
