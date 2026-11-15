@@ -1,10 +1,12 @@
 //! Shared-time work economy. Events and worker decisions are proposed as
 //! exchanges; time, deadlines, leases, activity duration and facility
-//! ownership are laws.
+//! ownership are laws. Each law is a rate with variables, serving every
+//! worker, `{agent}`, and every contract, `{job}`, each role fixed to the
+//! account its identifier names.
 
 use super::*;
 use axionomy::path;
-use axionomy::{QuantityComparison as C, QuantityExpression as Q};
+use axionomy::{OptionPattern, QuantityComparison as C, Relation};
 
 const FACILITIES: [Facility; 3] = [Facility::Workshop, Facility::Charger, Facility::Recycler];
 const MODES: [WorkMode; 3] = [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe];
@@ -27,12 +29,11 @@ fn q(role: Role, asset: Asset) -> Q<Ontology> {
 fn now() -> Q<Ontology> {
     q(Role::World, Asset::Tick)
 }
+/// One event of the season, the world role fixed to the world.
 fn law() -> Rate<Ontology> {
     Rate::new()
-        .preserve(
-            Role::World,
-            basket([(Asset::WorldIdentity, 1), (Asset::SeasonActive, 1)]),
-        )
+        .account(Role::World, Pattern::literal(AccountId::World))
+        .preserve(Role::World, basket([(Asset::SeasonActive, 1)]))
         .condition(
             path!("one-event-at-a-time"),
             Q::units(),
@@ -40,30 +41,33 @@ fn law() -> Rate<Ontology> {
             Q::constant(1),
         )
 }
-fn actor(rate: Rate<Ontology>, agent: AgentId) -> Rate<Ontology> {
-    rate.preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
-        .distinct(Role::Agent, Role::World)
+/// `rate` for each worker, `{agent}`.
+fn actor(rate: Rate<Ontology>) -> Rate<Ontology> {
+    by_worker(rate, &AGENTS)
 }
-fn turn(agent: AgentId) -> Rate<Ontology> {
-    actor(law(), agent)
-        .consume(Role::World, basket([(Asset::Permit(agent), 1)]))
-        .produce(Role::World, basket([(Asset::Acted(agent), 1)]))
-}
-fn job(rate: Rate<Ontology>, id: JobId) -> Rate<Ontology> {
-    rate.preserve(Role::Job, basket([(Asset::JobIdentity(id), 1)]))
-        .distinct(Role::Job, Role::World)
+/// The worker `{agent}` spending its decision this tick.
+fn turn() -> Rate<Ontology> {
+    actor(law())
+        .consume_at(
+            Role::World,
+            one([AssetPattern::Permit(agent().var()).into()]),
+        )
+        .produce_at(
+            Role::World,
+            one([AssetPattern::Acted(agent().var()).into()]),
+        )
 }
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, q(role, asset))
 }
-fn occupy(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
+fn occupy(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
     rate.consume(Role::Agent, basket([(Asset::Idle, 1)]))
         .produce(Role::Agent, basket([(Asset::Busy, 1)]))
         .produce(Role::World, basket([(Asset::Activities, 1)]))
-        .produce_computed(Role::Agent, Asset::ReadyAt, now() + Q::constant(duration))
+        .produce_computed(Role::Agent, Asset::ReadyAt, now() + duration.clone())
         .condition(
             path!("activity-fits-the-season"),
-            now() + Q::constant(duration),
+            now() + duration,
             C::LessThanOrEqual,
             q(Role::World, Asset::Horizon),
         )
@@ -80,22 +84,34 @@ fn finish_activity(rate: Rate<Ontology>) -> Rate<Ontology> {
         .produce(Role::Agent, basket([(Asset::Idle, 1)]))
         .consume(Role::World, basket([(Asset::Activities, 1)]))
 }
-fn service_location(facility: Facility) -> Location {
-    match facility {
-        Facility::Workshop => Location::Workshop,
-        Facility::Charger => Location::Charger,
-        Facility::Recycler => Location::Recycler,
-    }
+/// The contract that closes each wave of four, the fourth, eighth and so
+/// on, needs the wave's first delivered: the world holds its completion as
+/// many times as `{job}` closes a wave, once or not at all. `{first}` is
+/// the first contract of `{job}`'s wave.
+fn prerequisite(rate: Rate<Ontology>) -> Rate<Ontology> {
+    let first = Param::<u8>::new(path!("first"));
+    let wave = |number: Q<Ontology>| Q::divide(number, Q::constant(4), Rounding::Floor);
+    let earlier = || job().quantity() - Q::constant(1);
+    rate.derive(
+        first.name().clone(),
+        wave(earlier()) * Q::constant(4) + Q::constant(1),
+    )
+    .preserve_computed_at(
+        Role::World,
+        AssetPattern::CompletedJob(Slot::Of(JobIdPattern(first.var()))).into(),
+        wave(job().quantity()) - wave(earlier()),
+    )
 }
-fn dependency(id: JobId) -> Option<JobId> {
-    id.0.is_multiple_of(4).then(|| JobId(id.0 - 3))
+/// What the contract `{job}` names was claimed, and is still pending or in
+/// progress, by the worker `{agent}` names.
+fn assigned() -> Pattern<Asset> {
+    AssetPattern::Assigned(agent().var()).into()
 }
-fn prerequisite(rate: Rate<Ontology>, id: JobId) -> Rate<Ontology> {
-    if let Some(before) = dependency(id) {
-        rate.preserve(Role::World, basket([(Asset::CompletedJob(before), 1)]))
-    } else {
-        rate
-    }
+fn claimed() -> Pattern<Asset> {
+    AssetPattern::Claimed(contract()).into()
+}
+fn awaiting() -> Pattern<Asset> {
+    AssetPattern::Awaiting(contract(), mode().var()).into()
 }
 
 pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
@@ -105,7 +121,6 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         .collect::<Vec<_>>();
     let horizon = if profile == Profile::Stress { 78 } else { 48 };
     let mut world_assets = basket([
-        (Asset::WorldIdentity, 1),
         (Asset::SeasonActive, 1),
         (Asset::Horizon, horizon),
         (Asset::ContractsOpen, jobs.len() as u64),
@@ -116,7 +131,6 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         builder = builder.account(
             AccountId::Agent(agent),
             Account::from(basket([
-                (Asset::AgentIdentity(agent), 1),
                 (Asset::Policy(lineup[index]), 1),
                 (Asset::At(Location::Depot), 1),
                 (Asset::Operational, 1),
@@ -146,10 +160,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     }
     builder = builder.account(AccountId::Nature, Account::from(nature));
     for facility in FACILITIES {
-        let mut assets = basket([
-            (Asset::FacilityIdentity(facility), 1),
-            (Asset::Vacant(facility), 1),
-        ]);
+        let mut assets = basket([(Asset::Vacant(facility), 1)]);
         match facility {
             Facility::Workshop => {
                 assets.insert(Asset::RepairSupply, Quantity::new(jobs.len() as u64));
@@ -172,366 +183,395 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     for spec in &jobs {
         let release = u64::from((spec.id.0 - 1) / 4) * 6;
         let deadline = release + 20 + u64::from(spec.id.0 % 3) * 3;
-        builder = builder.account(
-            AccountId::Job(spec.id),
-            Account::from(basket([
-                (Asset::JobIdentity(spec.id), 1),
-                (Asset::Available, 1),
-                (Asset::Transferable, 1),
-                (Asset::Credit, spec.value),
-                (Asset::ReleaseAt, release),
-                (Asset::Deadline, deadline),
-            ])),
-        );
-        builder = builder.rate(
-            RateId::Expire {
-                job: spec.id,
-                agent: None,
-                mode: None,
-            },
-            expire_rate(spec.id, None, None),
-        );
-        for agent in AGENTS {
-            builder = builder.rate(
-                RateId::Claim {
-                    agent,
-                    job: spec.id,
-                },
-                prerequisite(job(turn(agent), spec.id), spec.id)
-                    .preserve(
-                        Role::Agent,
-                        basket([(Asset::Idle, 1), (Asset::Operational, 1)]),
-                    )
-                    .consume(Role::Agent, basket([(Asset::FreeContract, 1)]))
-                    .produce(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
-                    .consume(Role::Job, basket([(Asset::Available, 1)]))
-                    .produce(
-                        Role::Job,
-                        basket([(Asset::Assigned(agent), 1), (Asset::Pending, 1)]),
-                    )
-                    .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE))
-                    .condition(
-                        path!("contract-has-arrived"),
-                        now(),
-                        C::GreaterThanOrEqual,
-                        q(Role::Job, Asset::ReleaseAt),
-                    )
-                    .condition(
-                        path!("contract-remains-open"),
-                        now() + Q::constant(1),
-                        C::LessThanOrEqual,
-                        q(Role::Job, Asset::Deadline),
-                    )
-                    .distinct(Role::Agent, Role::Job),
-            );
-            for expired in [false, true] {
-                let base = if expired {
-                    actor(law(), agent)
-                } else {
-                    turn(agent)
-                };
-                let mut release = clear(job(base, spec.id), Role::Job, Asset::LeaseUntil)
-                    .consume(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
-                    .produce(Role::Agent, basket([(Asset::FreeContract, 1)]))
-                    .consume(
-                        Role::Job,
-                        basket([(Asset::Assigned(agent), 1), (Asset::Pending, 1)]),
-                    )
-                    .produce(Role::Job, basket([(Asset::Available, 1)]))
-                    .distinct(Role::Agent, Role::Job);
-                if expired {
-                    release = release.condition(
-                        path!("claim-lease-has-elapsed"),
-                        now(),
-                        C::GreaterThanOrEqual,
-                        q(Role::Job, Asset::LeaseUntil) + Q::constant(1),
-                    );
-                } else {
-                    release = release.preserve(Role::Agent, basket([(Asset::Idle, 1)]));
-                }
-                builder = builder.rate(
-                    RateId::ReleaseClaim {
-                        agent,
-                        job: spec.id,
-                        expired,
-                    },
-                    release,
-                );
-            }
-            builder = builder.rate(
-                RateId::Expire {
-                    job: spec.id,
-                    agent: Some(agent),
-                    mode: None,
-                },
-                expire_rate(spec.id, Some(agent), None),
-            );
-            for mode in MODES {
-                let cost = work_cost(*spec, mode);
-                let begin = occupy(
-                    clear(
-                        prerequisite(job(turn(agent), spec.id), spec.id),
-                        Role::Job,
-                        Asset::LeaseUntil,
-                    ),
-                    cost.time,
-                )
-                .preserve(
-                    Role::Agent,
-                    basket([
-                        (Asset::Operational, 1),
-                        (Asset::At(spec.location), 1),
-                        (Asset::Claimed(spec.id), 1),
-                    ]),
-                )
-                .consume(
-                    Role::Agent,
-                    basket([
-                        (Asset::Energy, cost.energy),
-                        (Asset::Material, cost.material),
-                    ]),
-                )
-                .produce(
-                    Role::Agent,
-                    basket([
-                        (Asset::SpentEnergy, cost.energy),
-                        (Asset::MaterialSpent, cost.material),
-                        (Asset::Waste, cost.waste),
-                        (Asset::EmbodiedMaterial, cost.material - cost.waste),
-                        (Asset::Attempts, 1),
-                        (Asset::Awaiting(spec.id, mode), 1),
-                        (Asset::Wear, if mode == WorkMode::Rush { 2 } else { 1 }),
-                    ]),
-                )
-                .preserve(Role::Job, basket([(Asset::Assigned(agent), 1)]))
-                .consume(Role::Job, basket([(Asset::Pending, 1)]))
-                .produce(
-                    Role::Job,
-                    basket([(Asset::InProgress, 1), (Asset::Attempts, 1)]),
-                )
-                .condition(
-                    path!("claim-lease-remains-valid"),
-                    now(),
-                    C::LessThanOrEqual,
-                    q(Role::Job, Asset::LeaseUntil),
-                )
-                .condition(
-                    path!("work-finishes-by-deadline"),
-                    now() + Q::constant(cost.time),
-                    C::LessThanOrEqual,
-                    q(Role::Job, Asset::Deadline),
-                )
-                .condition(
-                    path!("equipment-needs-maintenance-below-wear-six"),
-                    q(Role::Agent, Asset::Wear),
-                    C::LessThanOrEqual,
-                    Q::constant(5),
-                )
-                .distinct(Role::Agent, Role::Job);
-                builder = builder.rate(
-                    RateId::Begin {
-                        agent,
-                        job: spec.id,
-                        mode,
-                    },
-                    begin,
-                );
-                for outcome in [Outcome::Success, Outcome::Failure] {
-                    let mut finish = finish_activity(job(actor(law(), agent), spec.id))
-                        .preserve(
-                            Role::Nature,
-                            basket([(Asset::OutcomeWeight(spec.id, mode, outcome), 1)]),
-                        )
-                        .consume(Role::Agent, basket([(Asset::Awaiting(spec.id, mode), 1)]))
-                        .consume(Role::Job, basket([(Asset::InProgress, 1)]))
-                        .condition(
-                            path!("outcome-settles-before-expiry"),
-                            now(),
-                            C::LessThanOrEqual,
-                            q(Role::Job, Asset::Deadline),
-                        )
-                        .distinct(Role::Agent, Role::Job)
-                        .distinct(Role::Nature, Role::World);
-                    finish = match outcome {
-                        Outcome::Success => finish
-                            .consume(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
-                            .produce(
-                                Role::Agent,
-                                basket([
-                                    (Asset::FreeContract, 1),
-                                    (Asset::Value, spec.value),
-                                    (Asset::Credit, spec.value),
-                                    (Asset::Completed, 1),
-                                    (Asset::Successes, 1),
-                                ]),
-                            )
-                            .consume(
-                                Role::Job,
-                                basket([(Asset::Assigned(agent), 1), (Asset::Credit, spec.value)]),
-                            )
-                            .produce(Role::Job, basket([(Asset::Completed, 1)]))
-                            .consume(Role::World, basket([(Asset::ContractsOpen, 1)]))
-                            .produce(
-                                Role::World,
-                                basket([
-                                    (Asset::ContractsClosed, 1),
-                                    (Asset::CompletedJob(spec.id), 1),
-                                ]),
-                            ),
-                        Outcome::Failure => finish
-                            .preserve(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
-                            .consume(Role::Agent, basket([(Asset::Operational, 1)]))
-                            .produce(
-                                Role::Agent,
-                                basket([(Asset::Damage, 1), (Asset::Failures, 1)]),
-                            )
-                            .preserve(Role::Job, basket([(Asset::Assigned(agent), 1)]))
-                            .produce(Role::Job, basket([(Asset::Pending, 1)]))
-                            .produce_computed(
-                                Role::Job,
-                                Asset::LeaseUntil,
-                                now() + Q::constant(LEASE),
-                            ),
-                    };
-                    builder = builder.rate(
-                        RateId::Finish {
-                            agent,
-                            job: spec.id,
-                            mode,
-                            outcome,
-                        },
-                        finish,
-                    );
-                }
-                builder = builder.rate(
-                    RateId::Expire {
-                        job: spec.id,
-                        agent: Some(agent),
-                        mode: Some(mode),
-                    },
-                    expire_rate(spec.id, Some(agent), Some(mode)),
-                );
-            }
-            for recipient in AGENTS.into_iter().filter(|other| *other != agent) {
-                // A joint proposal spends both actors' decision permissions. A
-                // contract can be handed off once, preventing referral farming.
-                builder = builder.rate(
-                    RateId::Handoff {
-                        agent,
-                        recipient,
-                        job: spec.id,
-                    },
-                    clear(job(turn(agent), spec.id), Role::Job, Asset::LeaseUntil)
-                        .consume(Role::World, basket([(Asset::Permit(recipient), 1)]))
-                        .produce(Role::World, basket([(Asset::Acted(recipient), 1)]))
-                        .preserve(Role::Agent, basket([(Asset::Idle, 1)]))
-                        .consume(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
-                        .produce(
-                            Role::Agent,
-                            basket([
-                                (Asset::FreeContract, 1),
-                                (Asset::Credit, 2),
-                                (Asset::Assists, 1),
-                            ]),
-                        )
-                        .preserve(
-                            Role::Partner,
-                            basket([
-                                (Asset::AgentIdentity(recipient), 1),
-                                (Asset::Idle, 1),
-                                (Asset::Operational, 1),
-                            ]),
-                        )
-                        .consume(
-                            Role::Partner,
-                            basket([(Asset::FreeContract, 1), (Asset::Credit, 2)]),
-                        )
-                        .produce(Role::Partner, basket([(Asset::Claimed(spec.id), 1)]))
-                        .preserve(Role::Job, basket([(Asset::Pending, 1)]))
-                        .consume(
-                            Role::Job,
-                            basket([(Asset::Assigned(agent), 1), (Asset::Transferable, 1)]),
-                        )
-                        .produce(
-                            Role::Job,
-                            basket([(Asset::Assigned(recipient), 1), (Asset::HandedOff, 1)]),
-                        )
-                        .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE))
-                        .condition(
-                            path!("handoff-before-deadline"),
-                            now() + Q::constant(1),
-                            C::LessThanOrEqual,
-                            q(Role::Job, Asset::Deadline),
-                        )
-                        .distinct(Role::Agent, Role::Partner)
-                        .distinct(Role::Partner, Role::Job)
-                        .distinct(Role::Agent, Role::Job),
-                );
-            }
+        let mut contract = terms(spec);
+        for (asset, quantity) in [
+            (Asset::Available, 1),
+            (Asset::Transferable, 1),
+            (Asset::Credit, spec.value),
+            (Asset::ReleaseAt, release),
+            (Asset::Deadline, deadline),
+        ] {
+            contract.insert(asset, Quantity::new(quantity));
         }
+        builder = builder.account(AccountId::Job(spec.id), Account::from(contract));
+    }
+
+    let count = jobs.len() as u8;
+    let job = |rate| on_contract(rate, count);
+    let expire = |agent, mode| {
+        RateIdPattern::Expire {
+            job: contract(),
+            agent: Slot::Of(agent),
+            mode: Slot::Of(mode),
+        }
+        .into()
+    };
+    builder = builder
+        .rate_at(
+            expire(OptionPattern::None, OptionPattern::None),
+            expiry(job(law())).consume(Role::Job, basket([(Asset::Available, 1)])),
+        )
+        .rate_at(
+            expire(OptionPattern::Some(agent().var()), OptionPattern::None),
+            clear(abandoned(actor(job(law()))), Role::Job, Asset::LeaseUntil)
+                .consume(Role::Job, basket([(Asset::Pending, 1)])),
+        )
+        .rate_at(
+            expire(
+                OptionPattern::Some(agent().var()),
+                OptionPattern::Some(mode().var()),
+            ),
+            finish_activity(abandoned(actor(job(law()))).variable(mode().every()))
+                .consume_at(Role::Agent, one([awaiting()]))
+                .consume(Role::Job, basket([(Asset::InProgress, 1)])),
+        );
+    builder = builder.rate_at(
+        RateIdPattern::Claim {
+            agent: agent().var(),
+            job: contract(),
+        }
+        .into(),
+        prerequisite(job(turn()))
+            .preserve(
+                Role::Agent,
+                basket([(Asset::Idle, 1), (Asset::Operational, 1)]),
+            )
+            .consume(Role::Agent, basket([(Asset::FreeContract, 1)]))
+            .produce_at(Role::Agent, one([claimed()]))
+            .consume(Role::Job, basket([(Asset::Available, 1)]))
+            .produce_at(
+                Role::Job,
+                one([assigned(), Pattern::literal(Asset::Pending)]),
+            )
+            .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE))
+            .condition(
+                path!("contract-has-arrived"),
+                now(),
+                C::GreaterThanOrEqual,
+                q(Role::Job, Asset::ReleaseAt),
+            )
+            .condition(
+                path!("contract-remains-open"),
+                now() + Q::constant(1),
+                C::LessThanOrEqual,
+                q(Role::Job, Asset::Deadline),
+            ),
+    );
+    for expired in [false, true] {
+        // A claim released by its worker spends its turn; one whose lease
+        // lapsed is released as an event.
+        let base = if expired { actor(law()) } else { turn() };
+        let release = clear(job(base), Role::Job, Asset::LeaseUntil)
+            .consume_at(Role::Agent, one([claimed()]))
+            .produce(Role::Agent, basket([(Asset::FreeContract, 1)]))
+            .consume_at(
+                Role::Job,
+                one([assigned(), Pattern::literal(Asset::Pending)]),
+            )
+            .produce(Role::Job, basket([(Asset::Available, 1)]));
+        let release = if expired {
+            release.condition(
+                path!("claim-lease-has-elapsed"),
+                now(),
+                C::GreaterThanOrEqual,
+                q(Role::Job, Asset::LeaseUntil) + Q::constant(1),
+            )
+        } else {
+            release.preserve(Role::Agent, basket([(Asset::Idle, 1)]))
+        };
+        builder = builder.rate_at(
+            RateIdPattern::ReleaseClaim {
+                agent: agent().var(),
+                job: contract(),
+                expired: Slot::Is(expired),
+            }
+            .into(),
+            release,
+        );
+    }
+    for mode in MODES {
+        let cost = cost(mode);
+        let begin = occupy(
+            clear(prerequisite(job(turn())), Role::Job, Asset::LeaseUntil),
+            cost.time.clone(),
+        );
+        let begin = at_the_contract(begin)
+            .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
+            .preserve_at(Role::Agent, one([claimed()]))
+            .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())
+            .consume_computed(Role::Agent, Asset::Material, cost.material.clone())
+            .produce_computed(Role::Agent, Asset::SpentEnergy, cost.energy)
+            .produce_computed(Role::Agent, Asset::MaterialSpent, cost.material.clone())
+            .produce_computed(Role::Agent, Asset::Waste, cost.waste.clone())
+            .produce_computed(
+                Role::Agent,
+                Asset::EmbodiedMaterial,
+                cost.material - cost.waste,
+            )
+            .produce(
+                Role::Agent,
+                basket([
+                    (Asset::Attempts, 1),
+                    (Asset::Wear, if mode == WorkMode::Rush { 2 } else { 1 }),
+                ]),
+            )
+            .produce_at(
+                Role::Agent,
+                one([AssetPattern::Awaiting(contract(), Slot::Is(mode)).into()]),
+            )
+            .preserve_at(Role::Job, one([assigned()]))
+            .consume(Role::Job, basket([(Asset::Pending, 1)]))
+            .produce(
+                Role::Job,
+                basket([(Asset::InProgress, 1), (Asset::Attempts, 1)]),
+            )
+            .condition(
+                path!("claim-lease-remains-valid"),
+                now(),
+                C::LessThanOrEqual,
+                q(Role::Job, Asset::LeaseUntil),
+            )
+            .condition(
+                path!("work-finishes-by-deadline"),
+                now() + cost.time,
+                C::LessThanOrEqual,
+                q(Role::Job, Asset::Deadline),
+            )
+            .condition(
+                path!("equipment-needs-maintenance-below-wear-six"),
+                q(Role::Agent, Asset::Wear),
+                C::LessThanOrEqual,
+                Q::constant(5),
+            );
+        builder = builder.rate_at(
+            RateIdPattern::Begin {
+                agent: agent().var(),
+                job: contract(),
+                mode: Slot::Is(mode),
+            }
+            .into(),
+            begin,
+        );
+    }
+    for outcome in [Outcome::Success, Outcome::Failure] {
+        let finish = finish_activity(job(actor(law())).variable(mode().every()))
+            .account(Role::Nature, Pattern::literal(AccountId::Nature))
+            .preserve_at(
+                Role::Nature,
+                one([
+                    AssetPattern::OutcomeWeight(contract(), mode().var(), Slot::Is(outcome)).into(),
+                ]),
+            )
+            .consume_at(Role::Agent, one([awaiting()]))
+            .consume(Role::Job, basket([(Asset::InProgress, 1)]))
+            .condition(
+                path!("outcome-settles-before-expiry"),
+                now(),
+                C::LessThanOrEqual,
+                q(Role::Job, Asset::Deadline),
+            );
+        let reward = || q(Role::Job, Asset::Reward);
+        let finish = match outcome {
+            Outcome::Success => finish
+                .consume_at(Role::Agent, one([claimed()]))
+                .produce(
+                    Role::Agent,
+                    basket([
+                        (Asset::FreeContract, 1),
+                        (Asset::Completed, 1),
+                        (Asset::Successes, 1),
+                    ]),
+                )
+                .produce_computed(Role::Agent, Asset::Value, reward())
+                .produce_computed(Role::Agent, Asset::Credit, reward())
+                .consume_at(Role::Job, one([assigned()]))
+                .consume_computed(Role::Job, Asset::Credit, reward())
+                .produce(Role::Job, basket([(Asset::Completed, 1)]))
+                .consume(Role::World, basket([(Asset::ContractsOpen, 1)]))
+                .produce(Role::World, basket([(Asset::ContractsClosed, 1)]))
+                .produce_at(
+                    Role::World,
+                    one([AssetPattern::CompletedJob(contract()).into()]),
+                ),
+            Outcome::Failure => finish
+                .preserve_at(Role::Agent, one([claimed()]))
+                .consume(Role::Agent, basket([(Asset::Operational, 1)]))
+                .produce(
+                    Role::Agent,
+                    basket([(Asset::Damage, 1), (Asset::Failures, 1)]),
+                )
+                .preserve_at(Role::Job, one([assigned()]))
+                .produce(Role::Job, basket([(Asset::Pending, 1)]))
+                .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE)),
+        };
+        builder = builder.rate_at(
+            RateIdPattern::Finish {
+                agent: agent().var(),
+                job: contract(),
+                mode: mode().var(),
+                outcome: Slot::Is(outcome),
+            }
+            .into(),
+            finish,
+        );
+    }
+    // A joint proposal spends both actors' decision permissions. A
+    // contract can be handed off once, preventing referral farming.
+    let recipient = Param::<AgentId>::new(path!("recipient"));
+    builder = builder.rate_at(
+        RateIdPattern::Handoff {
+            agent: agent().var(),
+            recipient: recipient.var(),
+            job: contract(),
+        }
+        .into(),
+        clear(
+            job(turn()
+                .variable(recipient.every())
+                .distinct_variables(agent().name().clone(), recipient.name().clone())),
+            Role::Job,
+            Asset::LeaseUntil,
+        )
+        .account(
+            Role::Partner,
+            AccountIdPattern::Agent(recipient.var()).into(),
+        )
+        .consume_at(
+            Role::World,
+            one([AssetPattern::Permit(recipient.var()).into()]),
+        )
+        .produce_at(
+            Role::World,
+            one([AssetPattern::Acted(recipient.var()).into()]),
+        )
+        .preserve(Role::Agent, basket([(Asset::Idle, 1)]))
+        .consume_at(Role::Agent, one([claimed()]))
+        .produce(
+            Role::Agent,
+            basket([
+                (Asset::FreeContract, 1),
+                (Asset::Credit, 2),
+                (Asset::Assists, 1),
+            ]),
+        )
+        .preserve(
+            Role::Partner,
+            basket([(Asset::Idle, 1), (Asset::Operational, 1)]),
+        )
+        .consume(
+            Role::Partner,
+            basket([(Asset::FreeContract, 1), (Asset::Credit, 2)]),
+        )
+        .produce_at(Role::Partner, one([claimed()]))
+        .preserve(Role::Job, basket([(Asset::Pending, 1)]))
+        .consume_at(
+            Role::Job,
+            one([assigned(), Pattern::literal(Asset::Transferable)]),
+        )
+        .produce_at(
+            Role::Job,
+            one([
+                AssetPattern::Assigned(recipient.var()).into(),
+                Pattern::literal(Asset::HandedOff),
+            ]),
+        )
+        .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE))
+        .condition(
+            path!("handoff-before-deadline"),
+            now() + Q::constant(1),
+            C::LessThanOrEqual,
+            q(Role::Job, Asset::Deadline),
+        ),
+    );
+    builder = builder.rate_at(
+        RateIdPattern::Wait {
+            agent: agent().var(),
+        }
+        .into(),
+        turn(),
+    );
+    // The roads never change: a worker moves along one, either way, a hop a
+    // turn.
+    let (from, to) = (
+        Param::<Location>::new(path!("from")),
+        Param::new(path!("to")),
+    );
+    let roads = LOCATIONS.into_iter().flat_map(|from| {
+        LOCATIONS
+            .into_iter()
+            .filter(move |to| ROUTES.contains(&(from, *to)) || ROUTES.contains(&(*to, from)))
+            .map(move |to| (from, to))
+    });
+    builder = builder.rate_at(
+        RateIdPattern::Move {
+            agent: agent().var(),
+            from: from.var(),
+            to: to.var(),
+        }
+        .into(),
+        turn()
+            .variable(from.every())
+            .variable(to.every())
+            .relation(Relation::pairs(&from, &to, roads))
+            .preserve(Role::Agent, basket([(Asset::Idle, 1)]))
+            .consume_at(
+                Role::Agent,
+                [
+                    (AssetPattern::At(from.var()).into(), Quantity::new(1)),
+                    (Pattern::literal(Asset::Energy), Quantity::new(1)),
+                ],
+            )
+            .produce_at(
+                Role::Agent,
+                [
+                    (AssetPattern::At(to.var()).into(), Quantity::new(1)),
+                    (Pattern::literal(Asset::SpentEnergy), Quantity::new(1)),
+                ],
+            ),
+    );
+    for facility in FACILITIES {
+        for maintenance in [false, true] {
+            if maintenance && facility != Facility::Workshop {
+                continue;
+            }
+            builder = builder.rate_at(
+                RateIdPattern::BeginService {
+                    agent: agent().var(),
+                    facility: Slot::Is(facility),
+                    maintenance: Slot::Is(maintenance),
+                }
+                .into(),
+                service_rate(facility, maintenance),
+            );
+        }
+        let end = finish_activity(at_facility(actor(law()), facility))
+            .consume(Role::Agent, basket([(Asset::Servicing(facility), 1)]))
+            .consume_at(
+                Role::Facility,
+                one([AssetPattern::Occupied(Slot::Is(facility), agent().var()).into()]),
+            )
+            .produce(Role::Facility, basket([(Asset::Vacant(facility), 1)]));
+        let end = match facility {
+            Facility::Workshop => clear(end, Role::Agent, Asset::Wear)
+                .consume(Role::Agent, basket([(Asset::Repairing, 1)]))
+                .produce(Role::Agent, basket([(Asset::Operational, 1)])),
+            Facility::Charger => end
+                .consume(Role::Agent, basket([(Asset::ChargingEnergy, 12)]))
+                .produce(Role::Agent, basket([(Asset::Energy, 12)])),
+            Facility::Recycler => end
+                .consume(Role::Agent, basket([(Asset::ReclaimingMaterial, 1)]))
+                .produce(Role::Agent, basket([(Asset::Material, 1)])),
+        };
+        builder = builder.rate_at(
+            RateIdPattern::EndService {
+                agent: agent().var(),
+                facility: Slot::Is(facility),
+            }
+            .into(),
+            end,
+        );
     }
     for agent in AGENTS {
-        builder = builder.rate(RateId::Wait { agent }, turn(agent));
-        for from in LOCATIONS {
-            for to in LOCATIONS
-                .into_iter()
-                .filter(|to| ROUTES.contains(&(from, *to)) || ROUTES.contains(&(*to, from)))
-            {
-                builder = builder.rate(
-                    RateId::Move { agent, from, to },
-                    turn(agent)
-                        .preserve(Role::Agent, basket([(Asset::Idle, 1)]))
-                        .consume(
-                            Role::Agent,
-                            basket([(Asset::At(from), 1), (Asset::Energy, 1)]),
-                        )
-                        .produce(
-                            Role::Agent,
-                            basket([(Asset::At(to), 1), (Asset::SpentEnergy, 1)]),
-                        ),
-                );
-            }
-        }
-        for facility in FACILITIES {
-            for maintenance in [false, true] {
-                if maintenance && facility != Facility::Workshop {
-                    continue;
-                }
-                builder = builder.rate(
-                    RateId::BeginService {
-                        agent,
-                        facility,
-                        maintenance,
-                    },
-                    service_rate(agent, facility, maintenance),
-                );
-            }
-            let mut end = finish_activity(actor(law(), agent))
-                .consume(Role::Agent, basket([(Asset::Servicing(facility), 1)]))
-                .preserve(
-                    Role::Facility,
-                    basket([(Asset::FacilityIdentity(facility), 1)]),
-                )
-                .consume(
-                    Role::Facility,
-                    basket([(Asset::Occupied(facility, agent), 1)]),
-                )
-                .produce(Role::Facility, basket([(Asset::Vacant(facility), 1)]))
-                .distinct(Role::Facility, Role::Agent)
-                .distinct(Role::Facility, Role::World);
-            end = match facility {
-                Facility::Workshop => clear(end, Role::Agent, Asset::Wear)
-                    .consume(Role::Agent, basket([(Asset::Repairing, 1)]))
-                    .produce(Role::Agent, basket([(Asset::Operational, 1)])),
-                Facility::Charger => end
-                    .consume(Role::Agent, basket([(Asset::ChargingEnergy, 12)]))
-                    .produce(Role::Agent, basket([(Asset::Energy, 12)])),
-                Facility::Recycler => end
-                    .consume(Role::Agent, basket([(Asset::ReclaimingMaterial, 1)]))
-                    .produce(Role::Agent, basket([(Asset::Material, 1)])),
-            };
-            builder = builder.rate(RateId::EndService { agent, facility }, end);
-        }
         builder = builder.invariant(
             LinearInvariant::new(path!("decision-permission").join(&path::write(&agent)))
                 .weight(Asset::Permit(agent), 1)
@@ -550,9 +590,9 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         tick = tick
             .consume(Role::World, basket([(Asset::Acted(agent), 1)]))
             .produce(Role::World, basket([(Asset::Permit(agent), 1)]))
-            .preserve(
+            .account(
                 Role::Worker(agent),
-                basket([(Asset::AgentIdentity(agent), 1)]),
+                Pattern::literal(AccountId::Agent(agent)),
             )
             .consume(Role::Worker(agent), basket([(Asset::TimeRemaining, 1)]))
             .produce(Role::Worker(agent), basket([(Asset::ElapsedTime, 1)]));
@@ -562,7 +602,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         .rate(
             RateId::EndSeason,
             Rate::new()
-                .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
+                .account(Role::World, Pattern::literal(AccountId::World))
                 .consume(Role::World, basket([(Asset::SeasonActive, 1)]))
                 .produce(Role::World, basket([(Asset::SeasonEnded, 1)]))
                 .condition(
@@ -639,60 +679,53 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     }
 }
 
-fn expire_rate(id: JobId, owner: Option<AgentId>, mode: Option<WorkMode>) -> Rate<Ontology> {
-    let mut rate = job(law(), id)
-        .condition(
-            path!("contract-deadline-has-elapsed"),
-            now(),
-            C::GreaterThanOrEqual,
-            q(Role::Job, Asset::Deadline) + Q::constant(1),
-        )
-        .produce(Role::Job, basket([(Asset::Expired, 1)]))
-        .consume(Role::World, basket([(Asset::ContractsOpen, 1)]))
-        .produce(Role::World, basket([(Asset::ContractsClosed, 1)]));
-    if let Some(agent) = owner {
-        rate = actor(rate, agent)
-            .consume(Role::Agent, basket([(Asset::Claimed(id), 1)]))
-            .produce(Role::Agent, basket([(Asset::FreeContract, 1)]))
-            .consume(Role::Job, basket([(Asset::Assigned(agent), 1)]))
-            .distinct(Role::Agent, Role::Job);
-        if let Some(mode) = mode {
-            rate = finish_activity(rate)
-                .consume(Role::Agent, basket([(Asset::Awaiting(id, mode), 1)]))
-                .consume(Role::Job, basket([(Asset::InProgress, 1)]));
-        } else {
-            rate = clear(rate, Role::Job, Asset::LeaseUntil)
-                .consume(Role::Job, basket([(Asset::Pending, 1)]));
-        }
-    } else {
-        rate = rate.consume(Role::Job, basket([(Asset::Available, 1)]));
-    }
-    rate
+/// A contract missing its deadline: it closes unpaid.
+fn expiry(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.condition(
+        path!("contract-deadline-has-elapsed"),
+        now(),
+        C::GreaterThanOrEqual,
+        q(Role::Job, Asset::Deadline) + Q::constant(1),
+    )
+    .produce(Role::Job, basket([(Asset::Expired, 1)]))
+    .consume(Role::World, basket([(Asset::ContractsOpen, 1)]))
+    .produce(Role::World, basket([(Asset::ContractsClosed, 1)]))
 }
 
-fn service_rate(agent: AgentId, facility: Facility, maintenance: bool) -> Rate<Ontology> {
+/// A contract expiring while the worker `{agent}` holds it: the worker is
+/// free of it.
+fn abandoned(rate: Rate<Ontology>) -> Rate<Ontology> {
+    expiry(rate)
+        .consume_at(Role::Agent, one([claimed()]))
+        .produce(Role::Agent, basket([(Asset::FreeContract, 1)]))
+        .consume_at(Role::Job, one([assigned()]))
+}
+
+/// `rate` at `facility`, the facility role fixed to it.
+fn at_facility(rate: Rate<Ontology>, facility: Facility) -> Rate<Ontology> {
+    rate.account(
+        Role::Facility,
+        Pattern::literal(AccountId::Facility(facility)),
+    )
+}
+
+fn service_rate(facility: Facility, maintenance: bool) -> Rate<Ontology> {
     let duration = match facility {
         Facility::Workshop => 4,
         Facility::Charger => 3,
         Facility::Recycler => 2,
     };
-    let rate = occupy(turn(agent), duration)
+    let rate = occupy(at_facility(turn(), facility), Q::constant(duration))
         .preserve(
             Role::Agent,
             basket([(Asset::At(service_location(facility)), 1)]),
         )
         .produce(Role::Agent, basket([(Asset::Servicing(facility), 1)]))
-        .preserve(
-            Role::Facility,
-            basket([(Asset::FacilityIdentity(facility), 1)]),
-        )
         .consume(Role::Facility, basket([(Asset::Vacant(facility), 1)]))
-        .produce(
+        .produce_at(
             Role::Facility,
-            basket([(Asset::Occupied(facility, agent), 1)]),
-        )
-        .distinct(Role::Agent, Role::Facility)
-        .distinct(Role::Facility, Role::World);
+            one([AssetPattern::Occupied(Slot::Is(facility), agent().var()).into()]),
+        );
     match facility {
         Facility::Workshop => rate
             .consume(
@@ -734,73 +767,6 @@ fn service_rate(agent: AgentId, facility: Facility, maintenance: bool) -> Rate<O
     }
 }
 
-/// The exchange of one unit of `rate` in a season, each of its roles bound to
-/// the account the rate names. All callers still pass through the same
-/// assessment, identity checks, timing conditions, and invariants.
-pub fn proposal(rate: RateId) -> Action {
-    let mut action = Exchange::new(rate, Quantity::new(1)).bind(Role::World, AccountId::World);
-    match rate {
-        RateId::Claim { agent, job }
-        | RateId::Begin { agent, job, .. }
-        | RateId::ReleaseClaim { agent, job, .. } => {
-            action = action
-                .bind(Role::Agent, AccountId::Agent(agent))
-                .bind(Role::Job, AccountId::Job(job));
-        }
-        RateId::Finish { agent, job, .. } => {
-            action = action
-                .bind(Role::Agent, AccountId::Agent(agent))
-                .bind(Role::Job, AccountId::Job(job))
-                .bind(Role::Nature, AccountId::Nature);
-        }
-        RateId::Move { agent, .. } | RateId::Wait { agent } => {
-            action = action.bind(Role::Agent, AccountId::Agent(agent));
-        }
-        RateId::BeginService {
-            agent, facility, ..
-        }
-        | RateId::EndService { agent, facility } => {
-            action = action
-                .bind(Role::Agent, AccountId::Agent(agent))
-                .bind(Role::Facility, AccountId::Facility(facility));
-        }
-        RateId::Handoff {
-            agent,
-            recipient,
-            job,
-            ..
-        } => {
-            action = action
-                .bind(Role::Agent, AccountId::Agent(agent))
-                .bind(Role::Partner, AccountId::Agent(recipient))
-                .bind(Role::Job, AccountId::Job(job));
-        }
-        RateId::Expire { job, agent, .. } => {
-            action = action.bind(Role::Job, AccountId::Job(job));
-            if let Some(agent) = agent {
-                action = action.bind(Role::Agent, AccountId::Agent(agent));
-            }
-        }
-        RateId::Tick => {
-            for agent in AGENTS {
-                action = action.bind(Role::Worker(agent), AccountId::Agent(agent));
-            }
-        }
-        RateId::EndSeason => {}
-        // Micro's own rates, which a season does not have, bind no world.
-        RateId::Resolve { agent, .. } => {
-            return Exchange::new(rate, Quantity::new(1))
-                .bind(Role::Agent, AccountId::Agent(agent))
-                .bind(Role::Nature, AccountId::Nature);
-        }
-        RateId::Repair { agent } | RateId::Recharge { agent } | RateId::Recycle { agent } => {
-            return Exchange::new(rate, Quantity::new(1))
-                .bind(Role::Agent, AccountId::Agent(agent));
-        }
-    }
-    action
-}
-
 /// The season's clock: the ticks that have passed.
 pub fn clock(world: &World) -> u64 {
     world.balance(&AccountId::World, &Asset::Tick).to_u64()
@@ -819,11 +785,11 @@ mod tests {
         build(Profile::Showcase, mixed_lineup()).initial
     }
     fn act(world: &mut World, rate: RateId) {
-        world.apply(proposal(rate)).unwrap();
+        world.apply(action(world, rate)).unwrap();
     }
     fn tick(world: &mut World) {
         for agent in AGENTS {
-            let wait = proposal(RateId::Wait { agent });
+            let wait = action(world, RateId::Wait { agent });
             if world.is_applicable(&wait) {
                 world.apply(wait).unwrap();
             }
@@ -835,10 +801,14 @@ mod tests {
             tick(world);
         }
     }
-    fn rejected_unchanged(world: &mut World, action: Action) {
+    fn rejected_unchanged(world: &mut World, exchange: Action) {
         let before = world.state_key();
-        assert!(world.apply(action).is_err());
+        assert!(world.apply(exchange).is_err());
         assert_eq!(world.state_key(), before);
+    }
+    fn refused(world: &mut World, rate: RateId) {
+        let exchange = action(world, rate);
+        rejected_unchanged(world, exchange);
     }
 
     #[test]
@@ -847,14 +817,14 @@ mod tests {
         for (agent, id) in [(AgentId::Atlas, JobId(1)), (AgentId::Bolt, JobId(2))] {
             act(&mut world, RateId::Claim { agent, job: id });
         }
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Claim {
+            RateId::Claim {
                 agent: AgentId::Coda,
                 job: JobId(1),
-            }),
+            },
         );
-        rejected_unchanged(&mut world, proposal(RateId::Tick));
+        refused(&mut world, RateId::Tick);
         tick(&mut world);
         for (agent, to) in [
             (AgentId::Atlas, Location::North),
@@ -892,15 +862,15 @@ mod tests {
             mode: WorkMode::Rush,
             outcome: Outcome::Success,
         };
-        rejected_unchanged(&mut world, proposal(finish));
+        refused(&mut world, finish);
         tick(&mut world);
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Move {
+            RateId::Move {
                 agent: AgentId::Atlas,
                 from: Location::North,
                 to: Location::Depot,
-            }),
+            },
         );
         until(&mut world, 4);
         act(&mut world, finish);
@@ -941,12 +911,12 @@ mod tests {
             maintenance: true,
         };
         act(&mut world, start(AgentId::Atlas));
-        rejected_unchanged(&mut world, proposal(start(AgentId::Bolt)));
+        refused(&mut world, start(AgentId::Bolt));
         let end = RateId::EndService {
             agent: AgentId::Atlas,
             facility: Facility::Workshop,
         };
-        rejected_unchanged(&mut world, proposal(end));
+        refused(&mut world, end);
         until(&mut world, 6);
         act(&mut world, end);
         act(&mut world, start(AgentId::Bolt));
@@ -959,11 +929,9 @@ mod tests {
                 .to_u64(),
             1
         );
-        rejected_unchanged(
-            &mut world,
-            proposal(start(AgentId::Atlas))
-                .bind(Role::Facility, AccountId::Facility(Facility::Charger)),
-        );
+        let elsewhere = action(&world, start(AgentId::Atlas))
+            .bind(Role::Facility, AccountId::Facility(Facility::Charger));
+        rejected_unchanged(&mut world, elsewhere);
     }
 
     #[test]
@@ -972,17 +940,17 @@ mod tests {
         let agent = AgentId::Atlas;
         assert!(
             world
-                .rate(&RateId::Move {
+                .instance(&RateId::Move {
                     agent,
                     from: Location::Depot,
                     to: Location::Workshop
                 })
-                .is_none()
+                .is_err()
         );
         assert_eq!(
             world
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
+                .flat_map(|key| world.instances_of(key))
                 .filter(|id| matches!(
                     id,
                     RateId::Move {
@@ -1002,13 +970,13 @@ mod tests {
                 to: Location::West,
             },
         );
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Move {
+            RateId::Move {
                 agent,
                 from: Location::West,
                 to: Location::Workshop,
-            }),
+            },
         );
         tick(&mut world);
         act(
@@ -1025,19 +993,19 @@ mod tests {
     #[test]
     fn future_jobs_dependencies_leases_and_deadlines_are_core_enforced() {
         let mut world = world();
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Claim {
+            RateId::Claim {
                 agent: AgentId::Atlas,
                 job: JobId(5),
-            }),
+            },
         );
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Claim {
+            RateId::Claim {
                 agent: AgentId::Atlas,
                 job: JobId(4),
-            }),
+            },
         );
         act(
             &mut world,
@@ -1051,7 +1019,7 @@ mod tests {
             job: JobId(1),
             expired: true,
         };
-        rejected_unchanged(&mut world, proposal(release));
+        refused(&mut world, release);
         until(&mut world, 7);
         act(&mut world, release);
         assert_eq!(balance(&world, AgentId::Atlas, Asset::FreeContract), 1);
@@ -1067,20 +1035,20 @@ mod tests {
             agent: Some(AgentId::Bolt),
             mode: None,
         };
-        rejected_unchanged(&mut world, proposal(expiry));
+        refused(&mut world, expiry);
         until(&mut world, 24);
         act(&mut world, expiry);
         assert_eq!(job_balance(&world, JobId(1), Asset::Expired), 1);
         assert_eq!(balance(&world, AgentId::Bolt, Asset::FreeContract), 1);
-        rejected_unchanged(&mut world, proposal(expiry));
-        rejected_unchanged(
+        refused(&mut world, expiry);
+        refused(
             &mut world,
-            proposal(RateId::Claim {
+            RateId::Claim {
                 agent: AgentId::Coda,
                 job: JobId(1),
-            }),
+            },
         );
-        rejected_unchanged(&mut world, proposal(RateId::EndSeason));
+        refused(&mut world, RateId::EndSeason);
     }
 
     #[test]
@@ -1099,7 +1067,7 @@ mod tests {
             recipient: AgentId::Bolt,
             job: JobId(1),
         };
-        let wrong = proposal(handoff).bind(Role::Partner, AccountId::Agent(AgentId::Coda));
+        let wrong = action(&world, handoff).bind(Role::Partner, AccountId::Agent(AgentId::Coda));
         rejected_unchanged(&mut world, wrong);
         act(&mut world, handoff);
         assert_eq!(balance(&world, AgentId::Atlas, Asset::Credit), 7);
@@ -1111,20 +1079,20 @@ mod tests {
             1
         );
         // The handoff spent Bolt's turn too.
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Wait {
+            RateId::Wait {
                 agent: AgentId::Bolt,
-            }),
+            },
         );
         tick(&mut world);
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Handoff {
+            RateId::Handoff {
                 agent: AgentId::Bolt,
                 recipient: AgentId::Atlas,
                 job: JobId(1),
-            }),
+            },
         );
     }
 
@@ -1230,14 +1198,14 @@ mod tests {
             },
         );
         until(&mut world, 24);
-        rejected_unchanged(
+        refused(
             &mut world,
-            proposal(RateId::Finish {
+            RateId::Finish {
                 agent,
                 job: JobId(1),
                 mode: WorkMode::Rush,
                 outcome: Outcome::Success,
-            }),
+            },
         );
         act(
             &mut world,

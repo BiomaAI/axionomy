@@ -2,15 +2,15 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern,
+    Quantity, QuantityExpression as Q, Rate, Rounding, Slot, basket,
 };
 
 mod continuous;
 #[cfg(feature = "packages")]
 pub mod package;
 
-pub use continuous::{clock, proposal};
+pub use continuous::clock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AgentId {
@@ -87,7 +87,6 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    WorldIdentity,
     SeasonActive,
     SeasonEnded,
     Tick,
@@ -112,7 +111,6 @@ pub enum Asset {
     Credit,
     Wear,
     Repairing,
-    FacilityIdentity(Facility),
     Vacant(Facility),
     Occupied(Facility, AgentId),
     Servicing(Facility),
@@ -120,10 +118,16 @@ pub enum Asset {
     ReclaimingMaterial,
     EmbodiedMaterial,
     RecyclingLoss,
-    AgentIdentity(AgentId),
-    JobIdentity(JobId),
     Policy(Policy),
+    /// Where a worker stands, or where a contract's work is done.
     At(Location),
+    /// What a contract pays on delivery: a fact of the contract.
+    Reward,
+    /// The energy, time and material a contract's work takes before its
+    /// mode's adjustments: facts of the contract.
+    WorkEnergy,
+    WorkTime,
+    WorkMaterial,
     Operational,
     Energy,
     TimeRemaining,
@@ -333,6 +337,139 @@ pub fn sustainable_lineup() -> [Policy; 4] {
     ]
 }
 
+/// The worker a rate's identifier names, `{agent}`.
+fn agent() -> Param<AgentId> {
+    Param::new(path!("agent"))
+}
+
+/// The number of the contract a rate's identifier names, `{job}`.
+fn job() -> Param<u8> {
+    Param::new(path!("job"))
+}
+
+/// The mode a rate's identifier names, `{mode}`.
+fn mode() -> Param<WorkMode> {
+    Param::new(path!("mode"))
+}
+
+/// The contract `{job}` names.
+fn contract() -> Slot<JobId> {
+    Slot::Of(JobIdPattern(job().var()))
+}
+
+/// One unit of each asset `assets` names.
+fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset, Quantity::new(1)))
+        .collect()
+}
+
+/// `rate` for each worker of `agents`, `{agent}`, its agent role fixed to
+/// that worker's account.
+fn by_worker(rate: Rate<Ontology>, agents: &[AgentId]) -> Rate<Ontology> {
+    rate.variable(agent().values(agents.iter().copied()))
+        .account(Role::Agent, AccountIdPattern::Agent(agent().var()).into())
+}
+
+/// `rate` for each of the `count` contracts, `{job}`, its job role fixed to
+/// that contract's account.
+fn on_contract(rate: Rate<Ontology>, count: u8) -> Rate<Ontology> {
+    rate.variable(job().range(1, count))
+        .account(Role::Job, AccountIdPattern::Job(contract()).into())
+}
+
+/// A contract's terms, the facts its laws read: where its work is done,
+/// what it pays, and the energy, time and material its work takes.
+fn terms(spec: &JobSpec) -> Basket<Asset> {
+    basket([
+        (Asset::At(spec.location), 1),
+        (Asset::Reward, spec.value),
+        (Asset::WorkEnergy, spec.energy),
+        (Asset::WorkTime, spec.time),
+        (Asset::WorkMaterial, spec.material),
+    ])
+}
+
+/// The worker stands where the contract's work is done: it holds each place
+/// as the contract does.
+fn at_the_contract(rate: Rate<Ontology>) -> Rate<Ontology> {
+    LOCATIONS.into_iter().fold(rate, |rate, place| {
+        rate.preserve_computed(
+            Role::Agent,
+            Asset::At(place),
+            Q::balance(Role::Job, Asset::At(place)),
+        )
+    })
+}
+
+/// What working a contract in a mode takes and leaves behind, from the
+/// contract's terms: the law of the mode.
+struct Cost {
+    energy: Q<Ontology>,
+    time: Q<Ontology>,
+    material: Q<Ontology>,
+    waste: Q<Ontology>,
+}
+
+/// Rush spends two more energy and one more material to finish a tick
+/// sooner, leaving two waste; lean takes two ticks longer and leaves waste
+/// on odd contracts; safe spends one more energy and one more tick, leaving
+/// one.
+fn cost(mode: WorkMode) -> Cost {
+    let term = |asset| Q::balance(Role::Job, asset);
+    let (energy, time, material) = (
+        term(Asset::WorkEnergy),
+        term(Asset::WorkTime),
+        term(Asset::WorkMaterial),
+    );
+    match mode {
+        WorkMode::Rush => Cost {
+            energy: energy + Q::constant(2),
+            time: Q::maximum(time - Q::constant(1), Q::constant(1)),
+            material: material + Q::constant(1),
+            waste: Q::constant(2),
+        },
+        WorkMode::Lean => Cost {
+            energy,
+            time: time + Q::constant(2),
+            material,
+            // The contract's number's parity.
+            waste: job().quantity()
+                - Q::divide(job().quantity(), Q::constant(2), Rounding::Floor) * Q::constant(2),
+        },
+        WorkMode::Safe => Cost {
+            energy: energy + Q::constant(1),
+            time: time + Q::constant(1),
+            material,
+            waste: Q::constant(1),
+        },
+    }
+}
+
+/// The exchange of one unit of `rate`, each role bound to the account
+/// `world`'s rate fixes it to.
+///
+/// # Panics
+///
+/// If `rate` names no instance of `world`'s rates.
+pub fn action(world: &World, rate: RateId) -> Action {
+    let instance = world
+        .instance(&rate)
+        .unwrap_or_else(|_| panic!("the league has no rate {rate:?}"));
+    instance.fixed_accounts().fold(
+        Exchange::new(rate, Quantity::new(1)),
+        |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
+            )
+        },
+    )
+}
+
 pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
     if profile != Profile::Micro {
         return continuous::build(profile, lineup);
@@ -347,22 +484,12 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
         builder = builder.account(
             AccountId::Agent(agent),
             Account::from(basket([
-                (Asset::AgentIdentity(agent), 1),
                 (Asset::Policy(lineup[index]), 1),
                 (Asset::At(Location::Depot), 1),
                 (Asset::Operational, 1),
-                (
-                    Asset::Energy,
-                    if profile == Profile::Stress { 180 } else { 96 },
-                ),
-                (
-                    Asset::TimeRemaining,
-                    if profile == Profile::Stress { 420 } else { 220 },
-                ),
-                (
-                    Asset::Material,
-                    if profile == Profile::Stress { 120 } else { 64 },
-                ),
+                (Asset::Energy, 96),
+                (Asset::TimeRemaining, 220),
+                (Asset::Material, 64),
             ])),
         );
     }
@@ -414,270 +541,236 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
 
     let mut goal = Goal::new();
     for spec in &jobs {
-        builder = builder.account(
-            AccountId::Job(spec.id),
-            Account::from(basket([
-                (Asset::JobIdentity(spec.id), 1),
-                (Asset::Available, 1),
-            ])),
-        );
+        let mut contract = terms(spec);
+        contract.insert(Asset::Available, Quantity::new(1));
+        builder = builder.account(AccountId::Job(spec.id), Account::from(contract));
         goal = goal.require(AccountId::Job(spec.id), basket([(Asset::Completed, 1)]));
-
-        for agent in agents.iter().copied() {
-            builder = builder.rate(
-                RateId::Claim {
-                    agent,
-                    job: spec.id,
-                },
-                Rate::new()
-                    .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
-                    .produce(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
-                    .preserve(Role::Job, basket([(Asset::JobIdentity(spec.id), 1)]))
-                    .consume(Role::Job, basket([(Asset::Available, 1)]))
-                    .produce(
-                        Role::Job,
-                        basket([(Asset::Assigned(agent), 1), (Asset::Pending, 1)]),
-                    )
-                    .distinct(Role::Agent, Role::Job),
-            );
-            for mode in [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe] {
-                let cost = work_cost(*spec, mode);
-                builder = builder.rate(
-                    RateId::Begin {
-                        agent,
-                        job: spec.id,
-                        mode,
-                    },
-                    Rate::new()
-                        .preserve(
-                            Role::Agent,
-                            basket([
-                                (Asset::AgentIdentity(agent), 1),
-                                (Asset::Operational, 1),
-                                (Asset::At(spec.location), 1),
-                                (Asset::Claimed(spec.id), 1),
-                            ]),
-                        )
-                        .consume(
-                            Role::Agent,
-                            basket([
-                                (Asset::Energy, cost.energy),
-                                (Asset::TimeRemaining, cost.time),
-                                (Asset::Material, cost.material),
-                            ]),
-                        )
-                        .produce(
-                            Role::Agent,
-                            basket([
-                                (Asset::SpentEnergy, cost.energy),
-                                (Asset::ElapsedTime, cost.time),
-                                (Asset::MaterialSpent, cost.material),
-                                (Asset::Waste, cost.waste),
-                                (Asset::Attempts, 1),
-                                (Asset::Awaiting(spec.id, mode), 1),
-                            ]),
-                        )
-                        .preserve(
-                            Role::Job,
-                            basket([
-                                (Asset::JobIdentity(spec.id), 1),
-                                (Asset::Assigned(agent), 1),
-                            ]),
-                        )
-                        .consume(Role::Job, basket([(Asset::Pending, 1)]))
-                        .produce(Role::Job, basket([(Asset::InProgress, 1)]))
-                        .distinct(Role::Agent, Role::Job),
-                );
-                for outcome in [Outcome::Success, Outcome::Failure] {
-                    builder = builder.rate(
-                        RateId::Resolve {
-                            agent,
-                            job: spec.id,
-                            mode,
-                            outcome,
-                        },
-                        Rate::new()
-                            .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
-                            .consume(Role::Agent, basket([(Asset::Awaiting(spec.id, mode), 1)]))
-                            .produce(
-                                Role::Agent,
-                                basket([(Asset::Resolved(spec.id, mode, outcome), 1)]),
-                            )
-                            .preserve(
-                                Role::Nature,
-                                basket([(Asset::OutcomeWeight(spec.id, mode, outcome), 1)]),
-                            )
-                            .distinct(Role::Agent, Role::Nature),
-                    );
-                    let finish = match outcome {
-                        Outcome::Success => Rate::new()
-                            .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
-                            .consume(
-                                Role::Agent,
-                                basket([
-                                    (Asset::Resolved(spec.id, mode, outcome), 1),
-                                    (Asset::Claimed(spec.id), 1),
-                                ]),
-                            )
-                            .produce(
-                                Role::Agent,
-                                basket([
-                                    (Asset::Value, spec.value),
-                                    (Asset::Completed, 1),
-                                    (Asset::Successes, 1),
-                                ]),
-                            )
-                            .preserve(Role::Job, basket([(Asset::JobIdentity(spec.id), 1)]))
-                            .consume(
-                                Role::Job,
-                                basket([(Asset::InProgress, 1), (Asset::Assigned(agent), 1)]),
-                            )
-                            .produce(Role::Job, basket([(Asset::Completed, 1)]))
-                            .distinct(Role::Agent, Role::Job),
-                        Outcome::Failure => Rate::new()
-                            .preserve(
-                                Role::Agent,
-                                basket([
-                                    (Asset::AgentIdentity(agent), 1),
-                                    (Asset::Claimed(spec.id), 1),
-                                ]),
-                            )
-                            .consume(
-                                Role::Agent,
-                                basket([
-                                    (Asset::Resolved(spec.id, mode, outcome), 1),
-                                    (Asset::Operational, 1),
-                                ]),
-                            )
-                            .produce(
-                                Role::Agent,
-                                basket([(Asset::Failures, 1), (Asset::Damage, 1)]),
-                            )
-                            .preserve(
-                                Role::Job,
-                                basket([
-                                    (Asset::JobIdentity(spec.id), 1),
-                                    (Asset::Assigned(agent), 1),
-                                ]),
-                            )
-                            .consume(Role::Job, basket([(Asset::InProgress, 1)]))
-                            .produce(Role::Job, basket([(Asset::Pending, 1)]))
-                            .distinct(Role::Agent, Role::Job),
-                    };
-                    builder = builder.rate(
-                        RateId::Finish {
-                            agent,
-                            job: spec.id,
-                            mode,
-                            outcome,
-                        },
-                        finish,
-                    );
-                }
-            }
-        }
     }
 
-    for agent in agents.iter().copied() {
-        for from in LOCATIONS {
-            for to in LOCATIONS {
-                if from == to {
-                    continue;
-                }
-                builder = builder.rate(
-                    RateId::Move { agent, from, to },
-                    Rate::new()
-                        .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
-                        .consume(
-                            Role::Agent,
-                            basket([
-                                (Asset::At(from), 1),
-                                (Asset::Energy, 1),
-                                (Asset::TimeRemaining, 1),
-                            ]),
-                        )
-                        .produce(
-                            Role::Agent,
-                            basket([
-                                (Asset::At(to), 1),
-                                (Asset::SpentEnergy, 1),
-                                (Asset::ElapsedTime, 1),
-                            ]),
-                        ),
-                );
-            }
+    // Each rate serves every worker, `{agent}`, and every contract, `{job}`,
+    // its roles fixed to their accounts.
+    let count = jobs.len() as u8;
+    let worker = |rate| by_worker(rate, &agents);
+    let outcome = Param::<Outcome>::new(path!("outcome"));
+    let assigned = || AssetPattern::Assigned(agent().var()).into();
+    let claimed = || AssetPattern::Claimed(contract()).into();
+    builder = builder.rate_at(
+        RateIdPattern::Claim {
+            agent: agent().var(),
+            job: contract(),
         }
-        builder = builder
-            .rate(
-                RateId::Repair { agent },
-                Rate::new()
-                    .preserve(
-                        Role::Agent,
-                        basket([
-                            (Asset::AgentIdentity(agent), 1),
-                            (Asset::At(Location::Workshop), 1),
-                        ]),
-                    )
-                    .consume(
-                        Role::Agent,
-                        basket([(Asset::Damage, 1), (Asset::TimeRemaining, 3)]),
-                    )
-                    .produce(
-                        Role::Agent,
-                        basket([(Asset::Operational, 1), (Asset::ElapsedTime, 3)]),
-                    )
-                    .consume(Role::Facility, basket([(Asset::RepairSupply, 1)]))
-                    .produce(Role::Facility, basket([(Asset::SpentRepairSupply, 1)]))
-                    .distinct(Role::Agent, Role::Facility),
-            )
-            .rate(
-                RateId::Recharge { agent },
-                Rate::new()
-                    .preserve(
-                        Role::Agent,
-                        basket([
-                            (Asset::AgentIdentity(agent), 1),
-                            (Asset::At(Location::Charger), 1),
-                        ]),
-                    )
-                    .consume(Role::Agent, basket([(Asset::TimeRemaining, 2)]))
-                    .produce(
-                        Role::Agent,
-                        basket([(Asset::Energy, 12), (Asset::ElapsedTime, 2)]),
-                    )
-                    .consume(Role::Facility, basket([(Asset::ChargeSupply, 12)]))
-                    .distinct(Role::Agent, Role::Facility),
-            )
-            .rate(
-                RateId::Recycle { agent },
-                Rate::new()
-                    .preserve(
-                        Role::Agent,
-                        basket([
-                            (Asset::AgentIdentity(agent), 1),
-                            (Asset::At(Location::Recycler), 1),
-                        ]),
-                    )
-                    .consume(
-                        Role::Agent,
-                        basket([
-                            (Asset::Waste, 1),
-                            (Asset::Energy, 1),
-                            (Asset::TimeRemaining, 1),
-                        ]),
-                    )
-                    .produce(
-                        Role::Agent,
-                        basket([
-                            (Asset::RecycledWaste, 1),
-                            (Asset::SpentEnergy, 1),
-                            (Asset::ElapsedTime, 1),
-                        ]),
-                    )
-                    .preserve(Role::Facility, basket([(Asset::RecyclerCapacity, 1)]))
-                    .distinct(Role::Agent, Role::Facility),
-            );
+        .into(),
+        on_contract(worker(Rate::new()), count)
+            .produce_at(Role::Agent, one([claimed()]))
+            .consume(Role::Job, basket([(Asset::Available, 1)]))
+            .produce_at(
+                Role::Job,
+                one([assigned(), Pattern::literal(Asset::Pending)]),
+            ),
+    );
+    for mode in [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe] {
+        let cost = cost(mode);
+        builder = builder.rate_at(
+            RateIdPattern::Begin {
+                agent: agent().var(),
+                job: contract(),
+                mode: Slot::Is(mode),
+            }
+            .into(),
+            at_the_contract(on_contract(worker(Rate::new()), count))
+                .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
+                .preserve_at(Role::Agent, one([claimed()]))
+                .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())
+                .consume_computed(Role::Agent, Asset::TimeRemaining, cost.time.clone())
+                .consume_computed(Role::Agent, Asset::Material, cost.material.clone())
+                .produce_computed(Role::Agent, Asset::SpentEnergy, cost.energy)
+                .produce_computed(Role::Agent, Asset::ElapsedTime, cost.time)
+                .produce_computed(Role::Agent, Asset::MaterialSpent, cost.material)
+                .produce_computed(Role::Agent, Asset::Waste, cost.waste)
+                .produce(Role::Agent, basket([(Asset::Attempts, 1)]))
+                .produce_at(
+                    Role::Agent,
+                    one([AssetPattern::Awaiting(contract(), Slot::Is(mode)).into()]),
+                )
+                .preserve_at(Role::Job, one([assigned()]))
+                .consume(Role::Job, basket([(Asset::Pending, 1)]))
+                .produce(Role::Job, basket([(Asset::InProgress, 1)])),
+        );
     }
+    // Nature resolves an attempt by its weight of the outcome, of the
+    // contract in the mode it was worked in.
+    builder = builder.rate_at(
+        RateIdPattern::Resolve {
+            agent: agent().var(),
+            job: contract(),
+            mode: mode().var(),
+            outcome: outcome.var(),
+        }
+        .into(),
+        worker(Rate::new())
+            .variable(job().range(1, count))
+            .variable(mode().every())
+            .variable(outcome.every())
+            .account(Role::Nature, Pattern::literal(AccountId::Nature))
+            .consume_at(
+                Role::Agent,
+                one([AssetPattern::Awaiting(contract(), mode().var()).into()]),
+            )
+            .produce_at(
+                Role::Agent,
+                one([AssetPattern::Resolved(contract(), mode().var(), outcome.var()).into()]),
+            )
+            .preserve_at(
+                Role::Nature,
+                one([AssetPattern::OutcomeWeight(contract(), mode().var(), outcome.var()).into()]),
+            ),
+    );
+    for result in [Outcome::Success, Outcome::Failure] {
+        let resolved = AssetPattern::Resolved(contract(), mode().var(), Slot::Is(result)).into();
+        let finish = on_contract(worker(Rate::new()), count).variable(mode().every());
+        let finish = match result {
+            Outcome::Success => finish
+                .consume_at(Role::Agent, one([resolved, claimed()]))
+                .produce_computed(
+                    Role::Agent,
+                    Asset::Value,
+                    Q::balance(Role::Job, Asset::Reward),
+                )
+                .produce(
+                    Role::Agent,
+                    basket([(Asset::Completed, 1), (Asset::Successes, 1)]),
+                )
+                .consume_at(
+                    Role::Job,
+                    one([Pattern::literal(Asset::InProgress), assigned()]),
+                )
+                .produce(Role::Job, basket([(Asset::Completed, 1)])),
+            Outcome::Failure => finish
+                .preserve_at(Role::Agent, one([claimed()]))
+                .consume_at(
+                    Role::Agent,
+                    one([resolved, Pattern::literal(Asset::Operational)]),
+                )
+                .produce(
+                    Role::Agent,
+                    basket([(Asset::Failures, 1), (Asset::Damage, 1)]),
+                )
+                .preserve_at(Role::Job, one([assigned()]))
+                .consume(Role::Job, basket([(Asset::InProgress, 1)]))
+                .produce(Role::Job, basket([(Asset::Pending, 1)])),
+        };
+        builder = builder.rate_at(
+            RateIdPattern::Finish {
+                agent: agent().var(),
+                job: contract(),
+                mode: mode().var(),
+                outcome: Slot::Is(result),
+            }
+            .into(),
+            finish,
+        );
+    }
+
+    // A worker moves between any two places, a tick and an energy a move.
+    let (from, to) = (
+        Param::<Location>::new(path!("from")),
+        Param::new(path!("to")),
+    );
+    builder = builder.rate_at(
+        RateIdPattern::Move {
+            agent: agent().var(),
+            from: from.var(),
+            to: to.var(),
+        }
+        .into(),
+        worker(Rate::new())
+            .variable(from.every())
+            .variable(to.every())
+            .distinct_variables(from.name().clone(), to.name().clone())
+            .consume_at(
+                Role::Agent,
+                [
+                    (AssetPattern::At(from.var()).into(), Quantity::new(1)),
+                    (Pattern::literal(Asset::Energy), Quantity::new(1)),
+                    (Pattern::literal(Asset::TimeRemaining), Quantity::new(1)),
+                ],
+            )
+            .produce_at(
+                Role::Agent,
+                [
+                    (AssetPattern::At(to.var()).into(), Quantity::new(1)),
+                    (Pattern::literal(Asset::SpentEnergy), Quantity::new(1)),
+                    (Pattern::literal(Asset::ElapsedTime), Quantity::new(1)),
+                ],
+            ),
+    );
+    // Each service at its facility, the facility role fixed to it.
+    let serviced = |facility, rate: Rate<Ontology>| {
+        worker(rate)
+            .account(
+                Role::Facility,
+                Pattern::literal(AccountId::Facility(facility)),
+            )
+            .preserve(
+                Role::Agent,
+                basket([(Asset::At(service_location(facility)), 1)]),
+            )
+    };
+    builder = builder
+        .rate_at(
+            RateIdPattern::Repair {
+                agent: agent().var(),
+            }
+            .into(),
+            serviced(Facility::Workshop, Rate::new())
+                .consume(
+                    Role::Agent,
+                    basket([(Asset::Damage, 1), (Asset::TimeRemaining, 3)]),
+                )
+                .produce(
+                    Role::Agent,
+                    basket([(Asset::Operational, 1), (Asset::ElapsedTime, 3)]),
+                )
+                .consume(Role::Facility, basket([(Asset::RepairSupply, 1)]))
+                .produce(Role::Facility, basket([(Asset::SpentRepairSupply, 1)])),
+        )
+        .rate_at(
+            RateIdPattern::Recharge {
+                agent: agent().var(),
+            }
+            .into(),
+            serviced(Facility::Charger, Rate::new())
+                .consume(Role::Agent, basket([(Asset::TimeRemaining, 2)]))
+                .produce(
+                    Role::Agent,
+                    basket([(Asset::Energy, 12), (Asset::ElapsedTime, 2)]),
+                )
+                .consume(Role::Facility, basket([(Asset::ChargeSupply, 12)])),
+        )
+        .rate_at(
+            RateIdPattern::Recycle {
+                agent: agent().var(),
+            }
+            .into(),
+            serviced(Facility::Recycler, Rate::new())
+                .consume(
+                    Role::Agent,
+                    basket([
+                        (Asset::Waste, 1),
+                        (Asset::Energy, 1),
+                        (Asset::TimeRemaining, 1),
+                    ]),
+                )
+                .produce(
+                    Role::Agent,
+                    basket([
+                        (Asset::RecycledWaste, 1),
+                        (Asset::SpentEnergy, 1),
+                        (Asset::ElapsedTime, 1),
+                    ]),
+                )
+                .preserve(Role::Facility, basket([(Asset::RecyclerCapacity, 1)])),
+        );
 
     builder = builder
         .invariant(
@@ -734,39 +827,13 @@ pub fn job_spec(job: JobId) -> JobSpec {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct WorkCost {
-    energy: u64,
-    time: u64,
-    material: u64,
-    waste: u64,
-}
-
-fn work_cost(spec: JobSpec, mode: WorkMode) -> WorkCost {
-    match mode {
-        WorkMode::Rush => WorkCost {
-            energy: spec.energy + 2,
-            time: spec.time.saturating_sub(1).max(1),
-            material: spec.material + 1,
-            waste: 2,
-        },
-        WorkMode::Lean => WorkCost {
-            energy: spec.energy,
-            time: spec.time + 2,
-            material: spec.material,
-            waste: index_parity(spec.id),
-        },
-        WorkMode::Safe => WorkCost {
-            energy: spec.energy + 1,
-            time: spec.time + 1,
-            material: spec.material,
-            waste: 1,
-        },
+/// Where a facility serves.
+const fn service_location(facility: Facility) -> Location {
+    match facility {
+        Facility::Workshop => Location::Workshop,
+        Facility::Charger => Location::Charger,
+        Facility::Recycler => Location::Recycler,
     }
-}
-
-const fn index_parity(job: JobId) -> u64 {
-    (job.0 as u64) % 2
 }
 
 fn failure_weight(risk: u64, mode: WorkMode) -> u64 {
@@ -782,17 +849,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn identity_assets_reject_rebinding_a_claim_to_the_wrong_agent() {
+    fn a_claim_binds_the_worker_and_contract_it_names() {
         let league = league(Profile::Micro, mixed_lineup());
-        let wrong = Exchange::new(
-            RateId::Claim {
-                agent: AgentId::Atlas,
-                job: JobId(1),
-            },
-            Quantity::new(1),
-        )
-        .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
-        .bind(Role::Job, AccountId::Job(JobId(1)));
+        let claim = RateId::Claim {
+            agent: AgentId::Atlas,
+            job: JobId(1),
+        };
+        let wrong =
+            action(league.initial(), claim).bind(Role::Agent, AccountId::Agent(AgentId::Bolt));
         assert!(!league.initial().is_applicable(&wrong));
+        assert!(
+            league
+                .initial()
+                .is_applicable(&action(league.initial(), claim))
+        );
+    }
+
+    #[test]
+    fn work_is_done_where_the_contract_is_at_its_modes_cost() {
+        let mut world = league(Profile::Micro, mixed_lineup()).initial().clone();
+        let agent = AgentId::Atlas;
+        let (north, east) = (job_spec(JobId(1)), job_spec(JobId(2)));
+        for rate in [
+            RateId::Claim {
+                agent,
+                job: north.id,
+            },
+            RateId::Claim {
+                agent,
+                job: east.id,
+            },
+            RateId::Move {
+                agent,
+                from: Location::Depot,
+                to: east.location,
+            },
+        ] {
+            world.apply(action(&world, rate)).unwrap();
+        }
+        let begin = |job, mode| RateId::Begin { agent, job, mode };
+        assert!(!world.is_applicable(&action(&world, begin(north.id, WorkMode::Lean))));
+        let held = |world: &World, asset| world.balance(&AccountId::Agent(agent), &asset).to_u64();
+        let energy = held(&world, Asset::Energy);
+        world
+            .apply(action(&world, begin(east.id, WorkMode::Lean)))
+            .unwrap();
+        assert_eq!(held(&world, Asset::Energy), energy - east.energy);
+        assert_eq!(held(&world, Asset::ElapsedTime), 1 + east.time + 2);
+        // Lean work leaves waste on odd contracts only.
+        assert_eq!(held(&world, Asset::Waste), 0);
     }
 }

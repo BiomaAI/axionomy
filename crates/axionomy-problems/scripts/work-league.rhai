@@ -120,9 +120,6 @@ fn failure_weight(risk, mode) {
     }
 }
 
-// The exchange of `rate`, once, with the accounts its roles bind.
-fn once(rate, bindings) { exchange(rate, bindings, 1) }
-
 // `proposal`, or `otherwise` when there is none.
 fn or_else(proposal, otherwise) { if proposal == () { otherwise } else { proposal } }
 
@@ -164,9 +161,9 @@ fn serial_outcome(random, spec, mode, attempt) {
 }
 
 // `worker`'s walk from `from` to `to`: one move, or none when there.
-fn walk(worker, from, to) {
+fn walk(state, worker, from, to) {
     if from == to { return []; }
-    [once(`move/${worker}/${from}/${to}`, #{ agent: `agent/${worker}` })]
+    [state.exchange_of(`move/${worker}/${from}/${to}`)]
 }
 
 // The serial match whole: turn by turn until no job is left to claim.
@@ -189,7 +186,6 @@ fn serial(state, random) {
     let turn = 0;
     while open.len() > 0 {
         let worker = crew[turn % crew.len()];
-        let agent = `agent/${worker}`;
         let id = chosen_job(open, policy[worker]);
         let still_open = [];
         for other in open {
@@ -197,29 +193,28 @@ fn serial(state, random) {
         }
         open = still_open;
         let spec = job_spec(id);
-        let job = `job/${id}`;
-        plan.push(once(`claim/${worker}/${id}`, #{ agent: agent, job: job }));
-        plan += walk(worker, at[worker], spec.location);
+        plan.push(state.exchange_of(`claim/${worker}/${id}`));
+        plan += walk(state, worker, at[worker], spec.location);
         at[worker] = spec.location;
         let mode = first_mode(policy[worker]);
         let attempt = 0;
         loop {
             attempt += 1;
-            plan.push(once(`begin/${worker}/${id}/${mode}`, #{ agent: agent, job: job }));
+            plan.push(state.exchange_of(`begin/${worker}/${id}/${mode}`));
             waste[worker] += work_cost(spec, mode).waste;
             let outcome = serial_outcome(random, spec, mode, attempt);
-            plan.push(once(`resolve/${worker}/${id}/${mode}/${outcome}`, #{ agent: agent, nature: "nature" }));
-            plan.push(once(`finish/${worker}/${id}/${mode}/${outcome}`, #{ agent: agent, job: job }));
+            plan.push(state.exchange_of(`resolve/${worker}/${id}/${mode}/${outcome}`));
+            plan.push(state.exchange_of(`finish/${worker}/${id}/${mode}/${outcome}`));
             if outcome == "success" { break; }
-            plan += walk(worker, spec.location, "workshop");
-            plan.push(once(`repair/${worker}`, #{ agent: agent, facility: "facility/workshop" }));
-            plan += walk(worker, "workshop", spec.location);
+            plan += walk(state, worker, spec.location, "workshop");
+            plan.push(state.exchange_of(`repair/${worker}`));
+            plan += walk(state, worker, "workshop", spec.location);
             mode = "safe";
         }
         if policy[worker] == "steward" && waste[worker] > 0 {
-            plan += walk(worker, at[worker], "recycler");
+            plan += walk(state, worker, at[worker], "recycler");
             at[worker] = "recycler";
-            plan.push(once(`recycle/${worker}`, #{ agent: agent, facility: "facility/recycler" }));
+            plan.push(state.exchange_of(`recycle/${worker}`));
             waste[worker] -= 1;
         }
         turn += 1;
@@ -289,7 +284,7 @@ fn can_finish(who, spec, mode, clock, deadline, overhead) {
 fn travel(state, who, to) {
     let first = who.routes[to][0];
     if first == who.at { return (); }
-    let move = once(`move/${who.name}/${who.at}/${first}`, #{ world: "world", agent: who.account });
+    let move = state.exchange_of(`move/${who.name}/${who.at}/${first}`);
     if state.applicable(move) { move } else { () }
 }
 
@@ -297,10 +292,7 @@ fn travel(state, who, to) {
 fn service(state, who, facility) {
     if who.at != facility { return travel(state, who, facility); }
     let maintenance = facility == "workshop" && held(who.balances, "damage") == 0;
-    let begin = once(
-        `begin-service/${who.name}/${facility}/${maintenance}`,
-        #{ world: "world", agent: who.account, facility: `facility/${facility}` },
-    );
+    let begin = state.exchange_of(`begin-service/${who.name}/${facility}/${maintenance}`);
     if state.applicable(begin) { begin } else { () }
 }
 
@@ -318,8 +310,7 @@ fn settled(state, random, id, mode, attempt) {
 // passed, the end of the attempt at it once that is due, or the release of
 // a claim whose lease has lapsed.
 fn due(state, random, clock, id) {
-    let job = `job/${id}`;
-    let contract = state.balances(job);
+    let contract = state.balances(`job/${id}`);
     if held(contract, "completed") > 0 || held(contract, "expired") > 0 { return (); }
     let owner = first_held(contract, "assigned", workers());
     let mode = ();
@@ -329,28 +320,17 @@ fn due(state, random, clock, id) {
         mode = first_held(owned, `awaiting/${id}`, modes());
     }
     if clock > held(contract, "deadline") {
-        let bindings = #{ world: "world", job: job };
-        let carrier = "none";
-        if owner != () {
-            bindings.agent = `agent/${owner}`;
-            carrier = `some/${owner}`;
-        }
+        let carrier = if owner == () { "none" } else { `some/${owner}` };
         let activity = if mode == () { "none" } else { `some/${mode}` };
-        return once(`expire/${id}/${carrier}/${activity}`, bindings);
+        return state.exchange_of(`expire/${id}/${carrier}/${activity}`);
     }
     if owner != () && mode != () {
         if clock < held(owned, "ready-at") { return (); }
         let outcome = settled(state, random, id, mode, held(contract, "attempts"));
-        return once(
-            `finish/${owner}/${id}/${mode}/${outcome}`,
-            #{ world: "world", agent: `agent/${owner}`, job: job, nature: "nature" },
-        );
+        return state.exchange_of(`finish/${owner}/${id}/${mode}/${outcome}`);
     }
     if owner != () {
-        let release = once(
-            `release-claim/${owner}/${id}/true`,
-            #{ world: "world", agent: `agent/${owner}`, job: job },
-        );
+        let release = state.exchange_of(`release-claim/${owner}/${id}/true`);
         if state.applicable(release) { return release; }
     }
     ()
@@ -359,7 +339,7 @@ fn due(state, random, clock, id) {
 // What `worker`, holding a decision, decides.
 fn decision(state, worker, clock, count, world) {
     let me = worker_in(state, worker);
-    let wait = once(`wait/${worker}`, #{ world: "world", agent: me.account });
+    let wait = state.exchange_of(`wait/${worker}`);
     if held(me.balances, "busy") > 0 { return wait; }
     let policy = me.policy;
     let claimed = ();
@@ -378,10 +358,7 @@ fn decision(state, worker, clock, count, world) {
             let deadline = state.balance(`job/${claimed}`, "deadline").to_int();
             for recipient in workers() {
                 if recipient == worker { continue; }
-                let handoff = once(
-                    `handoff/${worker}/${recipient}/${claimed}`,
-                    #{ world: "world", agent: me.account, partner: `agent/${recipient}`, job: `job/${claimed}` },
-                );
+                let handoff = state.exchange_of(`handoff/${worker}/${recipient}/${claimed}`);
                 if !state.applicable(handoff) { continue; }
                 let other = worker_in(state, recipient);
                 let overhead = 1 + other.routes[spec.location][1];
@@ -396,14 +373,10 @@ fn decision(state, worker, clock, count, world) {
     // material for it, head for it, or begin it.
     if claimed != () {
         let spec = job_spec(claimed);
-        let job = `job/${claimed}`;
-        let deadline = state.balance(job, "deadline").to_int();
+        let deadline = state.balance(`job/${claimed}`, "deadline").to_int();
         let distance = me.routes[spec.location][1];
         let preferred = preferred_modes(policy);
-        let release = once(
-            `release-claim/${worker}/${claimed}/false`,
-            #{ world: "world", agent: me.account, job: job },
-        );
+        let release = state.exchange_of(`release-claim/${worker}/${claimed}/false`);
         let possible = false;
         let minimum_energy = ();
         let minimum_material = ();
@@ -423,7 +396,7 @@ fn decision(state, worker, clock, count, world) {
         let heading = travel(state, me, spec.location);
         if heading != () { return heading; }
         for mode in preferred {
-            let begin = once(`begin/${worker}/${claimed}/${mode}`, #{ world: "world", agent: me.account, job: job });
+            let begin = state.exchange_of(`begin/${worker}/${claimed}/${mode}`);
             if state.applicable(begin) { return begin; }
         }
         return wait;
@@ -451,7 +424,7 @@ fn decision(state, worker, clock, count, world) {
             }
         }
         if mode == () { continue; }
-        let claim = once(`claim/${worker}/${id}`, #{ world: "world", agent: me.account, job: `job/${id}` });
+        let claim = state.exchange_of(`claim/${worker}/${id}`);
         if !state.applicable(claim) { continue; }
         let cost = work_cost(spec, mode);
         let urgency = deadline - clock;
@@ -477,20 +450,17 @@ fn season(state, random) {
         let event = due(state, random, clock, id);
         if event != () { return event; }
     }
+    // A worker has one service at a time, so whichever ends, worker by
+    // worker.
+    let endings = state.moves("end-service");
     for worker in workers() {
-        let balances = state.balances(`agent/${worker}`);
-        for facility in facilities() {
-            if held(balances, `servicing/${facility}`) == 0 { continue; }
-            let ending = once(
-                `end-service/${worker}/${facility}`,
-                #{ world: "world", agent: `agent/${worker}`, facility: `facility/${facility}` },
-            );
-            if state.applicable(ending) { return ending; }
+        for ending in endings {
+            if ending.account("agent") == `agent/${worker}` { return ending; }
         }
     }
     let world = state.balances("world");
     if held(world, "contracts-open") == 0 && held(world, "activities") == 0 {
-        let end = once("end-season", #{ world: "world" });
+        let end = state.exchange_of("end-season");
         if state.applicable(end) { return end; }
     }
     let first = clock % 4;
@@ -500,9 +470,7 @@ fn season(state, random) {
             return decision(state, worker, clock, count, world);
         }
     }
-    let bindings = #{ world: "world" };
-    for worker in workers() { bindings[`worker/${worker}`] = `agent/${worker}`; }
-    once("tick", bindings)
+    state.exchange_of("tick")
 }
 
 // --- Objectives -------------------------------------------------------------

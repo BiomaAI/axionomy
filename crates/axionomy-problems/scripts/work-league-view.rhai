@@ -24,7 +24,6 @@ fn policy_label(policy) {
 
 fn asset_label(parts) {
     switch parts[1] {
-        "world-identity" => "Identity: work economy",
         "season-active" => "Season active",
         "season-ended" => "Season ended",
         "tick" => "World time",
@@ -49,7 +48,6 @@ fn asset_label(parts) {
         "credit" => "Spendable credit",
         "wear" => "Equipment wear",
         "repairing" => "Under repair",
-        "facility-identity" => `Identity: ${capital(parts[2])}`,
         "vacant" => `${capital(parts[2])} service slot free`,
         "occupied" => `${capital(parts[2])} occupied by ${capital(parts[3])}`,
         "servicing" => `Receiving ${parts[2]} service`,
@@ -57,10 +55,12 @@ fn asset_label(parts) {
         "reclaiming-material" => "Material being reclaimed",
         "embodied-material" => "Material incorporated into work",
         "recycling-loss" => "Material lost during recycling",
-        "agent-identity" => `Identity: ${capital(parts[2])}`,
-        "job-identity" => `Identity: job ${parts[2]}`,
         "policy" => `${policy_label(parts[2])} policy`,
         "at" => `At ${capital(parts[2])}`,
+        "reward" => "Pays on delivery",
+        "work-energy" => "Work energy before its mode",
+        "work-time" => "Work time before its mode",
+        "work-material" => "Work material before its mode",
         "operational" => "Operational",
         "energy" => "Energy left",
         "time-remaining" => "Time left",
@@ -163,11 +163,12 @@ fn label(item) {
 fn unit(asset) {
     switch asset.split("/")[0] {
         "tick" | "horizon" | "ready-at" | "release-at" | "deadline" | "lease-until"
-            | "time-remaining" | "elapsed-time" => "ticks",
-        "credit" | "value" => "credits",
+            | "time-remaining" | "elapsed-time" | "work-time" => "ticks",
+        "credit" | "value" | "reward" => "credits",
         "energy" | "spent-energy" | "charging-energy" | "charge-supply" | "material"
             | "material-spent" | "reclaiming-material" | "embodied-material" | "recycling-loss"
-            | "waste" | "recycled-waste" | "repair-supply" | "spent-repair-supply" => "units",
+            | "waste" | "recycled-waste" | "repair-supply" | "spent-repair-supply"
+            | "work-energy" | "work-material" => "units",
         _ => (),
     }
 }
@@ -334,11 +335,14 @@ fn scene(state, frame) {
         y: node[2],
     });
     // Each route once, from the place first in the identifiers' order, in
-    // that order.
+    // that order: a season's roads, or in Micro, where a worker goes from
+    // any place to any other, a route between every two.
     let routes = #{};
-    for rate in state.rates("move/") {
-        let parts = rate.split("/");
-        if parts[2] < parts[3] { routes[`${parts[2]}/${parts[3]}`] = [parts[2], parts[3]]; }
+    for from in league::locations() {
+        let ends = if continuous { league::neighbours(from) } else { league::locations() };
+        for to in ends {
+            if from < to { routes[`${from}/${to}`] = [from, to]; }
+        }
     }
     let ordered = routes.keys();
     ordered.sort();

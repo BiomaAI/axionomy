@@ -13,7 +13,20 @@ Micro retains the compact serial correctness fixture. Showcase and Stress use
 `continuous.rs`: four workers share a world clock and make one
 joint or individual decision per tick. Work, repair, charging, and recycling
 can overlap; busy workers cannot move or start another activity. Each facility
-has one identity-checked occupied slot, released only when its service is due.
+has one occupied slot, released only when its service is due.
+
+The league's rates have variables: one law serves every worker, `{agent}`,
+and every contract, `{job}`, such as `claim/{agent}/{job}` or
+`move/{agent}/{from}/{to}`, whose roads are a relation. Laws split only where
+their shape differs: each mode's begin, a finish's outcome, each facility's
+service, and an expiry by what the contract was doing, `expire/{job}/none/none`,
+`expire/{job}/some/{agent}/none` or `expire/{job}/some/{agent}/some/{mode}`.
+A contract holds its terms as facts: where its work is done, what it pays and
+the energy, time and material its work takes, from which each mode's law
+reads its costs. A wave's fourth contract depends on its first, a value the
+claim derives from `{job}`. Every role is fixed to the account its identifier
+names, so no identity token pins a binding. Micro has 11 rates as written,
+for 246 instances; Showcase and Stress 23, for 1,030 and 1,954.
 
 Twelve Showcase contracts arrive in three waves; Stress has six waves and 24
 contracts. Claims are exclusive, expire after six unstarted ticks, and can be
@@ -63,8 +76,9 @@ The unit tests check the laws by applying exchanges:
   duplicate handoffs, and late payments are rejected without mutation.
   Worker time advances on the shared clock, and travel follows the declared
   roads one hop a turn.
-- Agent and job identity assets reject rebinding a valid-looking claim to the
-  wrong participant.
+- Every role is fixed to the account its rate's identifier names, so a claim
+  cannot be rebound to another participant, and work is done only where the
+  contract is, at its mode's cost.
 - Activities overlap; a joint handoff moves the claim and payment once and
   spends both workers' turns; recycling recovers material with a conserved
   loss.
@@ -84,8 +98,10 @@ effects replay through ordinary atomic exchanges, under every invariant.
 - Live frame publication without moving transport state into the economy.
 - Shared URLs that restore a precise problem, outcome, replay step, and
   leaderboard on both a server and static GitHub Pages.
-- Concrete-rate expansion pressure that keeps the new exact scalar
-  parameter/law schema intentionally narrower than a general callback system.
+- Rates with variables over workers, contracts and modes, with an `Option`
+  in their identifiers, a relation for the roads and a derived dependency,
+  their per-contract numbers read from facts rather than written into
+  thousands of concrete rates.
 
 ## In this folder
 
