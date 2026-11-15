@@ -6,6 +6,8 @@ use axionomy::{
 };
 
 pub const BATCHES: [u8; 6] = [0, 1, 2, 3, 4, 5];
+/// The most electricity the battery stores, an economy's constant.
+const BATTERY: u64 = 6;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Place {
     Warehouse,
@@ -54,7 +56,6 @@ pub enum Asset {
     SatisfiedDemand,
     MissedDemand,
     Day,
-    Days,
     Decisions,
     Aging,
     PendingAge(u8),
@@ -179,7 +180,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
     let environment = basket([
         (Asset::Decisions, 1),
         (Asset::CoolingOff, 1),
-        (Asset::Days, days),
         (Asset::Energy, 3),
         (Asset::GridPotential, 3 * (days - 1 - outage_days)),
         (Asset::Fuel, if stress { 5 } else { 6 }),
@@ -190,7 +190,15 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::Demand, 2),
         (Asset::FutureDemand, (days - 1) * 2),
     ]);
+    // The run's constants: how many days it lasts, and the most
+    // electricity the battery stores.
+    let (length, battery) = (
+        Param::<u64>::new(path!("days")),
+        Param::<u64>::new(path!("battery")),
+    );
     let mut builder = EconomyBuilder::new()
+        .constant(&length, days)
+        .constant(&battery, BATTERY)
         .account(AccountId::World, Account::from(environment))
         .account(
             AccountId::Buyer,
@@ -359,50 +367,55 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .produce_computed(Role::World, Asset::ColdSpace, amount * freed.quantity()),
     );
     // Delivering fresh or preserved crates where the batch stands, which
-    // frees the cold slots they took.
-    for preserved in [false, true] {
-        let price = if preserved { 2 } else { 3 };
-        builder = builder.rate_at(
-            RateIdPattern::Deliver {
-                batch: batch.var(),
-                preserved: Slot::Is(preserved),
-                at: place.var(),
-            }
-            .into(),
-            stored(active(decisions(), &batch))
-                .account(Role::Buyer, Pattern::literal(AccountId::Buyer))
-                .preserve_at(Role::Batch, one([at(&place)]))
-                .consume(
-                    Role::Batch,
-                    basket([(
-                        if preserved {
-                            Asset::Preserved
-                        } else {
-                            Asset::Fresh
-                        },
-                        1,
-                    )]),
-                )
-                .consume(Role::Buyer, basket([(Asset::Money, price)]))
-                .produce(Role::Buyer, basket([(Asset::Delivered, 1)]))
-                .consume(
-                    Role::World,
-                    basket([(Asset::Freight, 1), (Asset::Demand, 1)]),
-                )
-                .consume_computed(Role::World, Asset::Fuel, Q::constant(1))
-                .produce_computed(Role::World, Asset::TransportFuel, Q::constant(1))
-                .produce(
-                    Role::World,
-                    basket([
-                        (Asset::Money, price),
-                        (Asset::SatisfiedDemand, 1),
-                        (Asset::UsedFreight, 1),
-                    ]),
-                )
-                .consume_computed(Role::Batch, Asset::ColdOccupancy, slots())
-                .produce_computed(Role::World, Asset::ColdSpace, slots()),
-        );
-    }
+    // frees the cold slots they took: a relation over the two kinds gives
+    // the price a crate fetches, three fresh and two preserved, and how
+    // many crates of each a unit delivers, one of its kind and none of the
+    // other.
+    let preserved = Param::<bool>::new(path!("preserved"));
+    let (price, fresh, kept) = (
+        Param::<u64>::new(path!("price")),
+        Param::<u64>::new(path!("fresh-crates")),
+        Param::<u64>::new(path!("preserved-crates")),
+    );
+    let per_unit = |value: &Param<u64>| Q::units() * value.quantity();
+    builder = builder.rate_at(
+        RateIdPattern::Deliver {
+            batch: batch.var(),
+            preserved: preserved.var(),
+            at: place.var(),
+        }
+        .into(),
+        stored(active(decisions(), &batch))
+            .variable(preserved.every())
+            .relation(Relation::each_giving(
+                &preserved,
+                [
+                    price.name().clone(),
+                    fresh.name().clone(),
+                    kept.name().clone(),
+                ],
+                [(false, [3u64, 1, 0]), (true, [2, 0, 1])],
+            ))
+            .account(Role::Buyer, Pattern::literal(AccountId::Buyer))
+            .preserve_at(Role::Batch, one([at(&place)]))
+            .consume_computed(Role::Batch, Asset::Fresh, per_unit(&fresh))
+            .consume_computed(Role::Batch, Asset::Preserved, per_unit(&kept))
+            .consume_computed(Role::Buyer, Asset::Money, per_unit(&price))
+            .produce(Role::Buyer, basket([(Asset::Delivered, 1)]))
+            .consume(
+                Role::World,
+                basket([(Asset::Freight, 1), (Asset::Demand, 1)]),
+            )
+            .consume_computed(Role::World, Asset::Fuel, Q::constant(1))
+            .produce_computed(Role::World, Asset::TransportFuel, Q::constant(1))
+            .produce_computed(Role::World, Asset::Money, per_unit(&price))
+            .produce(
+                Role::World,
+                basket([(Asset::SatisfiedDemand, 1), (Asset::UsedFreight, 1)]),
+            )
+            .consume_computed(Role::Batch, Asset::ColdOccupancy, slots())
+            .produce_computed(Role::World, Asset::ColdSpace, slots()),
+    );
     // Discarding spoiled crates where the batch stands, which frees the
     // cold slots they took.
     builder = builder.rate_at(
@@ -532,7 +545,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     let supply = grid.quantity();
     let accepted = Q::minimum(
         supply.clone(),
-        Q::constant(6) - q(Role::World, Asset::Energy),
+        battery.quantity() - q(Role::World, Asset::Energy),
     );
     let mut open = ages_resolved(once(law()))
         .variable(day.range(1, days as u8 - 1))
@@ -586,7 +599,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 path!("last-day"),
                 q(Role::World, Asset::Day) + Q::constant(1),
                 C::Equal,
-                q(Role::World, Asset::Days),
+                length.quantity(),
             )
             .consume(Role::World, basket([(Asset::Aging, 1)]))
             .produce(Role::World, basket([(Asset::Solved, 1)]))

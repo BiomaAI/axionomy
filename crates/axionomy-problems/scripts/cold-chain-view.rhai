@@ -61,7 +61,6 @@ fn asset_label(parts) {
         "satisfied-demand" => "Food obligations met",
         "missed-demand" => "Food obligations missed",
         "day" => "Time elapsed",
-        "days" => "Run length",
         "decisions" => "Taking today's decisions",
         "aging" => "Settling today's heat exposure",
         "pending-age" => `${cohort_label(parts[2])} still to age today`,
@@ -130,7 +129,7 @@ fn unit(asset) {
             | "generator-fuel" | "transport-fuel" | "labor" | "spent-labor" | "future-labor"
             | "unused-labor" => "units",
         "money" => "credits",
-        "day" | "days" => "days",
+        "day" => "days",
         _ => (),
     }
 }

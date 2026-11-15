@@ -9,20 +9,14 @@
 // ten at a time.
 fn transfer() { 10 }
 
-// The cohorts, and each timed condition in the order its moment comes: the
-// cohort, its exposure and the moment it spoils.
+// The cohorts, and each timed condition in the order its moment comes, as
+// the law gives it: each spoiling's values, the cohort, its exposure, where
+// the cohort is stored and the moment it spoils.
 fn cohorts() { ["ambient", "refrigerated"] }
-fn timed_conditions() {
-    [
-        #{ cohort: "ambient", exposure: "ambient", due: "ambient-expiry" },
-        #{ cohort: "refrigerated", exposure: "warmed-after-outage", due: "warmed-expiry" },
-        #{ cohort: "refrigerated", exposure: "cold", due: "cold-expiry" },
-    ]
-}
-
-// Where a cohort is stored.
-fn storage_for(cohort) {
-    if cohort == "ambient" { "storage/warehouse" } else { "storage/fridge" }
+fn timed_conditions(state) {
+    let conditions = [];
+    for spoiling in state.instances("spoil") { conditions.push(state.values(spoiling)); }
+    conditions
 }
 
 // The exchanges, each bound to the accounts its roles name. Storage-wide
@@ -43,9 +37,12 @@ fn advance(from, to) { exchange(`advance/${from}/${to}`, #{ world: "world" }, 1)
 fn lose_power() {
     exchange("lose-power", #{ storage: "storage/fridge", cohort: "cohort/refrigerated", world: "world" }, 1)
 }
-fn spoil(cohort, exposure) {
-    exchange(`spoil/${cohort}/${exposure}`,
-        #{ storage: storage_for(cohort), cohort: `cohort/${cohort}`, world: "world" }, 1)
+fn spoil(condition) {
+    exchange(`spoil/${condition.cohort}/${condition.exposure}`, #{
+        storage: `storage/${condition.storage}`,
+        cohort: `cohort/${condition.cohort}`,
+        world: "world",
+    }, 1)
 }
 
 // The storage plans: commit another transfer to the fridge, advance to the
@@ -55,7 +52,7 @@ fn storage_plans(state) {
     [
         move_to_fridge(transfer()),
         advance("harvest", "ambient-expiry"),
-        spoil("ambient", "ambient"),
+        spoil(state.values("spoil/ambient/ambient")),
         seal_storage_plan(),
     ].filter(|proposal| state.applicable(proposal))
 }
@@ -67,8 +64,8 @@ fn storage_plans(state) {
 // runs on to the warmed and the cold cohorts' expiry, where the scenario
 // finishes.
 fn outage(state, random) {
-    for condition in timed_conditions() {
-        let effect = spoil(condition.cohort, condition.exposure);
+    for condition in timed_conditions(state) {
+        let effect = spoil(condition);
         if state.applicable(effect) { return effect; }
     }
     if state.balance("world", "now/harvest") > 0 {
@@ -107,7 +104,7 @@ fn claims(state) {
 // spoiled, so these are the refrigerated claims the plan keeps.
 fn usable_claims(state) {
     let total = quantity(0);
-    for condition in timed_conditions() {
+    for condition in timed_conditions(state) {
         let fresh = `fresh/${condition.cohort}/${condition.exposure}/${condition.due}`;
         if state.balance(`cohort/${condition.cohort}`, fresh) == 1
             && state.balance("world", `before/${condition.due}`) == 1 {

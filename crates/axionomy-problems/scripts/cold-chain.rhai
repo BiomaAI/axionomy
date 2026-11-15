@@ -11,8 +11,8 @@
 // The batches, in the order the policies visit them.
 fn batch_ids() { [0, 1, 2, 3, 4, 5] }
 
-// The most stored electricity a day may open with.
-fn battery() { 6 }
+// The most stored electricity a day may open with, the economy's constant.
+fn battery(state) { state.constant("battery") }
 
 // The electricity the grid supplies as day `day` opens, as the law gives
 // it: none on a day of the outage.
@@ -108,17 +108,18 @@ fn processed(id, amount) {
 }
 
 // Delivering `amount` of a batch's fresh or preserved crates where it is:
-// freight and demand for each, the buyer paying three a fresh crate or two
-// a preserved one, a unit of fuel for the trip, and cold space freed.
+// freight and demand for each, the buyer paying the price the law gives a
+// crate of the kind, a unit of fuel for the trip, and cold space freed.
 fn delivered(id, preserved, at, amount) {
     let batch = this.batches[id];
     let stock = if preserved { batch.preserved } else { batch.fresh };
-    let price = if preserved { 2 } else { 3 };
-    if amount == 0 || batch.at != at || stock < amount || this.money < amount * price
+    if amount == 0 || batch.at != at || stock < amount
         || this.freight < amount || this.demand < amount || this.fuel < 1
         || (at == "fridge" && batch.occupancy < amount) {
         return false;
     }
+    let price = this.state.values(`deliver/${id}/${preserved}/${at}`).price;
+    if this.money < amount * price { return false; }
     if preserved {
         this.batches[id].preserved = stock - amount;
     } else {
@@ -299,7 +300,7 @@ fn end_day(state, day, days) {
         return;
     }
     let next = day + 1;
-    this.energy = this.energy + min(grid_supply(state, next), battery() - this.energy);
+    this.energy = this.energy + min(grid_supply(state, next), battery(state) - this.energy);
     this.labor = quantity(2);
     this.freight = quantity(2);
     this.demand = quantity(2);
@@ -314,7 +315,7 @@ fn end_day(state, day, days) {
 // room.
 fn day_plan(state, policy) {
     let chain = shadow(state);
-    let days = state.balance("world", "days").to_int();
+    let days = state.constant("days").to_int();
     let cools_first = policy == "protect-cold" || policy == "rebalance-cold";
     for day in 0..days {
         if cools_first { chain.cool(true); }

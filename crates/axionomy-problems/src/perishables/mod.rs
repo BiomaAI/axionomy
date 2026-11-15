@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    Rate, Relation, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param, Pattern,
+    Quantity, Rate, Relation, Segment, basket,
 };
 
 pub mod cold_chain;
@@ -117,14 +117,16 @@ const MOMENTS: [Moment; 4] = [
     Moment::WarmedExpiry,
     Moment::ColdExpiry,
 ];
+/// Each timed condition, in the order its moment comes: a cohort, its
+/// exposure and the moment it spoils.
 const TIMED_CONDITIONS: [(Cohort, Exposure, Moment); 3] = [
     (Cohort::Ambient, Exposure::Ambient, Moment::AmbientExpiry),
-    (Cohort::Refrigerated, Exposure::Cold, Moment::ColdExpiry),
     (
         Cohort::Refrigerated,
         Exposure::WarmedAfterOutage,
         Moment::WarmedExpiry,
     ),
+    (Cohort::Refrigerated, Exposure::Cold, Moment::ColdExpiry),
 ];
 
 pub fn initial() -> World {
@@ -132,7 +134,7 @@ pub fn initial() -> World {
 }
 
 pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> World {
-    let mut builder = EconomyBuilder::new()
+    let builder = EconomyBuilder::new()
         .account(
             AccountId::World,
             Account::from(basket([
@@ -182,16 +184,24 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
         .rate_at(advance_id(), advance_rate())
         .rate(RateId::LosePower, lose_power_rate());
 
-    for (cohort, exposure, _) in TIMED_CONDITIONS {
-        builder = builder
-            .rate(RateId::Eat { cohort, exposure }, eat_rate(cohort, exposure))
-            .rate(
-                RateId::Spoil { cohort, exposure },
-                spoil_rate(cohort, exposure),
-            );
-    }
-
+    let conditions = Conditions::new();
     builder
+        .rate_at(
+            RateIdPattern::Eat {
+                cohort: conditions.cohort.var(),
+                exposure: conditions.exposure.var(),
+            }
+            .into(),
+            conditions.eat(),
+        )
+        .rate_at(
+            RateIdPattern::Spoil {
+                cohort: conditions.cohort.var(),
+                exposure: conditions.exposure.var(),
+            }
+            .into(),
+            conditions.spoil(),
+        )
         .rate(RateId::Finish, finish_rate())
         .rate(RateId::SealStoragePlan, seal_storage_plan_rate())
         .invariant(claim_invariant())
@@ -252,11 +262,11 @@ pub fn action(rate: RateId, units: u64) -> Action {
             .bind(Role::Cohort, cohort_account(Cohort::Refrigerated))
             .bind(Role::World, AccountId::World),
         RateId::Eat { cohort, .. } => exchange
-            .bind(Role::Holder, storage_for(cohort))
+            .bind(Role::Holder, storage_account(stored_in(cohort)))
             .bind(Role::Cohort, cohort_account(cohort))
             .bind(Role::World, AccountId::World),
         RateId::Spoil { cohort, .. } => exchange
-            .bind(Role::Storage, storage_for(cohort))
+            .bind(Role::Storage, storage_account(stored_in(cohort)))
             .bind(Role::Cohort, cohort_account(cohort))
             .bind(Role::World, AccountId::World),
         RateId::Finish | RateId::SealStoragePlan => exchange
@@ -311,10 +321,22 @@ fn cohort_account(cohort: Cohort) -> AccountId {
     AccountId::Cohort(cohort)
 }
 
-fn storage_for(cohort: Cohort) -> AccountId {
+/// Where `cohort` is stored.
+const fn stored_in(cohort: Cohort) -> Location {
     match cohort {
-        Cohort::Ambient => storage_account(Location::Warehouse),
-        Cohort::Refrigerated => storage_account(Location::Fridge),
+        Cohort::Ambient => Location::Warehouse,
+        Cohort::Refrigerated => Location::Fridge,
+    }
+}
+
+/// How much of each storage fact, ambient air, cold, running power and
+/// failed power, the storage of a cohort exposed so holds while its
+/// condition lasts.
+const fn storage_facts(exposure: Exposure) -> [u64; 4] {
+    match exposure {
+        Exposure::Ambient => [1, 0, 0, 0],
+        Exposure::Cold => [0, 1, 1, 0],
+        Exposure::WarmedAfterOutage => [1, 0, 0, 1],
     }
 }
 
@@ -328,6 +350,11 @@ fn due(exposure: Exposure) -> Moment {
 
 fn fresh_asset(cohort: Cohort, exposure: Exposure) -> Asset {
     Asset::Fresh(cohort, exposure, due(exposure))
+}
+
+/// One unit of the asset `asset` writes.
+fn one(asset: AssetPattern) -> (Pattern<Asset>, Quantity) {
+    (asset.into(), Quantity::new(1))
 }
 
 fn active_world(rate: Rate<Ontology>) -> Rate<Ontology> {
@@ -428,7 +455,6 @@ fn advance_id() -> Pattern<RateId> {
 /// moments pairs each with the one after it.
 fn advance_rate() -> Rate<Ontology> {
     let (from, to) = moments();
-    let one = |asset: AssetPattern| (asset.into(), Quantity::new(1));
     active_world(
         Rate::new()
             .variable(from.every())
@@ -498,38 +524,122 @@ fn lose_power_rate() -> Rate<Ontology> {
     )
 }
 
-fn eat_rate(cohort: Cohort, exposure: Exposure) -> Rate<Ontology> {
-    all_distinct(
-        active_world(
-            Rate::new()
-                .preserve(Role::Holder, storage_requirements(cohort, exposure))
-                .consume(Role::Holder, basket([(Asset::Claim(cohort), 1)]))
-                .produce(Role::Holder, basket([(Asset::Consumed(cohort), 1)]))
-                .preserve(
-                    Role::Cohort,
-                    basket([
-                        (Asset::CohortIdentity(cohort), 1),
-                        (fresh_asset(cohort, exposure), 1),
-                    ]),
-                )
-                .preserve(Role::World, basket([(Asset::Before(due(exposure)), 1)])),
-        ),
-        &[Role::Holder, Role::Cohort, Role::World],
-    )
+/// The timed conditions' law: its variables, a cohort and its exposure, and
+/// what the conditions' relation gives each pair: where the cohort is
+/// stored (`{storage}`), the moment it spoils (`{due}`), and how much of
+/// each storage fact its storage holds while it lasts.
+struct Conditions {
+    cohort: Param<Cohort>,
+    exposure: Param<Exposure>,
+    storage: Param<Location>,
+    due: Param<Moment>,
+    /// Each storage fact, and the value giving how much of it the storage
+    /// holds.
+    facts: [(Asset, Param<u64>); 4],
 }
 
-fn spoil_rate(cohort: Cohort, exposure: Exposure) -> Rate<Ontology> {
-    all_distinct(
-        active_world(
-            Rate::new()
-                .preserve(Role::Storage, storage_requirements(cohort, exposure))
-                .preserve(Role::Cohort, basket([(Asset::CohortIdentity(cohort), 1)]))
-                .consume(Role::Cohort, basket([(fresh_asset(cohort, exposure), 1)]))
-                .produce(Role::Cohort, basket([(Asset::Rotten(cohort), 1)]))
-                .preserve(Role::World, basket([(Asset::Reached(due(exposure)), 1)])),
-        ),
-        &[Role::Storage, Role::Cohort, Role::World],
-    )
+impl Conditions {
+    fn new() -> Self {
+        Self {
+            cohort: Param::new(path!("cohort")),
+            exposure: Param::new(path!("exposure")),
+            storage: Param::new(path!("storage")),
+            due: Param::new(path!("due")),
+            facts: [
+                (Asset::Ambient, Param::new(path!("ambient"))),
+                (Asset::Cold, Param::new(path!("cold"))),
+                (Asset::Powered, Param::new(path!("powered"))),
+                (Asset::Unpowered, Param::new(path!("unpowered"))),
+            ],
+        }
+    }
+
+    /// `rate` for each timed condition, `{cohort}` and `{exposure}`, in the
+    /// order its moment comes, reading what the relation gives it.
+    fn each(&self, rate: Rate<Ontology>) -> Rate<Ontology> {
+        let gives = [self.storage.name(), self.due.name()]
+            .into_iter()
+            .chain(self.facts.iter().map(|(_, held)| held.name()))
+            .cloned();
+        rate.variable(self.cohort.every())
+            .variable(
+                self.exposure
+                    .values(TIMED_CONDITIONS.map(|(_, exposure, _)| exposure)),
+            )
+            .relation(Relation::giving(
+                [self.cohort.name().clone(), self.exposure.name().clone()],
+                gives,
+                TIMED_CONDITIONS.map(|(cohort, exposure, moment)| {
+                    [
+                        cohort.segment(),
+                        exposure.segment(),
+                        stored_in(cohort).segment(),
+                        moment.segment(),
+                    ]
+                    .into_iter()
+                    .chain(storage_facts(exposure).map(Segment::from))
+                }),
+            ))
+    }
+
+    /// `rate` requiring, of the storage `role` binds, its identity and the
+    /// storage facts the condition holds in.
+    fn stored(&self, rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
+        self.facts.iter().fold(
+            rate.preserve_at(
+                role,
+                [one(AssetPattern::LocationIdentity(self.storage.var()))],
+            ),
+            |rate, (fact, held)| rate.preserve_computed(role, *fact, held.quantity()),
+        )
+    }
+
+    /// The cohort's condition: fresh, so exposed, until its moment.
+    fn fresh(&self) -> AssetPattern {
+        AssetPattern::Fresh(self.cohort.var(), self.exposure.var(), self.due.var())
+    }
+
+    /// Using units of the cohort where it is stored while its condition
+    /// lasts, before its moment.
+    fn eat(&self) -> Rate<Ontology> {
+        all_distinct(
+            active_world(
+                self.stored(self.each(Rate::new()), Role::Holder)
+                    .consume_at(Role::Holder, [one(AssetPattern::Claim(self.cohort.var()))])
+                    .produce_at(
+                        Role::Holder,
+                        [one(AssetPattern::Consumed(self.cohort.var()))],
+                    )
+                    .preserve_at(
+                        Role::Cohort,
+                        [
+                            one(AssetPattern::CohortIdentity(self.cohort.var())),
+                            one(self.fresh()),
+                        ],
+                    )
+                    .preserve_at(Role::World, [one(AssetPattern::Before(self.due.var()))]),
+            ),
+            &[Role::Holder, Role::Cohort, Role::World],
+        )
+    }
+
+    /// The cohort's condition spoiling where it is stored, once its moment
+    /// has come.
+    fn spoil(&self) -> Rate<Ontology> {
+        all_distinct(
+            active_world(
+                self.stored(self.each(Rate::new()), Role::Storage)
+                    .preserve_at(
+                        Role::Cohort,
+                        [one(AssetPattern::CohortIdentity(self.cohort.var()))],
+                    )
+                    .consume_at(Role::Cohort, [one(self.fresh())])
+                    .produce_at(Role::Cohort, [one(AssetPattern::Rotten(self.cohort.var()))])
+                    .preserve_at(Role::World, [one(AssetPattern::Reached(self.due.var()))]),
+            ),
+            &[Role::Storage, Role::Cohort, Role::World],
+        )
+    }
 }
 
 fn finish_rate() -> Rate<Ontology> {
@@ -623,26 +733,6 @@ fn seal_storage_plan_rate() -> Rate<Ontology> {
             Role::World,
         ],
     )
-}
-
-fn storage_requirements(cohort: Cohort, exposure: Exposure) -> axionomy::Basket<Asset> {
-    match (cohort, exposure) {
-        (Cohort::Ambient, Exposure::Ambient) => basket([
-            (Asset::LocationIdentity(Location::Warehouse), 1),
-            (Asset::Ambient, 1),
-        ]),
-        (Cohort::Refrigerated, Exposure::Cold) => basket([
-            (Asset::LocationIdentity(Location::Fridge), 1),
-            (Asset::Cold, 1),
-            (Asset::Powered, 1),
-        ]),
-        (Cohort::Refrigerated, Exposure::WarmedAfterOutage) => basket([
-            (Asset::LocationIdentity(Location::Fridge), 1),
-            (Asset::Ambient, 1),
-            (Asset::Unpowered, 1),
-        ]),
-        _ => unreachable!("only installed cohort/exposure pairs request storage facts"),
-    }
 }
 
 fn claim_invariant() -> LinearInvariant<Asset> {
@@ -942,8 +1032,8 @@ mod tests {
         assert!(
             world
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
-                .all(|rate| !world.is_applicable(&action(*rate, 1)))
+                .flat_map(|key| world.instances_of(key))
+                .all(|rate| !world.is_applicable(&action(rate, 1)))
         );
         assert_eq!(
             source.replayed(&trace).unwrap().state_key(),
