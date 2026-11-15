@@ -36,13 +36,15 @@ A resolution is a law for each winner, `resolve/a/{winning-bid}/{losing-bid}`,
 whose loser is the other traveller and whose bids a relation keeps to the
 higher winning, A on a tie. Timed laws split only where their shape differs:
 a completion by detour and lateness, a detour by whether the traveller was
-waiting. A crossing holds the lane for the traveller's `CrossingTime`, a fact
-of its account, and the clock advances by one law, `advance/{to}`. Every role
-is fixed to the account its identifier names, so an agent's name in an
-identifier cannot be used to impersonate another account or swap the auction
-winner, and no identity asset pins a binding. Finish consumes the bridge's
-active lifecycle asset, making the terminal economy quiescent. Micro has 8
-rates as written, for 17 instances; Showcase and Stress 18, for 100.
+waiting. A crossing holds the lane for as long as the traveller takes, which
+never changes and so is given by the crossing's relation, `{crossing-time}`,
+three ticks for A and two for B; the clock advances by one law,
+`advance/{to}`. Every role is fixed to the account its identifier names, so
+an agent's name in an identifier cannot be used to impersonate another
+account or swap the auction winner, and no identity asset pins a binding.
+Finish consumes the bridge's active lifecycle asset, making the terminal
+economy quiescent. Micro has 8 rates as written, for 17 instances; Showcase
+and Stress 18, for 100.
 
 ## Required results
 

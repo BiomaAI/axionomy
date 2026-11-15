@@ -11,8 +11,9 @@ fn clock(state) { state.balance("bridge", "now").to_int() }
 fn held(state, agent, asset) { state.balance(`agent/${agent}`, asset).to_int() }
 fn other(agent) { if agent == "a" { "b" } else { "a" } }
 
-// How many ticks an agent's crossing occupies the lane, as it records.
-fn duration(state, agent) { held(state, agent, "crossing-time") }
+// How many ticks an agent's crossing occupies the lane, as the crossing's law
+// gives it.
+fn duration(state, agent) { state.values(`cross/${agent}`)["crossing-time"].to_int() }
 
 // A rate's kind, its first segment, such as `cross` or `submit-bid`.
 fn kind(rate) { rate.split("/")[0] }

@@ -56,9 +56,6 @@ pub enum Asset {
     Deadline,
     LeaseUntil,
     ReadyAt,
-    /// How many ticks a traveller's crossing holds the lane: a fact of the
-    /// traveller.
-    CrossingTime,
     InTransit,
     OnDetour,
     Detouring,

@@ -31,6 +31,8 @@ fn arrived(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
         Q::balance(role, Asset::Arrival),
     )
 }
+/// How many ticks a traveller's crossing holds the lane: law structure,
+/// which the crossing's relation gives as `{crossing-time}`.
 pub fn duration(agent: AgentId) -> u64 {
     if agent == AgentId::A { 3 } else { 2 }
 }
@@ -45,7 +47,6 @@ pub(super) fn build(source: World) -> World {
                 AccountId::Agent(agent) => basket([
                     (Asset::Arrival, u64::from(*agent == AgentId::B)),
                     (Asset::Deadline, if *agent == AgentId::A { 7 } else { 4 }),
-                    (Asset::CrossingTime, duration(*agent)),
                 ]),
             })
             .unwrap();
@@ -79,7 +80,13 @@ pub(super) fn build(source: World) -> World {
             }
             // A crossing holds the lane for the traveller's crossing time.
             RateId::Cross { .. } => {
+                let crossing = Param::<u64>::new(path!("crossing-time"));
                 rate = clear(timed_traveller(), Role::Traveler, Asset::LeaseUntil)
+                    .relation(Relation::each_giving(
+                        &agent(),
+                        [crossing.name().clone()],
+                        [AgentId::A, AgentId::B].map(|agent| (agent, [duration(agent)])),
+                    ))
                     .preserve(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
                     .condition(
                         path!("reservation-has-not-expired"),
@@ -98,7 +105,7 @@ pub(super) fn build(source: World) -> World {
                     .produce_computed(
                         Role::Traveler,
                         Asset::ReadyAt,
-                        clock() + Q::balance(Role::Traveler, Asset::CrossingTime),
+                        clock() + crossing.quantity(),
                     );
             }
             RateId::ResetRound => {

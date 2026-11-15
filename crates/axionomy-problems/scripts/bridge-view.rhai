@@ -48,7 +48,6 @@ fn asset_label(name, parts) {
         "deadline" => "Arrival deadline",
         "lease-until" => "Reservation valid through",
         "ready-at" => "Travel completes at",
-        "crossing-time" => "A crossing holds the lane for",
         "in-transit" => "On the bridge",
         "on-detour" => "On the alternate route",
         "detouring" => "Detouring",
@@ -99,8 +98,8 @@ fn format(asset) {
     switch asset.split("/")[0] {
         "energy" | "spent-energy" => #{ scale: 0, unit: "units" },
         "credit" | "escrow" | "spent-credit" => #{ scale: 0, unit: "credits" },
-        "now" | "time-remaining" | "arrival" | "deadline" | "lease-until" | "ready-at"
-            | "crossing-time" => #{ scale: 0, unit: "ticks" },
+        "now" | "time-remaining" | "arrival" | "deadline" | "lease-until"
+            | "ready-at" => #{ scale: 0, unit: "ticks" },
         _ => (),
     }
 }
@@ -170,7 +169,11 @@ fn scene(state, frame) {
     });
     let routes = [
         ["west", "bridge", "reserve lane"],
-        ["bridge", "east", if timed { "A: 3 ticks · B: 2 ticks" } else { "cross atomically" }],
+        ["bridge", "east", if timed {
+            `A: ${bridge::duration(state, "a")} ticks · B: ${bridge::duration(state, "b")} ticks`
+        } else {
+            "cross atomically"
+        }],
     ];
     if timed {
         routes += [
