@@ -2,7 +2,7 @@ use crate::Ontology;
 use crate::accounts::Accounts;
 use crate::path;
 use crate::pattern::{Arguments, Domain, Pattern, Variable};
-use crate::rate::{InstanceFailure, Measure};
+use crate::rate::{Derived, InstanceFailure, Measure};
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, ConditionPath, Exchange,
     InvariantPath, LinearInvariant, ParameterPath, Quantity, QuantityComparison,
@@ -423,13 +423,47 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 ));
             }
         }
-        let mut named: Vec<&VariablePath> = Vec::new();
-        for name in read.iter().copied().chain(rate.named_variables()) {
-            if !named.contains(&name) {
-                named.push(name);
+        // A derived value is named once, and never as a variable is.
+        let derived: Vec<&VariablePath> = rate.derived().iter().map(Derived::name).collect();
+        for (index, name) in derived.iter().enumerate() {
+            if declared.contains(name) || derived[..index].contains(name) {
+                issues.push(issue(
+                    |rate, variable| ModelIssue::RepeatedVariable { rate, variable },
+                    name,
+                ));
             }
         }
-        for name in named.into_iter().filter(|name| !declared.contains(name)) {
+        // The identifier, relations and distinct pairs name variables;
+        // assets, accounts and quantities also derived values; a derived
+        // value only the variables and the derived values before it.
+        let known = |name: &&VariablePath, derived: &[&VariablePath]| {
+            declared.contains(name) || derived.contains(name)
+        };
+        let mut unknown: Vec<&VariablePath> = Vec::new();
+        let mut note = |name| {
+            if !unknown.contains(&name) {
+                unknown.push(name);
+            }
+        };
+        let identifying = rate.identifying_variables();
+        for name in read.iter().chain(&identifying) {
+            if !known(name, &[]) {
+                note(name);
+            }
+        }
+        for name in rate.named_variables() {
+            if !known(&name, &derived) {
+                note(name);
+            }
+        }
+        for (index, value) in rate.derived().iter().enumerate() {
+            for name in value.value().variables() {
+                if !known(&name, &derived[..index]) {
+                    note(name);
+                }
+            }
+        }
+        for name in unknown {
             issues.push(issue(
                 |rate, variable| ModelIssue::UndeclaredVariable { rate, variable },
                 name,
@@ -468,6 +502,39 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 issues.push(issue(
                     |rate, variable| ModelIssue::RepeatedValue { rate, variable },
                     variable.name(),
+                ));
+            }
+        }
+        for relation in rate.relations() {
+            if relation
+                .rows()
+                .iter()
+                .any(|row| row.len() != relation.variables().len())
+            {
+                issues.push(ModelIssue::MalformedRelation {
+                    rate: key.clone(),
+                    variables: relation.variables().to_vec(),
+                });
+            }
+        }
+        for relation in rate.relations() {
+            let rows = relation.rows();
+            if rows
+                .iter()
+                .enumerate()
+                .any(|(index, row)| rows[..index].contains(row))
+            {
+                issues.push(ModelIssue::RepeatedRow {
+                    rate: key.clone(),
+                    variables: relation.variables().to_vec(),
+                });
+            }
+        }
+        for value in rate.derived() {
+            if value.value().reads() {
+                issues.push(issue(
+                    |rate, variable| ModelIssue::DerivedReads { rate, variable },
+                    value.name(),
                 ));
             }
         }
@@ -547,6 +614,23 @@ pub enum ModelIssue<O: Ontology> {
     OverlappingRates {
         rate: Pattern<O::Rate>,
         other: Pattern<O::Rate>,
+    },
+    /// A row of a relation holds other than one value for each of its
+    /// variables.
+    MalformedRelation {
+        rate: Pattern<O::Rate>,
+        variables: Vec<VariablePath>,
+    },
+    /// A relation's rows repeat one.
+    RepeatedRow {
+        rate: Pattern<O::Rate>,
+        variables: Vec<VariablePath>,
+    },
+    /// A derived value reads what only an exchange has: its units, a
+    /// parameter or a balance.
+    DerivedReads {
+        rate: Pattern<O::Rate>,
+        variable: VariablePath,
     },
 }
 
@@ -715,7 +799,7 @@ impl<O: Ontology> Economy<O> {
         let Some((rate, arguments)) = self.rates.find(id) else {
             return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
         };
-        if rate.variables().is_empty() {
+        if rate.variables().is_empty() && rate.derived().is_empty() {
             return Ok(Cow::Borrowed(rate));
         }
         for variable in rate.variables() {
@@ -729,6 +813,16 @@ impl<O: Ontology> Economy<O> {
                 }]);
             }
         }
+        if let Some(relation) = rate
+            .relations()
+            .iter()
+            .find(|relation| !relation.holds(&arguments))
+        {
+            return Err(vec![ApplyError::OutsideRelation {
+                rate: id.clone(),
+                variables: relation.variables().to_vec(),
+            }]);
+        }
         let alike: Vec<_> = rate
             .distinct_variable_pairs()
             .filter(|(left, right)| arguments.get(left) == arguments.get(right))
@@ -741,6 +835,12 @@ impl<O: Ontology> Economy<O> {
         if !alike.is_empty() {
             return Err(alike);
         }
+        let arguments = rate.derive_values(arguments).map_err(|variable| {
+            vec![ApplyError::DerivedFails {
+                rate: id.clone(),
+                variable,
+            }]
+        })?;
         rate.instantiate(&arguments)
             .map(Cow::Owned)
             .map_err(|failure| {
@@ -1046,7 +1146,10 @@ impl<O: Ontology> Economy<O> {
         effects: &mut BTreeMap<O::Account, Effect<O::Asset>>,
     ) -> Result<(), ApplyError<O>> {
         for amount in amounts {
-            let value = match evaluate_expression(amount.quantity(), proposal, &self.accounts) {
+            let value = match evaluate_expression(
+                amount.quantity(),
+                Reading::Exchange(proposal, &self.accounts),
+            ) {
                 Ok(value) => value,
                 Err(error) => {
                     return Err(ApplyError::RateLawEvaluation {
@@ -1090,15 +1193,16 @@ impl<O: Ontology> Economy<O> {
         proposal: &Exchange<O>,
     ) -> Result<(), ApplyError<O>> {
         for condition in rule.conditions() {
-            let satisfied = match evaluate_condition(condition, proposal, &self.accounts) {
-                Ok(satisfied) => satisfied,
-                Err(error) => {
-                    return Err(ApplyError::RateLawEvaluation {
-                        rate: proposal.rate().clone(),
-                        message: error.into_message(),
-                    });
-                }
-            };
+            let satisfied =
+                match evaluate_condition(condition, Reading::Exchange(proposal, &self.accounts)) {
+                    Ok(satisfied) => satisfied,
+                    Err(error) => {
+                        return Err(ApplyError::RateLawEvaluation {
+                            rate: proposal.rate().clone(),
+                            message: error.into_message(),
+                        });
+                    }
+                };
             if !satisfied {
                 return Err(ApplyError::RateConditionFailed {
                     rate: proposal.rate().clone(),
@@ -1520,6 +1624,16 @@ pub enum ApplyError<O: Ontology> {
         rate: O::Rate,
         variable: VariablePath,
     },
+    #[error("the rate's identifier gives its variables values no row of a relation holds")]
+    OutsideRelation {
+        rate: O::Rate,
+        variables: Vec<VariablePath>,
+    },
+    #[error("a value the rate derives from its identifier is no quantity")]
+    DerivedFails {
+        rate: O::Rate,
+        variable: VariablePath,
+    },
     #[error("the rate's identifier gives variables that must differ one value")]
     VariablesMustDiffer {
         rate: O::Rate,
@@ -1720,20 +1834,41 @@ impl ExpressionError {
     }
 }
 
+/// What an expression reads: an exchange and the accounts it binds, or only
+/// the values a rate's identifier gives, as a derived value reads.
+pub(crate) enum Reading<'a, O: Ontology> {
+    Exchange(&'a Exchange<O>, &'a Accounts<O::Account, O::Asset>),
+    Values,
+}
+
+// Derived, these would ask the ontology's identifiers to be `Copy`.
+impl<O: Ontology> Clone for Reading<'_, O> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<O: Ontology> Copy for Reading<'_, O> {}
+
 pub(crate) fn evaluate_expression<O: Ontology>(
     expression: &QuantityExpression<O>,
-    proposal: &Exchange<O>,
-    accounts: &Accounts<O::Account, O::Asset>,
+    reading: Reading<'_, O>,
 ) -> Result<Quantity, ExpressionError> {
     match expression {
         QuantityExpression::Constant { value } => Ok(*value),
-        QuantityExpression::Units => Ok(proposal.units()),
-        QuantityExpression::Parameter { name } => proposal
-            .parameters()
-            .get(name)
-            .copied()
-            .ok_or_else(|| ExpressionError::MissingParameter(name.clone())),
+        QuantityExpression::Units => Ok(match reading {
+            Reading::Exchange(proposal, _) => proposal.units(),
+            Reading::Values => Quantity::ZERO,
+        }),
+        QuantityExpression::Parameter { name } => match reading {
+            Reading::Exchange(proposal, _) => proposal.parameters().get(name).copied(),
+            Reading::Values => None,
+        }
+        .ok_or_else(|| ExpressionError::MissingParameter(name.clone())),
         QuantityExpression::Balance { role, asset } => {
+            let Reading::Exchange(proposal, accounts) = reading else {
+                return Err(ExpressionError::UnboundRole);
+            };
             let account_id = proposal
                 .bindings()
                 .get(role)
@@ -1758,24 +1893,21 @@ pub(crate) fn evaluate_expression<O: Ontology>(
         QuantityExpression::Add { left, right } => evaluate_binary(
             left,
             right,
-            proposal,
-            accounts,
+            reading,
             ExpressionError::AdditionOverflow,
             |left, right| left.checked_add(right),
         ),
         QuantityExpression::Subtract { left, right } => evaluate_binary(
             left,
             right,
-            proposal,
-            accounts,
+            reading,
             ExpressionError::SubtractionUnderflow,
             |left, right| left.checked_sub(right),
         ),
         QuantityExpression::Multiply { left, right } => evaluate_binary(
             left,
             right,
-            proposal,
-            accounts,
+            reading,
             ExpressionError::MultiplicationOverflow,
             |left, right| left.checked_mul(right),
         ),
@@ -1784,15 +1916,15 @@ pub(crate) fn evaluate_expression<O: Ontology>(
             right,
             denominator,
             rounding,
-        } => evaluate_mul_div(left, right, denominator, *rounding, proposal, accounts),
+        } => evaluate_mul_div(left, right, denominator, *rounding, reading),
         QuantityExpression::Minimum { left, right } => {
-            let left = evaluate_expression(left, proposal, accounts)?;
-            let right = evaluate_expression(right, proposal, accounts)?;
+            let left = evaluate_expression(left, reading)?;
+            let right = evaluate_expression(right, reading)?;
             Ok(std::cmp::min(left, right))
         }
         QuantityExpression::Maximum { left, right } => {
-            let left = evaluate_expression(left, proposal, accounts)?;
-            let right = evaluate_expression(right, proposal, accounts)?;
+            let left = evaluate_expression(left, reading)?;
+            let right = evaluate_expression(right, reading)?;
             Ok(std::cmp::max(left, right))
         }
     }
@@ -1800,11 +1932,10 @@ pub(crate) fn evaluate_expression<O: Ontology>(
 
 pub(crate) fn evaluate_condition<O: Ontology>(
     condition: &RateCondition<O>,
-    proposal: &Exchange<O>,
-    accounts: &Accounts<O::Account, O::Asset>,
+    reading: Reading<'_, O>,
 ) -> Result<bool, ExpressionError> {
-    let left = evaluate_expression(condition.left(), proposal, accounts)?;
-    let right = evaluate_expression(condition.right(), proposal, accounts)?;
+    let left = evaluate_expression(condition.left(), reading)?;
+    let right = evaluate_expression(condition.right(), reading)?;
     Ok(match condition.comparison() {
         QuantityComparison::Equal => left == right,
         QuantityComparison::GreaterThanOrEqual => left >= right,
@@ -1815,13 +1946,12 @@ pub(crate) fn evaluate_condition<O: Ontology>(
 fn evaluate_binary<O: Ontology>(
     left: &QuantityExpression<O>,
     right: &QuantityExpression<O>,
-    proposal: &Exchange<O>,
-    accounts: &Accounts<O::Account, O::Asset>,
+    reading: Reading<'_, O>,
     error: ExpressionError,
     operation: impl FnOnce(Quantity, Quantity) -> Option<Quantity>,
 ) -> Result<Quantity, ExpressionError> {
-    let left = evaluate_expression(left, proposal, accounts)?;
-    let right = evaluate_expression(right, proposal, accounts)?;
+    let left = evaluate_expression(left, reading)?;
+    let right = evaluate_expression(right, reading)?;
     operation(left, right).ok_or(error)
 }
 
@@ -1833,12 +1963,11 @@ fn evaluate_mul_div<O: Ontology>(
     right: &QuantityExpression<O>,
     denominator: &QuantityExpression<O>,
     rounding: Rounding,
-    proposal: &Exchange<O>,
-    accounts: &Accounts<O::Account, O::Asset>,
+    reading: Reading<'_, O>,
 ) -> Result<Quantity, ExpressionError> {
-    let left = evaluate_expression(left, proposal, accounts)?;
-    let right = evaluate_expression(right, proposal, accounts)?;
-    let denominator = evaluate_expression(denominator, proposal, accounts)?;
+    let left = evaluate_expression(left, reading)?;
+    let right = evaluate_expression(right, reading)?;
+    let denominator = evaluate_expression(denominator, reading)?;
     if denominator.is_zero() {
         return Err(ExpressionError::DivisionByZero);
     }
@@ -1976,9 +2105,10 @@ mod evaluation_conformance {
             );
             let before = accounts.clone();
             let proposal_before = proposal.clone();
-            let actual = evaluate_expression(&case.expression, &proposal, &accounts)
-                .map(|value| value.to_string())
-                .map_err(ExpressionError::into_message);
+            let actual =
+                evaluate_expression(&case.expression, Reading::Exchange(&proposal, &accounts))
+                    .map(|value| value.to_string())
+                    .map_err(ExpressionError::into_message);
             let expected = match (&case.result, &case.error) {
                 (Some(value), None) => Ok(value.clone()),
                 (None, Some(error)) => Err(error.clone()),
@@ -1999,8 +2129,11 @@ mod evaluation_conformance {
                     comparison,
                     case.condition_right.clone(),
                 );
-                let actual = evaluate_condition(&rule.conditions()[0], &proposal, &accounts)
-                    .map_err(ExpressionError::into_message);
+                let actual = evaluate_condition(
+                    &rule.conditions()[0],
+                    Reading::Exchange(&proposal, &accounts),
+                )
+                .map_err(ExpressionError::into_message);
                 let expected = match expected {
                     (Some(value), None) => Ok(*value),
                     (None, Some(error)) => Err(error.clone()),

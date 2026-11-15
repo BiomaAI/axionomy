@@ -1,5 +1,6 @@
 use crate::Ontology;
-use crate::pattern::{Arguments, InstanceError, Pattern, Variable};
+use crate::economy::{Reading, evaluate_expression};
+use crate::pattern::{Arguments, InstanceError, Pattern, Relation, Segment, Variable};
 use crate::{
     Account, AccountDelta, Basket, ConditionPath, InvariantPath, ParameterPath, Quantity, Rounding,
     VariablePath,
@@ -303,7 +304,7 @@ impl<O: Ontology> QuantityExpression<O> {
 
     /// Every variable it names: those it reads as numbers and those its
     /// assets name, in order.
-    fn variables(&self) -> Vec<&VariablePath> {
+    pub(crate) fn variables(&self) -> Vec<&VariablePath> {
         let mut variables = Vec::new();
         self.walk(&mut |expression| match expression {
             Self::Variable { name } => variables.push(name),
@@ -311,6 +312,19 @@ impl<O: Ontology> QuantityExpression<O> {
             _ => {}
         });
         variables
+    }
+
+    /// Whether it reads what only an exchange has: its units, a parameter
+    /// or a balance.
+    pub(crate) fn reads(&self) -> bool {
+        let mut reads = false;
+        self.walk(&mut |expression| {
+            reads |= matches!(
+                expression,
+                Self::Units | Self::Parameter { .. } | Self::Balance { .. }
+            );
+        });
+        reads
     }
 
     /// The variables it reads as numbers, in order.
@@ -332,15 +346,12 @@ impl<O: Ontology> QuantityExpression<O> {
             Self::Constant { value } => Self::Constant { value: *value },
             Self::Units => Self::Units,
             Self::Parameter { name } => Self::Parameter { name: name.clone() },
-            Self::Variable { name } => {
-                let value = arguments
+            Self::Variable { name } => Self::Constant {
+                value: arguments
                     .get(name)
-                    .and_then(crate::Segment::number)
-                    .ok_or_else(|| InstanceFailure::NotNatural(name.clone()))?;
-                Self::Constant {
-                    value: Quantity::new(value),
-                }
-            }
+                    .and_then(crate::Segment::quantity)
+                    .ok_or_else(|| InstanceFailure::NotNatural(name.clone()))?,
+            },
             Self::Balance { role, asset } => Self::Balance {
                 role: role.clone(),
                 asset: Pattern::literal(asset.instantiate(arguments)?),
@@ -424,6 +435,30 @@ pub struct ComputedAmount<O: Ontology> {
     quantity: QuantityExpression<O>,
 }
 
+/// A whole number a rate computes from its variables' values when an
+/// exchange names an instance, named as a variable is: `next` as `row + 1`
+/// writes `row/{next}`. The rate's identifier never names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(bound(
+    serialize = "O::Role: Serialize, O::Asset: Serialize",
+    deserialize = "O::Role: Deserialize<'de>, O::Asset: Deserialize<'de>",
+))]
+#[schemars(bound = "O::Role: JsonSchema, O::Asset: JsonSchema")]
+pub struct Derived<O: Ontology> {
+    name: VariablePath,
+    value: QuantityExpression<O>,
+}
+
+impl<O: Ontology> Derived<O> {
+    pub fn name(&self) -> &VariablePath {
+        &self.name
+    }
+
+    pub fn value(&self) -> &QuantityExpression<O> {
+        &self.value
+    }
+}
+
 impl<O: Ontology> ComputedAmount<O> {
     pub const fn role(&self) -> &O::Role {
         &self.role
@@ -497,6 +532,8 @@ pub struct Rate<O: Ontology> {
     closes: BTreeSet<O::Role>,
     variables: Vec<Variable>,
     distinct_variables: BTreeSet<(VariablePath, VariablePath)>,
+    relations: Vec<Relation>,
+    derived: Vec<Derived<O>>,
     accounts: BTreeMap<O::Role, Pattern<O::Account>>,
 }
 
@@ -535,6 +572,8 @@ impl<O: Ontology> Rate<O> {
             closes: BTreeSet::new(),
             variables: Vec::new(),
             distinct_variables: BTreeSet::new(),
+            relations: Vec::new(),
+            derived: Vec::new(),
             accounts: BTreeMap::new(),
         }
     }
@@ -573,6 +612,22 @@ impl<O: Ontology> Rate<O> {
             (right, left)
         };
         self.distinct_variables.insert(pair);
+        self
+    }
+
+    /// Allows the variables `relation` names only the values one of its rows
+    /// holds together.
+    pub fn relation(mut self, relation: Relation) -> Self {
+        self.relations.push(relation);
+        self
+    }
+
+    /// Computes `name` from the variables' values, and the values derived
+    /// before it, as `value`: a whole number its assets, accounts and
+    /// quantities may name as `{name}`. An identifier for whose values it is
+    /// no quantity names no instance.
+    pub fn derive(mut self, name: VariablePath, value: QuantityExpression<O>) -> Self {
+        self.derived.push(Derived { name, value });
         self
     }
 
@@ -863,6 +918,14 @@ impl<O: Ontology> Rate<O> {
         self.distinct_variables.iter()
     }
 
+    pub fn relations(&self) -> &[Relation] {
+        &self.relations
+    }
+
+    pub fn derived(&self) -> &[Derived<O>] {
+        &self.derived
+    }
+
     /// The accounts the rate fixes roles to, in role order.
     pub fn fixed_accounts(&self) -> impl Iterator<Item = (&O::Role, &Pattern<O::Account>)> {
         self.accounts.iter()
@@ -940,6 +1003,17 @@ impl<O: Ontology> Rate<O> {
             named.extend(condition.left.variables());
             named.extend(condition.right.variables());
         }
+        named
+    }
+
+    /// The variables only the identifier gives: those its relations and
+    /// distinct pairs constrain, in order.
+    pub(crate) fn identifying_variables(&self) -> Vec<&VariablePath> {
+        let mut named: Vec<&VariablePath> = self
+            .relations
+            .iter()
+            .flat_map(Relation::variables)
+            .collect();
         for (left, right) in &self.distinct_variables {
             named.extend([left, right]);
         }
@@ -949,8 +1023,24 @@ impl<O: Ontology> Rate<O> {
     /// The variables the rate reads as numbers.
     pub(crate) fn natural_variables(&self) -> Vec<&VariablePath> {
         self.expressions()
+            .chain(self.derived.iter().map(Derived::value))
             .flat_map(QuantityExpression::naturals)
             .collect()
+    }
+
+    /// The values `arguments` give the variables with each derived value
+    /// after them, in order, each computed from the values before it; or
+    /// the first derived value that is no quantity.
+    pub(crate) fn derive_values(&self, arguments: Arguments) -> Result<Arguments, VariablePath> {
+        self.derived.iter().try_fold(arguments, |known, derived| {
+            let value = derived
+                .value
+                .instantiate(&known)
+                .ok()
+                .and_then(|value| evaluate_expression(&value, Reading::Values).ok())
+                .ok_or_else(|| derived.name.clone())?;
+            Ok(known.with(derived.name.clone(), Segment::from(value)))
+        })
     }
 
     /// The rate's instance for `arguments`: the rate written with those
@@ -974,6 +1064,8 @@ impl<O: Ontology> Rate<O> {
             closes: self.closes.clone(),
             variables: Vec::new(),
             distinct_variables: BTreeSet::new(),
+            relations: Vec::new(),
+            derived: Vec::new(),
             accounts: BTreeMap::new(),
         };
         for (direction, baskets) in [
@@ -1071,7 +1163,7 @@ where
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let readable = serializer.is_human_readable();
-        let mut state = serializer.serialize_struct("Rate", 13)?;
+        let mut state = serializer.serialize_struct("Rate", 16)?;
         state.serialize_field("consume", &self.consume.iter().collect::<Vec<_>>())?;
         state.serialize_field("produce", &self.produce.iter().collect::<Vec<_>>())?;
         state.serialize_field("preserve", &self.preserve.iter().collect::<Vec<_>>())?;
@@ -1105,6 +1197,16 @@ where
                 "distinct_variables",
                 &self.distinct_variables.iter().collect::<Vec<_>>(),
             )?;
+        }
+        if readable && self.relations.is_empty() {
+            state.skip_field("relations")?;
+        } else {
+            state.serialize_field("relations", &self.relations)?;
+        }
+        if readable && self.derived.is_empty() {
+            state.skip_field("derived")?;
+        } else {
+            state.serialize_field("derived", &self.derived)?;
         }
         if readable && self.accounts.is_empty() {
             state.skip_field("accounts")?;
@@ -1148,6 +1250,10 @@ struct RateData<O: Ontology> {
     #[serde(default)]
     distinct_variables: Vec<(VariablePath, VariablePath)>,
     #[serde(default)]
+    relations: Vec<Relation>,
+    #[serde(default)]
+    derived: Vec<Derived<O>>,
+    #[serde(default)]
     accounts: Vec<(O::Role, Pattern<O::Account>)>,
 }
 
@@ -1165,6 +1271,12 @@ where
         }
         for (left, right) in data.distinct_variables {
             rate = rate.distinct_variables(left, right);
+        }
+        for relation in data.relations {
+            rate = rate.relation(relation);
+        }
+        for derived in data.derived {
+            rate = rate.derive(derived.name, derived.value);
         }
         for (role, account) in data.accounts {
             rate = rate.account(role, account);

@@ -293,7 +293,9 @@ pub enum AssessmentStatusView {
 pub enum AssessmentIssueKindView {
     MissingRate,
     OutsideDomain,
+    OutsideRelation,
     VariablesMustDiffer,
+    DerivedFails,
     WrongAccount,
     MissingBinding,
     UnknownBinding,
@@ -2335,6 +2337,33 @@ where
                 AssessmentIssueKindView::OutsideDomain,
                 format!(
                     "Rate `{}` gives `{variable}` a value outside its domain.",
+                    rate.label
+                ),
+                vec![rate],
+            )
+        }
+        ApplyError::OutsideRelation { rate, variables } => {
+            let rate = ontology.rate(rate);
+            let variables = variables
+                .iter()
+                .map(|variable| format!("`{variable}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            (
+                AssessmentIssueKindView::OutsideRelation,
+                format!(
+                    "Rate `{}` gives {variables} values no row of its relation holds.",
+                    rate.label
+                ),
+                vec![rate],
+            )
+        }
+        ApplyError::DerivedFails { rate, variable } => {
+            let rate = ontology.rate(rate);
+            (
+                AssessmentIssueKindView::DerivedFails,
+                format!(
+                    "Rate `{}` derives no quantity `{variable}` from its identifier.",
                     rate.label
                 ),
                 vec![rate],

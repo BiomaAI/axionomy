@@ -175,6 +175,38 @@ rooms needs its own law. Sokoban's `Finish` is the other side: whichever goal
 cells the crates rest on, finishing is one law, and each exchange binds every
 crate's `Goal` role to the cell that crate is on.
 
+**A rate may have variables** instead of one rate per value. Its identifier
+is a pattern, `move/{from}/{to}`, each `{name}` one segment of the
+identifier an exchange names; the rate declares each variable's domain, and
+its assets, fixed accounts and quantities name the variables the same way:
+
+```rust
+Rate::new()
+    .variable(Variable::values(path!("from"), rooms.clone()))
+    .variable(Variable::values(path!("to"), rooms))
+    .relation(Relation::new([path!("from"), path!("to")], doors))
+    .consume_at(Part::Walker, [("at/{from}".parse()?, Quantity::new(1))])
+    .produce_at(Part::Walker, [("at/{to}".parse()?, Quantity::new(1))])
+```
+
+An exchange naming `move/hall/kitchen` applies this rate's instance: the
+rate written with `from = hall` and `to = kitchen`, exactly as a rate
+written by hand for that pair. Beside domains, a rate can:
+
+- allow some variables only the rows of a **relation** (`relation`);
+- require two variables to differ (`distinct_variables`);
+- **derive** a whole number from the variables (`derive`), such as
+  `next = row + 1`, named `{next}` in assets and quantities but never in the
+  identifier; an identifier for whose values it is no quantity names nothing;
+- **fix** the account a role is bound to (`account`), such as
+  `patient/{patient}`.
+
+**Law structure is a relation; what changes is state.** Which cells adjoin,
+which seed follows which, which rooms a door joins: these never change and
+belong in a relation. A road that can close, a door that can be locked, a
+column's height: exchanges change these, so they are balances the rate
+preserves, consumes or reads in a condition.
+
 ### 4. Roles: the parts of a law
 
 ```rust

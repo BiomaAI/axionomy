@@ -61,6 +61,24 @@ impl Issue {
                 ),
                 IssueKind::OutsideDomain { rate, variable },
             ),
+            Error::OutsideRelation { rate, variables } => (
+                format!(
+                    "rate `{rate}` gives variables {} values no row of its relation holds; its relations are listed at {}",
+                    variables
+                        .iter()
+                        .map(|variable| format!("`{variable}`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    rate_uri(&rate)
+                ),
+                IssueKind::OutsideRelation { rate, variables },
+            ),
+            Error::DerivedFails { rate, variable } => (
+                format!(
+                    "rate `{rate}` derives no quantity `{variable}` from the values its identifier gives"
+                ),
+                IssueKind::DerivedFails { rate, variable },
+            ),
             Error::VariablesMustDiffer { rate, left, right } => (
                 format!(
                     "rate `{rate}` gives variables `{left}` and `{right}` one value; they must differ"

@@ -31,7 +31,7 @@ pub use path::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, OntologyPath, ParameterPath, PathError,
     PathKind, RatePath, RolePath, VariablePath,
 };
-pub use pattern::{Arguments, Domain, Pattern, Segment, Variable};
+pub use pattern::{Arguments, Domain, Pattern, Relation, Segment, Variable};
 #[doc(hidden)]
 pub use serde as __serde;
 
@@ -64,8 +64,8 @@ macro_rules! path {
 
 pub use quantity::{Quantity, QuantityError, Rounding};
 pub use rate::{
-    ComputedAmount, LinearInvariant, Measure, QuantityComparison, QuantityExpression, Rate,
-    RateCondition, basket,
+    ComputedAmount, Derived, LinearInvariant, Measure, QuantityComparison, QuantityExpression,
+    Rate, RateCondition, basket,
 };
 use std::{fmt::Debug, hash::Hash};
 

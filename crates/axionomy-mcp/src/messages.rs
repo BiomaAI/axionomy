@@ -266,6 +266,17 @@ pub enum IssueKind {
         rate: RatePath,
         variable: VariablePath,
     },
+    /// The rate's identifier gives variables values no row of a relation
+    /// of the rate holds.
+    OutsideRelation {
+        rate: RatePath,
+        variables: Vec<VariablePath>,
+    },
+    /// A value the rate derives from its identifier is no quantity.
+    DerivedFails {
+        rate: RatePath,
+        variable: VariablePath,
+    },
     /// The rate's identifier gives two variables that must differ one value.
     VariablesMustDiffer {
         rate: RatePath,

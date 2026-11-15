@@ -217,6 +217,12 @@ pub(crate) fn failure<O: Written>(error: &ApplyError<O>) -> Value {
         ApplyError::WrongAccount { role, expected } => {
             json!({"kind": "wrong_account", "role": role, "expected": expected})
         }
+        ApplyError::OutsideRelation { rate, variables } => {
+            json!({"kind": "outside_relation", "rate": rate, "variables": variables})
+        }
+        ApplyError::DerivedFails { rate, variable } => {
+            json!({"kind": "derived_fails", "rate": rate, "variable": variable})
+        }
         ApplyError::MissingParameter { name } => {
             json!({"kind": "missing_parameter", "parameter": name})
         }

@@ -242,7 +242,10 @@ impl axionomy::Ontology for Bytes {
 
 /// An ontology whose identifiers carry a number, for a rate with a variable.
 mod visits {
-    use axionomy::{Account, Economy, EconomyBuilder, Pattern, Quantity, Rate, Variable, basket};
+    use axionomy::{
+        Account, Economy, EconomyBuilder, Pattern, Quantity, QuantityExpression, Rate, Relation,
+        Variable, basket,
+    };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
     pub enum Asset {
@@ -258,6 +261,7 @@ mod visits {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
     pub enum RateId {
         Visit(u8),
+        Step(u8, u8),
         Rest,
     }
 
@@ -297,6 +301,33 @@ mod visits {
                         )],
                     ),
             )
+            .rate_at(
+                "step/{from}/{to}".parse().unwrap(),
+                Rate::new()
+                    .variable(Variable::range("from".parse().unwrap(), 1, 4))
+                    .variable(Variable::range("to".parse().unwrap(), 1, 4))
+                    .relation(Relation::new(
+                        ["from".parse().unwrap(), "to".parse().unwrap()],
+                        [[1, 2], [2, 3], [3, 4]].map(|row| row.map(u64::into)),
+                    ))
+                    .derive(
+                        "cost".parse().unwrap(),
+                        QuantityExpression::variable("to".parse().unwrap())
+                            - QuantityExpression::variable("from".parse().unwrap()),
+                    )
+                    .consume_computed_at(
+                        Role::Walker,
+                        Pattern::literal(Asset::Token),
+                        QuantityExpression::variable("cost".parse().unwrap()),
+                    )
+                    .produce_at(
+                        Role::Walker,
+                        [(
+                            "visited/{to}".parse::<Pattern<Asset>>().unwrap(),
+                            Quantity::new(1),
+                        )],
+                    ),
+            )
             .rate(
                 RateId::Rest,
                 Rate::new().produce(Role::Walker, basket([(Asset::Token, 1)])),
@@ -327,18 +358,23 @@ fn a_typed_rate_with_variables_written_down_is_a_paths_rate() {
     assert_eq!(decoded.state_key(), world.state_key());
 
     let mut typed = world.clone();
-    typed
-        .apply(
-            Exchange::new(RateId::Visit(2), Quantity::new(1)).bind(Role::Walker, AccountId::Walker),
-        )
-        .unwrap();
     let mut untyped = read;
-    untyped
-        .apply(
-            paths::Exchange::new(path!("visit/2"), Quantity::new(1))
-                .bind(path!("walker"), path!("walker")),
-        )
-        .unwrap();
+    for (rate, path) in [
+        (RateId::Visit(2), path!("visit/2")),
+        (RateId::Step(2, 3), path!("step/2/3")),
+    ] {
+        typed
+            .apply(Exchange::new(rate, Quantity::new(1)).bind(Role::Walker, AccountId::Walker))
+            .unwrap();
+        untyped
+            .apply(
+                paths::Exchange::new(path, Quantity::new(1)).bind(path!("walker"), path!("walker")),
+            )
+            .unwrap();
+    }
+    assert!(!typed.is_applicable(
+        &Exchange::new(RateId::Step(1, 3), Quantity::new(1)).bind(Role::Walker, AccountId::Walker)
+    ));
     assert_eq!(
         serde_json::to_value(&untyped).unwrap(),
         serde_json::to_value(&typed).unwrap()

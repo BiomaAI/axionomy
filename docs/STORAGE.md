@@ -144,9 +144,10 @@ breaking several is refused for the first. Values and the store's
 records (runs, steps, groups, members, refs) are postcard, the kernel's
 binary form: every field written, quantities as big-endian bytes, expressions
 tagged by variant; a step's receipt digest is the hash of the receipt's
-postcard. The store records the format it is written in (format 4, which
+postcard. The store records the format it is written in (format 5, which
 indexes every fork by the run and step it forked from, keys invariants by
-position and keys rates by their identifiers as written, variables and all)
+position, keys rates by their identifiers as written, variables and all, and
+writes each rate's variables, relations, derived values and fixed accounts)
 and refuses a store in any other, or from before formats were recorded. The **state root** is the
 tree's hash. The tree holds the logical state, and an economy lists its
 accounts in key order (D-051), so an economy rebuilt from a root is the

@@ -9,7 +9,10 @@
 //! variable is the identifier it writes; it keeps the typed value, so a rate
 //! without variables is exactly the rate it always was.
 
-use crate::path::{self, Segments, VariablePath};
+use crate::{
+    Quantity,
+    path::{self, Segments, VariablePath},
+};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{
@@ -34,9 +37,24 @@ impl Segment {
 
     /// The whole number the segment writes, when it writes one canonically.
     pub fn number(&self) -> Option<u64> {
-        let canonical = self.0.bytes().all(|byte| byte.is_ascii_digit())
-            && (&*self.0 == "0" || !self.0.starts_with('0'));
-        canonical.then(|| self.0.parse().ok()).flatten()
+        self.canonical().then(|| self.0.parse().ok()).flatten()
+    }
+
+    /// The quantity the segment writes, when it writes a whole number
+    /// canonically that a quantity holds.
+    pub fn quantity(&self) -> Option<Quantity> {
+        self.canonical().then(|| self.0.parse().ok()).flatten()
+    }
+
+    fn canonical(&self) -> bool {
+        self.0.bytes().all(|byte| byte.is_ascii_digit())
+            && (&*self.0 == "0" || !self.0.starts_with('0'))
+    }
+}
+
+impl From<Quantity> for Segment {
+    fn from(value: Quantity) -> Self {
+        Self(value.to_string().into())
     }
 }
 
@@ -256,11 +274,65 @@ impl JsonSchema for Variable {
     }
 }
 
+/// The values some of a rate's variables may take together, one row each:
+/// law structure that never changes, such as which cells of a board adjoin.
+/// What exchanges can change belongs in the economy's accounts instead.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Relation {
+    variables: Vec<VariablePath>,
+    rows: Vec<Vec<Segment>>,
+}
+
+impl Relation {
+    /// The rows `variables` may take together.
+    pub fn new(
+        variables: impl IntoIterator<Item = VariablePath>,
+        rows: impl IntoIterator<Item = impl IntoIterator<Item = Segment>>,
+    ) -> Self {
+        Self {
+            variables: variables.into_iter().collect(),
+            rows: rows
+                .into_iter()
+                .map(|row| row.into_iter().collect())
+                .collect(),
+        }
+    }
+
+    pub fn variables(&self) -> &[VariablePath] {
+        &self.variables
+    }
+
+    pub fn rows(&self) -> &[Vec<Segment>] {
+        &self.rows
+    }
+
+    /// Whether the values `arguments` give its variables are one of its rows.
+    pub fn holds(&self, arguments: &Arguments) -> bool {
+        let values: Option<Vec<&Segment>> = self
+            .variables
+            .iter()
+            .map(|name| arguments.get(name))
+            .collect();
+        values.is_some_and(|values| {
+            self.rows
+                .iter()
+                .any(|row| row.iter().eq(values.iter().copied()))
+        })
+    }
+}
+
 /// The value each variable has, in order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Arguments(Vec<(VariablePath, Segment)>);
 
 impl Arguments {
+    /// The values with `name`'s after them.
+    pub(crate) fn with(mut self, name: VariablePath, value: Segment) -> Self {
+        self.0.push((name, value));
+        self
+    }
+
     pub fn get(&self, name: &VariablePath) -> Option<&Segment> {
         self.0
             .iter()

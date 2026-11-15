@@ -187,6 +187,13 @@ fn issue(issue: &ModelIssue<Mixed>) -> Value {
         ModelIssue::OverlappingRates { rate, other } => {
             json!({"kind": "overlapping_rates", "rate": rate.text(), "other": other.text()})
         }
+        ModelIssue::MalformedRelation { rate, variables } => {
+            json!({"kind": "malformed_relation", "rate": rate.text(), "variables": variables})
+        }
+        ModelIssue::RepeatedRow { rate, variables } => {
+            json!({"kind": "repeated_row", "rate": rate.text(), "variables": variables})
+        }
+        ModelIssue::DerivedReads { rate, variable } => named("derived_reads", rate, variable),
         ModelIssue::DuplicateAccount { .. } | ModelIssue::DuplicateRate { .. } => {
             panic!("no fixture names an identifier twice: {issue:?}")
         }
