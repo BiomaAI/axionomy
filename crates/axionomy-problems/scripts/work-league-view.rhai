@@ -37,8 +37,6 @@ fn asset_label(parts) {
         "busy" => "Activity in progress",
         "free-contract" => "Can accept a contract",
         "ready-at" => "Activity finishes at",
-        "release-at" => "Contract opens at",
-        "deadline" => "Delivery deadline",
         "lease-until" => "Claim reserved through",
         "expired" => "Expired without delivery",
         "transferable" => "Handoff available",
@@ -57,10 +55,6 @@ fn asset_label(parts) {
         "recycling-loss" => "Material lost during recycling",
         "policy" => `${policy_label(parts[2])} policy`,
         "at" => `At ${capital(parts[2])}`,
-        "reward" => "Pays on delivery",
-        "work-energy" => "Work energy before its mode",
-        "work-time" => "Work time before its mode",
-        "work-material" => "Work material before its mode",
         "operational" => "Operational",
         "energy" => "Energy left",
         "time-remaining" => "Time left",
@@ -87,7 +81,6 @@ fn asset_label(parts) {
         "spent-repair-supply" => "Repair supply used",
         "charge-supply" => "Charging energy supply",
         "recycler-capacity" => "Recycler available",
-        "outcome-weight" => `Job ${parts[2]} ${parts[3]} ${parts[4]} weight`,
         _ => (),
     }
 }
@@ -124,7 +117,7 @@ fn rate_label(parts) {
         "end-season" => "Close the resolved work season",
         "claim" => `${capital(parts[2])} claims job ${parts[3]}`,
         "move" => `${capital(parts[2])} moves from ${capital(parts[3])} to ${capital(parts[4])}`,
-        "begin" => `${capital(parts[2])} begins job ${parts[3]} in ${parts[4]} mode`,
+        "begin" => `${capital(parts[2])} begins job ${parts[3]} at ${capital(parts[4])} in ${parts[5]} mode`,
         "resolve" => `${capital(parts[2])}'s ${parts[4]} work on job ${parts[3]} ${
             if parts[5] == "success" { "succeeds" } else { "fails" }
         }`,
@@ -143,7 +136,6 @@ fn label(item) {
             "agent" => `Worker ${capital(parts[2])}`,
             "job" => `Job ${parts[2]}`,
             "facility" => `${capital(parts[2])} facility`,
-            "nature" => "Disruption model",
             "world" => "Shared work clock and contracts",
             _ => (),
         },
@@ -162,13 +154,11 @@ fn label(item) {
 // The unit of an asset's quantities, if it has one.
 fn unit(asset) {
     switch asset.split("/")[0] {
-        "tick" | "horizon" | "ready-at" | "release-at" | "deadline" | "lease-until"
-            | "time-remaining" | "elapsed-time" | "work-time" => "ticks",
-        "credit" | "value" | "reward" => "credits",
+        "tick" | "horizon" | "ready-at" | "lease-until" | "time-remaining" | "elapsed-time" => "ticks",
+        "credit" | "value" => "credits",
         "energy" | "spent-energy" | "charging-energy" | "charge-supply" | "material"
             | "material-spent" | "reclaiming-material" | "embodied-material" | "recycling-loss"
-            | "waste" | "recycled-waste" | "repair-supply" | "spent-repair-supply"
-            | "work-energy" | "work-material" => "units",
+            | "waste" | "recycled-waste" | "repair-supply" | "spent-repair-supply" => "units",
         _ => (),
     }
 }
@@ -263,8 +253,8 @@ fn contract(state, number, continuous, tick) {
         ["success", "completed"]
     } else if val(state, account, "expired") > 0 {
         ["danger", "deadline missed"]
-    } else if continuous && tick < val(state, account, "release-at") {
-        ["neutral", `opens at ${val(state, account, "release-at")}`]
+    } else if continuous && tick < league::terms_of(state, number).release {
+        ["neutral", `opens at ${league::terms_of(state, number).release}`]
     } else if assigned != () {
         let work = if val(state, account, "in-progress") > 0 { "being worked" } else { "claimed" };
         ["active", `${work} by ${capital(assigned)}`]
@@ -280,7 +270,7 @@ fn contract(state, number, continuous, tick) {
         metric("risk", "Failure weight", spec.risk, "of 10"),
     ];
     if continuous {
-        drawn.metrics.push(asset_metric("deadline", "Deadline", "deadline", val(state, account, "deadline")));
+        drawn.metrics.push(metric("deadline", "Deadline", league::terms_of(state, number).deadline, "ticks"));
         if assigned != () && val(state, account, "pending") > 0 {
             drawn.metrics.push(asset_metric(
                 "lease", "Claim expires after", "lease-until", val(state, account, "lease-until"),

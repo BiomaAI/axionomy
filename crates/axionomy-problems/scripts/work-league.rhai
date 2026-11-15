@@ -120,6 +120,12 @@ fn failure_weight(risk, mode) {
     }
 }
 
+// What the laws of contract `id` read of its terms: what it pays on
+// delivery (`reward`), the energy, time and material its work takes before
+// its mode's adjustments, when it opens for claims (`release`) and its
+// deadline, as its expiry has them.
+fn terms_of(state, id) { state.values(`expire/${id}/none/none`) }
+
 // `proposal`, or `otherwise` when there is none.
 fn or_else(proposal, otherwise) { if proposal == () { otherwise } else { proposal } }
 
@@ -200,7 +206,7 @@ fn serial(state, random) {
         let attempt = 0;
         loop {
             attempt += 1;
-            plan.push(state.exchange_of(`begin/${worker}/${id}/${mode}`));
+            plan.push(state.exchange_of(`begin/${worker}/${id}/${spec.location}/${mode}`));
             waste[worker] += work_cost(spec, mode).waste;
             let outcome = serial_outcome(random, spec, mode, attempt);
             plan.push(state.exchange_of(`resolve/${worker}/${id}/${mode}/${outcome}`));
@@ -296,12 +302,13 @@ fn service(state, who, facility) {
     if state.applicable(begin) { begin } else { () }
 }
 
-// Nature settling the `attempt`th attempt at job `id` in `mode`: a number
-// the attempt's event draws below Nature's weights' total, failing below the
-// weight of failure. Any lineup meets the same number at the same attempt.
-fn settled(state, random, id, mode, attempt) {
-    let failure = state.balance("nature", `outcome-weight/${id}/${mode}/failure`).to_int();
-    let success = state.balance("nature", `outcome-weight/${id}/${mode}/success`).to_int();
+// Nature settling `owner`'s `attempt`th attempt at job `id` in `mode`: a
+// number the attempt's event draws below the weights of its outcomes, as
+// each outcome's law has them, failing below the weight of failure. Any
+// lineup meets the same number at the same attempt.
+fn settled(state, random, owner, id, mode, attempt) {
+    let failure = state.values(`finish/${owner}/${id}/${mode}/failure`).weight.to_int();
+    let success = state.values(`finish/${owner}/${id}/${mode}/success`).weight.to_int();
     let drawn = random.next(`attempt/${id}/${attempt}`, failure + success);
     if drawn < failure { "failure" } else { "success" }
 }
@@ -319,14 +326,14 @@ fn due(state, random, clock, id) {
         owned = state.balances(`agent/${owner}`);
         mode = first_held(owned, `awaiting/${id}`, modes());
     }
-    if clock > held(contract, "deadline") {
+    if clock > terms_of(state, id).deadline {
         let carrier = if owner == () { "none" } else { `some/${owner}` };
         let activity = if mode == () { "none" } else { `some/${mode}` };
         return state.exchange_of(`expire/${id}/${carrier}/${activity}`);
     }
     if owner != () && mode != () {
         if clock < held(owned, "ready-at") { return (); }
-        let outcome = settled(state, random, id, mode, held(contract, "attempts"));
+        let outcome = settled(state, random, owner, id, mode, held(contract, "attempts"));
         return state.exchange_of(`finish/${owner}/${id}/${mode}/${outcome}`);
     }
     if owner != () {
@@ -355,7 +362,7 @@ fn decision(state, worker, clock, count, world) {
     if held(me.balances, "damage") > 0 || held(me.balances, "wear") >= wear_limit {
         if claimed != () {
             let spec = job_spec(claimed);
-            let deadline = state.balance(`job/${claimed}`, "deadline").to_int();
+            let deadline = terms_of(state, claimed).deadline.to_int();
             for recipient in workers() {
                 if recipient == worker { continue; }
                 let handoff = state.exchange_of(`handoff/${worker}/${recipient}/${claimed}`);
@@ -373,7 +380,7 @@ fn decision(state, worker, clock, count, world) {
     // material for it, head for it, or begin it.
     if claimed != () {
         let spec = job_spec(claimed);
-        let deadline = state.balance(`job/${claimed}`, "deadline").to_int();
+        let deadline = terms_of(state, claimed).deadline.to_int();
         let distance = me.routes[spec.location][1];
         let preferred = preferred_modes(policy);
         let release = state.exchange_of(`release-claim/${worker}/${claimed}/false`);
@@ -396,7 +403,7 @@ fn decision(state, worker, clock, count, world) {
         let heading = travel(state, me, spec.location);
         if heading != () { return heading; }
         for mode in preferred {
-            let begin = state.exchange_of(`begin/${worker}/${claimed}/${mode}`);
+            let begin = state.exchange_of(`begin/${worker}/${claimed}/${spec.location}/${mode}`);
             if state.applicable(begin) { return begin; }
         }
         return wait;
@@ -412,9 +419,11 @@ fn decision(state, worker, clock, count, world) {
     for id in 1..=count {
         let contract = state.balances(`job/${id}`);
         // What a claim needs: an open contract that has arrived.
-        if held(contract, "available") == 0 || clock < held(contract, "release-at") { continue; }
+        if held(contract, "available") == 0 { continue; }
+        let terms = terms_of(state, id);
+        if clock < terms.release { continue; }
         let spec = job_spec(id);
-        let deadline = held(contract, "deadline");
+        let deadline = terms.deadline.to_int();
         let distance = me.routes[spec.location][1];
         let mode = ();
         for each in preferred_modes(policy) {

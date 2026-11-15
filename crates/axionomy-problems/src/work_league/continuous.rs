@@ -144,21 +144,6 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         );
     }
     builder = builder.account(AccountId::World, Account::from(world_assets));
-    let mut nature = Basket::new();
-    for spec in &jobs {
-        for mode in MODES {
-            let failure = failure_weight(spec.risk, mode);
-            nature.insert(
-                Asset::OutcomeWeight(spec.id, mode, Outcome::Failure),
-                Quantity::new(failure),
-            );
-            nature.insert(
-                Asset::OutcomeWeight(spec.id, mode, Outcome::Success),
-                Quantity::new(10 - failure),
-            );
-        }
-    }
-    builder = builder.account(AccountId::Nature, Account::from(nature));
     for facility in FACILITIES {
         let mut assets = basket([(Asset::Vacant(facility), 1)]);
         match facility {
@@ -181,23 +166,17 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     }
 
     for spec in &jobs {
-        let release = u64::from((spec.id.0 - 1) / 4) * 6;
-        let deadline = release + 20 + u64::from(spec.id.0 % 3) * 3;
-        let mut contract = terms(spec);
-        for (asset, quantity) in [
-            (Asset::Available, 1),
-            (Asset::Transferable, 1),
-            (Asset::Credit, spec.value),
-            (Asset::ReleaseAt, release),
-            (Asset::Deadline, deadline),
-        ] {
-            contract.insert(asset, Quantity::new(quantity));
-        }
-        builder = builder.account(AccountId::Job(spec.id), Account::from(contract));
+        builder = builder.account(
+            AccountId::Job(spec.id),
+            Account::from(basket([
+                (Asset::Available, 1),
+                (Asset::Transferable, 1),
+                (Asset::Credit, spec.value),
+            ])),
+        );
     }
 
-    let count = jobs.len() as u8;
-    let job = |rate| on_contract(rate, count);
+    let job = |rate| on_contract(rate, &jobs).relation(schedule(&jobs));
     let expire = |agent, mode| {
         RateIdPattern::Expire {
             job: contract(),
@@ -248,13 +227,13 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                 path!("contract-has-arrived"),
                 now(),
                 C::GreaterThanOrEqual,
-                q(Role::Job, Asset::ReleaseAt),
+                release().quantity(),
             )
             .condition(
                 path!("contract-remains-open"),
                 now() + Q::constant(1),
                 C::LessThanOrEqual,
-                q(Role::Job, Asset::Deadline),
+                deadline().quantity(),
             ),
     );
     for expired in [false, true] {
@@ -295,7 +274,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             clear(prerequisite(job(turn())), Role::Job, Asset::LeaseUntil),
             cost.time.clone(),
         );
-        let begin = at_the_contract(begin)
+        let begin = at_the_contract(begin, &jobs)
             .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
             .preserve_at(Role::Agent, one([claimed()]))
             .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())
@@ -335,7 +314,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                 path!("work-finishes-by-deadline"),
                 now() + cost.time,
                 C::LessThanOrEqual,
-                q(Role::Job, Asset::Deadline),
+                deadline().quantity(),
             )
             .condition(
                 path!("equipment-needs-maintenance-below-wear-six"),
@@ -347,6 +326,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             RateIdPattern::Begin {
                 agent: agent().var(),
                 job: contract(),
+                place: place().var(),
                 mode: Slot::Is(mode),
             }
             .into(),
@@ -354,23 +334,17 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
         );
     }
     for outcome in [Outcome::Success, Outcome::Failure] {
-        let finish = finish_activity(job(actor(law())).variable(mode().every()))
-            .account(Role::Nature, Pattern::literal(AccountId::Nature))
-            .preserve_at(
-                Role::Nature,
-                one([
-                    AssetPattern::OutcomeWeight(contract(), mode().var(), Slot::Is(outcome)).into(),
-                ]),
-            )
+        let finish = possible(finish_activity(job(actor(law())).variable(mode().every())))
+            .relation(odds_of(&jobs, outcome))
             .consume_at(Role::Agent, one([awaiting()]))
             .consume(Role::Job, basket([(Asset::InProgress, 1)]))
             .condition(
                 path!("outcome-settles-before-expiry"),
                 now(),
                 C::LessThanOrEqual,
-                q(Role::Job, Asset::Deadline),
+                deadline().quantity(),
             );
-        let reward = || q(Role::Job, Asset::Reward);
+        let paid = || reward().quantity();
         let finish = match outcome {
             Outcome::Success => finish
                 .consume_at(Role::Agent, one([claimed()]))
@@ -382,10 +356,10 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                         (Asset::Successes, 1),
                     ]),
                 )
-                .produce_computed(Role::Agent, Asset::Value, reward())
-                .produce_computed(Role::Agent, Asset::Credit, reward())
+                .produce_computed(Role::Agent, Asset::Value, paid())
+                .produce_computed(Role::Agent, Asset::Credit, paid())
                 .consume_at(Role::Job, one([assigned()]))
-                .consume_computed(Role::Job, Asset::Credit, reward())
+                .consume_computed(Role::Job, Asset::Credit, paid())
                 .produce(Role::Job, basket([(Asset::Completed, 1)]))
                 .consume(Role::World, basket([(Asset::ContractsOpen, 1)]))
                 .produce(Role::World, basket([(Asset::ContractsClosed, 1)]))
@@ -480,7 +454,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             path!("handoff-before-deadline"),
             now() + Q::constant(1),
             C::LessThanOrEqual,
-            q(Role::Job, Asset::Deadline),
+            deadline().quantity(),
         ),
     );
     builder = builder.rate_at(
@@ -679,13 +653,39 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     }
 }
 
+/// When a contract opens for claims, `{release}`, and the tick its work is
+/// due by, `{deadline}`.
+fn release() -> Param<u64> {
+    Param::new(path!("release"))
+}
+fn deadline() -> Param<u64> {
+    Param::new(path!("deadline"))
+}
+
+/// Each of `jobs`' schedule, law structure that never changes: contracts
+/// open in waves of four six ticks apart, each due twenty ticks after it
+/// opens and three more for each step of its number's remainder by three.
+fn schedule(jobs: &[JobSpec]) -> Relation {
+    Relation::each_giving(
+        &job(),
+        [release().name().clone(), deadline().name().clone()],
+        jobs.iter().map(|spec| {
+            let release = u64::from((spec.id.0 - 1) / 4) * 6;
+            (
+                spec.id.0,
+                [release, release + 20 + u64::from(spec.id.0 % 3) * 3],
+            )
+        }),
+    )
+}
+
 /// A contract missing its deadline: it closes unpaid.
 fn expiry(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.condition(
         path!("contract-deadline-has-elapsed"),
         now(),
         C::GreaterThanOrEqual,
-        q(Role::Job, Asset::Deadline) + Q::constant(1),
+        deadline().quantity() + Q::constant(1),
     )
     .produce(Role::Job, basket([(Asset::Expired, 1)]))
     .consume(Role::World, basket([(Asset::ContractsOpen, 1)]))
@@ -846,6 +846,7 @@ mod tests {
                 RateId::Begin {
                     agent,
                     job: id,
+                    place: job_spec(id).location,
                     mode: WorkMode::Rush,
                 },
             );
@@ -1122,6 +1123,7 @@ mod tests {
             RateId::Begin {
                 agent,
                 job: JobId(1),
+                place: Location::North,
                 mode: WorkMode::Rush,
             },
         );
@@ -1194,6 +1196,7 @@ mod tests {
             RateId::Begin {
                 agent,
                 job: JobId(1),
+                place: Location::North,
                 mode: WorkMode::Rush,
             },
         );

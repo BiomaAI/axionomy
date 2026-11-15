@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern,
-    Quantity, QuantityExpression as Q, Rate, Rounding, Slot, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param, Pattern,
+    Quantity, QuantityComparison, QuantityExpression as Q, Rate, Relation, Rounding, Slot, basket,
 };
 
 mod continuous;
@@ -81,7 +81,6 @@ pub enum AccountId {
     Agent(AgentId),
     Job(JobId),
     Facility(Facility),
-    Nature,
     World,
 }
 
@@ -100,8 +99,6 @@ pub enum Asset {
     Busy,
     FreeContract,
     ReadyAt,
-    ReleaseAt,
-    Deadline,
     LeaseUntil,
     Expired,
     Transferable,
@@ -119,15 +116,8 @@ pub enum Asset {
     EmbodiedMaterial,
     RecyclingLoss,
     Policy(Policy),
-    /// Where a worker stands, or where a contract's work is done.
+    /// Where a worker stands.
     At(Location),
-    /// What a contract pays on delivery: a fact of the contract.
-    Reward,
-    /// The energy, time and material a contract's work takes before its
-    /// mode's adjustments: facts of the contract.
-    WorkEnergy,
-    WorkTime,
-    WorkMaterial,
     Operational,
     Energy,
     TimeRemaining,
@@ -154,14 +144,12 @@ pub enum Asset {
     SpentRepairSupply,
     ChargeSupply,
     RecyclerCapacity,
-    OutcomeWeight(JobId, WorkMode, Outcome),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Role {
     Agent,
     Job,
-    Nature,
     Facility,
     World,
     Partner,
@@ -208,9 +196,12 @@ pub enum RateId {
         from: Location,
         to: Location,
     },
+    /// A worker beginning a contract's work, where the contract's work is
+    /// done, in a mode.
     Begin {
         agent: AgentId,
         job: JobId,
+        place: Location,
         mode: WorkMode,
     },
     Resolve {
@@ -372,35 +363,126 @@ fn by_worker(rate: Rate<Ontology>, agents: &[AgentId]) -> Rate<Ontology> {
         .account(Role::Agent, AccountIdPattern::Agent(agent().var()).into())
 }
 
-/// `rate` for each of the `count` contracts, `{job}`, its job role fixed to
-/// that contract's account.
-fn on_contract(rate: Rate<Ontology>, count: u8) -> Rate<Ontology> {
-    rate.variable(job().range(1, count))
+/// `rate` for each of `jobs`, `{job}`, its job role fixed to that
+/// contract's account, and its terms given by their relation.
+fn on_contract(rate: Rate<Ontology>, jobs: &[JobSpec]) -> Rate<Ontology> {
+    rate.variable(job().range(1, jobs.len() as u8))
         .account(Role::Job, AccountIdPattern::Job(contract()).into())
+        .relation(terms(jobs))
 }
 
-/// A contract's terms, the facts its laws read: where its work is done,
-/// what it pays, and the energy, time and material its work takes.
-fn terms(spec: &JobSpec) -> Basket<Asset> {
-    basket([
-        (Asset::At(spec.location), 1),
-        (Asset::Reward, spec.value),
-        (Asset::WorkEnergy, spec.energy),
-        (Asset::WorkTime, spec.time),
-        (Asset::WorkMaterial, spec.material),
-    ])
+/// The place a rate's identifier names, `{place}`: where a contract's work
+/// is done.
+fn place() -> Param<Location> {
+    Param::new(path!("place"))
 }
 
-/// The worker stands where the contract's work is done: it holds each place
-/// as the contract does.
-fn at_the_contract(rate: Rate<Ontology>) -> Rate<Ontology> {
-    LOCATIONS.into_iter().fold(rate, |rate, place| {
-        rate.preserve_computed(
-            Role::Agent,
-            Asset::At(place),
-            Q::balance(Role::Job, Asset::At(place)),
-        )
+/// The numbers a contract's terms give its laws: what it pays on delivery,
+/// `{reward}`, and the energy, time and material its work takes before its
+/// mode's adjustments.
+fn reward() -> Param<u64> {
+    Param::new(path!("reward"))
+}
+fn work_energy() -> Param<u64> {
+    Param::new(path!("energy"))
+}
+fn work_time() -> Param<u64> {
+    Param::new(path!("time"))
+}
+fn work_material() -> Param<u64> {
+    Param::new(path!("material"))
+}
+
+/// Each of `jobs`' terms: law structure that never changes, a row for each
+/// contract.
+fn terms(jobs: &[JobSpec]) -> Relation {
+    Relation::each_giving(
+        &job(),
+        [reward(), work_energy(), work_time(), work_material()].map(|number| number.name().clone()),
+        jobs.iter().map(|spec| {
+            (
+                spec.id.0,
+                [spec.value, spec.energy, spec.time, spec.material],
+            )
+        }),
+    )
+}
+
+/// The worker stands where the contract's work is done, `{place}`, which a
+/// relation's row for each of `jobs` says.
+fn at_the_contract(rate: Rate<Ontology>, jobs: &[JobSpec]) -> Rate<Ontology> {
+    rate.variable(place().every())
+        .relation(Relation::pairs(
+            &job(),
+            &place(),
+            jobs.iter().map(|spec| (spec.id.0, spec.location)),
+        ))
+        .preserve_at(Role::Agent, one([AssetPattern::At(place().var()).into()]))
+}
+
+/// Nature's weight of an attempt's outcome, `{weight}`, out of ten: the
+/// outcome can happen only with some weight.
+fn weight() -> Param<u64> {
+    Param::new(path!("weight"))
+}
+
+/// Every attempt's case: each of `jobs` worked in each mode with each
+/// outcome.
+fn cases(jobs: &[JobSpec]) -> impl Iterator<Item = (&JobSpec, WorkMode, Outcome)> {
+    jobs.iter().flat_map(|spec| {
+        [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe]
+            .into_iter()
+            .flat_map(move |mode| {
+                [Outcome::Success, Outcome::Failure]
+                    .into_iter()
+                    .map(move |outcome| (spec, mode, outcome))
+            })
     })
+}
+
+/// The weight of each outcome, `{outcome}`, of an attempt at each of
+/// `jobs` in each mode: law structure that never changes, which Nature
+/// draws by.
+fn odds(jobs: &[JobSpec], outcome: &Param<Outcome>) -> Relation {
+    Relation::giving(
+        [
+            job().name().clone(),
+            mode().name().clone(),
+            outcome.name().clone(),
+        ],
+        [weight().name().clone()],
+        cases(jobs).map(|(spec, mode, outcome)| {
+            [
+                spec.id.0.segment(),
+                mode.segment(),
+                outcome.segment(),
+                Quantity::new(outcome_weight(spec, mode, outcome)).into(),
+            ]
+        }),
+    )
+}
+
+/// The weight of `outcome` of an attempt at each of `jobs` in each mode,
+/// for a law whose identifier writes the outcome out.
+fn odds_of(jobs: &[JobSpec], outcome: Outcome) -> Relation {
+    Relation::pairs_giving(
+        &job(),
+        &mode(),
+        [weight().name().clone()],
+        cases(jobs)
+            .filter(|(_, _, case)| *case == outcome)
+            .map(|(spec, mode, outcome)| (spec.id.0, mode, [outcome_weight(spec, mode, outcome)])),
+    )
+}
+
+/// An attempt's outcome happens only where Nature weighs it at all.
+fn possible(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.condition(
+        path!("the-outcome-can-happen"),
+        weight().quantity(),
+        QuantityComparison::GreaterThanOrEqual,
+        Q::constant(1),
+    )
 }
 
 /// What working a contract in a mode takes and leaves behind, from the
@@ -417,11 +499,10 @@ struct Cost {
 /// on odd contracts; safe spends one more energy and one more tick, leaving
 /// one.
 fn cost(mode: WorkMode) -> Cost {
-    let term = |asset| Q::balance(Role::Job, asset);
     let (energy, time, material) = (
-        term(Asset::WorkEnergy),
-        term(Asset::WorkTime),
-        term(Asset::WorkMaterial),
+        work_energy().quantity(),
+        work_time().quantity(),
+        work_material().quantity(),
     );
     match mode {
         WorkMode::Rush => Cost {
@@ -494,32 +575,7 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
         );
     }
 
-    let mut nature = vec![];
-    for spec in &jobs {
-        for mode in [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe] {
-            let failure = failure_weight(spec.risk, mode);
-            nature.push((
-                Asset::OutcomeWeight(spec.id, mode, Outcome::Failure),
-                failure,
-            ));
-            nature.push((
-                Asset::OutcomeWeight(spec.id, mode, Outcome::Success),
-                10 - failure,
-            ));
-        }
-    }
     builder = builder
-        .account(
-            AccountId::Nature,
-            Account::from(
-                Basket::try_from_entries(
-                    nature
-                        .into_iter()
-                        .map(|(asset, quantity)| (asset, Quantity::new(quantity))),
-                )
-                .expect("nature weights are unique"),
-            ),
-        )
         .account(
             AccountId::Facility(Facility::Workshop),
             Account::from(basket([(
@@ -541,15 +597,15 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
 
     let mut goal = Goal::new();
     for spec in &jobs {
-        let mut contract = terms(spec);
-        contract.insert(Asset::Available, Quantity::new(1));
-        builder = builder.account(AccountId::Job(spec.id), Account::from(contract));
+        builder = builder.account(
+            AccountId::Job(spec.id),
+            Account::from(basket([(Asset::Available, 1)])),
+        );
         goal = goal.require(AccountId::Job(spec.id), basket([(Asset::Completed, 1)]));
     }
 
     // Each rate serves every worker, `{agent}`, and every contract, `{job}`,
     // its roles fixed to their accounts.
-    let count = jobs.len() as u8;
     let worker = |rate| by_worker(rate, &agents);
     let outcome = Param::<Outcome>::new(path!("outcome"));
     let assigned = || AssetPattern::Assigned(agent().var()).into();
@@ -560,7 +616,7 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             job: contract(),
         }
         .into(),
-        on_contract(worker(Rate::new()), count)
+        on_contract(worker(Rate::new()), &jobs)
             .produce_at(Role::Agent, one([claimed()]))
             .consume(Role::Job, basket([(Asset::Available, 1)]))
             .produce_at(
@@ -574,10 +630,11 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             RateIdPattern::Begin {
                 agent: agent().var(),
                 job: contract(),
+                place: place().var(),
                 mode: Slot::Is(mode),
             }
             .into(),
-            at_the_contract(on_contract(worker(Rate::new()), count))
+            at_the_contract(on_contract(worker(Rate::new()), &jobs), &jobs)
                 .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
                 .preserve_at(Role::Agent, one([claimed()]))
                 .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())
@@ -607,11 +664,11 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             outcome: outcome.var(),
         }
         .into(),
-        worker(Rate::new())
-            .variable(job().range(1, count))
+        possible(worker(Rate::new()))
+            .variable(job().range(1, jobs.len() as u8))
             .variable(mode().every())
             .variable(outcome.every())
-            .account(Role::Nature, Pattern::literal(AccountId::Nature))
+            .relation(odds(&jobs, &outcome))
             .consume_at(
                 Role::Agent,
                 one([AssetPattern::Awaiting(contract(), mode().var()).into()]),
@@ -619,23 +676,15 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             .produce_at(
                 Role::Agent,
                 one([AssetPattern::Resolved(contract(), mode().var(), outcome.var()).into()]),
-            )
-            .preserve_at(
-                Role::Nature,
-                one([AssetPattern::OutcomeWeight(contract(), mode().var(), outcome.var()).into()]),
             ),
     );
     for result in [Outcome::Success, Outcome::Failure] {
         let resolved = AssetPattern::Resolved(contract(), mode().var(), Slot::Is(result)).into();
-        let finish = on_contract(worker(Rate::new()), count).variable(mode().every());
+        let finish = on_contract(worker(Rate::new()), &jobs).variable(mode().every());
         let finish = match result {
             Outcome::Success => finish
                 .consume_at(Role::Agent, one([resolved, claimed()]))
-                .produce_computed(
-                    Role::Agent,
-                    Asset::Value,
-                    Q::balance(Role::Job, Asset::Reward),
-                )
+                .produce_computed(Role::Agent, Asset::Value, reward().quantity())
                 .produce(
                     Role::Agent,
                     basket([(Asset::Completed, 1), (Asset::Successes, 1)]),
@@ -844,6 +893,16 @@ fn failure_weight(risk: u64, mode: WorkMode) -> u64 {
     }
 }
 
+/// Nature's weight, out of ten, of `outcome` of an attempt at `spec` in
+/// `mode`.
+fn outcome_weight(spec: &JobSpec, mode: WorkMode, outcome: Outcome) -> u64 {
+    let failure = failure_weight(spec.risk, mode);
+    match outcome {
+        Outcome::Failure => failure,
+        Outcome::Success => 10 - failure,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -887,7 +946,12 @@ mod tests {
         ] {
             world.apply(action(&world, rate)).unwrap();
         }
-        let begin = |job, mode| RateId::Begin { agent, job, mode };
+        let begin = |job, mode| RateId::Begin {
+            agent,
+            job,
+            place: job_spec(job).location,
+            mode,
+        };
         assert!(!world.is_applicable(&action(&world, begin(north.id, WorkMode::Lean))));
         let held = |world: &World, asset| world.balance(&AccountId::Agent(agent), &asset).to_u64();
         let energy = held(&world, Asset::Energy);
