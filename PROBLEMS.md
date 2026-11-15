@@ -26,8 +26,8 @@ A solver may use an adapter to translate a rate ID into proposed role
 bindings, but the bindings become part of the exchange and the rate remains
 the authority for validity and effects. A field in `RateId` is descriptive,
 not authorization. When a role must represent a particular cell, slot,
-participant, institution, or result account, the rate fixes that account, or
-requires preserved identity or capability assets from that role. Adversarial
+participant, institution, or result account, the rate fixes that account,
+written with the rate's variables where it has them. Adversarial
 tests deliberately rebind roles to ensure the core rejects domain-invalid
 exchanges even when they bypass the example's trusted action helper.
 
@@ -63,7 +63,8 @@ that module's Rust documentation.
 | Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
-| Rates with variables |  | ✓ |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |
+| Rates with variables |  | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Fixed accounts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |  |  |
 | Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |

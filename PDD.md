@@ -1485,14 +1485,25 @@ The workshop can install a malformed “counterfeit chair” rate. It still cann
 create mass because the economy independently rejects the firing. Solver
 discipline is not a trust boundary.
 
-### 13.4 Concrete rate generation works but is the largest scalability pressure
+### 13.4 Rates with variables replaced concrete rate generation
 
-The maze and workshop need few rates. Scheduling creates a rate for each
-operation, readiness time, and start time. Rescue creates a rate for each
-truth/seed outcome. This is a real scaling pressure, but not yet authority to
-add a fifth semantic primitive. Concrete rates remain the minimum until
-measurement justifies a constrained, inspectable rate-schema and binding
-system; arbitrary hidden callbacks would not be acceptable.
+Each sample once wrote one concrete rate per value of every identifier its
+law depended on, and its scripts computed which concrete rate applied. With
+rates with variables (D-054) each law is written once; the instances are
+the same, so what every package finds is the same (D-053's pins), apart
+from the arms whose exchanges are now named by shorter identifiers or chosen
+among instances in their order. Rates as written, Stress instance (or the
+largest), before → after: Connect Four 226 → 4 (Micro 1,282 → 4), Work
+League 1,954 → 23, the fleet 290 → 25, sokoban 259 → 4, the incident 203 →
+23, the expedition 226 → 73, the cold chain 161 → 22, scheduling 104 → 45,
+bridge 100 → 18, the marketplace 86 → 50, the AMM season 35 → 18, rescue
+Micro 22 → 6, mission Micro 39 → 11, logistics Micro 51 → 23, lending 15 →
+13. Maze, exact cover and workshop keep their rates and fix their accounts;
+their moves are their instances (D-055). The scripts lost their binding
+tables and their loops over rate identifiers: Connect Four's went from 449 to
+150 lines, its bitboards, tactics and negamax replaced by the engine's
+minimax. What stays one rate per value is what differs in shape or in
+numbers no relation can hold, kept as facts in the economy instead.
 
 ### 13.5 Objectives can remain assets while algorithms remain generic
 

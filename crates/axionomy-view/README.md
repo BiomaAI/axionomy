@@ -19,3 +19,11 @@ leaderboards. Scenes are built from `visual_entity`, `visual_metric` and
 `asset_metric`, keyed through `Keyed` and tied to the economy by
 `link_account` and `link_balance`; `exact_front` and `evaluated_front` show
 exact and evaluated Pareto fronts.
+
+A rate with variables is shown as written: its identifier, keyed by the path
+its variables' names write (`rescue/rate/stabilize/patient`) and labeled as
+written (`stabilize/{patient}`), with its pieces, variables and domains,
+relations, derived values, fixed accounts, the roles it opens and closes,
+and how many identifiers it answers to. An exchange naming an instance
+carries the rate it is an instance of and the values it gives each
+variable, beside the instance itself.
