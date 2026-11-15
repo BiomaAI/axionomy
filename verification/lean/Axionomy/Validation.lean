@@ -27,10 +27,10 @@ def unknownBinding [DecidableEq Role] (roles : List Role) (role : Role) : Option
   if role ∈ roles then none else some (.unknownBinding role)
 
 def missingParameter (parameters : List (String × Q)) (parameter : String) : Option (Issue AccountId RateId Role) :=
-  if (Evaluation.orderedFind compare parameter parameters).isSome then none else some (.missingParameter parameter)
+  if (Evaluation.orderedFind Path.compareText parameter parameters).isSome then none else some (.missingParameter parameter)
 
 def containsName (names : List String) (parameter : String) : Bool :=
-  (Evaluation.orderedFind compare parameter (names.map fun key => (key, ()))).isSome
+  (Evaluation.orderedFind Path.compareText parameter (names.map fun key => (key, ()))).isSome
 
 def unknownParameter (names : List String) (parameter : String) : Option (Issue AccountId RateId Role) :=
   if containsName names parameter then none else some (.unknownParameter parameter)
@@ -179,8 +179,8 @@ theorem required_parameter [DecidableEq AccountId] [DecidableEq Role]
     (parameters : List (String × Q)) (present : AccountId → Bool)
     (clean : issues (RateId := RateId) cmpAccount cmpRole units metadata bindings parameters present = [])
     (parameter : String) (member : parameter ∈ metadata.parameters) :
-    ∃ value, Evaluation.orderedFind compare parameter parameters = some value := by
-  cases found : Evaluation.orderedFind compare parameter parameters with
+    ∃ value, Evaluation.orderedFind Path.compareText parameter parameters = some value := by
+  cases found : Evaluation.orderedFind Path.compareText parameter parameters with
   | some value => exact ⟨value, rfl⟩
   | none =>
     have reported : Issue.missingParameter (AccountId := AccountId) (RateId := RateId) (Role := Role) parameter ∈

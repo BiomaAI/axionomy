@@ -1,6 +1,7 @@
 import Axionomy.Rates
 import Axionomy.Account
 import Axionomy.MulDiv
+import Axionomy.Path
 
 namespace Axionomy.Evaluation
 
@@ -87,7 +88,7 @@ def fromState {AccountId Role Asset Q : Type} [DecidableEq AccountId] [Decidable
     (parameters : List (String × Q)) (bindings : List (Role × AccountId))
     (accounts : List (AccountId × List (Asset × Q))) : Context Role Asset Q where
   units := units
-  parameter := fun name => orderedFind compare name parameters
+  parameter := fun name => orderedFind Path.compareText name parameters
   balance := fun role asset =>
     match orderedFind roleCompare role bindings with
     | none => .error .unboundRole

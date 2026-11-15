@@ -94,4 +94,47 @@ theorem compare_lawful : Lawful (compare : Nat → Nat → Ordering) where
     simp only [ne_eq, Nat.compare_eq_gt, Nat.not_lt] at *
     omega
 
+-- These are laws of the identifier order, independently of any transaction.
+-- Matching a Rust comparison function to a logical function alone does not
+-- establish that it defines a lawful order.
+structure OrderLaws {K : Type} (cmp : K → K → Ordering) : Prop where
+  reflexive : ∀ x, cmp x x = .eq
+  equal : ∀ x y, cmp x y = .eq → x = y
+  transitive : ∀ x y z, cmp x y = .lt → cmp y z = .lt → cmp x z = .lt
+  greater : ∀ x y, cmp x y = .gt → cmp y x = .lt
+
+theorem naturalOrder : OrderLaws (compare : Nat → Nat → Ordering) where
+  reflexive := fun _ => Nat.compare_eq_eq.mpr rfl
+  equal := fun _ _ => Nat.compare_eq_eq.mp
+  transitive := fun _ _ _ first second => Nat.compare_eq_lt.mpr (Nat.lt_trans (Nat.compare_eq_lt.mp first) (Nat.compare_eq_lt.mp second))
+  greater := fun _ _ value => Nat.compare_eq_lt.mpr (Nat.compare_eq_gt.mp value)
+
+/-- An order with these laws orders keys totally. -/
+theorem OrderLaws.lawful {K : Type} {cmp : K → K → Ordering} (laws : OrderLaws cmp) : Lawful cmp where
+  trans a b c ab bc := by
+    cases hab : cmp a b with
+    | gt => exact absurd hab ab
+    | eq => exact (laws.equal a b hab) ▸ bc
+    | lt =>
+      cases hbc : cmp b c with
+      | gt => exact absurd hbc bc
+      | eq => exact (laws.equal b c hbc) ▸ ab
+      | lt => simp [laws.transitive a b c hab hbc]
+  total a b := by
+    cases hab : cmp a b with
+    | gt => exact Or.inr (by simp [laws.greater a b hab])
+    | _ => exact Or.inl (by simp)
+  antisymm a b ab ba := by
+    cases hab : cmp a b with
+    | gt => exact absurd hab ab
+    | eq => exact laws.equal a b hab
+    | lt =>
+      cases hba : cmp b a with
+      | gt => exact absurd hba ba
+      | eq => exact (laws.equal b a hba).symm
+      | lt =>
+        have := laws.transitive a b a hab hba
+        rw [laws.reflexive a] at this
+        contradiction
+
 end Axionomy.Ordered

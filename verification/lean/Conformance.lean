@@ -366,7 +366,7 @@ def metadataCase (inputs : List (Nat × Nat × Nat × Evaluation.Expr Nat Nat Na
     let serialize := fun entries => entries.map fun (role, asset, expression) => (role, asset, expressionJson expression)
     snapshots := snapshots ++ [⟨roles, distinct, serialize consumed, serialize produced, serialize preserved,
       conditions.map (fun (label, left, comparison, right) => (label, expressionJson left, comparison, expressionJson right)),
-      Discovery.registerAll compare parameterRefs [], assetRefs⟩]
+      Discovery.registerAll Path.compareText parameterRefs [], assetRefs⟩]
   return ⟨steps, snapshots⟩
 
 structure ValidationIssueCase where
@@ -403,7 +403,7 @@ def validationCase (roles : List Nat) (requiredParameters : List String) (distin
     (units rate : Nat) (bindings : List (Nat × Nat)) (parameters : List (String × Nat))
     (accounts : List Nat) : ValidationCase :=
   let roles := Discovery.registerAll compare (roles ++ distinct.flatMap (fun (l, r) => [l, r])) []
-  let names := Discovery.registerAll compare requiredParameters []
+  let names := Discovery.registerAll Path.compareText requiredParameters []
   let pairs := Discovery.registerAll (Discovery.pairCompare compare)
     (distinct.map fun (l, r) => Discovery.orderedPair compare l r) []
   let bindings := bindings.mergeSort (fun l r => l.1 ≤ r.1)
@@ -632,6 +632,18 @@ def main : IO Unit := do
     for pairs in [[], [(0, 0)], [(1, 0), (0, 1), (2, 0)]] do
       validation := validation.push (validationCase roles [] pairs 1 0
         (roles.map fun role => (role, role)) [] roles)
+  -- Paths in their natural order, as names compared as text are ordered:
+  -- numbers by value and before words, a path before the paths it starts,
+  -- `-` within a segment and `/` between segments told apart.
+  let pathGrid := ["0", "1", "2", "10", "9x", "a", "a-b", "a/b", "a/b/c", "a/2", "a/10", "b",
+    "job", "job/2", "job/10", "job/2/a", "x9", "z-9", "agents/7", "agents/7/wallet"]
+  let orderName : Ordering → String
+    | .lt => "lt"
+    | .eq => "eq"
+    | .gt => "gt"
+  let pathOrder := pathGrid.flatMap fun left => pathGrid.map fun right =>
+    Json.mkObj [("left", toJson left), ("right", toJson right),
+      ("order", toJson (orderName (Path.compareText left right)))]
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
     ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps),
@@ -642,5 +654,6 @@ def main : IO Unit := do
     ("executions", toJson (TransactionConformance.executionFixtures expressionJson)),
     ("lifecycleAccounting", toJson (LifecycleConformance.fixtures expressionJson)),
     ("basketCollections", toJson BasketCollectionConformance.fixtures),
-    ("invariantInputs", toJson InvariantInputConformance.fixtures)]
+    ("invariantInputs", toJson InvariantInputConformance.fixtures),
+    ("pathOrder", toJson pathOrder)]
   IO.println document.compress

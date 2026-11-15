@@ -1,15 +1,9 @@
 import Axionomy.TransactionAggregation
+import Axionomy.Ordered
 
 namespace Axionomy.OrderedEffects
 
--- These are laws of the identifier order, independently of any transaction.
--- Matching a Rust comparison function to a logical function alone does not
--- establish that it defines a lawful order.
-structure OrderLaws {K : Type} (cmp : K → K → Ordering) : Prop where
-  reflexive : ∀ x, cmp x x = .eq
-  equal : ∀ x y, cmp x y = .eq → x = y
-  transitive : ∀ x y z, cmp x y = .lt → cmp y z = .lt → cmp x z = .lt
-  greater : ∀ x y, cmp x y = .gt → cmp y x = .lt
+export Ordered (OrderLaws naturalOrder)
 
 def Sorted {K V : Type} (cmp : K → K → Ordering) (entries : List (K × V)) : Prop :=
   (entries.map Prod.fst).Pairwise (fun x y => cmp x y = .lt)
@@ -60,12 +54,6 @@ theorem sorted_unique {K V : Type} (cmp : K → K → Ordering) (laws : OrderLaw
     subst y
     rw [laws.reflexive x] at less
     contradiction) sorted
-
-theorem naturalOrder : OrderLaws (compare : Nat → Nat → Ordering) where
-  reflexive := fun _ => Nat.compare_eq_eq.mpr rfl
-  equal := fun _ _ => Nat.compare_eq_eq.mp
-  transitive := fun _ _ _ first second => Nat.compare_eq_lt.mpr (Nat.lt_trans (Nat.compare_eq_lt.mp first) (Nat.compare_eq_lt.mp second))
-  greater := fun _ _ value => Nat.compare_eq_lt.mpr (Nat.compare_eq_gt.mp value)
 
 section Aggregation
 open Transaction

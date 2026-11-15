@@ -28,6 +28,7 @@ implementation itself is tested, not proved.
 
 | Area | Modules | Key properties |
 | --- | --- | --- |
+| Identifiers | `Ordered`, `Path` | Every identifier is a path, ordered naturally: segment by segment, numbers by value and before words, a path before the longer paths it starts; the order is lawful, so entries kept in it are sorted, unique and independent of the order they came in; a name compared as text (an exchange's parameter) is ordered as the path it reads as, then by its characters |
 | Exact arithmetic | `Quantity`, `MulDiv`, `RoundingDiscipline` | Checked operations are exact or reject; full-width rounded mul-div is exact and never overflows in the intermediate product; floor never exceeds and ceiling never falls below the exact value; vault round trips never create value |
 | Holdings | `Basket`, `BasketOperations`, `BasketCollection`, `Account`, `AccountMap`, `State` | Construction rejects duplicates before dropping zeros; deposits and withdrawals are exact and fail without mutation |
 | Rates and expressions | `Rates`, `Evaluation`, `RateConstruction`, `Discovery`, `ModelConstruction` | Expressions evaluate against one pre-exchange snapshot; the first error wins; metadata discovery is complete |
@@ -46,6 +47,10 @@ index and rate sets. `built_sound` connects them to model construction;
 `Lifecycle.rejection_atomic` and `Execution.replay_rejection_atomic` cover
 failed steps and whole-trace rollback. No assumption asserts conservation or
 the supply equation being proved.
+
+The fixtures' `pathOrder` pairs pin the kernel's `Path` order to `Path.compare`
+on paths that set numbers against words, `2` against `10`, a path against
+the paths it starts, and `-` within a segment against `/` between segments.
 
 `Conformance.lean`, `TransactionConformance.lean`,
 `LifecycleConformance.lean`, `BasketCollectionConformance.lean` and

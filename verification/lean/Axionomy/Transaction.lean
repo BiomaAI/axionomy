@@ -39,7 +39,7 @@ structure Rule (Role A : Type) where
   closes : List Role := []
 
 def Rule.parameters {Role A : Type} (rule : Rule Role A) : List String :=
-  Discovery.registerAll compare
+  Discovery.registerAll Path.compareText
     ((rule.computedConsume ++ rule.computedProduce ++ rule.computedPreserve).flatMap
       (fun amount => Discovery.parameters amount.quantity) ++ rule.conditions.flatMap
       (fun condition => Discovery.parameters condition.left ++ Discovery.parameters condition.right)) []
