@@ -7,7 +7,7 @@ function words(path: string): string {
   return path.replaceAll("-", " ").replaceAll("/", " · ");
 }
 
-export function PanelHeading({ kicker, title, aside, action }: { kicker: ReactNode; title: ReactNode; aside?: string; action?: ReactNode }) {
+export function PanelHeading({ kicker, title, aside, action }: { kicker: ReactNode; title: ReactNode; aside?: ReactNode; action?: ReactNode }) {
   return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div><div className="panel-heading-side">{aside && <small>{aside}</small>}{action}</div></div>;
 }
 
@@ -74,8 +74,8 @@ export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { s
 }
 
 export function StepTicker({ frame, steps, onProof }: { frame?: ExchangeFrame; steps: number; onProof?: () => void }) {
-  if (steps === 0) return <div className="empty-state">Nothing has happened here yet: this is where its history starts.</div>;
-  if (!frame) return <div className="empty-state">This is the initial state. Press play and every exchange narrates here as it applies.</div>;
+  if (steps === 0) return <div className="empty-state">No steps</div>;
+  if (!frame) return <div className="empty-state">Initial state</div>;
   return <div className="step-ticker">
     <div className="ticker-feed" key={frame.index}>
       {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`} style={{ "--cue-i": index } as CSSProperties}>
@@ -91,8 +91,8 @@ export function StepTicker({ frame, steps, onProof }: { frame?: ExchangeFrame; s
 }
 
 export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: number }) {
-  if (steps === 0) return <div className="empty-state">No step has been taken here yet, so there is nothing to prove.</div>;
-  if (!frame) return <div className="empty-state">Move the scrubber to see what a step checked, predicted, and actually changed.</div>;
+  if (steps === 0) return <div className="empty-state">No steps</div>;
+  if (!frame) return <div className="empty-state">Initial state</div>;
   return <div className="transition">
     <div className="frame-cues" aria-label="Transition cues">
       {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`}><strong>{cue.label}</strong>{cue.details.map((detail) => <span key={detail}>{detail}</span>)}</article>)}
@@ -151,14 +151,14 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
   const [filter, setFilter] = useState("");
   useEffect(() => { setSelectedRate(model?.rates[0]?.rate.key); setFilter(""); }, [document.id, model]);
   const rate = model?.rates.find((candidate) => candidate.rate.key === selectedRate) ?? model?.rates[0];
-  if (!model) return <div className="empty-state">This view describes no rules.</div>;
+  if (!model) return <div className="empty-state">No rules</div>;
   const matchingRates = model.rates.filter((candidate) => `${candidate.rate.label} ${candidate.rate.key}`.toLowerCase().includes(filter.toLowerCase()));
   const visibleRates = matchingRates.slice(0, 200);
   if (rate && !visibleRates.some((candidate) => candidate.rate.key === rate.rate.key)) visibleRates.unshift(rate);
   return <div className="model-explorer">
     <section className="rate-browser">
       <div className="rate-controls"><label><span>Filter {model.rates.length} rates</span><input name="rate-filter" type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Rate, action, route, operation…" /></label><label><span>Rate</span><select name="rate" value={rate?.rate.key ?? ""} onChange={(event) => setSelectedRate(event.target.value)}>{visibleRates.map((candidate) => <option key={candidate.rate.key} value={candidate.rate.key}>{candidate.rate.label}</option>)}</select></label></div>
-      {matchingRates.length > visibleRates.length && <p className="muted">Showing the first 200 matches; refine the filter to inspect the rest.</p>}
+      {matchingRates.length > visibleRates.length && <p className="muted">First 200 of {matchingRates.length}</p>}
       {rate && <div className="rate-contract">
         {rate.roles.map((role) => <article key={role.role.key}><h3>{role.role.label}</h3><RateBasket label="Consume" values={role.consumed} /><RateBasket label="Produce" values={role.produced} /><RateBasket label="Preserve" values={role.preserved} /></article>)}
         {rate.computed_consumed?.map((amount, index) => <ComputedRateAmount key={`consume:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed consume" amount={amount} />)}

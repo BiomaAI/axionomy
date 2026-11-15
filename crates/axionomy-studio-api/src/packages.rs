@@ -2,7 +2,7 @@
 //! from its bytes.
 
 use crate::{Natural, PackageVersion, PointId, RefView, Refusal};
-use axionomy::{PathKind, path::Path};
+use axionomy::{OntologyPath, PathKind, path::Path};
 use axionomy_engine::{
     CandidatesPath, Engine, EngineError, Experiment, ExperimentPath, GoalPath, Loaded, Manifest,
     ObjectivePath, PackagePath, StrategyPath,
@@ -54,6 +54,9 @@ pub struct ExperimentView {
     pub experiment: ExperimentPath,
     /// The ref naming the point the arms start from.
     pub start: RefPath,
+    /// The ontology of the economy there: the kind of economy its
+    /// strategies play.
+    pub ontology: OntologyPath,
     /// The goal every arm works toward.
     pub goal: GoalPath,
     pub arms: Vec<ArmView>,
@@ -138,7 +141,6 @@ impl From<&Loaded> for LoadedView {
     }
 }
 
-/// Every package the store holds.
 /// The refs of `manifest`'s package that name points: those it ships and
 /// those named under its name.
 pub(crate) fn refs_of(engine: &Engine, manifest: &Manifest) -> Result<Vec<RefView>, Refusal> {
@@ -160,6 +162,7 @@ pub(crate) fn refs_of(engine: &Engine, manifest: &Manifest) -> Result<Vec<RefVie
     Ok(refs)
 }
 
+/// Every package the store holds.
 pub fn packages(engine: &Engine) -> Result<PackageList, Refusal> {
     let mut manifests = engine.manifests()?;
     manifests.sort_by(|left, right| left.name.cmp(&right.name));
@@ -201,6 +204,7 @@ fn experiment_view(
         Err(error) => return Err(error),
     };
     Ok(ExperimentView {
+        ontology: engine.ontology(engine.referred(&experiment.start)?)?,
         start: experiment.start,
         goal: experiment.goal,
         arms: experiment

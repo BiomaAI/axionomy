@@ -16,14 +16,14 @@ by an engine, native or in the browser, that Studio asks the same way.
   same. A package is a release: loading another version of one the store
   holds replaces what the held version shipped, and Studio says so; loading
   the same version again changes nothing. Refs and runs of your own stay.
-  What an action did is said once, in place of what the last one said: a
-  confirmation goes by itself, and a caution stays until it is dismissed.
 - **The activity line**, at the top of the page however far it is
   scrolled, says what is running: a strategy playing and how many states it
   has looked at, an experiment playing and the arm and trial it is on, a
   package loading, a ref followed and the steps that arrived, a history
-  played back. Each that can be stopped has its **Stop** there. With nothing
-  running it says where the store is kept.
+  played back. Each that can be stopped has its **Stop** there. After them
+  it says what the last action came to (a caution in amber, a failure in
+  red) until the next one, and at its end where the store is kept: saved on
+  the server, saved in this browser, or not saved and why.
 - **The history tree** is the page's spine: every history the package's
   refs are on, and every branch grown from them, drawn as a timeline (steps
   left to right, each branch on a row below the step it split off at, long
@@ -34,38 +34,52 @@ by an engine, native or in the browser, that Studio asks the same way.
   moves appear as they are made. Refs are labels on the steps they name
   (a package's own, which are fixed, in steel; yours in brass), experiment
   trials and branches made in this tab are labelled at their tips, and the
-  history on screen is drawn in brass with the play cursor on it. Hovering a
+  history on screen is drawn in brass with the play cursor on it. Edges are
+  drawn beneath the steps: one trunk where branches leave a row, each turning
+  onto its own row in one stroke, the history on screen over the rest.
+  Hovering a
   step says what its branch is; clicking it opens that branch at that step,
   and clicking a step of the history on screen moves the cursor there.
   `HistoryTree` knows only branches, steps and labels, so anything with a
   branching history can draw one.
 - **Play** walks the history on screen in the picture and the inspectors.
   Where nothing has happened yet, such as a package's first ref when it
-  opens, Play lets the strategy the package's first experiment runs find
-  the moves and plays them; pressed again while it searches, it stops. Space
+  opens, Play runs the first strategy that runs on this history to find the
+  moves, and plays them; pressed again while it searches, it stops. Space
   plays and pauses, the arrow keys step.
 - **From here**, beside the picture, is everything one can do at the step
-  on screen, and says first what doing it does: at a ref of your own it
-  moves the ref forward; anywhere else, a package's ref among them, it makes
-  a branch.
-  - **Moves here**: the moves the package's rules offer, each checked
-    (applies, or what it lacks), each with **Apply**; a move opens its full
-    check when clicked.
-  - **Let a strategy play** picks a strategy and plays it from here toward
-    the goal and with the effort its experiment gives it (or the package's
-    first goal, a budget of 1000000 and 1000 turns); its branch opens at the
-    step it started from and plays.
-  - **Experiments from here**, for each experiment that starts at this
-    point: **Play each arm** plays every arm's trials, each a new branch of
-    the tree as it is recorded, and lists how each trial ended, in how many
-    steps, and its objective values, with **Watch** to open and play it.
-    Played again, it says whether the same seeds gave the same results.
-  - **Name this point** names it with a ref of yours (`<package>/mine`
-    unless you name it otherwise); at a ref of yours, **Follow it** delivers
-    each step it is moved over, by this page or any other proposer, and
-    **Delete it** deletes it, its history staying in the tree.
-  - **Write a move by hand**, folded away: an exchange checked before it can
-    be applied.
+  on screen, in five sections that are always there, each naming what it
+  works with by its path. Its heading marks a ref of your own, which a move
+  applied there moves forward, and a package's ref, which is fixed;
+  anywhere else what is done makes a branch. *Play* is the transport's
+  word, for walking a history; *Run* computes one.
+  - **Moves**: the package's candidate sets, and the moves the one picked
+    offers here, each with its rate's path, checked (applies, or what it
+    lacks), each with **Apply**; a move opens its full check when clicked.
+  - **Strategy**: the strategies that run on this history, with their goal,
+    seed, budget and turns in the open, and **Run**; its branch opens at the
+    step it started from and plays. They are the strategies of the arms
+    (a strategy and the ref it starts from, its own or its experiment's)
+    that start in this history's tree, each with its experiment's goal and
+    effort, or, in a tree no arm starts in, those of experiments on its
+    ontology (each experiment says the ontology of its start); then any no
+    experiment compares. So rescue's micro model and its incidents, amm's
+    day and its seasons, or lending's market and the empty one its attack
+    needs, each offer only their own.
+  - **Experiments**: every experiment of the package, with its start ref,
+    goal, arms (and any arm's own start), trials and effort, each **Run**
+    from wherever you are: every arm's trials, each a new branch of the tree
+    as it is recorded, listed with how each ended, in how many steps, and
+    its objective values, with **Watch** to open and play it. The activity
+    line says when it ran, and run again, whether the same seeds gave the
+    same results. A start ref opens on a click.
+  - **Ref**: the refs naming this point, and **Create** for one of yours
+    (`<package>/mine` unless you name it otherwise); at a ref of yours,
+    **Follow it** delivers each step it is moved over, by this page or any
+    other proposer, and **Delete it** deletes it, its history staying in the
+    tree.
+  - **Exchange**: one written by hand, **Check**ed before it can be
+    applied.
 - **Words explain themselves**: Studio's own words (package, history,
   branch, ref, fixed, move, strategy, goal, experiment, arm, trial, seed,
   budget, turns, follow) are dotted where they are met, and say what they
@@ -76,9 +90,10 @@ ref there shows here; in the browser it is the Worker's, on the origin
 private file system where it stays across reloads, so a sample loaded again
 after Pages publishes a new version is that version, not a mix of both.
 
-**Source of truth** shows accounts and assets; **The rules** shows rates,
-roles, goals, and invariants; **Proof of this step** explains the selected
-exchange: what was checked before it applied and its exact effects.
+**State** shows accounts and assets; **Rules** shows rates, roles, goals,
+and invariants; **Proof** explains the selected exchange: what was checked
+before it applied and its exact effects. Panels say what they show, not how
+to use them: what a word means is on its dotted underline.
 
 Graph, grid, matrix, timeline, and reserves pictures help people read a result, but they
 never become a second simulation model. Geometry, semantic entities, paths,

@@ -37,7 +37,7 @@ export function SceneView({ scene, previousScene, history = [], frame, motion = 
     return () => observer.disconnect();
   }, [scene !== null && scene !== undefined && hasChrome(scene)]);
   if (!scene) {
-    return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
+    return <div className="empty-state">No picture</div>;
   }
   return <div className="scene-composition" style={{ "--scene-top": `${chromeHeight}px` } as CSSProperties}>
     <SceneChrome scene={scene} lane={chrome} onAccount={onAccount} />

@@ -61,14 +61,13 @@ export function Compare({ engine, left, right, leftName, rightName, leftDocument
   const view: DivergenceView | undefined = compared.data;
   const split = view ? Number(view.shared.split(":")[1]) : undefined;
   return <section className="panel compare-panel" aria-label="Comparison">
-    <PanelHeading kicker={<><Term name="branch">Branch</Term> set against another history</>} title={<>{leftName} <span className="versus">vs</span> {rightName}</>}
+    <PanelHeading kicker="Compare" title={<>{leftName} <span className="versus">vs</span> {rightName}</>}
       action={<button type="button" onClick={onClose}>Close</button>} />
     {compared.isError ? <div className="assessment-issue">{(compared.error as Error).message}</div>
       : !view ? <p className="compare-note muted">Comparing…</p>
       : <div className="compare-body">
         <p className="compare-note">
-          The same up to step {split}{view.steps.length === 0 ? ", and no different after it." : ", then they part."}
-          {view.converged != null ? ` Equal again from step ${view.converged}.` : view.steps.length > 0 ? " Never equal again." : ""}
+          Split at step {split}{view.steps.length === 0 ? " · no difference" : view.converged != null ? ` · equal again at step ${view.converged}` : ""}
         </p>
         {view.objectives.length > 0 && <dl className="compare-ends">{view.objectives.map((objective, index) => <div key={objective.objective}>
           <dt><Term name="objective">{lastPart(objective.objective)}</Term> {objective.direction === "minimize" ? "↓" : "↑"}</dt>
@@ -89,7 +88,7 @@ export function Compare({ engine, left, right, leftName, rightName, leftDocument
             </tr>;
           })}</tbody>
         </table></div>}
-        {view.next != null && <p className="compare-note muted">The first {STEPS} steps after the split are shown.</p>}
+        {view.next != null && <p className="compare-note muted">First {STEPS} steps</p>}
       </div>}
   </section>;
 }

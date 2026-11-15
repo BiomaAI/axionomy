@@ -35,6 +35,24 @@ const UNIT = 24;
 const ROW = 30;
 const PAD_X = 16;
 const PAD_Y = 18;
+/** The radius of the corner a branch turns from its parent's trunk onto its own row. */
+const CORNER = 8;
+/** How far dashes keep from the steps and the count they run between. */
+const DASH_CLEAR = 8;
+/** How long a dash is, before its round ends; dashes are about this far apart. */
+const DASH = 3;
+const DASH_EVERY = 8;
+
+/** A stretch of a row from `x1` to `x2`: solid, or dashed by `dash`. */
+type Piece = { x1: number; x2: number; dash?: string };
+
+/** Dashes from `x1` to `x2`, as many as fit about {@link DASH_EVERY} apart, the first at `x1` and the last at `x2`. */
+function dashes(x1: number, x2: number): Piece {
+  const length = Math.max(0, x2 - x1);
+  const count = Math.max(1, Math.round((length + DASH_EVERY - DASH) / DASH_EVERY));
+  const gap = count > 1 ? (length - count * DASH) / (count - 1) : length;
+  return { x1, x2, dash: `${DASH} ${gap.toFixed(3)}` };
+}
 
 /** How wide a label is drawn: its text in the tree's 11px monospace, padded. */
 function labelWidth(text: string): number {
@@ -205,8 +223,74 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
   };
   const cursorOn = selection ? cursorBranch(path, selection.cursor, roots) : undefined;
   const frame = host.current?.getBoundingClientRect();
+  // Where a branch leaves its parent's row: down the parent's trunk at the
+  // step it branched at, then round a corner onto its own row.
+  const fork = (branch: TreeBranch) => branch.parent && laid.rows.has(branch.parent.id) ? { x: laid.x(branch.parent.step), y: y(branch.parent.id) } : undefined;
+  const start = (branch: TreeBranch) => { const from = fork(branch); return from ? from.x + CORNER : laid.x(branch.first); };
+  /**
+   * The stretches of `branch`'s row from step `from` to step `to`: solid,
+   * and over each stretch drawn short, dashes from the steps either side up
+   * to its count of steps in the middle.
+   */
+  const pieces = (branch: TreeBranch, from: number, to: number) => {
+    const out: Piece[] = [];
+    let at = from === branch.first ? start(branch) : laid.x(from);
+    for (const gap of laid.gaps) {
+      if (gap.from < from || gap.to > to) continue;
+      if (laid.x(gap.from) > at) out.push({ x1: at, x2: laid.x(gap.from) });
+      const count = counting(gap);
+      out.push(dashes(laid.x(gap.from) + DASH_CLEAR, count.left - DASH_CLEAR), dashes(count.right + DASH_CLEAR, laid.x(gap.to) - DASH_CLEAR));
+      at = laid.x(gap.to);
+    }
+    if (laid.x(to) > at) out.push({ x1: at, x2: laid.x(to) });
+    return out;
+  };
+  /** Where a stretch drawn short says how many steps it holds. */
+  const counting = (gap: { from: number; to: number }) => {
+    const middle = (laid.x(gap.from) + laid.x(gap.to)) / 2;
+    const words = `${gap.to - gap.from - 1} steps`;
+    const width = words.length * 5.6;
+    return { words, middle, left: middle - width / 2, right: middle + width / 2 };
+  };
+  // The last branch to leave a row at a step draws the trunk down to it;
+  // those before it leave the trunk at their own rows.
+  const lastOff = new Map<string, string>();
+  for (const branch of laid.ordered) if (branch.parent && fork(branch)) lastOff.set(`${branch.parent.id}:${branch.parent.step}`, branch.id);
+  /**
+   * A branch's row, from `from` to `to`: from where it leaves its parent
+   * (from `top`, or from its corner), round its corner and on along its
+   * first solid stretch in one stroke, so nothing joins where it turns; then
+   * its other stretches, dashed where drawn short.
+   */
+  const row = (branch: TreeBranch, from: number, to: number, on: boolean, top?: number) => {
+    const at = fork(branch);
+    const rowY = y(branch.id);
+    const stretches = pieces(branch, from, to);
+    const turned = at && from === branch.first;
+    const along = turned && stretches[0] && !stretches[0].dash ? stretches.shift() : undefined;
+    const className = `tree-edge${on ? " on-path" : ""}`;
+    return <g key={branch.id}>
+      {turned && <path className={className} d={`M ${at.x} ${top ?? rowY - CORNER} V ${rowY - CORNER} A ${CORNER} ${CORNER} 0 0 0 ${at.x + CORNER} ${rowY}${along ? ` H ${along.x2}` : ""}`} />}
+      {stretches.map((piece, index) => <line key={index} className={className} strokeDasharray={piece.dash} x1={piece.x1} x2={piece.x2} y1={rowY} y2={rowY} />)}
+    </g>;
+  };
   return <div className="history-tree" ref={host} role="group" aria-label={label} onScroll={() => setHover(undefined)}>
     <svg width={laid.width} height={laid.height} role="presentation">
+      <g className="tree-edges">
+        {laid.ordered.map((branch) => row(branch, branch.first, branch.last, false, branch.parent && lastOff.get(`${branch.parent.id}:${branch.parent.step}`) === branch.id ? fork(branch)?.y : undefined))}
+      </g>
+      <g className="tree-edges">
+        {laid.ordered.flatMap((branch) => {
+          const on = path.get(branch.id);
+          return on ? [row(branch, Math.max(branch.first, on.from), Math.min(branch.last, on.to), true, fork(branch)?.y)] : [];
+        })}
+      </g>
+      <g className="tree-counts">
+        {laid.ordered.flatMap((branch) => laid.gaps.filter((gap) => gap.from >= branch.first && gap.to <= branch.last).map((gap) => {
+          const count = counting(gap);
+          return <text key={`${branch.id}:${gap.from}`} className="tree-gap" x={count.middle} y={y(branch.id) + 3} textAnchor="middle">{count.words}</text>;
+        }))}
+      </g>
       {laid.ordered.map((branch) => {
         const row = y(branch.id);
         const own = branch.parent ? branch.first + 1 : branch.first;
@@ -215,20 +299,6 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
         const steps: number[] = [];
         for (let step = own; step <= branch.last; step++) if (!compressed(step) || step === branch.last) steps.push(step);
         return <g key={branch.id} className={tone}>
-          {branch.parent && laid.rows.has(branch.parent.id) && <path className={`tree-link${on ? " on-path" : ""}`} d={`M ${laid.x(branch.parent.step)} ${y(branch.parent.id)} V ${row - 8} Q ${laid.x(branch.parent.step)} ${row} ${laid.x(branch.parent.step) + 8} ${row} H ${laid.x(own)}`} />}
-          <line className="tree-line" x1={laid.x(branch.first)} x2={laid.x(branch.last)} y1={row} y2={row} />
-          {on && <line className="tree-line path-line" x1={laid.x(Math.max(branch.first, on.from))} x2={laid.x(Math.min(branch.last, on.to))} y1={row} y2={row} />}
-          {laid.gaps.filter((gap) => gap.from >= branch.first && gap.to <= branch.last).map((gap) => {
-            // A stretch drawn short says on it how many steps it holds.
-            const middle = (laid.x(gap.from) + laid.x(gap.to)) / 2;
-            const words = `${gap.to - gap.from - 1} steps`;
-            const width = words.length * 5.6 + 8;
-            return <g key={gap.from}>
-              <line className="tree-line gap-line" x1={laid.x(gap.from) + 6} x2={laid.x(gap.to) - 6} y1={row} y2={row} />
-              <rect className="tree-gap-back" x={middle - width / 2} y={row - 7} width={width} height={14} />
-              <text className="tree-gap" x={middle} y={row + 3} textAnchor="middle">{words}</text>
-            </g>;
-          })}
           <rect className="tree-track" x={laid.x(branch.first) - UNIT / 2} y={row - ROW / 2} width={laid.x(branch.last) - laid.x(branch.first) + UNIT} height={ROW}
             onClick={(event) => onTrack(branch, event)} />
           {steps.map((step) => {

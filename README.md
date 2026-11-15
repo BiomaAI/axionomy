@@ -244,13 +244,13 @@ visually separate from transport failures.
 
 ### Reading Studio
 
-- Whatever is running (a strategy or an experiment playing, a package loading, a ref followed, a history played back) appears in the **activity line** at the top of the page, each with Stop where it can be stopped; with nothing running it says where the store is kept.
+- Whatever is running (a strategy or an experiment playing, a package loading, a ref followed, a history played back) appears in the **activity line** at the top of the page, each with Stop where it can be stopped, then what the last action came to, and where the store is kept.
 - Every history of a package, and every branch grown from it, appears in the **history tree**, live: a branch appears as it is recorded.
-- What can be done at the step on screen (a move, a strategy, an experiment, naming it) appears under **From here**, beside the picture.
-- Assets and accounts appear under **Source of truth**.
-- Rates, roles, goals, and invariants appear under **The rules**.
-- Each applied exchange appears under **Proof of this step** and in the replay scrubber.
-- An experiment's trials, how each ended and their objective values appear under **Experiments from here**, at the point it starts from, each trial a branch of the tree to watch.
+- What can be done at the step on screen appears under **From here**, beside the picture, in sections always there: **Moves**, **Strategy**, **Experiments** (every one of the package, run from anywhere), **Ref** and **Exchange**.
+- Assets and accounts appear under **State**.
+- Rates, roles, goals, and invariants appear under **Rules**.
+- Each applied exchange appears under **Proof** and in the replay scrubber.
+- An experiment's trials, how each ended and their objective values appear under **Experiments**, at the point it starts from, each trial a branch of the tree to watch.
 
 Studio, the CLI, the HTTP API, and MCP deliberately call the same engine.
 Their different usability demands pressure one engine API. A capability is

@@ -169,7 +169,7 @@ async function accessHandle(): Promise<{ handle?: FileSystemSyncAccessHandle; re
     } catch (cause) {
       const held = cause instanceof DOMException && cause.name === "NoModificationAllowedError";
       if (!held) return { reason: `the origin private file system is unavailable: ${described(cause)}` };
-      if (attempt >= HANDLE_ATTEMPTS) return { reason: "another tab holds the saved store" };
+      if (attempt >= HANDLE_ATTEMPTS) return { reason: "another Studio tab has the saved store open; close it and reload" };
       await new Promise((resolve) => setTimeout(resolve, HANDLE_RETRY_MS));
     }
   }

@@ -142,7 +142,7 @@ test("a second Worker keeps its store in memory while another holds the saved on
     return { first, second };
   }, "/src/browserPackages.ts");
   expect(opened.first).toEqual({ persistent: true });
-  expect(opened.second).toEqual({ persistent: false, reason: "another tab holds the saved store" });
+  expect(opened.second).toEqual({ persistent: false, reason: "another Studio tab has the saved store open; close it and reload" });
 });
 
 test("cancelling a run terminates its Worker mid-run, and the next one opens the store with all committed before", async ({ page }) => {

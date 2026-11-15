@@ -46,11 +46,11 @@ function ownRef(pkg: string): string {
  */
 async function playFrom(page: Page, shipped: string, name: string): Promise<number> {
   const start = await openRef(page, shipped);
-  await expect(fromHere(page)).toContainText(`${shipped} is fixed`);
+  await expect(fromHere(page).locator(".panel-heading small")).toHaveText("fixed");
   await fromHere(page).getByRole("textbox", { name: "Ref name" }).fill(name);
-  await fromHere(page).getByRole("button", { name: "Name it" }).click();
-  await expect(page.getByRole("status").filter({ hasText: `${name} names step ${start} now` })).toBeVisible();
-  await expect(fromHere(page)).toContainText(`What you do here moves ${name} forward`);
+  await fromHere(page).getByRole("button", { name: "Create" }).click();
+  await expect(page.getByRole("status").filter({ hasText: `${name} names step ${start}.` })).toBeVisible();
+  await expect(fromHere(page).locator(".panel-heading small")).toHaveText("your ref");
   expect(await steps(page)).toBe(start);
   return start;
 }
@@ -103,7 +103,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   await openSample(page, "maze");
   // The package's ref is fixed: at its point, applying makes a branch.
   await openRef(page, "maze/showcase");
-  await expect(fromHere(page)).toContainText("maze/showcase is fixed: what you do here makes a branch");
+  await expect(fromHere(page).locator(".panel-heading small")).toHaveText("fixed");
   const mine = ownRef("maze");
   const start = await playFrom(page, "maze/showcase", mine);
   // Each move is shown checked before anything is applied.
@@ -116,9 +116,10 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   // Back at step 0 the point is not where the ref is: applying there branches.
   const branches = await tree(page).locator(".tree-branch").count();
   await page.getByRole("button", { name: "Go to initial state" }).click();
-  await expect(fromHere(page)).toContainText("What you do here makes a branch from step 0");
+  await expect(fromHere(page).locator(".panel-heading h2")).toHaveText(`Step 0 of ${mine}`);
+  await expect(fromHere(page).locator(".panel-heading small")).toHaveCount(0);
   await fromHere(page).locator(".move-applicable").last().getByRole("button", { name: "Apply" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "a new branch from step 0" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "a branch from step 0" })).toBeVisible();
   await expect(trace(page)).toHaveAttribute("max", "1");
   await expect(tree(page).locator(".tree-branch")).toHaveCount(branches + 1);
   // The ref stayed where the move took it, and the package's where it shipped.
@@ -127,17 +128,16 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   expect(await openRef(page, mine)).toBe(start + 1);
 
   // A move written by hand is checked before it can be applied.
-  await fromHere(page).locator(".exchange-editor summary").click();
   await fromHere(page).getByRole("textbox", { name: "Exchange" }).fill('{"rate": "nowhere", "bindings": {}, "units": "1"}');
   const apply = fromHere(page).locator(".exchange-editor").getByRole("button", { name: "Apply" });
   await expect(apply).toBeDisabled();
-  await fromHere(page).getByRole("button", { name: "Check it" }).click();
+  await fromHere(page).getByRole("button", { name: "Check" }).click();
   await expect(fromHere(page).locator(".exchange-editor .assessment-invalid")).toBeVisible();
   await expect(apply).toBeDisabled();
 
   // One's own ref is deleted; its history stays on screen and in the tree.
   await fromHere(page).getByRole("button", { name: "Delete it" }).click();
-  await expect(page.getByRole("status").filter({ hasText: `${mine} is deleted` })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: `Deleted ${mine}.` })).toBeVisible();
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
   await expect(tree(page).getByRole("button", { name: `Open ${mine}` })).toHaveCount(0);
   // A package's ref offers no deleting.
@@ -148,12 +148,13 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
 test("lets a strategy play from here: its branch opens and plays", async ({ page }) => {
   await openSample(page, "maze");
   const start = await openRef(page, "maze/showcase");
-  const play = fromHere(page).getByRole("region", { name: "Let a strategy play" });
+  const play = fromHere(page).getByRole("region", { name: "Strategy", exact: true });
   await play.getByRole("combobox", { name: "Strategy" }).selectOption("maze/a-star");
   // The goal and the effort are those of the experiment that runs the strategy.
-  await expect(play.locator("summary")).toContainText("Toward solved, seed 17");
-  await play.getByRole("button", { name: "Play it" }).click();
-  await expect(page.getByRole("status").filter({ hasText: /a-star reached the goal in \d+ steps, after looking at/ })).toBeVisible({ timeout: 30_000 });
+  await expect(play.getByRole("combobox", { name: "Goal" })).toHaveValue("maze/solved");
+  await expect(play.getByRole("textbox", { name: "Seed" })).toHaveValue("17");
+  await play.getByRole("button", { name: "Run" }).click();
+  await expect(page.getByRole("status").filter({ hasText: /maze\/a-star: reached the goal in \d+ steps, [\d,]+ states looked at/ })).toBeVisible({ timeout: 30_000 });
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText(`a-star, from step ${start}`);
   expect(await steps(page)).toBeGreaterThan(start);
   // The package's ref stays where it shipped.
@@ -174,7 +175,7 @@ test("follows a ref and receives the steps it is moved over", async ({ page }) =
   await expect(activity(page)).toContainText(`Following ${mine} · 1 step arrived`);
   await activity(page).getByRole("button", { name: "Stop following" }).click();
   await expect(fromHere(page).getByRole("button", { name: "Follow it" })).toBeVisible();
-  await expect(activity(page)).toContainText("Store");
+  await expect(activity(page)).toContainText(/Saved|Not saved/);
 });
 
 test("stops a game mid-play, and nothing else notices", async ({ page }) => {
@@ -184,15 +185,15 @@ test("stops a game mid-play, and nothing else notices", async ({ page }) => {
   const live = ownRef("connect-four");
   const start = await playFrom(page, "connect-four/stress", live);
   await fromHere(page).getByRole("button", { name: "Follow it" }).click();
-  const play = fromHere(page).getByRole("region", { name: "Let a strategy play" });
+  const play = fromHere(page).getByRole("region", { name: "Strategy", exact: true });
   await play.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/self-play");
-  await play.getByRole("button", { name: "Play it" }).click();
-  await expect(page.locator(".scrubber-label")).toContainText("Finding the moves to play");
-  await expect(activity(page)).toContainText(`Playing self-play from step ${start}`);
+  await play.getByRole("button", { name: "Run" }).click();
+  await expect(page.locator(".scrubber-label")).toContainText("Finding moves");
+  await expect(activity(page)).toContainText(`Running connect-four/mcts-32/self-play from step ${start}`);
   await expect(activity(page)).toContainText(`Following ${live}`);
   await page.waitForTimeout(1_500);
   await activity(page).getByRole("button", { name: "Stop", exact: true }).click();
-  await expect(play.getByRole("button", { name: "Play it" })).toBeEnabled({ timeout: 30_000 });
+  await expect(play.getByRole("button", { name: "Run" })).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
   // The follower never noticed: it is still waiting, and hears the next move.
   await expect(fromHere(page).getByRole("button", { name: "Stop following" })).toBeVisible();
@@ -206,9 +207,11 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await openSample(page, "maze");
   await openRef(page, "maze/micro");
   const branches = await tree(page).locator(".tree-branch").count();
-  const here = fromHere(page).getByRole("region", { name: "Experiments from here" });
-  await here.getByRole("button", { name: /^Play (each arm|again)$/ }).first().click();
-  await expect(here.getByRole("status")).toContainText(/Played/, { timeout: 60_000 });
+  // Every experiment of the package is listed; maze/micro's is run.
+  const here = fromHere(page).getByRole("region", { name: "Experiments", exact: true }).locator(".experiment-here").filter({ has: page.locator(".experiment-line strong", { hasText: /^maze\/micro$/ }) });
+  await expect(here.locator(".experiment-facts")).toContainText("maze/micro");
+  await here.getByRole("button", { name: /^Run( again)?$/ }).click();
+  await expect(activity(page).getByRole("status")).toContainText(/^Ran maze\/micro( again: same results)?\.$/, { timeout: 60_000 });
   // Five strategies, each a trial that reached the goal, each a new branch.
   await expect(here.locator(".trial-list li")).toHaveCount(5);
   await expect(here.locator(".trial-list")).toContainText("a-star");
@@ -216,15 +219,15 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await expect(tree(page).locator(".tree-branch")).toHaveCount(branches + 5);
   await expect(tree(page).locator(".tone-trial").first()).toBeVisible();
   // Played again with the same seeds, it says the results are the same.
-  await here.getByRole("button", { name: "Play again" }).first().click();
-  await expect(here.getByRole("status")).toContainText("the same seeds gave the same results", { timeout: 60_000 });
+  await here.getByRole("button", { name: "Run again" }).click();
+  await expect(activity(page).getByRole("status")).toContainText("again: same results", { timeout: 60_000 });
   // A trial is watched: its branch opens where it started and plays.
   await here.locator(".trial-list li", { hasText: "a-star" }).getByRole("button", { name: "Watch" }).click();
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("a-star");
   expect(await steps(page)).toBeGreaterThan(0);
   // A branch is set against the history it left: the same up to where it split, then step by step.
   const comparison = page.getByRole("region", { name: "Comparison" });
-  await expect(comparison).toContainText("The same up to step 0, then they part.");
+  await expect(comparison.locator(".compare-note")).toContainText("Split at step 0");
   await expect(comparison.locator("tbody tr").first()).toContainText("Walk Start");
   // Any branch of the same tree is compared from its card in the tree.
   await tree(page).getByRole("button", { name: /^Step 3 of breadth-first/ }).last().hover();

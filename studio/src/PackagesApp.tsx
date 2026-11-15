@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconMaximize } from "@tabler/icons-react";
-import { ActivityStrip, type Activity } from "./Activity";
+import { ActivityStrip, type Activity, type Said } from "./Activity";
 import { BrowserPackages } from "./browserPackages";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
@@ -108,10 +108,9 @@ export function shortPoint(point: PointId): string {
   return `${run.slice(0, 4)}…${run.slice(-6)}:${step}`;
 }
 
-/** What Studio says an action did: a confirmation, or a caution worth reading. */
-type Notice = { tone: "done" | "caution"; message: string };
-const done = (message: string): Notice => ({ tone: "done", message });
-const caution = (message: string): Notice => ({ tone: "caution", message });
+const done = (message: string): Said => ({ tone: "done", message });
+const caution = (message: string): Said => ({ tone: "caution", message });
+const failed = (cause: unknown): Said => ({ tone: "error", message: described(cause) });
 
 /** `count` of a thing, its word in the singular or the plural. */
 function counted(count: number, one: string, many = `${one}s`): string {
@@ -161,20 +160,13 @@ export function PackagesApp() {
   const [opened, setOpened] = useState<Opened>();
   const [loadedUrl, setLoadedUrl] = useState<string | undefined>(link.package);
   const [busy, setBusy] = useState<string>();
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [error, setError] = useState<string>();
+  const [said, setSaid] = useState<Said[]>([]);
   const [copied, setCopied] = useState(false);
   /** What made branches in this tab, by run. */
   const [notes, setNotes] = useState<ReadonlyMap<string, Note>>(new Map());
   const note = (point: PointId, label: string, from: PointId) => setNotes((current) => new Map(current).set(parsePoint(point).run, { label, words: `${label}, from step ${stepOf(from)}` }));
-  /** Says what the latest action did, in place of what the one before it said. */
-  const report = (...said: Notice[]) => setNotices(said);
-  // A confirmation goes by itself; a caution stays until it is dismissed.
-  useEffect(() => {
-    if (!notices.some((said) => said.tone === "done")) return;
-    const timer = window.setTimeout(() => setNotices((current) => current.filter((said) => said.tone !== "done")), 5_000);
-    return () => window.clearTimeout(timer);
-  }, [notices]);
+  /** Says what the latest action came to, in place of what the one before it said. */
+  const report = (...words: Said[]) => setSaid(words);
   const pkg = listing.data?.packages.find((candidate) => candidate.name === packageName);
 
   // The history tree stays the store's: each change arrives as it is made.
@@ -222,7 +214,6 @@ export function PackagesApp() {
   /** The experiments playing now, by path, each with how far it is. */
   const [experimenting, setExperimenting] = useState<ReadonlyMap<string, ExperimentRun>>(new Map());
   /** What each experiment's last play came to, by path. */
-  const [experimentSaid, setExperimentSaid] = useState<ReadonlyMap<string, string>>(new Map());
   const experimentsStopped = useRef(new Set<string>());
   const [focusedAccount, setFocusedAccount] = useState<string>();
   /** The history the one on screen is set against: picked (a point), closed (null), or the one it left (undefined). */
@@ -302,7 +293,7 @@ export function PackagesApp() {
       const ref = await engine.readRef(name);
       pendingStep.current = step;
       setOpened({ point: ref.point, ref: name, shipped: ref.shipped_by ?? undefined });
-    } catch (cause) { setError(described(cause)); }
+    } catch (cause) { report(failed(cause)); }
   };
 
   /** Opens the history up to `point`, at `step` of it (its end by default), playing it when asked. */
@@ -340,24 +331,23 @@ export function PackagesApp() {
   /** Loads a package, says what it did, and opens the first package it held. */
   const load = async (what: string, loading: () => Promise<LoadedFrom>, open = true) => {
     setBusy(`Loading ${what}…`);
-    setError(undefined);
     report();
     try {
       const from = await loading();
       const names = loadedPackages(from);
-      if (from.got === "current") report(done(`Opened ${names.join(", ")}: the store already holds what ${what} serves.`));
-      else if (from.got === "kept") report(caution(`${what} could not be reached (${from.message}); the store's copy of ${names.join(", ")} is shown.`));
+      if (from.got === "current") report(done(`Opened ${names.join(", ")}, unchanged.`));
+      else if (from.got === "kept") report(caution(`${what} unreachable (${from.message}): opened the stored ${names.join(", ")}.`));
       else report(
         done(`Loaded ${names.join(", ")} from ${what}.`),
-        ...(from.loaded.replaced ?? []).map((release) => caution(`Replaced ${release.name} ${release.version}: what it shipped and this version does not carry is gone; refs of your own stay.`)),
-        ...from.loaded.kept.refs.map((ref) => caution(`Kept ref ${ref}: the store already names another point with it.`)),
-        ...(from.loaded.kept.definitions.length > 0 ? [caution(`Kept ${counted(from.loaded.kept.definitions.length, "definition")} the store already defines otherwise.`)] : []),
+        ...(from.loaded.replaced ?? []).map((release) => caution(`Replaced ${release.name} ${release.version}.`)),
+        ...from.loaded.kept.refs.map((ref) => caution(`Kept the store's ref ${ref}.`)),
+        ...(from.loaded.kept.definitions.length > 0 ? [caution(`Kept the store's ${counted(from.loaded.kept.definitions.length, "definition")}.`)] : []),
       );
       const list = await relist();
       if (open && names[0]) selectPackage(names[0], list);
       return names;
     } catch (cause) {
-      setError(described(cause));
+      report(failed(cause));
       return [];
     } finally {
       setBusy(undefined);
@@ -419,14 +409,14 @@ export function PackagesApp() {
           setOpened({ point: applied.point, ref });
         } catch (cause) {
           if (!(cause instanceof EngineRefusal) || !cause.moved) throw cause;
-          report(caution(`${ref} moved to ${shortPoint(cause.moved.current)} before this step counted, so the step is a branch; look again from where the ref is.`));
+          report(caution(`${label}: a branch, as ${ref} had moved to ${shortPoint(cause.moved.current)}.`));
           openPoint(applied.point);
         }
       } else {
-        report(done(`${label}: a new branch from step ${stepOf(at)}.`));
+        report(done(`${label}: a branch from step ${stepOf(at)}.`));
         openPoint(applied.point);
       }
-    } catch (cause) { setError(described(cause)); }
+    } catch (cause) { report(failed(cause)); }
   };
 
   /** Stops the strategy playing, which then says nothing of it. */
@@ -450,22 +440,22 @@ export function PackagesApp() {
     try {
       const ran = await work.result;
       const found = stepOf(ran.end) - stepOf(ran.start);
-      if (found === 0) { report(caution(`${lastPart(strategy)} found no move toward ${asked.goal} from here: ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
+      if (found === 0) { report(ran.outcome.kind === "reached" ? done(`${asked.goal} holds here already.`) : caution(`${strategy}: no steps toward ${asked.goal}; ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
       note(ran.end, lastPart(strategy), ran.start);
-      report(done(`${lastPart(strategy)} ${outcomeWords(ran.outcome).toLowerCase()} in ${counted(found, "step")}${ran.thinking ? `, after looking at ${counted(ran.thinking.expanded, "state")}` : ""}.`));
+      report(done(`${strategy}: ${outcomeWords(ran.outcome).toLowerCase()} in ${counted(found, "step")}${ran.thinking ? `, ${counted(ran.thinking.expanded, "state")} looked at` : ""}.`));
       openPoint(ran.end, stepOf(ran.start), true);
     } catch (cause) {
-      if (!findingStopped.current) setError(described(cause));
+      if (!findingStopped.current) report(failed(cause));
     } finally {
       setFinding(undefined);
       findingStopped.current = false;
     }
   };
-  /** Play where nothing has happened yet: the strategy the package's first experiment runs, else its first. */
-  const firstStrategy = pkg?.experiments[0]?.arms[0]?.strategy ?? pkg?.strategies[0];
+  /** Play where nothing has happened yet: the first strategy that plays this history. */
   const playAhead = () => {
-    if (!firstStrategy) { report(caution(`${pkg?.name ?? "This package"} defines no strategy to find moves with; apply a move to make some.`)); return; }
-    void letPlay(firstStrategy, askedOf(pkg, firstStrategy));
+    const first = runs.strategies[0];
+    if (!first) { report(caution(`No strategy of ${pkg?.name ?? "this package"} runs on this history.`)); return; }
+    void letPlay(first.strategy, first.asked);
   };
 
   // The keys the transport names: Space plays or pauses (or finds moves to
@@ -495,25 +485,22 @@ export function PackagesApp() {
     const path = experiment.experiment;
     if (!engine || experimenting.has(path)) return;
     const before = results.find((result) => result.experiment === path);
-    setExperimentSaid((current) => changed(current, path));
     const work = engine.runExperiment(path, (progress) => setExperimenting((current) => {
       const run = current.get(path);
       return run ? changed(current, path, { ...run, progress }) : current;
     }));
     setExperimenting((current) => changed(current, path, { cancel: work.cancel, experiment }));
-    let said: string;
     try {
       const next = await work.result;
       queryClient.setQueryData(["results", engine.kind, path], next);
       const ends = (played: ResultsView) => JSON.stringify(played.arms.map((arm) => arm.trials.map((trial) => [trial.ended, trial.values])));
-      said = !before ? "Played: each trial is a new branch in the tree." : ends(before) === ends(next) ? "Played again: the same seeds gave the same results, as new branches." : "Played again: the results changed.";
+      report(done(!before ? `Ran ${path}.` : ends(before) === ends(next) ? `Ran ${path} again: same results.` : `Ran ${path} again: results changed.`));
     } catch (cause) {
-      said = experimentsStopped.current.has(path) ? "Stopped before every trial ran: no results are kept." : described(cause);
+      report(experimentsStopped.current.has(path) ? caution(`Stopped ${path}: no results kept.`) : failed(cause));
     } finally {
       experimentsStopped.current.delete(path);
       setExperimenting((current) => changed(current, path));
     }
-    setExperimentSaid((current) => changed(current, path, said));
   };
   const stopExperiment = (path: string) => {
     experimentsStopped.current.add(path);
@@ -529,19 +516,19 @@ export function PackagesApp() {
     const ref = opened.ref;
     try {
       await engine.deleteRef(ref, opened.point);
-      report(done(`${ref} is deleted; its history stays in the tree.`));
+      report(done(`Deleted ${ref}.`));
       setOpened({ point: opened.point });
-    } catch (cause) { setError(described(cause)); }
+    } catch (cause) { report(failed(cause)); }
   };
 
   const keepAsRef = async (name: string) => {
     if (!engine || !screenPoint) return;
     try {
       await engine.createRef(name, screenPoint);
-      report(done(`${name} names step ${stepOf(screenPoint)} now.`));
+      report(done(`${name} names step ${stepOf(screenPoint)}.`));
       pendingStep.current = "end";
       setOpened({ point: screenPoint, ref: name });
-    } catch (cause) { setError(described(cause)); }
+    } catch (cause) { report(failed(cause)); }
   };
 
   const copyLink = async () => {
@@ -551,7 +538,7 @@ export function PackagesApp() {
   };
 
   const label = engine ? connectionLabel(engine.kind, "connected") : connectionLabel("native", "checking");
-  const storeWords = !engine ? "Looking for an engine…" : engine.kind === "native" ? "Store on the server" : kept.data?.persistent ? "Store saved in this browser" : `Store in memory${kept.data?.reason ? `: ${kept.data.reason}` : ""}`;
+  const storeWords = !engine ? "Looking for an engine…" : engine.kind === "native" ? "Saved on the server" : kept.data?.persistent ? "Saved in this browser" : `Not saved${kept.data?.reason ? `: ${kept.data.reason}` : ""}`;
   const toggleTheater = () => {
     const node = worldPanel.current;
     if (!node) return;
@@ -570,7 +557,7 @@ export function PackagesApp() {
     ...(busy ? [{ key: "loading", words: busy }] : []),
     ...(finding ? [{
       key: "strategy",
-      words: <>Playing <strong>{lastPart(finding.strategy)}</strong> from step {stepOf(finding.from)}{finding.progress && ` · ${counted(finding.progress.expanded, "state")} looked at`}</>,
+      words: <>Running <strong>{finding.strategy}</strong> from step {stepOf(finding.from)}{finding.progress && ` · ${counted(finding.progress.expanded, "state")} looked at`}</>,
       stop: { label: "Stop", onStop: stopFinding },
     }] : []),
     ...[...experimenting].map(([path, run]) => ({ key: `experiment:${path}`, words: experimentWords(run), stop: { label: "Stop", onStop: () => stopExperiment(path) } })),
@@ -587,13 +574,19 @@ export function PackagesApp() {
     while (branch?.parent) branch = tree.branches.find((candidate) => candidate.id === branch?.parent?.id) ?? undefined;
     return branch?.id;
   };
+  const screenRoot = opened ? rootOf(parsePoint(opened.point).run) : undefined;
+  const inTree = (ref: string) => {
+    const point = pkg?.refs.find((candidate) => candidate.name === ref)?.point;
+    return point !== undefined && screenRoot !== undefined && rootOf(parsePoint(point).run) === screenRoot;
+  };
+  const runs = playable(pkg, document?.source.key, inTree);
 
   return <div className="app-shell packages-workspace">
     <header className="topbar">
       <Brand />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
-    <ActivityStrip activities={activities} idle={storeWords} />
+    <ActivityStrip activities={activities} said={said} store={storeWords} />
 
     <section className="command-bar" aria-label="Package controls">
       <label className="field package-field"><span><Term name="package">Package</Term></span><select name="package" value={packageName ?? ""} disabled={!engine || Boolean(busy)} onChange={(event) => {
@@ -615,35 +608,31 @@ export function PackagesApp() {
       <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
     </section>
 
-    {notices.length > 0 && <div className="status-layer">
-      {notices.map((said) => <div className={`notice notice-${said.tone}`} role="status" key={said.message}>{said.message}{said.tone === "caution" && <button type="button" onClick={() => setNotices((current) => current.filter((candidate) => candidate !== said))}>Dismiss</button>}</div>)}
-    </div>}
-    {error && <div className="error-banner" role="alert">{error}<button type="button" onClick={() => setError(undefined)}>Dismiss</button></div>}
 
     {!engine || !listing.data ? <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />
       : <main className="point-cockpit" aria-busy={stale}>
         <section className="panel tree-panel" aria-label="History tree">
-          <PanelHeading kicker={<>Every <Term name="history">history</Term> of {pkg?.name ?? "the package"}, and its <Term name="branch">branches</Term></>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
+          <PanelHeading kicker={<><Term name="history">History</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
           {histories.isError ? <div className="assessment-issue">{described(histories.error)}</div>
-            : !histories.data ? <div className="empty-state">Drawing the tree…</div>
+            : !histories.data ? <div className="empty-state">Loading…</div>
             : <HistoryTree branches={tree.branches} selection={selection} onSelect={pick} label="History tree" describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
               onCompare={opened && selection && branch.id !== selection.id && rootOf(branch.id) === rootOf(selection.id) ? () => setCompareWith(`${branch.id}:${branch.last}`) : undefined} />} />}
         </section>
-        {!opened ? <div className="empty-state">This package names no point. Load another.</div>
-          : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Drawing the history…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
+        {!opened ? <div className="empty-state">No refs</div>
+          : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
           : snapshot && <QuantityFormats.Provider value={document.formats ?? {}}>
             <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} frame={frame} />
             <section className="stage point-stage">
               <div className="panel world-panel" ref={worldPanel}>
-                <PanelHeading kicker="The picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
+                <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
                 <SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={setFocusedAccount} />
               </div>
               <div className="panel action-panel">
-                <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} />
-                <FromHere engine={engine} pkg={pkg} at={playing ? undefined : screenPoint} playing={playing} opened={opened} atEnd={atEnd} onRefPoint={onRefPoint} position={position}
+                <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
+                <FromHere engine={engine} pkg={pkg} runs={runs} runsKey={`${pkg?.name}:${screenRoot}:${document?.source.key}`} onOpenRef={(name) => void openRef(name)} at={playing ? undefined : screenPoint} playing={playing} opened={opened} onRefPoint={onRefPoint} position={position}
                   onApply={act} finding={Boolean(finding)} onLetPlay={letPlay} results={results} onWatch={watch} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives}
-                  experimenting={experimenting} experimentSaid={experimentSaid} onPlayExperiment={(experiment) => void playExperiment(experiment)} onStopExperiment={stopExperiment} />
+                  experimenting={experimenting} onPlayExperiment={(experiment) => void playExperiment(experiment)} onStopExperiment={stopExperiment} />
               </div>
               <div className="truth-rail">
                 <div className="panel ticker-panel">
@@ -651,7 +640,7 @@ export function PackagesApp() {
                   <StepTicker frame={frame} steps={steps} onProof={() => proofPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
                 </div>
                 <div className="panel accounts-panel">
-                  <PanelHeading kicker="Source of truth" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : counted(snapshot.accounts.length, "account")} />
+                  <PanelHeading kicker="State" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : counted(snapshot.accounts.length, "account")} />
                   <Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} changingBalanceKeys={changing} />
                 </div>
               </div>
@@ -659,13 +648,12 @@ export function PackagesApp() {
             {against && against !== opened.point && !stale && <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
               leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => setCompareWith(null)} />}
             <section className="definition-grid proof-grid">
-              <div className="panel transition-panel" ref={proofPanel}><PanelHeading kicker="Proof of this step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} steps={steps} /></div>
-              <div className="panel model-panel"><PanelHeading kicker="The rules" title="Rates, roles, goals & invariants" aside={counted(document.model?.rates.length ?? 0, "rate")} /><ModelExplorer document={document} /></div>
+              <div className="panel transition-panel" ref={proofPanel}><PanelHeading kicker="Proof" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} steps={steps} /></div>
+              <div className="panel model-panel"><PanelHeading kicker="Rules" title="Rates, roles, goals & invariants" aside={counted(document.model?.rates.length ?? 0, "rate")} /><ModelExplorer document={document} /></div>
             </section>
           </QuantityFormats.Provider>}
       </main>}
 
-    <footer>The picture explains. The accounts, rules, and replay prove.</footer>
   </div>;
 }
 
@@ -684,14 +672,13 @@ function changed<V>(map: ReadonlyMap<string, V>, key: string, value?: V): Readon
 function experimentWords({ experiment, progress }: ExperimentRun) {
   const trials = Number(experiment.trials);
   const arm = progress && experiment.arms[progress.arm];
-  return <>Playing <strong>{experiment.experiment}</strong>{arm && progress ? <>: <strong>{lastPart(arm.strategy)}</strong>, arm {progress.arm + 1} of {experiment.arms.length}{trials > 1 && `, trial ${progress.trial + 1} of ${trials}`} · {counted(progress.progress.expanded, "state")} looked at</> : "…"}</>;
+  return <>Running <strong>{experiment.experiment}</strong>{arm && progress ? <>: <strong>{arm.strategy}</strong>, arm {progress.arm + 1} of {experiment.arms.length}{trials > 1 && `, trial ${progress.trial + 1} of ${trials}`} · {counted(progress.progress.expanded, "state")} looked at</> : "…"}</>;
 }
 
 /** The page before any package is loaded: the samples, each a click from open. */
 function EmptyCatalog({ samples, busy, onOpen }: { samples: { name: string; url: string }[]; busy: boolean; onOpen: (url: string) => void }) {
   return <div className="empty-catalog" role="note">
     <strong>Open a <Term name="package">package</Term></strong>
-    <p>{samples.length > 0 ? "Pick a sample, or load a package file of your own." : "Load a package file, a store file or a zip of one."}</p>
     {samples.length > 0 && <ul className="sample-list" aria-label="Sample packages">{samples.map((sample) => <li key={sample.url}><button type="button" disabled={busy} onClick={() => onOpen(sample.url)}>{sample.name}</button></li>)}</ul>}
   </div>;
 }
@@ -707,7 +694,6 @@ function BranchCard({ branch, step, info, branches, onCompare }: { branch: TreeB
     {info?.refs.map((ref) => <span key={ref.name}><Term name="ref">{ref.name}</Term> names step {ref.step}{ref.fixed ? <>, <Term name="fixed">fixed</Term></> : ""}</span>)}
     {trial && <span><Term name="trial">Trial</Term> {trial.index + 1} of <Term name="experiment">{trial.experiment}</Term>, {lastPart(trial.strategy)}: {endedWords(trial.trial.ended)}{trial.objectives.length > 0 && ` · ${trial.objectives.map((objective, index) => `${lastPart(objective.objective)} ${trial.trial.values[index]}`).join(" · ")}`}</span>}
     {info?.note && !trial && <span>Made in this tab: {info.note.words}</span>}
-    <small>Click to open it at this step.</small>
     {onCompare && <button type="button" onClick={onCompare}>Compare with the history on screen</button>}
   </div>;
 }
@@ -729,15 +715,36 @@ const DEFAULT_EFFORT = { seed: "17", budget: "1000000", turns: "1000" };
 /** What a strategy is asked: the goal it plays toward and the effort it is given. */
 type Asked = { goal?: string; seed: string; budget: string; turns: string };
 
+/** What can play a history: its strategies, each with what it is asked by default, and the goals it may be asked toward. */
+type Playable = { strategies: { strategy: string; asked: Asked }[]; goals: string[] };
+
 /**
- * What an experiment that runs `strategy` asks of it, when one does: the
- * goal it works toward and the effort it is given. Otherwise the package's
- * first goal and Studio's own effort.
+ * What runs on a history: the strategies of the arms that start in its tree
+ * (an arm is a strategy and the ref it starts from, its own or its
+ * experiment's), or, where none does, of the arms of experiments on its
+ * ontology; in their order, each asked what its experiment asks, the goal
+ * it works toward and the effort it is given. Then the strategies no
+ * experiment compares, which may run on any, asked with Studio's own
+ * effort. Its goals likewise: those of its arms' experiments, then those no
+ * experiment works toward. `inTree` says whether a ref names a point of the
+ * history's tree.
  */
-function askedOf(pkg: PackageView | undefined, strategy: string | undefined): Asked {
-  const experiment = pkg?.experiments.find((candidate) => candidate.arms.some((arm) => arm.strategy === strategy));
-  if (!experiment) return { goal: pkg?.goals[0], ...DEFAULT_EFFORT };
-  return { goal: experiment.goal, seed: experiment.seed, budget: experiment.budget, turns: experiment.turns };
+function playable(pkg: PackageView | undefined, ontology: string | undefined, inTree: (ref: string) => boolean): Playable {
+  if (!pkg) return { strategies: [], goals: [] };
+  const arms = pkg.experiments.flatMap((experiment) => experiment.arms.map((arm) => ({ experiment, strategy: arm.strategy, start: arm.start ?? experiment.start })));
+  const inThisTree = arms.filter((arm) => inTree(arm.start));
+  const here = inThisTree.length > 0 ? inThisTree : arms.filter((arm) => arm.experiment.ontology === ontology);
+  const compared = new Set(arms.map((arm) => arm.strategy));
+  const aimed = new Set(pkg.experiments.map((experiment) => experiment.goal));
+  const goals = [...new Set(here.map((arm) => arm.experiment.goal)), ...pkg.goals.filter((goal) => !aimed.has(goal))];
+  const strategies = new Map<string, Asked>();
+  for (const { experiment, strategy } of here) {
+    if (!strategies.has(strategy)) strategies.set(strategy, { goal: experiment.goal, seed: experiment.seed, budget: experiment.budget, turns: experiment.turns });
+  }
+  for (const strategy of pkg.strategies) {
+    if (!compared.has(strategy)) strategies.set(strategy, { goal: goals[0], ...DEFAULT_EFFORT });
+  }
+  return { strategies: [...strategies].map(([strategy, asked]) => ({ strategy, asked })), goals };
 }
 
 function outcomeWords(outcome: RanView["outcome"]): string {
@@ -765,13 +772,16 @@ function endedWords(ended: ResultsView["arms"][number]["trials"][number]["ended"
 }
 
 /** Everything one can do from the point on screen, each a click from done. */
-function FromHere({ engine, pkg, at, playing, opened, atEnd, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives, experimenting, experimentSaid, onPlayExperiment, onStopExperiment }: {
+function FromHere({ engine, pkg, runs, runsKey, onOpenRef, at, playing, opened, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives, experimenting, onPlayExperiment, onStopExperiment }: {
   engine: PackageEngine;
   pkg?: PackageView;
+  /** What runs on the history on screen, and what changes when another history's tree is opened. */
+  runs: Playable;
+  runsKey: string;
+  onOpenRef: (name: string) => void;
   at?: PointId;
   playing: boolean;
   opened: Opened;
-  atEnd: boolean;
   onRefPoint: boolean;
   position: number;
   onApply: (exchange: Exchange, label: string) => Promise<void>;
@@ -784,25 +794,20 @@ function FromHere({ engine, pkg, at, playing, opened, atEnd, onRefPoint, positio
   follow: Following;
   objectives: string[];
   experimenting: ReadonlyMap<string, ExperimentRun>;
-  experimentSaid: ReadonlyMap<string, string>;
   onPlayExperiment: (experiment: ExperimentView) => void;
   onStopExperiment: (path: string) => void;
 }) {
-  const experiments = (pkg?.experiments ?? []).filter((experiment) => at && pkg?.refs.find((ref) => ref.name === experiment.start)?.point === at);
-  const what = onRefPoint ? <>What you do here moves <Term name="ref">{opened.ref}</Term> forward.</>
-    : opened.shipped && atEnd ? <><Term name="fixed">{opened.ref} is fixed</Term>: what you do here makes a <Term name="branch">branch</Term>.</>
-    : <>What you do here makes a <Term name="branch">branch</Term> from step {position}.</>;
-  if (!at) return <div className="from-here"><p className="from-what">{playing ? "Playing. Pause at any step to act from it." : `Finding step ${position}…`}</p></div>;
+  if (!at) return <div className="from-here"><p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p></div>;
   return <div className="from-here">
-    <p className="from-what">{what}</p>
     <Moves engine={engine} pkg={pkg} at={at} onApply={onApply} />
-    <LetPlay pkg={pkg} finding={finding} onLetPlay={onLetPlay} />
-    {experiments.length > 0 && <section className="from-section" aria-label="Experiments from here">
-      <h3><Term name="experiment">Experiments</Term> from here</h3>
-      {experiments.map((experiment) => <ExperimentHere key={experiment.experiment} experiment={experiment} recorded={results.find((result) => result.experiment === experiment.experiment)} onWatch={onWatch}
-        running={experimenting.has(experiment.experiment)} said={experimentSaid.get(experiment.experiment)} onPlay={() => onPlayExperiment(experiment)} onStop={() => onStopExperiment(experiment.experiment)} />)}
-    </section>}
-    <NameHere pkg={pkg} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
+    <StrategyHere key={runsKey} offered={runs} finding={finding} onLetPlay={onLetPlay} />
+    <section className="from-section" aria-label="Experiments">
+      <h3><Term name="experiment">Experiments</Term></h3>
+      {(pkg?.experiments.length ?? 0) === 0 ? <p className="muted">No experiments</p>
+        : pkg?.experiments.map((experiment) => <ExperimentRow key={experiment.experiment} experiment={experiment} recorded={results.find((result) => result.experiment === experiment.experiment)} onWatch={onWatch} onOpenRef={onOpenRef}
+          running={experimenting.has(experiment.experiment)} onPlay={() => onPlayExperiment(experiment)} onStop={() => onStopExperiment(experiment.experiment)} />)}
+    </section>
+    <RefHere pkg={pkg} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
     <HandWritten engine={engine} at={at} onApply={onApply} />
   </div>;
 }
@@ -820,73 +825,77 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
   const [open, setOpen] = useState<number>();
   const [applying, setApplying] = useState(false);
   useEffect(() => setOpen(undefined), [at]);
-  if (!pkg || pkg.candidates.length === 0) return null;
   const candidates = offered.data?.candidates ?? [];
-  return <section className="from-section" aria-label="Moves here">
-    <h3><Term name="move">Moves</Term> here</h3>
-    {pkg.candidates.length > 1 && <label className="field"><span>Offered by</span><select name="candidates" value={set ?? ""} onChange={(event) => setSet(event.target.value)}>{pkg.candidates.map((candidate) => <option key={candidate} value={candidate}>{lastPart(candidate)}</option>)}</select></label>}
+  return <section className="from-section" aria-label="Moves">
+    <h3><Term name="move">Moves</Term></h3>
+    {!pkg || pkg.candidates.length === 0 ? <p className="muted">No candidate sets</p> : <>
+    <label className="field"><span>Candidates</span><select name="candidates" value={set ?? ""} onChange={(event) => setSet(event.target.value)}>{pkg.candidates.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
     {offered.isError ? <div className="assessment-issue">{described(offered.error)}</div>
-      : !offered.data ? <p className="muted">Asking the rules…</p>
-      : candidates.length === 0 ? <p className="muted">No move is offered here.</p>
+      : !offered.data ? <p className="muted">Loading…</p>
+      : candidates.length === 0 ? <p className="muted">No moves</p>
       : <ul className="move-list">{candidates.map((candidate, index) => {
         const applies = candidate.proposal.assessment.status === "applicable";
         return <li key={index} className={`move move-${candidate.proposal.assessment.status}`}>
           <button type="button" className="move-name" aria-expanded={open === index} onClick={() => setOpen(open === index ? undefined : index)} title={bindingWords(candidate)}>
             <strong>{candidate.proposal.label}</strong>
+            <code>{candidate.exchange.rate}</code>
             <small>{applies ? "applies" : candidate.proposal.assessment.status.replaceAll("_", " ")}</small>
           </button>
           <button type="button" className="primary" disabled={!applies || applying} onClick={async () => { setApplying(true); try { await onApply(candidate.exchange, candidate.proposal.label); } finally { setApplying(false); } }}>Apply</button>
           {open === index && <div className="move-detail"><span className="muted">{bindingWords(candidate)}</span><Assessment assessment={candidate.proposal.assessment} /></div>}
         </li>;
       })}</ul>}
+    </>}
   </section>;
 }
 
-/** A strategy played from here: the branch it makes opens and plays. */
-function LetPlay({ pkg, finding, onLetPlay }: { pkg?: PackageView; finding: boolean; onLetPlay: (strategy: string, asked: Asked) => Promise<void> }) {
-  const first = pkg?.experiments[0]?.arms[0]?.strategy ?? pkg?.strategies[0];
-  const [strategy, setStrategy] = useState(first);
-  const [asked, setAsked] = useState<Asked>(() => askedOf(pkg, first));
-  useEffect(() => { setStrategy(first); setAsked(askedOf(pkg, first)); }, [pkg?.name]);
-  if (!pkg || pkg.strategies.length === 0 || pkg.goals.length === 0) return null;
-  const valid = natural(asked.seed) && natural(asked.budget) && BigInt(asked.budget) > 0n && natural(asked.turns);
-  return <section className="from-section" aria-label="Let a strategy play">
-    <h3>Let a <Term name="strategy">strategy</Term> play</h3>
-    <div className="let-play">
-      <select name="strategy" aria-label="Strategy" value={strategy} disabled={finding} onChange={(event) => { setStrategy(event.target.value); setAsked(askedOf(pkg, event.target.value)); }}>{pkg.strategies.map((candidate) => <option key={candidate} value={candidate}>{lastPart(candidate)}</option>)}</select>
-      <button type="button" className={finding ? "danger" : "primary"} disabled={!strategy || !asked.goal || !valid} onClick={() => strategy && void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Play it"}</button>
-    </div>
-    <details className="settings">
-      <summary>Toward {lastPart(asked.goal ?? "")}, seed {asked.seed}</summary>
+/** A strategy run from here: the branch it makes opens and plays. */
+function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; finding: boolean; onLetPlay: (strategy: string, asked: Asked) => Promise<void> }) {
+  const first = offered.strategies[0];
+  const [strategy, setStrategy] = useState(first?.strategy);
+  const [asked, setAsked] = useState<Asked | undefined>(first?.asked);
+  const valid = asked !== undefined && natural(asked.seed) && natural(asked.budget) && BigInt(asked.budget) > 0n && natural(asked.turns);
+  return <section className="from-section" aria-label="Strategy">
+    <h3><Term name="strategy">Strategy</Term></h3>
+    {!strategy || !asked ? <p className="muted">No strategy runs on this history</p> : <>
+      <div className="let-play">
+        <select name="strategy" aria-label="Strategy" value={strategy} disabled={finding} onChange={(event) => { setStrategy(event.target.value); setAsked(offered.strategies.find((candidate) => candidate.strategy === event.target.value)?.asked); }}>{offered.strategies.map((candidate) => <option key={candidate.strategy} value={candidate.strategy}>{candidate.strategy}</option>)}</select>
+        <button type="button" className={finding ? "danger" : "primary"} disabled={!finding && (!asked.goal || !valid)} onClick={() => void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Run"}</button>
+      </div>
       <div className="settings-fields">
-        <label className="field"><span><Term name="goal">Goal</Term></span><select name="goal" value={asked.goal} disabled={finding} onChange={(event) => setAsked({ ...asked, goal: event.target.value })}>{pkg.goals.map((goal) => <option key={goal} value={goal}>{lastPart(goal)}</option>)}</select></label>
+        <label className="field"><span><Term name="goal">Goal</Term></span><select name="goal" value={asked.goal} disabled={finding} onChange={(event) => setAsked({ ...asked, goal: event.target.value })}>{offered.goals.map((goal) => <option key={goal} value={goal}>{goal}</option>)}</select></label>
         <label className="field"><span><Term name="seed">Seed</Term></span><input name="seed" inputMode="numeric" value={asked.seed} disabled={finding} onChange={(event) => setAsked({ ...asked, seed: event.target.value.trim() })} /></label>
         <label className="field"><span><Term name="budget">Budget</Term></span><input name="budget" inputMode="numeric" value={asked.budget} disabled={finding} onChange={(event) => setAsked({ ...asked, budget: event.target.value.trim() })} /></label>
         <label className="field"><span><Term name="turns">Turns</Term></span><input name="turns" inputMode="numeric" value={asked.turns} disabled={finding} onChange={(event) => setAsked({ ...asked, turns: event.target.value.trim() })} /></label>
       </div>
-      {!valid && <div className="assessment-issue">A seed, a budget and turns are whole numbers, the budget at least 1.</div>}
-    </details>
+      {!valid && <div className="assessment-issue">Seed, budget and turns are whole numbers; budget ≥ 1.</div>}
+    </>}
   </section>;
 }
 
-/** An experiment that starts here: play it, and watch each trial it played. */
-function ExperimentHere({ experiment, recorded, onWatch, running, said, onPlay, onStop }: {
+/** An experiment of the package: what it compares from where, run from anywhere, and each trial it ran to watch. */
+function ExperimentRow({ experiment, recorded, onWatch, onOpenRef, running, onPlay, onStop }: {
   experiment: ExperimentView;
   recorded?: ResultsView;
   onWatch: (trial: { end: PointId; start: PointId }) => void;
+  onOpenRef: (name: string) => void;
   running: boolean;
-  said?: string;
   onPlay: () => void;
   onStop: () => void;
 }) {
-  const trials = experiment.trials === "1" ? "" : ` × ${experiment.trials} trials`;
   return <div className="experiment-here">
     <div className="experiment-line">
-      <span><strong>{lastPart(experiment.experiment)}</strong> <span className="muted">{experiment.arms.length} <Term name="arm">arms</Term>{trials} toward {lastPart(experiment.goal)}</span></span>
+      <strong>{experiment.experiment}</strong>
       {running ? <button type="button" className="danger" onClick={onStop}>Stop</button>
-        : <button type="button" className="primary" onClick={onPlay}>{recorded ? "Play again" : "Play each arm"}</button>}
+        : <button type="button" className="primary" onClick={onPlay}>{recorded ? "Run again" : "Run"}</button>}
     </div>
-    {said && !running && <p className="muted" role="status">{said}</p>}
+    <dl className="experiment-facts">
+      <dt><Term name="ref">start</Term></dt><dd><button type="button" className="link" onClick={() => onOpenRef(experiment.start)}>{experiment.start}</button></dd>
+      <dt><Term name="goal">goal</Term></dt><dd>{experiment.goal}</dd>
+      <dt><Term name="arm">arms</Term></dt><dd>{experiment.arms.map((arm) => <span key={`${arm.strategy}:${arm.start ?? ""}`}>{arm.strategy}{arm.start && <> from <button type="button" className="link" onClick={() => onOpenRef(arm.start!)}>{arm.start}</button></>}</span>)}</dd>
+      <dt><Term name="trial">trials</Term></dt><dd>{experiment.trials}</dd>
+      <dt>effort</dt><dd><span><Term name="seed">seed</Term> {experiment.seed}</span><span><Term name="budget">budget</Term> {experiment.budget}</span><span><Term name="turns">turns</Term> {experiment.turns}</span></dd>
+    </dl>
     {recorded && <ul className="trial-list">{recorded.arms.flatMap((arm) => arm.trials.map((trial, index) => <li key={`${arm.arm.strategy}:${index}`}>
       <span><strong>{lastPart(arm.arm.strategy)}</strong>{arm.trials.length > 1 ? ` · trial ${index + 1}` : ""} <span className="muted">{endedWords(trial.ended)}, {counted(stepOf(trial.end) - stepOf(arm.start), "step")}{recorded.objectives.length > 0 && ` · ${recorded.objectives.map((objective, column) => `${lastPart(objective.objective)} ${trial.values[column]}`).join(" · ")}`}</span></span>
       <button type="button" disabled={trial.end === arm.start} onClick={() => onWatch({ end: trial.end, start: arm.start })}>Watch</button>
@@ -894,8 +903,8 @@ function ExperimentHere({ experiment, recorded, onWatch, running, said, onPlay, 
   </div>;
 }
 
-/** Naming the point on screen, or following and deleting the ref of one's own on it. */
-function NameHere({ pkg, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
+/** The refs naming the point on screen, a new one, or following and deleting the ref of one's own on it. */
+function RefHere({ pkg, at, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; at: PointId; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
   // The first of `<package>/mine`, `<package>/mine-2`, … that no ref of the package has.
   const suggested = useMemo(() => {
     const taken = new Set(pkg?.refs.map((ref) => ref.name));
@@ -906,15 +915,17 @@ function NameHere({ pkg, opened, onRefPoint, onKeep, onDelete, follow, objective
   }, [pkg]);
   const [name, setName] = useState(suggested);
   useEffect(() => setName(suggested), [suggested, opened.point]);
+  const here = pkg?.refs.filter((ref) => ref.point === at) ?? [];
+  const named = here.length > 0 && <ul className="refs-here">{here.map((ref) => <li key={ref.name}><code>{ref.name}</code>{ref.shipped_by ? <> <Term name="fixed">fixed</Term></> : ""}</li>)}</ul>;
   if (onRefPoint && opened.ref) {
     const { following, setFollowing, delivered, problem } = follow;
-    return <section className="from-section" aria-label="Your ref">
-      <h3>Your <Term name="ref">ref</Term> {opened.ref}</h3>
+    return <section className="from-section" aria-label="Ref">
+      <h3><Term name="ref">Ref</Term></h3>
+      {named}
       <div className="let-play">
         <button type="button" className={following ? "danger" : ""} onClick={() => setFollowing(!following)}>{following ? "Stop following" : <>Follow it</>}</button>
         <button type="button" onClick={onDelete}>Delete it</button>
       </div>
-      {following && <p className="muted"><Term name="follow">Following</Term>: each step it moves over arrives here.</p>}
       {problem && <div className="assessment-issue" role="alert">{problem}</div>}
       {delivered.length > 0 && <ol className="delivered-frames" aria-label="Delivered steps">{delivered.map((frame) => <li key={frame.point}>
         <strong>step {stepOf(frame.point)}</strong><span>{frame.exchange.rate} ×{frame.exchange.units}</span>
@@ -922,17 +933,17 @@ function NameHere({ pkg, opened, onRefPoint, onKeep, onDelete, follow, objective
       </li>)}</ol>}
     </section>;
   }
-  return <section className="from-section" aria-label="Name this point">
-    <h3>Name this point</h3>
+  return <section className="from-section" aria-label="Ref">
+    <h3><Term name="ref">Ref</Term></h3>
+    {named}
     <form className="let-play" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onKeep(name.trim()); }}>
       <input name="ref-name" aria-label="Ref name" value={name} onChange={(event) => setName(event.target.value)} />
-      <button type="submit" disabled={!name.trim()}>Name it</button>
+      <button type="submit" disabled={!name.trim()}>Create</button>
     </form>
-    <p className="muted">A <Term name="ref">ref</Term> of your own moves forward as you play from it.</p>
   </section>;
 }
 
-/** An exchange written by hand, checked before it is applied: out of the way unless wanted. */
+/** An exchange written by hand, checked before it is applied. */
 function HandWritten({ engine, at, onApply }: { engine: PackageEngine; at: PointId; onApply: (exchange: Exchange, label: string) => Promise<void> }) {
   const [written, setWritten] = useState("");
   const [assessed, setAssessed] = useState<{ text: string; candidate: Candidate }>();
@@ -945,16 +956,16 @@ function HandWritten({ engine, at, onApply }: { engine: PackageEngine; at: Point
     try { setAssessed({ text: written, candidate: await engine.assess(at, exchange) }); } catch (cause) { setProblem(described(cause)); }
   };
   const ready = assessed && assessed.text === written && assessed.candidate.proposal.assessment.status === "applicable";
-  return <details className="exchange-editor">
-    <summary>Write a move by hand</summary>
-    <textarea name="exchange" aria-label="Exchange" spellCheck={false} rows={6} value={written} placeholder={'{"rate": "…", "bindings": {"role": "account"}, "units": "1"}'} onChange={(event) => { setWritten(event.target.value); setAssessed(undefined); }} />
+  return <section className="from-section exchange-editor" aria-label="Exchange">
+    <h3><Term name="exchange">Exchange</Term></h3>
+    <textarea name="exchange" aria-label="Exchange" spellCheck={false} rows={4} value={written} placeholder={'{"rate": "…", "bindings": {"role": "account"}, "units": "1"}'} onChange={(event) => { setWritten(event.target.value); setAssessed(undefined); }} />
     <div className="let-play">
-      <button type="button" onClick={() => void check()} disabled={!written.trim()}>Check it</button>
+      <button type="button" onClick={() => void check()} disabled={!written.trim()}>Check</button>
       <button type="button" className="primary" disabled={!ready} onClick={() => assessed && void onApply(assessed.candidate.exchange, assessed.candidate.proposal.label)}>Apply</button>
     </div>
     {problem && <div className="assessment-issue" role="alert">{problem}</div>}
     {assessed && assessed.text === written && <Assessment assessment={assessed.candidate.proposal.assessment} />}
-  </details>;
+  </section>;
 }
 
 type Following = {
