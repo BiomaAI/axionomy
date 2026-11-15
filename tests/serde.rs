@@ -243,14 +243,21 @@ impl axionomy::Ontology for Bytes {
 /// An ontology whose identifiers carry a number, for a rate with a variable.
 mod visits {
     use axionomy::{
-        Account, Economy, EconomyBuilder, Pattern, Quantity, QuantityExpression, Rate, Relation,
-        Variable, basket,
+        Account, Economy, EconomyBuilder, OptionPattern, Param, Pattern, Quantity, Rate, Relation,
+        Slot, basket, path,
     };
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+    pub enum Place {
+        North,
+        South,
+    }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
     pub enum Asset {
         Token,
         Visited(u8),
+        At(Place),
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -262,6 +269,7 @@ mod visits {
     pub enum RateId {
         Visit(u8),
         Step(u8, u8),
+        Wait(Option<Place>),
         Rest,
     }
 
@@ -282,51 +290,49 @@ mod visits {
     }
 
     pub fn world() -> Economy<Visits> {
+        let place = Param::<u8>::new(path!("place"));
+        let (from, to) = (Param::<u8>::new(path!("from")), Param::new(path!("to")));
+        let cost = Param::<u8>::new(path!("cost"));
+        let at = Param::<Place>::new(path!("at"));
         EconomyBuilder::new()
             .account(
                 AccountId::Walker,
-                Account::from(basket([(Asset::Token, 3)])),
+                Account::from(basket([(Asset::Token, 3), (Asset::At(Place::North), 1)])),
             )
             .rate_at(
-                "visit/{place}".parse().unwrap(),
+                RateIdPattern::Visit(place.var()).into(),
                 Rate::new()
-                    .variable(Variable::range("place".parse().unwrap(), 1, 4))
+                    .variable(place.range(1, 4))
                     .account(Role::Walker, Pattern::literal(AccountId::Walker))
                     .consume(Role::Walker, basket([(Asset::Token, 1)]))
                     .produce_at(
                         Role::Walker,
-                        [(
-                            "visited/{place}".parse::<Pattern<Asset>>().unwrap(),
-                            Quantity::new(1),
-                        )],
+                        [(AssetPattern::Visited(place.var()).into(), Quantity::new(1))],
                     ),
             )
             .rate_at(
-                "step/{from}/{to}".parse().unwrap(),
+                RateIdPattern::Step(from.var(), to.var()).into(),
                 Rate::new()
-                    .variable(Variable::range("from".parse().unwrap(), 1, 4))
-                    .variable(Variable::range("to".parse().unwrap(), 1, 4))
-                    .relation(Relation::new(
-                        ["from".parse().unwrap(), "to".parse().unwrap()],
-                        [[1, 2], [2, 3], [3, 4]].map(|row| row.map(u64::into)),
-                    ))
-                    .derive(
-                        "cost".parse().unwrap(),
-                        QuantityExpression::variable("to".parse().unwrap())
-                            - QuantityExpression::variable("from".parse().unwrap()),
-                    )
+                    .variable(from.range(1, 4))
+                    .variable(to.range(1, 4))
+                    .relation(Relation::pairs(&from, &to, [(1, 2), (2, 3), (3, 4)]))
+                    .derive(cost.name().clone(), to.quantity() - from.quantity())
                     .consume_computed_at(
                         Role::Walker,
                         Pattern::literal(Asset::Token),
-                        QuantityExpression::variable("cost".parse().unwrap()),
+                        cost.quantity(),
                     )
                     .produce_at(
                         Role::Walker,
-                        [(
-                            "visited/{to}".parse::<Pattern<Asset>>().unwrap(),
-                            Quantity::new(1),
-                        )],
+                        [(AssetPattern::Visited(to.var()).into(), Quantity::new(1))],
                     ),
+            )
+            .rate_at(
+                RateIdPattern::Wait(Slot::Of(OptionPattern::Some(at.var()))).into(),
+                Rate::new().variable(at.every()).preserve_at(
+                    Role::Walker,
+                    [(AssetPattern::At(at.var()).into(), Quantity::new(1))],
+                ),
             )
             .rate(
                 RateId::Rest,
@@ -335,6 +341,42 @@ mod visits {
             .build()
             .expect("the visits model is valid")
     }
+}
+
+/// A typed pattern writes what its text reads: each field a value, a
+/// variable, or a pattern of its own type, as its type writes a value.
+#[test]
+fn a_typed_pattern_writes_what_its_text_reads() {
+    use axionomy::{OptionPattern, Param, Pattern, Slot, Variable};
+    use visits::{Asset, AssetPattern, Place, RateId, RateIdPattern};
+
+    let place = Param::<u8>::new(path!("place"));
+    let at = Param::<Place>::new(path!("at"));
+    let text = |text: &str| text.parse::<Pattern<RateId>>().unwrap();
+    assert_eq!(
+        Pattern::from(RateIdPattern::Step(place.var(), Slot::Is(3))),
+        text("step/{place}/3")
+    );
+    assert_eq!(
+        Pattern::from(RateIdPattern::Wait(Slot::Of(OptionPattern::Some(at.var())))),
+        text("wait/some/{at}")
+    );
+    assert_eq!(
+        Pattern::from(RateIdPattern::Wait(Slot::Of(OptionPattern::None))),
+        Pattern::literal(RateId::Wait(None))
+    );
+    assert_eq!(
+        Pattern::from(AssetPattern::At(Slot::Is(Place::South))),
+        Pattern::literal(Asset::At(Place::South))
+    );
+    assert_eq!(
+        at.every(),
+        Variable::values(
+            path!("at"),
+            ["north", "south"].map(|segment| segment.parse().unwrap())
+        )
+    );
+    assert_eq!(place.range(1, 4), Variable::range(path!("place"), 1, 4));
 }
 
 /// A typed economy whose rate has a variable is written down as a `Paths`
@@ -362,6 +404,10 @@ fn a_typed_rate_with_variables_written_down_is_a_paths_rate() {
     for (rate, path) in [
         (RateId::Visit(2), path!("visit/2")),
         (RateId::Step(2, 3), path!("step/2/3")),
+        (
+            RateId::Wait(Some(visits::Place::North)),
+            path!("wait/some/north"),
+        ),
     ] {
         typed
             .apply(Exchange::new(rate, Quantity::new(1)).bind(Role::Walker, AccountId::Walker))
@@ -372,9 +418,11 @@ fn a_typed_rate_with_variables_written_down_is_a_paths_rate() {
             )
             .unwrap();
     }
-    assert!(!typed.is_applicable(
-        &Exchange::new(RateId::Step(1, 3), Quantity::new(1)).bind(Role::Walker, AccountId::Walker)
-    ));
+    for refused in [RateId::Step(1, 3), RateId::Wait(Some(visits::Place::South))] {
+        assert!(!typed.is_applicable(
+            &Exchange::new(refused, Quantity::new(1)).bind(Role::Walker, AccountId::Walker)
+        ));
+    }
     assert_eq!(
         serde_json::to_value(&untyped).unwrap(),
         serde_json::to_value(&typed).unwrap()

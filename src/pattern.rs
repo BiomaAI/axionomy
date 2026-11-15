@@ -20,6 +20,7 @@ use std::{
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
+    marker::PhantomData,
     str::FromStr,
     sync::Arc,
 };
@@ -493,6 +494,32 @@ impl<T: Segments> Pattern<T> {
     }
 }
 
+impl<T: Segments> Pattern<T> {
+    /// The pattern `pieces` write: the identifier itself where none is a
+    /// variable.
+    pub fn from_pieces(pieces: Vec<Piece>) -> Result<Self, PatternError> {
+        if pieces
+            .iter()
+            .all(|piece| matches!(piece, Piece::Segment(_)))
+        {
+            let text = pieces
+                .iter()
+                .map(|piece| match piece {
+                    Piece::Segment(segment) => segment.as_str(),
+                    Piece::Variable(_) => unreachable!("every piece is a segment"),
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            return path::read_text(&text)
+                .map(Self::literal)
+                .map_err(|_| PatternError::Unreadable(text));
+        }
+        Ok(Self {
+            form: Form::Written(pieces.into()),
+        })
+    }
+}
+
 impl<T> From<T> for Pattern<T> {
     fn from(value: T) -> Self {
         Self::literal(value)
@@ -716,5 +743,304 @@ mod tests {
         assert!(!row.contains(&"6".parse().unwrap()));
         assert!(!row.contains(&"05".parse().unwrap()));
         assert!(!row.contains(&"east".parse().unwrap()));
+    }
+}
+
+/// A type a typed pattern can stand for: what each field of a derived
+/// `…Pattern` holds. `#[derive(Identifier)]` and `#[derive(Segments)]`
+/// implement it, writing each pattern as its type writes a value.
+pub trait Patterned: Segments {
+    /// Its typed patterns: the derived `…Pattern` mirror, or
+    /// [`Infallible`](std::convert::Infallible) for a type written in one
+    /// segment, whose patterns are its values and its variables.
+    type Pattern;
+
+    /// Appends the pieces `pattern` writes.
+    fn write_pattern(pattern: &Self::Pattern, pieces: &mut Vec<Piece>);
+}
+
+/// A type written in exactly one segment, which a variable can therefore
+/// stand for: unsigned integers, `bool`, and enums whose variants have no
+/// fields.
+pub trait OneSegment: Patterned {
+    /// The segment `value` is written as.
+    fn segment(&self) -> Segment {
+        let mut segments = Vec::new();
+        self.write_segments(&mut segments);
+        debug_assert_eq!(segments.len(), 1, "a one-segment type writes one segment");
+        Segment(segments.concat().into())
+    }
+}
+
+/// A one-segment type with finitely many values, each listed.
+pub trait Finite: OneSegment {
+    /// Every value, in the order declared.
+    fn values() -> Vec<Self>;
+}
+
+/// A one-segment type written as a whole number.
+pub trait Natural: OneSegment + Copy + Into<u64> {}
+
+/// One field of a typed pattern: a value written out, a variable standing
+/// for one segment, or a pattern of the field's own type.
+pub enum Slot<T: Patterned> {
+    Is(T),
+    Var(Param<T>),
+    Of(T::Pattern),
+}
+
+impl<T: Patterned> Slot<T> {
+    /// Appends the pieces it writes.
+    pub fn write(&self, pieces: &mut Vec<Piece>) {
+        match self {
+            Self::Is(value) => {
+                let mut segments = Vec::new();
+                value.write_segments(&mut segments);
+                pieces.extend(
+                    segments
+                        .into_iter()
+                        .map(|segment| Piece::Segment(Segment(segment.into()))),
+                );
+            }
+            Self::Var(param) => pieces.push(Piece::Variable(param.name.clone())),
+            Self::Of(pattern) => T::write_pattern(pattern, pieces),
+        }
+    }
+}
+
+impl<T: Patterned + Clone> Clone for Slot<T>
+where
+    T::Pattern: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::Is(value) => Self::Is(value.clone()),
+            Self::Var(param) => Self::Var(param.clone()),
+            Self::Of(pattern) => Self::Of(pattern.clone()),
+        }
+    }
+}
+
+impl<T: Patterned + fmt::Debug> fmt::Debug for Slot<T>
+where
+    T::Pattern: fmt::Debug,
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Is(value) => formatter.debug_tuple("Is").field(value).finish(),
+            Self::Var(param) => formatter.debug_tuple("Var").field(param).finish(),
+            Self::Of(pattern) => formatter.debug_tuple("Of").field(pattern).finish(),
+        }
+    }
+}
+
+impl<T: Patterned + PartialEq> PartialEq for Slot<T>
+where
+    T::Pattern: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Is(left), Self::Is(right)) => left == right,
+            (Self::Var(left), Self::Var(right)) => left == right,
+            (Self::Of(left), Self::Of(right)) => left == right,
+            _ => false,
+        }
+    }
+}
+
+impl<T: Patterned + Eq> Eq for Slot<T> where T::Pattern: Eq {}
+
+/// A rate's variable whose values are values of `T`, which is written in one
+/// segment.
+pub struct Param<T> {
+    name: VariablePath,
+    kind: PhantomData<fn() -> T>,
+}
+
+impl<T> Param<T> {
+    pub fn name(&self) -> &VariablePath {
+        &self.name
+    }
+}
+
+impl<T: OneSegment> Param<T> {
+    /// The variable `name`, taking values of `T`.
+    pub fn new(name: VariablePath) -> Self {
+        Self {
+            name,
+            kind: PhantomData,
+        }
+    }
+
+    /// It as a field of a typed pattern: `{name}`.
+    pub fn var(&self) -> Slot<T> {
+        Slot::Var(self.clone())
+    }
+
+    /// The variable taking the values listed, in their order.
+    pub fn values(&self, values: impl IntoIterator<Item = T>) -> Variable {
+        Variable::values(
+            self.name.clone(),
+            values.into_iter().map(|value| value.segment()),
+        )
+    }
+}
+
+impl<T: Finite> Param<T> {
+    /// The variable taking every value of `T`.
+    pub fn every(&self) -> Variable {
+        self.values(T::values())
+    }
+}
+
+impl<T: Natural> Param<T> {
+    /// The variable taking the whole numbers from `first` to `last`.
+    pub fn range(&self, first: T, last: T) -> Variable {
+        Variable::range(self.name.clone(), first.into(), last.into())
+    }
+
+    /// Its value, as a quantity.
+    pub fn quantity<O: crate::Ontology>(&self) -> crate::QuantityExpression<O> {
+        crate::QuantityExpression::variable(self.name.clone())
+    }
+}
+
+impl<T> Clone for Param<T> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            kind: PhantomData,
+        }
+    }
+}
+
+impl<T> fmt::Debug for Param<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{{{}}}", self.name)
+    }
+}
+
+impl<T> PartialEq for Param<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl<T> Eq for Param<T> {}
+
+impl Relation {
+    /// The pairs of values `left` and `right` may take together.
+    pub fn pairs<A: OneSegment, B: OneSegment>(
+        left: &Param<A>,
+        right: &Param<B>,
+        rows: impl IntoIterator<Item = (A, B)>,
+    ) -> Self {
+        Self::new(
+            [left.name.clone(), right.name.clone()],
+            rows.into_iter()
+                .map(|(left, right)| [left.segment(), right.segment()]),
+        )
+    }
+}
+
+/// A pattern of an `Option`: `none`, or `some` and a pattern of the value.
+pub enum OptionPattern<T: Patterned> {
+    None,
+    Some(Slot<T>),
+}
+
+impl<T: Patterned + Clone> Clone for OptionPattern<T>
+where
+    T::Pattern: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::None => Self::None,
+            Self::Some(slot) => Self::Some(slot.clone()),
+        }
+    }
+}
+
+impl<T: Patterned + fmt::Debug> fmt::Debug for OptionPattern<T>
+where
+    T::Pattern: fmt::Debug,
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => formatter.write_str("None"),
+            Self::Some(slot) => formatter.debug_tuple("Some").field(slot).finish(),
+        }
+    }
+}
+
+impl<T: Patterned + PartialEq> PartialEq for OptionPattern<T>
+where
+    T::Pattern: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::None, Self::None) => true,
+            (Self::Some(left), Self::Some(right)) => left == right,
+            _ => false,
+        }
+    }
+}
+
+impl<T: Patterned + Eq> Eq for OptionPattern<T> where T::Pattern: Eq {}
+
+impl<T: Patterned> Patterned for Option<T> {
+    type Pattern = OptionPattern<T>;
+
+    fn write_pattern(pattern: &Self::Pattern, pieces: &mut Vec<Piece>) {
+        match pattern {
+            OptionPattern::None => pieces.push(Piece::Segment(Segment("none".into()))),
+            OptionPattern::Some(slot) => {
+                pieces.push(Piece::Segment(Segment("some".into())));
+                slot.write(pieces);
+            }
+        }
+    }
+}
+
+impl<K> Patterned for path::Path<K> {
+    type Pattern = Pattern<path::Path<K>>;
+
+    fn write_pattern(pattern: &Self::Pattern, pieces: &mut Vec<Piece>) {
+        pieces.extend(pattern.pieces().iter().cloned());
+    }
+}
+
+macro_rules! one_segment {
+    ($($kind:ty),*) => {$(
+        impl Patterned for $kind {
+            type Pattern = std::convert::Infallible;
+
+            fn write_pattern(pattern: &Self::Pattern, _: &mut Vec<Piece>) {
+                match *pattern {}
+            }
+        }
+
+        impl OneSegment for $kind {}
+    )*};
+}
+
+one_segment!(u8, u16, u32, u64, bool);
+
+impl Natural for u8 {}
+impl Natural for u16 {}
+impl Natural for u32 {}
+impl Natural for u64 {}
+
+impl Finite for bool {
+    fn values() -> Vec<Self> {
+        vec![false, true]
+    }
+}
+
+impl<T: Patterned> From<OptionPattern<T>> for Pattern<Option<T>> {
+    fn from(pattern: OptionPattern<T>) -> Self {
+        let mut pieces = Vec::new();
+        Option::<T>::write_pattern(&pattern, &mut pieces);
+        Self::from_pieces(pieces).expect("a typed pattern writes a value of its type")
     }
 }

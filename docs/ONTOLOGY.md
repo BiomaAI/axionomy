@@ -181,13 +181,23 @@ identifier an exchange names; the rate declares each variable's domain, and
 its assets, fixed accounts and quantities name the variables the same way:
 
 ```rust
-Rate::new()
-    .variable(Variable::values(path!("from"), rooms.clone()))
-    .variable(Variable::values(path!("to"), rooms))
-    .relation(Relation::new([path!("from"), path!("to")], doors))
-    .consume_at(Part::Walker, [("at/{from}".parse()?, Quantity::new(1))])
-    .produce_at(Part::Walker, [("at/{to}".parse()?, Quantity::new(1))])
+let (from, to) = (Param::<Room>::new(path!("from")), Param::new(path!("to")));
+builder.rate_at(
+    LawPattern::Move { from: from.var(), to: to.var() }.into(),
+    Rate::new()
+        .variable(from.every())
+        .variable(to.every())
+        .relation(Relation::pairs(&from, &to, doors))
+        .consume_at(Part::Walker, [(GoodPattern::At(from.var()).into(), Quantity::new(1))])
+        .produce_at(Part::Walker, [(GoodPattern::At(to.var()).into(), Quantity::new(1))]),
+)
 ```
+
+`#[derive(Identifier)]` writes `LawPattern` and `GoodPattern` beside `Law`
+and `Good`: the same variants, each field a value (`Slot::Is`), a variable
+(`Slot::Var`) or a pattern of its own type (`Slot::Of`). A variable stands
+for one segment, so `Param<T>` takes a type written in one: an unsigned
+integer, a `bool`, or an enum whose variants have no fields.
 
 An exchange naming `move/hall/kitchen` applies this rate's instance: the
 rate written with `from = hall` and `to = kitchen`, exactly as a rate

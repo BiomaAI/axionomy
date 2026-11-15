@@ -8,6 +8,12 @@
 //! identifiers, unsigned integers, `bool` or `Option` of one (`none`, or
 //! `some` and the value).
 //!
+//! Beside the type it writes its typed patterns, `NamePattern`: the same
+//! variants and fields, each field an `axionomy::Slot` of its type, which
+//! converts into `axionomy::Pattern<Name>`. An enum whose variants have no
+//! fields is written in one segment, so a variable can take its values;
+//! the derive lists them.
+//!
 //! It also derives `Ord` as the natural order of those paths: variants by
 //! name, then fields in order, numbers by value. So a typed identifier and its
 //! path sort alike, and a typed economy written down is a `Paths` economy byte
@@ -143,14 +149,21 @@ fn expand(input: &DeriveInput, whole: Whole) -> syn::Result<Tokens> {
             }
         }
     };
+    let patterns = patterns(input);
     if whole == Whole::Segments {
-        return Ok(segments);
+        return Ok(quote! {
+            #segments
+
+            #patterns
+        });
     }
     let order = ordering(input)?;
     Ok(quote! {
         #order
 
         #segments
+
+        #patterns
 
         impl ::axionomy::__serde::Serialize for #name {
             fn serialize<S: ::axionomy::__serde::Serializer>(
@@ -169,6 +182,155 @@ fn expand(input: &DeriveInput, whole: Whole) -> syn::Result<Tokens> {
             }
         }
     })
+}
+
+/// The type's typed patterns: `NamePattern`, its mirror with each field a
+/// `Slot` of the field's type, written as the type writes a value; and, for
+/// an enum whose variants have no fields, a variable's values.
+fn patterns(input: &DeriveInput) -> Tokens {
+    let name = &input.ident;
+    let visibility = &input.vis;
+    let mirror = format_ident!("{name}Pattern");
+    let slot = |fields: &Fields| -> Tokens {
+        let slot_of = |ty: &syn::Type| quote!(::axionomy::pattern::Slot<#ty>);
+        match fields {
+            Fields::Unit => quote!(),
+            Fields::Unnamed(unnamed) => {
+                let fields = unnamed.unnamed.iter().map(|field| {
+                    let vis = &field.vis;
+                    let ty = slot_of(&field.ty);
+                    quote!(#vis #ty)
+                });
+                quote!((#(#fields),*))
+            }
+            Fields::Named(named) => {
+                let fields = named.named.iter().map(|field| {
+                    let vis = &field.vis;
+                    let ident = &field.ident;
+                    let ty = slot_of(&field.ty);
+                    quote!(#vis #ident: #ty)
+                });
+                quote!({ #(#fields),* })
+            }
+        }
+    };
+    let segment = |text: &str| {
+        quote! {
+            pieces.push(::axionomy::pattern::Piece::Segment(
+                #text.parse().expect("a variant's name is a segment"),
+            ));
+        }
+    };
+    let doc = format!(
+        "A pattern of [`{name}`]: each field a value, a variable, or a pattern of its own type."
+    );
+    let (declaration, write) = match &input.data {
+        Data::Enum(data) => {
+            let variants = data.variants.iter().map(|variant| {
+                let ident = &variant.ident;
+                let fields = slot(&variant.fields);
+                quote!(#ident #fields)
+            });
+            let writes = data.variants.iter().map(|variant| {
+                let ident = &variant.ident;
+                let (pattern, fields) = bindings(&variant.fields);
+                let name = segment(&kebab(ident));
+                quote! {
+                    #mirror::#ident #pattern => {
+                        #name
+                        #(::axionomy::pattern::Slot::write(#fields, pieces);)*
+                    }
+                }
+            });
+            (
+                quote! {
+                    #[doc = #doc]
+                    #[derive(Debug, Clone, PartialEq, Eq)]
+                    // Generated beside every identifier, used where rates name it.
+                    #[allow(dead_code)]
+                    #visibility enum #mirror { #(#variants),* }
+                },
+                quote!(match pattern { #(#writes)* }),
+            )
+        }
+        Data::Struct(data) => {
+            let fields = slot(&data.fields);
+            let terminator = if matches!(data.fields, Fields::Named(_)) {
+                quote!()
+            } else {
+                quote!(;)
+            };
+            let (pattern, bound) = bindings(&data.fields);
+            let write = if data.fields.is_empty() {
+                segment(&kebab(name))
+            } else {
+                quote! {
+                    let #mirror #pattern = pattern;
+                    #(::axionomy::pattern::Slot::write(#bound, pieces);)*
+                }
+            };
+            (
+                quote! {
+                    #[doc = #doc]
+                    #[derive(Debug, Clone, PartialEq, Eq)]
+                    // Generated beside every identifier, used where rates name it.
+                    #[allow(dead_code)]
+                    #visibility struct #mirror #fields #terminator
+                },
+                write,
+            )
+        }
+        Data::Union(_) => return Tokens::new(),
+    };
+    let finite = match &input.data {
+        Data::Enum(data)
+            if !data.variants.is_empty()
+                && data
+                    .variants
+                    .iter()
+                    .all(|variant| variant.fields.is_empty()) =>
+        {
+            let values = data.variants.iter().map(|variant| {
+                let ident = &variant.ident;
+                quote!(Self::#ident)
+            });
+            quote! {
+                impl ::axionomy::pattern::OneSegment for #name {}
+
+                impl ::axionomy::pattern::Finite for #name {
+                    fn values() -> ::std::vec::Vec<Self> {
+                        ::std::vec![#(#values),*]
+                    }
+                }
+            }
+        }
+        _ => quote!(),
+    };
+    quote! {
+        #declaration
+
+        impl ::axionomy::pattern::Patterned for #name {
+            type Pattern = #mirror;
+
+            #[allow(unused_variables)]
+            fn write_pattern(
+                pattern: &Self::Pattern,
+                pieces: &mut ::std::vec::Vec<::axionomy::pattern::Piece>,
+            ) {
+                #write
+            }
+        }
+
+        impl ::std::convert::From<#mirror> for ::axionomy::Pattern<#name> {
+            fn from(pattern: #mirror) -> Self {
+                let mut pieces = ::std::vec::Vec::new();
+                <#name as ::axionomy::pattern::Patterned>::write_pattern(&pattern, &mut pieces);
+                Self::from_pieces(pieces).expect("a typed pattern writes a value of its type")
+            }
+        }
+
+        #finite
+    }
 }
 
 /// `Ord` as the natural order of the paths `Segments` writes: variants by

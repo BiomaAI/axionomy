@@ -31,7 +31,10 @@ pub use path::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, OntologyPath, ParameterPath, PathError,
     PathKind, RatePath, RolePath, VariablePath,
 };
-pub use pattern::{Arguments, Domain, Pattern, Relation, Segment, Variable};
+pub use pattern::{
+    Arguments, Domain, Finite, Natural, OneSegment, OptionPattern, Param, Pattern, Patterned,
+    Relation, Segment, Slot, Variable,
+};
 #[doc(hidden)]
 pub use serde as __serde;
 

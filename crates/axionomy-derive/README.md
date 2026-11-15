@@ -37,6 +37,28 @@ assert_eq!(serde_json::json!(Asset::Key(Some(7))), "key/some/7");
   starts. Variants sort by name, not by where they are declared. Code that
   needs a domain order, such as time, states it instead of borrowing an
   identifier's.
+- **Patterns.** Beside `Asset` the derive writes `AssetPattern`, the same
+  variants with each field an `axionomy::Slot` of the field's type: a value
+  (`Slot::Is`), a variable (`Slot::Var`, from an `axionomy::Param`), or a
+  pattern of the field's own type (`Slot::Of`). It converts into
+  `axionomy::Pattern<Asset>`, written as `Asset` writes a value, so a rate
+  with variables names its identifier, assets and accounts with types, not
+  text. A variable stands for one segment, so `Param<T>` takes a `T` written
+  in one: an unsigned integer, a `bool`, or an enum whose variants have no
+  fields, for which the derive also lists every value (`Param::every`).
+
+```rust
+use axionomy::{Param, Pattern, path};
+
+// `Room` and `Asset` as above.
+let from = Param::<Room>::new(path!("from"));
+let at: Pattern<Asset> = AssetPattern::At(from.var()).into();
+assert_eq!(at, "at/{from}".parse().unwrap());
+assert_eq!(from.every(), axionomy::Variable::values(
+    path!("from"),
+    ["key-room", "gate"].map(|segment| segment.parse().unwrap()),
+));
+```
 
 Derive `Debug`, `Clone`, `PartialEq`, `Eq` and `Hash` (and `Copy` when it
 fits) as usual, but not `PartialOrd`, `Ord`, `Serialize` or `Deserialize`: the
