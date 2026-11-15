@@ -46,8 +46,11 @@ invariants. Every rate fixes the market, clock, oracle, borrower, supplier
 and customer to their roles' accounts, so no identity token pins them; a
 depositor or a keeper is the exchange's to choose. Collecting revenue is one
 rate over the installments, `collect-revenue/{installment}`: each
-installment's amount and the periods it is due after are terms of its
-purchase order, balances the customer holds.
+installment's amount, `{amount}`, and the periods it is due after, `{due}`,
+are terms of its purchase order that never change, law structure a
+relation's row for each installment gives; the customer holds only the
+purchase orders and their cash. The market's terms and the oracle's
+schedule stay balances: they are the whole market's, no case of a law.
 
 The package's moves borrow exactly the bill's shortfall while it is unpaid,
 repay everything owed or all available cash after, and return collateral

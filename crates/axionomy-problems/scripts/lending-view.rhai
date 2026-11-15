@@ -44,8 +44,6 @@ fn asset_label(name, parts) {
         "invoice" => "Supplier invoice",
         "bill-paid" => "Bill paid",
         "purchase-order" => `Purchase order ${ordinal(parts[2])}`,
-        "installment-amount" => `Installment ${ordinal(parts[2])} amount`,
-        "installment-due" => `Installment ${ordinal(parts[2])} due after`,
         "period" => "Time remaining",
         "elapsed-period" => "Time elapsed",
         "pending-shock" => "Pending price drop",
@@ -97,8 +95,8 @@ fn format(asset) {
         "borrow-index" => #{ scale: 18 },
         "base-rate" | "kink" | "slope-below-kink" | "slope-above-kink" | "reserve-factor"
             | "loan-to-value" | "liquidation-threshold" | "liquidation-bonus" => #{ scale: 16, unit: "%" },
-        "cash" | "reserves" | "collateral-price" | "price-drop" | "installment-amount" => #{ scale: 0, unit: "cash" },
-        "period" | "elapsed-period" | "shock-after" | "installment-due" => #{ scale: 0, unit: "periods" },
+        "cash" | "reserves" | "collateral-price" | "price-drop" => #{ scale: 0, unit: "cash" },
+        "period" | "elapsed-period" | "shock-after" => #{ scale: 0, unit: "periods" },
         _ => (),
     }
 }

@@ -4,7 +4,7 @@ use axionomy::ConditionPath;
 use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern,
-    Quantity, QuantityComparison, QuantityExpression, Rate, Rounding, basket,
+    Quantity, QuantityComparison, QuantityExpression, Rate, Relation, Rounding, basket,
 };
 
 #[cfg(feature = "packages")]
@@ -80,11 +80,6 @@ pub enum Asset {
     BillPaid,
     /// A customer's commitment to pay one revenue installment.
     PurchaseOrder(u8),
-    /// The cash an installment pays: a term of its purchase order.
-    InstallmentAmount(u8),
-    /// Closed periods after which an installment is collectable: a term of
-    /// its purchase order.
-    InstallmentDue(u8),
     Period,
     ElapsedPeriod,
     /// One while the scheduled price drop has not happened.
@@ -560,20 +555,30 @@ fn pay_bill_rate(bill: Payment) -> Rate<Ontology> {
     )
 }
 
-/// Collecting any of the customer's `installments`,
+/// Collecting any of the customer's installments of `revenue`,
 /// `collect-revenue/{installment}`: its purchase order pays the cash its
-/// amount says once the periods it is due after have closed.
-fn collect_revenue_rate(installment: &Param<u8>, installments: u8) -> Rate<Ontology> {
-    let term = |asset: fn(axionomy::Slot<u8>) -> AssetPattern| {
-        Q::balance_at(Role::Customer, asset(installment.var()).into())
-    };
-    let amount = term(AssetPattern::InstallmentAmount);
+/// amount says, `{amount}`, once the periods it is due after, `{due}`, have
+/// closed. Its terms never change, so they are law structure: a relation's
+/// row for each installment.
+fn collect_revenue_rate(installment: &Param<u8>, revenue: &[Payment]) -> Rate<Ontology> {
+    let (amount, due) = (
+        Param::<u64>::new(path!("amount")),
+        Param::<u64>::new(path!("due")),
+    );
+    let installments = u8::try_from(revenue.len()).expect("few installments");
     fixed(
         clock_bound(fixed(Rate::new(), Role::Borrower, AccountId::Borrower)),
         Role::Customer,
         AccountId::Customer,
     )
     .variable(installment.range(0, installments - 1))
+    .relation(Relation::each_giving(
+        installment,
+        [amount.name().clone(), due.name().clone()],
+        (0_u8..)
+            .zip(revenue)
+            .map(|(installment, payment)| (installment, [payment.amount, payment.period])),
+    ))
     .consume_at(
         Role::Customer,
         [(
@@ -581,13 +586,13 @@ fn collect_revenue_rate(installment: &Param<u8>, installments: u8) -> Rate<Ontol
             Quantity::new(1),
         )],
     )
-    .consume_computed(Role::Customer, Asset::Cash, amount.clone())
-    .produce_computed(Role::Borrower, Asset::Cash, amount)
+    .consume_computed(Role::Customer, Asset::Cash, amount.quantity())
+    .produce_computed(Role::Borrower, Asset::Cash, amount.quantity())
     .condition(
         path!("the-installment-is-due"),
         elapsed(),
         QuantityComparison::GreaterThanOrEqual,
-        term(AssetPattern::InstallmentDue),
+        due.quantity(),
     )
 }
 
@@ -669,13 +674,7 @@ pub fn world(config: &Config) -> World {
     let terms = config.terms;
     let customer: Basket<Asset> = (0_u8..)
         .zip(&config.revenue)
-        .flat_map(|(installment, payment)| {
-            [
-                (Asset::PurchaseOrder(installment), 1),
-                (Asset::InstallmentAmount(installment), payment.amount),
-                (Asset::InstallmentDue(installment), payment.period),
-            ]
-        })
+        .map(|(installment, _)| (Asset::PurchaseOrder(installment), 1))
         .chain([(
             Asset::Cash,
             config.revenue.iter().map(|payment| payment.amount).sum(),
@@ -754,12 +753,11 @@ pub fn world(config: &Config) -> World {
         .rate(RateId::Accrue, accrue_rate())
         .rate(RateId::Reprice, reprice_rate())
         .rate(RateId::Liquidate, liquidate_rate());
-    let installments = u8::try_from(config.revenue.len()).expect("few installments");
-    if installments > 0 {
+    if !config.revenue.is_empty() {
         let installment = Param::<u8>::new(path!("installment"));
         builder = builder.rate_at(
             RateIdPattern::CollectRevenue(installment.var()).into(),
-            collect_revenue_rate(&installment, installments),
+            collect_revenue_rate(&installment, &config.revenue),
         );
     }
     builder
