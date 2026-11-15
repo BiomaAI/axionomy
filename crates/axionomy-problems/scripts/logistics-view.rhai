@@ -60,7 +60,6 @@ fn asset_label(parts) {
         "delivered" => "Order delivered",
         "package" => `Package for ${order_label(parts[2])}`,
         "weather-ready" => "Ready to draw travel conditions",
-        "outcome-weight" => `Odds of ${travel(parts[3])} on the ${road(parts[2])}`,
         "outcome" => `Drawn: ${travel(parts[3])} on the ${road(parts[2])}`,
         _ => (),
     }

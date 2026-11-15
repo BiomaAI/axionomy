@@ -1,7 +1,7 @@
 // Logistics' Micro: one vehicle carries packages from the depot to a
 // customer, by the direct road or the reliable one through a junction.
-// Every leg it departs on waits for Nature to draw its weather from the
-// weights Nature holds, clear, delayed or a breakdown; a clear or delayed
+// Every leg it departs on waits for Nature to draw its weather by the
+// weights the law gives, clear, delayed or a breakdown; a clear or delayed
 // leg then arrives, and a breakdown is repaired before Nature draws again.
 // Each draw is the event of its leg at the vehicle's elapsed time, so any
 // run that travels that leg then meets the same weather.
@@ -45,7 +45,7 @@ fn carried(state) {
 }
 
 // Nature's draw for the leg under way while its weather is ready: each
-// resolution that applies, with the weight Nature holds of it, as
+// resolution that applies, with the weight its rate's relation gives it, as
 // `[exchange, weight]` pairs in outcome order; none otherwise.
 fn weather(state) {
     let route = active_route(state);
@@ -54,7 +54,7 @@ fn weather(state) {
     for outcome in outcomes() {
         let resolution = state.exchange_of(`resolve/${route}/${outcome}`);
         if state.applicable(resolution) {
-            weighted.push([resolution, state.balance("nature", `outcome-weight/${route}/${outcome}`)]);
+            weighted.push([resolution, state.values(resolution.rate()).weight]);
         }
     }
     weighted

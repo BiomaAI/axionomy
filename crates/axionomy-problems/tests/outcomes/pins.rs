@@ -226,7 +226,7 @@ pub const REFS: &[super::PinnedRef] = &[
     ("marketplace/micro", 0, "3e9a28f00aac8536b5814d4ffe99654af5298b1b46c7a24d8f3359d26998a2af"),
     ("marketplace/showcase", 0, "bd936ae0f02a32c0097f0074a2d215d885b6831147270b6f7d89ea72aab1faee"),
     ("marketplace/stress", 0, "c1cc9091aa228aee54652f5530af429b13081ba1489cde3a0944f98a3819ddf5"),
-    ("logistics/micro", 0, "0b2cec470f6ec0c4a78600e4c2239718e6bed809ef64d8125bee9f15b87a0516"),
+    ("logistics/micro", 0, "ffb5403b2adc38b4e21e035a9bd18592527d2a93da8c595c6ee8e65daa87aa3e"),
     ("logistics/showcase", 0, "c4566e51b4ddf476e99595b3d2ab4f46411cce7dfcd9dea1388e1a9813f47da8"),
     ("logistics/stress", 0, "594f7f2a4e89c82edb2d346619f067352f3133b4308b0a3aaafbf29dff335318"),
     ("connect-four/micro", 0, "83120e8508a5651c243530c7328671c8100609b663c4f84afc239d85b6014910"),

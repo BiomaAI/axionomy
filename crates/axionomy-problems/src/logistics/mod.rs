@@ -3,7 +3,7 @@
 use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    Rate, Slot, basket,
+    Rate, Relation, Slot, basket,
 };
 pub mod fleet;
 #[cfg(feature = "packages")]
@@ -88,7 +88,6 @@ pub enum Asset {
     Delivered,
     Package(OrderId),
     WeatherReady,
-    OutcomeWeight(Route, TravelOutcome),
     Outcome(Route, TravelOutcome),
 }
 
@@ -168,7 +167,10 @@ fn build(pending: &[OrderId]) -> World {
                 (Asset::RepairTool, 1),
             ])),
         )
-        .account(AccountId::Nature, Account::from(nature_assets()))
+        .account(
+            AccountId::Nature,
+            Account::from(basket([(Asset::WeatherReady, 1)])),
+        )
         .account(
             AccountId::FuelStation,
             Account::from(basket([(Asset::Fuel, 12)])),
@@ -182,10 +184,17 @@ fn build(pending: &[OrderId]) -> World {
         builder = builder.account(AccountId::Order(order), Account::from(order_state));
     }
 
-    // The rates' variables: an order, a route and the weather on it.
+    // The rates' variables: an order, a route and the weather on it; and
+    // the numbers relations give: the weight of each weather on each route,
+    // and the fuel and time a leg takes.
     let order = Param::<OrderId>::new(path!("order"));
     let route = Param::<Route>::new(path!("route"));
     let outcome = Param::<TravelOutcome>::new(path!("outcome"));
+    let weight = Param::<u64>::new(path!("weight"));
+    let (fuel, time) = (
+        Param::<u64>::new(path!("fuel")),
+        Param::<u64>::new(path!("time")),
+    );
     let package = || AssetPattern::Package(order.var()).into();
     let traveling = || AssetPattern::Traveling(route.var()).into();
     // `rate` for each order, `{order}`, its role fixed to that order.
@@ -225,18 +234,23 @@ fn build(pending: &[OrderId]) -> World {
                     one([Pattern::literal(Asset::Delivered), package()]),
                 ),
         )
-        // Nature draws a leg's weather from the weights it holds.
+        // Nature draws a leg's weather, each by the weight a relation over
+        // the routes and outcomes gives it.
         .rate_at(
             RateIdPattern::Resolve(route.var(), outcome.var()).into(),
             with_nature(Rate::new())
                 .variable(route.every())
                 .variable(outcome.every())
+                .relation(Relation::pairs_giving(
+                    &route,
+                    &outcome,
+                    [weight.name().clone()],
+                    ROUTES.into_iter().flat_map(|route| {
+                        OUTCOMES.map(|outcome| (route, outcome, [outcome_weight(route, outcome)]))
+                    }),
+                ))
                 .preserve_at(Role::Vehicle, one([traveling()]))
                 .consume(Role::Nature, basket([(Asset::WeatherReady, 1)]))
-                .preserve_at(
-                    Role::Nature,
-                    one([AssetPattern::OutcomeWeight(route.var(), outcome.var()).into()]),
-                )
                 .produce_at(
                     Role::Nature,
                     one([AssetPattern::Outcome(route.var(), outcome.var()).into()]),
@@ -265,40 +279,45 @@ fn build(pending: &[OrderId]) -> World {
         );
 
     // A route's departure and arrivals are its own: where it starts and
-    // ends, and the fuel and time a leg takes, are the route's, not values
-    // an identifier gives.
+    // ends are places, which no relation gives. Arriving after a clear trip
+    // or a delay is one law of the route, a relation over the two giving
+    // the fuel and time the leg takes.
+    let arrived = [TravelOutcome::Clear, TravelOutcome::Delayed];
     for route in ROUTES {
-        builder = builder.rate(
-            RateId::Depart(route),
-            with_vehicle(Rate::new())
-                .consume(Role::Vehicle, basket([(Asset::At(route_source(route)), 1)]))
-                .produce(Role::Vehicle, basket([(Asset::Traveling(route), 1)])),
-        );
-        for outcome in [TravelOutcome::Clear, TravelOutcome::Delayed] {
-            let (fuel, time) = travel_cost(route, outcome);
-            builder = builder.rate(
-                RateId::Arrive(route, outcome),
+        builder = builder
+            .rate(
+                RateId::Depart(route),
+                with_vehicle(Rate::new())
+                    .consume(Role::Vehicle, basket([(Asset::At(route_source(route)), 1)]))
+                    .produce(Role::Vehicle, basket([(Asset::Traveling(route), 1)])),
+            )
+            .rate_at(
+                RateIdPattern::Arrive(Slot::Is(route), outcome.var()).into(),
                 with_nature(Rate::new())
-                    .consume(
-                        Role::Vehicle,
-                        basket([
-                            (Asset::Traveling(route), 1),
-                            (Asset::Fuel, fuel),
-                            (Asset::TimeRemaining, time),
-                        ]),
-                    )
+                    .variable(outcome.values(arrived))
+                    .relation(Relation::each_giving(
+                        &outcome,
+                        [fuel.name().clone(), time.name().clone()],
+                        arrived.map(|outcome| {
+                            let (burnt, taken) = travel_cost(route, outcome);
+                            (outcome, [burnt, taken])
+                        }),
+                    ))
+                    .consume(Role::Vehicle, basket([(Asset::Traveling(route), 1)]))
+                    .consume_computed(Role::Vehicle, Asset::Fuel, fuel.quantity())
+                    .consume_computed(Role::Vehicle, Asset::TimeRemaining, time.quantity())
                     .produce(
                         Role::Vehicle,
-                        basket([
-                            (Asset::At(route_destination(route)), 1),
-                            (Asset::SpentFuel, fuel),
-                            (Asset::ElapsedTime, time),
-                        ]),
+                        basket([(Asset::At(route_destination(route)), 1)]),
                     )
-                    .consume(Role::Nature, basket([(Asset::Outcome(route, outcome), 1)]))
+                    .produce_computed(Role::Vehicle, Asset::SpentFuel, fuel.quantity())
+                    .produce_computed(Role::Vehicle, Asset::ElapsedTime, time.quantity())
+                    .consume_at(
+                        Role::Nature,
+                        one([AssetPattern::Outcome(Slot::Is(route), outcome.var()).into()]),
+                    )
                     .produce(Role::Nature, basket([(Asset::WeatherReady, 1)])),
             );
-        }
     }
 
     builder
@@ -355,20 +374,15 @@ pub fn goal() -> Goal<Ontology> {
     })
 }
 
-fn nature_assets() -> axionomy::Basket<Asset> {
-    let mut assets = basket([(Asset::WeatherReady, 1)]);
-    for route in ROUTES {
-        for outcome in OUTCOMES {
-            let weight = match (is_direct(route), outcome) {
-                (true, TravelOutcome::Clear) => 2,
-                (true, TravelOutcome::Delayed | TravelOutcome::Breakdown) => 1,
-                (false, TravelOutcome::Clear) => 8,
-                (false, TravelOutcome::Delayed | TravelOutcome::Breakdown) => 1,
-            };
-            assets.insert(Asset::OutcomeWeight(route, outcome), Quantity::new(weight));
-        }
+/// The weight of `outcome` on `route` among the weather Nature draws for a
+/// leg: the direct road's two clear trips to a delay and a breakdown, the
+/// safe road's eight.
+const fn outcome_weight(route: Route, outcome: TravelOutcome) -> u64 {
+    match (is_direct(route), outcome) {
+        (true, TravelOutcome::Clear) => 2,
+        (false, TravelOutcome::Clear) => 8,
+        (_, TravelOutcome::Delayed | TravelOutcome::Breakdown) => 1,
     }
-    assets
 }
 
 /// The exchange of `rate` once, each of its roles bound to the account

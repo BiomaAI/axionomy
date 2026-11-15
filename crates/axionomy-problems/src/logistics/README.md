@@ -68,11 +68,14 @@ delivery, refueling, travel, repair, and order completion are all rates.
 
 Loading and delivering are one rate each over the orders, `load/{order}`,
 resolving a leg's weather one over the routes and outcomes,
-`resolve/{route}/{outcome}`, and repairing one over the routes. A route's
-departure and arrivals stay its own rates: where it starts and ends, and
-the fuel and time a leg takes, belong to the route, not to values an
-identifier gives. Each role is fixed to its account, so the policies and
-the planner propose each move as its rate's exchange (`state.exchange_of`).
+`resolve/{route}/{outcome}`, a relation over the two giving each
+outcome's weight on each route, and repairing one over the routes. A
+route's departure and arrival stay its own rates, since where it starts
+and ends are places no relation gives, but arriving after a clear trip or
+a delay is one law of the route, `arrive/direct-out/{outcome}`, a relation
+over the two giving the fuel and time the leg takes. Each role is fixed to
+its account, so the policies and the planner propose each move as its
+rate's exchange (`state.exchange_of`).
 
 Nature draws each resolution by its event, `weather/<route>/<elapsed time>`:
 the weather of that leg, met at the time the vehicle has elapsed when the
