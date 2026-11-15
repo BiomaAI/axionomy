@@ -2,12 +2,17 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  // The Worker's own tests, and the packages workspace on the engine in the browser.
-  testMatch: ["wasm.spec.ts", "packages.spec.ts"],
   timeout: 60_000,
   use: {
     baseURL: "http://127.0.0.1:5174",
   },
+  projects: [
+    // The Worker's own tests, and the packages workspace on the engine in the browser.
+    { name: "studio", testMatch: ["wasm.spec.ts", "packages.spec.ts"] },
+    // The sweep of every strategy, once those pass and a few samples at a
+    // time: every run is a search, and too many at once starve each other.
+    { name: "sweep", testMatch: "sweep.spec.ts", dependencies: ["studio"], workers: 2 },
+  ],
   webServer: {
     // Reuse the Wasm artifacts from `pnpm build`; optimization is not server startup.
     command: "VITE_AXIONOMY_ENGINE=browser pnpm exec vite --host 127.0.0.1 --port 5174",

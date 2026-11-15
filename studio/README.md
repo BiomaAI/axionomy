@@ -245,3 +245,11 @@ a follower waits in the Worker for its ref to move, asking nothing
 meanwhile; a second Worker, while the first holds that store, keeps one in
 memory and says so; and cancelling a game mid-run terminates its Worker,
 the next one opening the store with all committed before.
+
+`tests/sweep.spec.ts`, in the Wasm suite, is the sweep: at every ref of
+every sample it runs every strategy From here offers there, each from the
+ref's point. It runs once the rest of the suite passes, two samples at a
+time, since every run is a search and too many at once starve each other.
+Each run must end saying what it came to, a goal reached or a caution,
+never a failure, and the page must throw nothing, log no error, and draw
+every line React Flow is given.

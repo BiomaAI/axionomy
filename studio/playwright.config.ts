@@ -2,7 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testIgnore: "wasm.spec.ts",
+  // The Worker's tests and the sweep run on the engine in the browser.
+  testIgnore: ["wasm.spec.ts", "sweep.spec.ts"],
   timeout: 30_000,
   use: {
     baseURL: "http://127.0.0.1:5173",
