@@ -16,11 +16,11 @@ arrivals already in flight can cause injury that slows future travel. Scheduled
 clinical pulses reduce casualty health and invalidate stabilization. The core
 blocks further public work until those events settle. Medicine, energy, radio,
 sensor charges and base resupply are finite conserved resources. Failures are
-retained. Three policies share each scenario and receive only their own view,
-public team positions and explicitly learned objective accounts. Studio exposes
-those views at every frame. Their outcome frontier compares evaluated policies,
-not an exhaustive optimum or a success-probability estimate. The Micro
-information-set search fixture below remains available and tested.
+retained. The package's three policies share each scenario and see only their
+own account, public team positions and explicitly learned objective accounts.
+Studio exposes those views at every frame. Their outcomes compare evaluated
+policies, not an exhaustive optimum or a success-probability estimate. The
+Micro specification follows.
 
 ## Specification
 
@@ -41,77 +41,49 @@ requires an atomic treatment exchange using the Medic's kit before the team
 can rescue the victim. Every public mission action consumes encoded deadline
 time except the final goal-marking exchange.
 
-The coordinated policy scans, shares, and follows the Medic's visible
-intelligence. A direct policy always sends both agents north. Replayed traces
-are also projected into observation, outcome, and termination transitions for
-learning.
-
-Observation-scoped ISMCTS receives only the Scout's canonical information
-identity when generating decisions or choosing rollout actions. The caller
-supplies complete encoded belief worlds; the planner retains only worlds
-consistent with the live observation and samples among them. After a public
-action and required Nature response, caller-owned belief worlds are advanced,
-filtered to the new observation, and passed back to the same planner. Tree
+The package's planner is the Scout choosing every public action by
+information-set tree search over what it sees, each iteration in a world its
+observations since the prior leave possible; Nature answers the team. Tree
 statistics merge by information state rather than hidden world state. Nature
 resolution may inspect the sampled world, but only to propose concrete encoded
-outcome exchanges. The selected live action is core-revalidated.
+outcome exchanges. The selected live action is core-revalidated. Its fixed
+policies are share-and-coordinate, which scans, shares and follows the Medic's
+intelligence, and direct north, which sends both agents north without a scan.
 
 ## Required results
 
-- Agent views hide Nature and the other agent.
-- Two worlds with different hidden truths have equal Scout observation keys,
-  equal public proposal sets, and the same seeded ISMCTS decision.
-- The initial ISMCTS decision is the public `BeginScan` exchange in either
-  hidden world.
-- Hidden instantiation, scan resolution, and encounter exchanges never appear
-  in the Scout's decision source.
-- Intelligence changes ownership only through a share exchange.
-- Role identities reject scan results, injuries, or intelligence bound to the
-  wrong agent.
-- After observing, the caller filters 16 initial belief worlds to a posterior
-  and replans; the next selected action is the now-causal share exchange.
-- Joint movement, encounter, treatment, and rescue are multi-account rates.
-- A coordinated successful trace contains instantiation, scan intent, scan
-  resolution, share, encounter, and finish exchanges and replays exactly.
-- Across all 16 weighted scenarios, coordination succeeds 12 times and direct
-  north succeeds 8.
-- Seeded Monte Carlo draws each sample's scenario by the event `scenario`
-  with that sample's seed, as the package's script does.
-- The complete trace becomes one RL transition per exchange, ending with an
-  encoded terminal outcome.
-- A sampled Pareto front retains the reliability/time/medical-use tradeoff and
-  remains explicitly approximate.
+The package's experiments find these, pinned in `tests/outcomes`:
+
+- In Micro's scenario, the victim north, the sensor's seed 0 (whose report is
+  wrong) and the route safe, direct north rescues in four exchanges and the
+  planner stops without a rescue.
+- Over 16 scenarios drawn from the prior, each by the event `scenario` with
+  its own seed, share-and-coordinate rescues 11 times and direct north 7.
+- Every expedition policy closes Showcase and Stress.
+
+The model's tests check its rules: the Scout holds the same before scanning
+whatever the truth, the Medic follows intelligence only once it is shared, a
+coordinated rescue replays exactly, and a scan's result cannot be bound to the
+Medic.
 
 ## API pressure
 
 - Agent-specific observations and information boundaries.
 - Information-state identities and observation-safe tree transpositions.
 - Belief sampling from encoded priors without giving policies hidden state.
-- Lazy public proposal generation followed by core applicability filtering.
+- Public proposals followed by core applicability filtering.
 - Multi-agent communication as economic state change.
 - Hidden truth, belief, hazard, and deadline in one model.
-- Exact 16-scenario counterfactual comparison plus genuine seeded Monte Carlo
-  over partially observed policies.
-- Caller-owned belief evolution and repeated information-set planning.
-- Assessment-derived masks and replay-derived learning trajectories.
-- Approximate fronts provide set-valued policy supervision without claiming
-  exact hidden-world performance.
+- Seeded Monte Carlo over partially observed policies.
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro mission, its Nature, agent views, beliefs,
-  ISMCTS planning, scenario evaluation and Monte Carlo.
+- `mod.rs` is the model: the Micro mission and its Nature.
 - `expedition/` is the Showcase and Stress expedition, an ontology of its own
   laid out the same way: its model in `mod.rs`, and its scripts
   `scripts/expedition.rhai` and `scripts/expedition-view.rhai`.
 - `package.rs` writes its package: its economies under refs, goals,
   strategies, experiments and view, whose scripts are `scripts/mission.rhai`
   and `scripts/mission-view.rhai`.
-
-[`examples/mission.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/mission.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example mission
-```
 
 The mission is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

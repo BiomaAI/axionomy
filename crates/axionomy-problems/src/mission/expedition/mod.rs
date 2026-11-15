@@ -1,10 +1,9 @@
 //! Independent teammates, private observations and timed cooperative extraction.
 use axionomy::path;
 use axionomy::{
-    Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
-    Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
+    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
-use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Agent {
@@ -191,12 +190,6 @@ pub enum RateId {
     Tick(u8),
     Close,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Policy {
-    RadioCoordination,
-    Rendezvous,
-    NorthFirst,
-}
 pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `mission/expedition` where economies are
@@ -212,7 +205,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type AgentView<'a> = EconomicView<'a, Ontology>;
 pub fn patient(id: u8) -> bool {
     id.is_multiple_of(2)
 }
@@ -1157,402 +1149,32 @@ pub fn action(rate: RateId) -> Action {
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
 }
-pub fn agent_view(world: &World, agent: Agent) -> AgentView<'_> {
-    let mut accounts = vec![AccountId::World, AccountId::Agent(agent)];
-    for id in 0..value(world, AccountId::World, Asset::Count) as u8 {
-        if LOCATIONS
-            .into_iter()
-            .any(|location| value(world, AccountId::Agent(agent), Asset::Known(id, location)) > 0)
-        {
-            accounts.push(AccountId::Objective(id));
-        }
-    }
-    world.view(accounts)
-}
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut rates: Vec<_> = world.rate_ids().copied().collect();
-    rates.sort();
-    world.applicable(rates.into_iter().map(action))
-}
-pub fn nature_response(world: &World) -> Option<Action> {
-    let count = value(world, AccountId::World, Asset::Count) as u8;
-    let mut rates = Vec::new();
-    for location in LOCATIONS {
-        for opening in [false, true] {
-            rates.push(RateId::Weather { location, opening });
-        }
-    }
-    for day in [8, 16, 24] {
-        rates.push(RateId::FinishClinical(day));
-    }
-    for id in 0..count {
-        if patient(id) {
-            for day in [8, 16, 24] {
-                for active in [true, false] {
-                    rates.push(RateId::Clinical {
-                        objective: id,
-                        day,
-                        active,
-                    });
-                }
-            }
-        }
-        for phase in [Phase::Hidden, Phase::Located, Phase::Carried] {
-            for dead in [true, false] {
-                rates.push(RateId::Fail {
-                    objective: id,
-                    phase,
-                    dead,
-                });
-            }
-        }
-        rates.push(if patient(id) {
-            RateId::FinishExtract(id)
-        } else {
-            RateId::FinishCollect(id)
-        });
-        for location in LOCATIONS {
-            rates.push(RateId::Discover {
-                objective: id,
-                location,
-            });
-        }
-    }
-    for agent in AGENTS {
-        for to in LOCATIONS {
-            for hazardous in [false, true] {
-                rates.push(RateId::Arrive {
-                    agent,
-                    to,
-                    hazardous,
-                });
-            }
-        }
-    }
-    for round in 0..2 {
-        for location in LOCATIONS {
-            rates.push(RateId::Report { round, location });
-        }
-    }
-    rates
-        .into_iter()
-        .map(action)
-        .find(|exchange| world.is_applicable(exchange))
-}
-/// Policies read only their own account, public team positions and objectives
-/// explicitly learned by that agent. They cannot inspect Nature or teammate intel.
-pub fn decision(view: &AgentView<'_>, agent: Agent, policy: Policy) -> Option<Action> {
-    let val = |account, asset| view.balance(&account, &asset).map_or(0, Quantity::to_u64);
-    let own = AccountId::Agent(agent);
-    let world = AccountId::World;
-    if val(own, Asset::Ready) == 0 || val(world, Asset::Permit(agent)) == 0 {
-        return None;
-    }
-    let from = LOCATIONS
-        .into_iter()
-        .find(|location| val(own, Asset::At(*location)) > 0)?;
-    let count = val(world, Asset::Count) as u8;
-    let known = |id| {
-        LOCATIONS
-            .into_iter()
-            .find(|location| val(own, Asset::Known(id, *location)) > 0)
-    };
-    let move_to = |to| {
-        if to != from
-            && val(world, Asset::WeatherOpen(to)) > 0
-            && val(own, Asset::Energy) >= distance(from, to) + val(own, Asset::Harm)
-        {
-            Some(action(RateId::Depart { agent, from, to }))
-        } else {
-            None
-        }
-    };
-    if let Some(id) = (0..count).find(|id| val(own, Asset::Cargo(*id)) > 0) {
-        return if from == Location::Base {
-            Some(action(RateId::Deliver(id)))
-        } else {
-            move_to(Location::Base)
-        };
-    }
-    if from == Location::Base
-        && val(world, Asset::Supply) > 0
-        && (val(own, Asset::Energy) < 7
-            || (agent == Agent::Medic && val(own, Asset::MedicalKit) == 0))
-    {
-        return Some(action(RateId::Resupply(agent)));
-    }
-    if agent == Agent::Medic {
-        if val(own, Asset::MedicalKit) > 1 && val(own, Asset::Harm) >= 2 {
-            return Some(action(RateId::TreatAgent {
-                target: Agent::Medic,
-                location: from,
-            }));
-        }
-        for id in (0..count).filter(|id| patient(*id)) {
-            let Some(site) = known(id) else {
-                continue;
-            };
-            if val(AccountId::Objective(id), Asset::Located) == 0 {
-                continue;
-            }
-            if val(own, Asset::MedicalKit) == 0
-                && val(AccountId::Objective(id), Asset::Unstable) > 0
-                && val(world, Asset::Supply) > 0
-            {
-                return move_to(Location::Base);
-            }
-            if from != site {
-                return move_to(site);
-            }
-            if val(AccountId::Objective(id), Asset::Unstable) > 0 && val(own, Asset::MedicalKit) > 0
-            {
-                if val(world, Asset::NextClinical) <= val(world, Asset::Time) + 1 {
-                    return None;
-                }
-                return Some(action(RateId::TreatPatient {
-                    objective: id,
-                    location: site,
-                    restore: val(AccountId::Objective(id), Asset::Harm) > 0,
-                }));
-            }
-            return None;
-        }
-        return if from != Location::Base {
-            move_to(Location::Base)
-        } else {
-            None
-        };
-    }
-    // Learn the sector before acting on a fallible sensor hint.
-    if val(own, Asset::Unsearched(from)) > 0 {
-        return Some(action(RateId::Survey(from)));
-    }
-    for id in (0..count).filter(|id| patient(*id)) {
-        let Some(site) = known(id) else {
-            continue;
-        };
-        if val(AccountId::Objective(id), Asset::Located) == 0 {
-            continue;
-        }
-        if val(own, Asset::Shared(id, site)) == 0 {
-            let together = val(world, Asset::TeamAt(Agent::Medic, from)) > 0;
-            if together {
-                return Some(action(RateId::Share {
-                    objective: id,
-                    location: site,
-                    remote: false,
-                }));
-            }
-            if policy == Policy::RadioCoordination && val(own, Asset::Radio) > 0 {
-                return Some(action(RateId::Share {
-                    objective: id,
-                    location: site,
-                    remote: true,
-                }));
-            }
-            return move_to(Location::Base);
-        }
-        if from == site
-            && val(world, Asset::TeamAt(Agent::Medic, site)) > 0
-            && val(world, Asset::Permit(Agent::Medic)) > 0
-            && val(AccountId::Objective(id), Asset::Stable) > 0
-        {
-            return Some(action(RateId::Extract {
-                objective: id,
-                location: site,
-            }));
-        }
-        if from != site && val(world, Asset::WeatherOpen(site)) > 0 {
-            return move_to(site);
-        }
-        // While the medic is on the way, collect data already at this sector;
-        // otherwise preserve the rendezvous rather than repeatedly wandering.
-        if from == site {
-            return None;
-        }
-    }
-    for id in (0..count).filter(|id| !patient(*id)) {
-        if val(AccountId::Objective(id), Asset::Located) == 0 {
-            continue;
-        }
-        if let Some(site) = known(id) {
-            if from == site {
-                return Some(action(RateId::Collect {
-                    objective: id,
-                    location: site,
-                }));
-            }
-            if let Some(exchange) = move_to(site) {
-                return Some(exchange);
-            }
-        }
-    }
-    if policy != Policy::NorthFirst
-        && from == Location::Base
-        && val(own, Asset::Sensor) > 0
-        && (val(own, Asset::UsedSensor) == 0 || val(world, Asset::Completed) > 0)
-    {
-        return Some(action(RateId::Scan));
-    }
-    let mut sites: Vec<_> = LOCATIONS
-        .into_iter()
-        .filter(|site| {
-            val(own, Asset::Unsearched(*site)) > 0 && val(world, Asset::WeatherOpen(*site)) > 0
-        })
-        .collect();
-    sites.sort_by_key(|site| {
-        (
-            if policy == Policy::NorthFirst {
-                u64::from(*site != Location::North)
-            } else {
-                u64::from(!(0..count).any(|id| val(own, Asset::Hint(id, *site)) > 0))
-            },
-            distance(from, *site),
-            *site,
-        )
-    });
-    sites.into_iter().find_map(move_to)
-}
 /// The most steps an expedition takes before it is cut short.
 pub const HORIZON: usize = 500;
-
-/// Runs `policy` on `world` until the expedition ends: Nature responds first,
-/// then the expedition closes when it can, then the first agent whose private
-/// view gives an applicable decision acts, and otherwise the clock ticks.
-pub fn run(world: &mut impl Apply<Ontology>, policy: Policy) -> RolloutResult<Ontology> {
-    run_to_goal(world, &goal(), RolloutConfig::new(HORIZON), |world, _| {
-        RolloutDecision::Propose(
-            nature_response(world)
-                .or_else(|| {
-                    let close = action(RateId::Close);
-                    world.is_applicable(&close).then_some(close)
-                })
-                .or_else(|| {
-                    AGENTS
-                        .into_iter()
-                        .filter_map(|agent| decision(&agent_view(world, agent), agent, policy))
-                        .find(|exchange| world.is_applicable(exchange))
-                })
-                .unwrap_or_else(|| action(RateId::Tick(now(world) as u8))),
-        )
-    })
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::Trace;
 
-    /// The trace of a run of `policy` from `source`, which must end at the
-    /// goal.
-    fn trace_of(source: &World, policy: Policy) -> Trace<Ontology> {
-        let result = run(&mut source.clone(), policy);
-        assert!(
-            result.termination().is_terminal(),
-            "{policy:?}: {:?}",
-            result.termination()
-        );
-        result.trace().cloned().expect("runs keep their trace")
-    }
-    #[test]
-    fn expeditions_replay_independent_work_and_common_scenario_tradeoffs() {
-        let mut outcomes = std::collections::BTreeSet::new();
-        let mut overlap = false;
-        let mut extraction = false;
-        let mut local = false;
-        for stress in [false, true] {
-            for seed in [0, 3, 17, u64::MAX] {
-                for policy in [
-                    Policy::RadioCoordination,
-                    Policy::Rendezvous,
-                    Policy::NorthFirst,
-                ] {
-                    let source = initial(stress, seed);
-                    let before = source.state_key();
-                    let trace = trace_of(&source, policy);
-                    assert_eq!(trace, trace_of(&source, policy));
-                    let mut replay = source.clone();
-                    for exchange in trace.exchanges() {
-                        replay.apply(exchange.clone()).unwrap();
-                        overlap |= AGENTS.into_iter().all(|agent| {
-                            value(&replay, AccountId::Agent(agent), Asset::Ready) == 0
-                        });
-                        for agent in AGENTS {
-                            let own = AccountId::Agent(agent);
-                            assert_eq!(
-                                LOCATIONS
-                                    .into_iter()
-                                    .map(|site| value(&replay, own, Asset::At(site))
-                                        + value(&replay, own, Asset::Travelling(site)))
-                                    .sum::<u64>(),
-                                1
-                            );
-                            for site in LOCATIONS {
-                                assert_eq!(
-                                    value(&replay, own, Asset::At(site)),
-                                    value(&replay, AccountId::World, Asset::TeamAt(agent, site))
-                                );
-                            }
-                        }
-                    }
-                    extraction |= trace
-                        .exchanges()
-                        .iter()
-                        .any(|exchange| matches!(exchange.rate(), RateId::Extract { .. }));
-                    local |= trace.exchanges().iter().any(|exchange| {
-                        matches!(exchange.rate(), RateId::Share { remote: false, .. })
-                    });
-                    assert_eq!(source.state_key(), before);
-                    assert!(replay.matches(&goal()));
-                    let completed = value(&replay, AccountId::World, Asset::Completed);
-                    let failed = value(&replay, AccountId::World, Asset::FailedCount);
-                    assert_eq!(
-                        completed + failed,
-                        value(&source, AccountId::World, Asset::Count)
-                    );
-                    outcomes.insert((completed, failed, now(&replay)));
-                    if seed == 17 {
-                        eprintln!(
-                            "{stress:?} {policy:?}: completed {completed}, failed {failed}, time {}, vitality {}",
-                            now(&replay),
-                            value(&replay, AccountId::World, Asset::SavedVitality)
-                        );
-                    }
-                }
-            }
+    fn apply_all(world: &mut World, rates: &[RateId]) {
+        for rate in rates {
+            world
+                .apply(action(*rate))
+                .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
         }
-        assert!(overlap && extraction && local);
-        assert!(outcomes.len() >= 4, "{outcomes:?}");
     }
+
     #[test]
-    fn equal_observations_give_equal_decisions_without_hidden_intelligence() {
+    fn hidden_scenarios_differ_only_in_what_the_agents_cannot_see() {
         let a = initial(false, 0);
         let b = initial(false, 17);
         assert_ne!(a.state_key(), b.state_key());
         for agent in AGENTS {
-            let left = agent_view(&a, agent);
-            let right = agent_view(&b, agent);
-            assert_eq!(left.observation_key(), right.observation_key());
-            assert!(left.account(&AccountId::Nature).is_none());
-            assert!(
-                left.account(&AccountId::Agent(if agent == Agent::Scout {
-                    Agent::Medic
-                } else {
-                    Agent::Scout
-                }))
-                .is_none()
+            let seen = [AccountId::World, AccountId::Agent(agent)];
+            assert_eq!(
+                a.view(seen).observation_key(),
+                b.view(seen).observation_key()
             );
-            assert!(left.account(&AccountId::Objective(0)).is_none());
-            for policy in [
-                Policy::RadioCoordination,
-                Policy::Rendezvous,
-                Policy::NorthFirst,
-            ] {
-                assert_eq!(
-                    decision(&left, agent, policy),
-                    decision(&right, agent, policy)
-                );
-            }
         }
     }
     #[test]
@@ -1579,77 +1201,99 @@ mod tests {
     }
     #[test]
     fn private_discovery_requires_a_real_briefing_before_joint_extraction() {
-        let source = initial(false, 17);
-        let trace = trace_of(&source, Policy::RadioCoordination);
-        let mut replay = source.clone();
-        let mut discovered = false;
-        let mut briefed = false;
-        let mut extracted = false;
-        for exchange in trace.exchanges() {
-            if let RateId::Extract {
-                objective,
-                location,
-            } = exchange.rate()
-            {
-                assert!(briefed);
-                assert_eq!(
-                    value(&replay, AccountId::Objective(*objective), Asset::Stable),
-                    1
-                );
-                for agent in AGENTS {
-                    assert_eq!(
-                        value(&replay, AccountId::Agent(agent), Asset::At(*location)),
-                        1
-                    );
-                }
-                let rebound = exchange
-                    .clone()
-                    .bind(Role::Medic, AccountId::Agent(Agent::Scout));
-                assert!(!replay.is_applicable(&rebound));
-                extracted = true;
-            }
-            replay.apply(exchange.clone()).unwrap();
-            if let RateId::Discover {
-                objective: 0,
-                location,
-            } = exchange.rate()
-            {
-                assert!(
-                    agent_view(&replay, Agent::Scout)
-                        .account(&AccountId::Objective(0))
-                        .is_some()
-                );
-                assert!(
-                    agent_view(&replay, Agent::Medic)
-                        .account(&AccountId::Objective(0))
-                        .is_none()
-                );
-                assert!(!replay.is_applicable(&action(RateId::Extract {
+        let east = Location::East;
+        let known =
+            |world: &World, agent| value(world, AccountId::Agent(agent), Asset::Known(0, east));
+        let mut world = initial(false, 17);
+        apply_all(
+            &mut world,
+            &[
+                RateId::Scan,
+                RateId::Report {
+                    round: 0,
+                    location: east,
+                },
+                RateId::Tick(0),
+                RateId::Depart {
+                    agent: Agent::Scout,
+                    from: Location::Base,
+                    to: east,
+                },
+                RateId::Tick(1),
+                RateId::Tick(2),
+                RateId::Arrive {
+                    agent: Agent::Scout,
+                    to: east,
+                    hazardous: false,
+                },
+                RateId::Survey(east),
+                RateId::Discover {
                     objective: 0,
-                    location: *location
-                })));
-                discovered = true;
-            }
-            if let RateId::Share {
-                objective: 0,
-                remote: true,
-                ..
-            } = exchange.rate()
-            {
-                assert!(discovered);
-                assert!(
-                    agent_view(&replay, Agent::Medic)
-                        .account(&AccountId::Objective(0))
-                        .is_some()
-                );
-                assert_eq!(
-                    value(&replay, AccountId::Agent(Agent::Scout), Asset::UsedRadio),
-                    1
-                );
-                briefed = true;
-            }
+                    location: east,
+                },
+            ],
+        );
+        let extract = action(RateId::Extract {
+            objective: 0,
+            location: east,
+        });
+        assert_eq!(known(&world, Agent::Scout), 1);
+        assert_eq!(known(&world, Agent::Medic), 0);
+        assert!(!world.is_applicable(&extract));
+
+        apply_all(
+            &mut world,
+            &[
+                RateId::Tick(3),
+                RateId::Share {
+                    objective: 0,
+                    location: east,
+                    remote: true,
+                },
+            ],
+        );
+        assert_eq!(known(&world, Agent::Medic), 1);
+        assert_eq!(
+            value(&world, AccountId::Agent(Agent::Scout), Asset::UsedRadio),
+            1
+        );
+
+        apply_all(
+            &mut world,
+            &[
+                RateId::Depart {
+                    agent: Agent::Medic,
+                    from: Location::Base,
+                    to: east,
+                },
+                RateId::Tick(4),
+                RateId::Weather {
+                    location: east,
+                    opening: false,
+                },
+                RateId::Tick(5),
+                RateId::Arrive {
+                    agent: Agent::Medic,
+                    to: east,
+                    hazardous: true,
+                },
+                RateId::TreatPatient {
+                    objective: 0,
+                    location: east,
+                    restore: false,
+                },
+                RateId::Tick(6),
+            ],
+        );
+        assert_eq!(value(&world, AccountId::Objective(0), Asset::Stable), 1);
+        for agent in AGENTS {
+            assert_eq!(value(&world, AccountId::Agent(agent), Asset::At(east)), 1);
         }
-        assert!(discovered && briefed && extracted);
+        let rebound = extract
+            .clone()
+            .bind(Role::Medic, AccountId::Agent(Agent::Scout));
+        assert!(!world.is_applicable(&rebound));
+        world.apply(extract).unwrap();
     }
     #[test]
     fn movement_occupies_agents_and_scheduled_updates_cannot_be_skipped() {
@@ -1674,10 +1318,22 @@ mod tests {
             hazardous: false
         })));
         assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
-        world.apply(action(RateId::Tick(0))).unwrap();
-        while let Some(exchange) = nature_response(&world) {
-            world.apply(exchange).unwrap();
-        }
+        apply_all(
+            &mut world,
+            &[
+                RateId::Tick(0),
+                RateId::Arrive {
+                    agent: Agent::Scout,
+                    to: Location::North,
+                    hazardous: false,
+                },
+                RateId::Arrive {
+                    agent: Agent::Medic,
+                    to: Location::South,
+                    hazardous: false,
+                },
+            ],
+        );
         assert_eq!(
             value(
                 &world,
@@ -1699,17 +1355,29 @@ mod tests {
         }
         assert!(!world.is_applicable(&action(RateId::Tick(5))));
         assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
-        while let Some(exchange) = nature_response(&world) {
-            world.apply(exchange).unwrap();
-        }
+        apply_all(
+            &mut world,
+            &[RateId::Weather {
+                location: Location::North,
+                opening: false,
+            }],
+        );
         for tick in 5..8 {
             world.apply(action(RateId::Tick(tick))).unwrap();
         }
         assert!(!world.is_applicable(&action(RateId::Tick(8))));
         assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
-        while let Some(exchange) = nature_response(&world) {
-            world.apply(exchange).unwrap();
-        }
+        apply_all(
+            &mut world,
+            &[
+                RateId::Clinical {
+                    objective: 0,
+                    day: 8,
+                    active: true,
+                },
+                RateId::FinishClinical(8),
+            ],
+        );
         assert_eq!(value(&world, AccountId::Objective(0), Asset::Health), 2);
         assert!(world.is_applicable(&action(RateId::Tick(8))));
     }

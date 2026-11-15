@@ -2,32 +2,14 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
-    ObservationKey, Quantity, Rate, Trace, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
-use axionomy_search::{
-    action_source::{ActionSource, lazy_actions},
-    ismcts::{InformationState, IsmctsDecision, IsmctsProgress, IsmctsResult, IsmctsSession},
-    mcts::MctsConfig,
-    monte_carlo::{
-        BernoulliStatistics, MonteCarloConfig, MonteCarloProgress, MonteCarloSession,
-        MonteCarloStatus, PolicyEstimate, VectorStatistics, VectorSummary, evaluate,
-    },
-    pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
-    rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
-    sampling::{
-        EventTickets, SamplingError, SeededSampler, TicketSource, WeightedExchange,
-        choose_by_ticket, sample, sample_seed, systematic_ticket, total_weight,
-    },
-    session::{Continue, WorkBudget},
-    tree::{TreeSearchError, TreeStatus},
-};
-use std::ops::ControlFlow;
 pub mod expedition;
 #[cfg(feature = "packages")]
 pub mod package;
 
-const HORIZON: usize = 12;
+/// The most exchanges a Micro run takes, Nature's draw among them.
+pub const HORIZON: usize = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AgentId {
@@ -124,12 +106,6 @@ pub enum RateId {
     Finish,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Policy {
-    ShareAndCoordinate,
-    NorthTogether,
-}
-
 pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `mission` where economies are
@@ -145,87 +121,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type AgentView<'a> = EconomicView<'a, Ontology>;
-pub type MissionObservation = ObservationKey<Ontology>;
-pub type MissionInformation = InformationState<MissionObservation>;
-pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
-pub type PlanningDecision = IsmctsDecision<Action>;
-pub type PlanningError = TreeSearchError<Ontology>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PolicyObjective {
-    SuccessProbability,
-    MeanElapsedTime,
-    MedicalKitUseProbability,
-}
-
-#[derive(Debug, Clone)]
-pub struct MissionRollout {
-    trace: Trace<Ontology>,
-    succeeded: bool,
-    elapsed_time: u64,
-    used_medical_kit: bool,
-}
-
-/// Search evidence for an action that was actually committed to the mission.
-#[derive(Debug, Clone)]
-pub struct ReplanningStep {
-    /// Zero-based exchange index, including scenario instantiation.
-    pub trace_index: usize,
-    pub decision: PlanningDecision,
-    pub prior_worlds: usize,
-    pub posterior_worlds: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct PlannedMission {
-    pub rollout: MissionRollout,
-    pub decisions: Vec<ReplanningStep>,
-}
-
-impl MissionRollout {
-    pub const fn trace(&self) -> &Trace<Ontology> {
-        &self.trace
-    }
-
-    pub const fn succeeded(&self) -> bool {
-        self.succeeded
-    }
-
-    pub const fn elapsed_time(&self) -> u64 {
-        self.elapsed_time
-    }
-
-    pub const fn used_medical_kit(&self) -> bool {
-        self.used_medical_kit
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PolicyComparison {
-    chosen: Policy,
-    coordinated_successes: usize,
-    direct_successes: usize,
-    samples: usize,
-}
-
-impl PolicyComparison {
-    pub const fn chosen(self) -> Policy {
-        self.chosen
-    }
-
-    pub const fn coordinated_successes(self) -> usize {
-        self.coordinated_successes
-    }
-
-    pub const fn direct_successes(self) -> usize {
-        self.direct_successes
-    }
-
-    pub const fn samples(self) -> usize {
-        self.samples
-    }
-}
 
 pub fn initial() -> World {
     let mut nature = basket([(Asset::Unresolved, 1)]);
@@ -611,703 +506,6 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
 
-pub fn agent_view(world: &World, agent: AgentId) -> AgentView<'_> {
-    world.view([
-        AccountId::Agent(agent),
-        AccountId::Mission,
-        AccountId::Success,
-    ])
-}
-
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut rates = world.rate_ids().copied().collect::<Vec<_>>();
-    rates.sort();
-    world.applicable(rates.into_iter().map(action))
-}
-
-/// Produces the acting Scout's information identity without exposing Nature or
-/// the Medic's private account.
-pub fn scout_information(world: &World) -> MissionInformation {
-    InformationState::new(0, agent_view(world, AgentId::Scout).observation_key())
-}
-
-/// Lazily derives public mission decisions from the Scout's observation.
-///
-/// The emitted values are ordinary concrete exchanges. ISMCTS still assesses
-/// them against each sampled economy and revalidates the selected exchange
-/// against the live mission.
-pub fn decision_source() -> impl ActionSource<MissionInformation, Action> {
-    lazy_actions(
-        |information: &MissionInformation, emit: &mut dyn FnMut(Action)| {
-            if observed(information, AccountId::Mission, Asset::NeedsTreatment) {
-                emit(action(RateId::Treat));
-                return;
-            }
-            if observed(information, AccountId::Mission, Asset::AreaSafe) {
-                for location in [Location::North, Location::South] {
-                    if observed(
-                        information,
-                        AccountId::Agent(AgentId::Scout),
-                        Asset::At(location),
-                    ) {
-                        emit(action(RateId::Rescue(location)));
-                    }
-                }
-                return;
-            }
-            if observed(information, AccountId::Mission, Asset::Rescued) {
-                emit(action(RateId::Finish));
-                return;
-            }
-            if !observed(information, AccountId::Mission, Asset::Planning) {
-                return;
-            }
-
-            let has_sensor = observed(information, AccountId::Agent(AgentId::Scout), Asset::Sensor);
-            if has_sensor {
-                emit(action(RateId::BeginScan));
-            }
-            for location in [Location::North, Location::South] {
-                if observed(
-                    information,
-                    AccountId::Agent(AgentId::Scout),
-                    Asset::Intel(location),
-                ) {
-                    emit(action(RateId::Share(location)));
-                }
-                if observed(
-                    information,
-                    AccountId::Agent(AgentId::Scout),
-                    Asset::SharedIntel(location),
-                ) {
-                    emit(action(RateId::MoveTogether(location)));
-                }
-                if has_sensor {
-                    emit(action(RateId::MoveDirect(location)));
-                }
-            }
-        },
-    )
-}
-
-/// Plans a public mission decision from caller-supplied encoded belief worlds.
-///
-/// Belief management stays outside the authoritative economy. Every supplied
-/// determinization is still a complete economy, inconsistent worlds are
-/// discarded by observation identity, and the selected live exchange is
-/// revalidated against `actual`.
-pub fn plan(actual: &World, beliefs: &[World], config: MctsConfig) -> IsmctsResult<Ontology> {
-    plan_with_progress(actual, beliefs, config, usize::MAX, |_| {
-        ControlFlow::Continue(())
-    })
-    .map(|decision| decision.expect("planning nobody interrupts decides"))
-}
-
-pub fn plan_with_progress(
-    actual: &World,
-    beliefs: &[World],
-    config: MctsConfig,
-    chunk_size: usize,
-    mut observer: impl FnMut(IsmctsProgress) -> ControlFlow<()>,
-) -> Result<Option<PlanningDecision>, PlanningError> {
-    let root = scout_information(actual);
-    let compatible = beliefs
-        .iter()
-        .filter(|world| scout_information(world) == root)
-        .cloned()
-        .collect::<Vec<_>>();
-    let mut session = IsmctsSession::new(
-        actual,
-        config,
-        1,
-        scout_information,
-        move |_, random| {
-            (!compatible.is_empty()).then(|| {
-                let index = random.ticket(compatible.len() as u64) as usize;
-                compatible[index].clone()
-            })
-        },
-        decision_source(),
-        nature_outcomes,
-        |world| world.matches(&goal()).then_some(vec![1.0]),
-        |_| vec![0.0],
-        informed_rollout_action,
-    )?;
-    while session.status() == TreeStatus::Running {
-        let report = session.advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)?;
-        if observer(*report.progress()).is_break() {
-            return Ok(None);
-        }
-    }
-    Ok(session.into_decision())
-}
-
-/// Expands Nature's encoded integer-weighted prior into initial belief worlds.
-///
-/// This is fixture orchestration, not authoritative state: callers may retain,
-/// filter, replace, or generate their own complete encoded determinizations.
-pub fn initial_beliefs(model: &World) -> Vec<World> {
-    scenarios(model)
-        .into_iter()
-        .flat_map(|weighted| {
-            let mut world = model.clone();
-            world
-                .apply(weighted.exchange().clone())
-                .expect("scenario support contains applicable exchanges");
-            std::iter::repeat_n(
-                world,
-                usize::try_from(weighted.weight())
-                    .expect("this concrete fixture uses platform-sized integer weights"),
-            )
-        })
-        .collect()
-}
-
-/// Advances caller-owned beliefs through one public action and any immediately
-/// required encoded Nature response, then conditions on the live observation.
-pub fn update_beliefs(
-    beliefs: &[World],
-    public_action: &Action,
-    live_observation: &MissionInformation,
-) -> Vec<World> {
-    beliefs
-        .iter()
-        .filter_map(|belief| {
-            let mut next = belief.clone();
-            next.apply(public_action.clone()).ok()?;
-            if let Some(response) = nature_response(&next) {
-                next.apply(response).ok()?;
-            }
-            (scout_information(&next) == *live_observation).then_some(next)
-        })
-        .collect()
-}
-
-/// Returns the unique immediately required Nature exchange in this fixture.
-pub fn nature_response(world: &World) -> Option<Action> {
-    candidates(world).into_iter().find(|exchange| {
-        matches!(
-            exchange.rate(),
-            RateId::ResolveScan { .. } | RateId::Encounter { .. }
-        )
-    })
-}
-
-/// Instantiates one reproducible hidden scenario on an isolated branch.
-pub fn instantiate(model: &World, sample_index: usize) -> Option<World> {
-    let support = scenarios(model);
-    let total = total_weight(&support).ok()?;
-    let exchange = choose_by_ticket(&support, systematic_ticket(sample_index, total))
-        .ok()?
-        .clone();
-    let mut world = model.clone();
-    world.apply(exchange).ok()?;
-    Some(world)
-}
-
-/// Runs a policy on `world`, an unresolved model, in the scenario systematic
-/// sample `sample_index` selects; `world` is left where the rollout ended.
-pub fn run_policy(
-    world: &mut impl Apply<Ontology>,
-    policy: Policy,
-    sample_index: usize,
-) -> MissionRollout {
-    let scenario = systematic_scenario(world.economy(), sample_index);
-    run_policy_with_scenario(world, policy, scenario)
-}
-
-fn systematic_scenario(model: &World, sample_index: usize) -> Action {
-    let scenarios = scenarios(model);
-    let total = total_weight(&scenarios).expect("mission has encoded scenarios");
-    choose_by_ticket(&scenarios, systematic_ticket(sample_index, total))
-        .expect("systematic ticket is in range")
-        .clone()
-}
-
-/// Sample `index` of `policy` from the model in `scenario`, stepped where
-/// `episodes` keeps it.
-fn episode(
-    model: &World,
-    policy: &Policy,
-    index: usize,
-    scenario: Action,
-    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
-) -> MissionRollout {
-    let mut world = episodes.begin(policy, index, model.clone());
-    let rollout = run_policy_with_scenario(&mut world, *policy, scenario);
-    episodes.end(policy, index, world, &rollout);
-    rollout
-}
-
-/// Replans after every public decision and encoded Nature response. Search
-/// sees only Scout information and caller-owned belief worlds; the live core
-/// validates every selected action. Unsuccessful missions retain their trace.
-pub fn run_planned_with_progress(
-    model: &World,
-    sample_index: usize,
-    config: MctsConfig,
-    chunk_size: usize,
-    mut observer: impl FnMut(usize, IsmctsProgress) -> ControlFlow<()>,
-) -> Result<Option<PlannedMission>, crate::PlannedRunError<Ontology>> {
-    let support = scenarios(model);
-    let total = total_weight(&support)?;
-    let scenario = choose_by_ticket(&support, systematic_ticket(sample_index, total))?.clone();
-    let mut actual = model.clone();
-    actual.apply(scenario.clone())?;
-    let mut trace = Trace::new();
-    trace.push(scenario);
-    let mut beliefs = initial_beliefs(model);
-    let mut decisions = Vec::new();
-    while trace.exchanges().len() < HORIZON && !actual.matches(&goal()) {
-        // A wrong destination can leave the encoded mission without a Nature
-        // response or a public action. Preserve that failure instead of
-        // consulting hidden truth to manufacture a recovery.
-        let decision = match plan_with_progress(
-            &actual,
-            &beliefs,
-            config.with_seed(config.seed().wrapping_add(decisions.len() as u64)),
-            chunk_size,
-            |state| observer(decisions.len(), state),
-        ) {
-            Ok(Some(decision)) => decision,
-            Ok(None) => return Ok(None),
-            Err(TreeSearchError::NoRootActions) => break,
-            Err(error) => return Err(error.into()),
-        };
-        let trace_index = trace.exchanges().len();
-        let prior_worlds = beliefs.len();
-        actual.apply(decision.action().clone())?;
-        trace.push(decision.action().clone());
-        if let Some(response) = nature_response(&actual) {
-            actual.apply(response.clone())?;
-            trace.push(response);
-        }
-        beliefs = update_beliefs(&beliefs, decision.action(), &scout_information(&actual));
-        decisions.push(ReplanningStep {
-            trace_index,
-            decision,
-            prior_worlds,
-            posterior_worlds: beliefs.len(),
-        });
-    }
-    let replayed = model.replayed(&trace)?;
-    if replayed.state_key() != actual.state_key() {
-        return Err(crate::PlannedRunError::Diverged);
-    }
-    Ok(Some(PlannedMission {
-        rollout: MissionRollout {
-            trace,
-            succeeded: replayed.matches(&goal()),
-            elapsed_time: replayed
-                .balance(&AccountId::Mission, &Asset::ElapsedTime)
-                .to_u64(),
-            used_medical_kit: !replayed
-                .balance(&AccountId::Agent(AgentId::Medic), &Asset::UsedMedicalKit)
-                .is_zero(),
-        },
-        decisions,
-    }))
-}
-
-fn run_policy_with_scenario(
-    world: &mut impl Apply<Ontology>,
-    policy: Policy,
-    scenario: Action,
-) -> MissionRollout {
-    let goal = goal();
-    let mut scenario = Some(scenario);
-    let result = run_to_goal(
-        world,
-        &goal,
-        RolloutConfig::new(HORIZON).with_retention(TraceRetention::Trace),
-        |world, _| {
-            let proposal = if !world
-                .balance(&AccountId::Nature, &Asset::Unresolved)
-                .is_zero()
-            {
-                scenario.take()
-            } else {
-                policy_action(world, policy)
-            };
-            match proposal {
-                Some(exchange) => RolloutDecision::Propose(exchange),
-                None => RolloutDecision::Stop(RolloutStop::NoProposal),
-            }
-        },
-    );
-    let end = world.economy();
-    MissionRollout {
-        trace: result
-            .trace()
-            .cloned()
-            .expect("mission rollouts retain traces"),
-        succeeded: end.matches(&goal),
-        elapsed_time: end
-            .balance(&AccountId::Mission, &Asset::ElapsedTime)
-            .to_u64(),
-        used_medical_kit: !end
-            .balance(&AccountId::Agent(AgentId::Medic), &Asset::UsedMedicalKit)
-            .is_zero(),
-    }
-}
-
-/// Exhaustively compares policies across every integer-weighted scenario.
-pub fn evaluate_scenarios(
-    model: &World,
-    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
-) -> Option<PolicyComparison> {
-    let support = scenarios(model);
-    let samples = usize::try_from(total_weight(&support).ok()?).ok()?;
-    let estimates = evaluate(
-        [Policy::ShareAndCoordinate, Policy::NorthTogether],
-        MonteCarloConfig::new(samples),
-        |policy, sample| {
-            let scenario = systematic_scenario(model, sample);
-            Ok::<_, std::convert::Infallible>(
-                episode(model, policy, sample, scenario, episodes).succeeded(),
-            )
-        },
-        BernoulliStatistics::new,
-    )
-    .ok()?;
-    comparison(estimates, samples)
-}
-
-/// The scenario of `support`, Nature's prior, that the world seeded `seed`
-/// draws: the event `scenario`, drawn once, as a run begins.
-fn drawn_scenario(
-    support: &[WeightedExchange<Action>],
-    seed: u64,
-) -> Result<&Action, SamplingError> {
-    sample(support, &mut EventTickets::new(seed, &path!("scenario")))
-}
-
-/// Estimates policies from reproducible random draws over the encoded prior.
-pub fn monte_carlo(
-    model: &World,
-    samples: usize,
-    seed: u64,
-    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
-) -> Option<PolicyComparison> {
-    monte_carlo_with_progress(model, samples, seed, episodes, usize::MAX, |_| {
-        ControlFlow::Continue(())
-    })
-}
-
-pub fn monte_carlo_with_progress(
-    model: &World,
-    samples: usize,
-    seed: u64,
-    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
-    chunk_size: usize,
-    mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
-) -> Option<PolicyComparison> {
-    let support = scenarios(model);
-    let mut session = MonteCarloSession::new(
-        [Policy::ShareAndCoordinate, Policy::NorthTogether],
-        MonteCarloConfig::new(samples),
-        |policy: &Policy, sample_index| {
-            let scenario = drawn_scenario(&support, sample_seed(seed, sample_index))
-                .map_err(|_| ())?
-                .clone();
-            Ok::<_, ()>(episode(model, policy, sample_index, scenario, episodes).succeeded())
-        },
-        BernoulliStatistics::new,
-    );
-    while session.status() == MonteCarloStatus::Running {
-        let report = session
-            .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
-            .ok()?;
-        if observer(*report.progress()).is_break() {
-            return None;
-        }
-    }
-    comparison(session.into_estimates()?, samples)
-}
-
-/// Estimates a non-dominated policy set from sampled hidden scenarios.
-pub fn policy_front(
-    model: &World,
-    samples: usize,
-    seed: u64,
-    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
-) -> Option<PolicyFront> {
-    policy_front_with_progress(model, samples, seed, episodes, usize::MAX, |_| {
-        ControlFlow::Continue(())
-    })
-}
-
-pub fn policy_front_with_progress(
-    model: &World,
-    samples: usize,
-    seed: u64,
-    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
-    chunk_size: usize,
-    mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
-) -> Option<PolicyFront> {
-    if samples == 0 {
-        return None;
-    }
-    let support = scenarios(model);
-    let mut session = MonteCarloSession::new(
-        [Policy::ShareAndCoordinate, Policy::NorthTogether],
-        MonteCarloConfig::new(samples),
-        |policy: &Policy, sample_index| {
-            let scenario = drawn_scenario(&support, sample_seed(seed, sample_index))
-                .map_err(|_| ())?
-                .clone();
-            let rollout = episode(model, policy, sample_index, scenario, episodes);
-            Ok::<_, ()>(vec![
-                f64::from(rollout.succeeded()),
-                rollout.elapsed_time() as f64,
-                f64::from(rollout.used_medical_kit()),
-            ])
-        },
-        || VectorStatistics::new(3),
-    );
-    while session.status() == MonteCarloStatus::Running {
-        let report = session
-            .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
-            .ok()?;
-        if observer(*report.progress()).is_break() {
-            return None;
-        }
-    }
-    policy_front_from(session.into_estimates()?)
-}
-
-fn policy_front_from(estimates: Vec<PolicyEstimate<Policy, VectorSummary>>) -> Option<PolicyFront> {
-    let mut front = ParetoFront::approximate();
-    for estimate in estimates {
-        let objectives = policy_objectives(estimate.summary())?;
-        front.insert(estimate, objectives).ok()?;
-    }
-    debug_assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
-    Some(front)
-}
-
-pub fn policy_objectives(summary: &VectorSummary) -> Option<ObjectiveVector<PolicyObjective, f64>> {
-    let dimensions = summary.dimensions();
-    (dimensions.len() == 3).then_some(())?;
-    ObjectiveVector::try_new([
-        Objective::maximize(PolicyObjective::SuccessProbability, dimensions[0].mean()),
-        Objective::minimize(PolicyObjective::MeanElapsedTime, dimensions[1].mean()),
-        Objective::minimize(
-            PolicyObjective::MedicalKitUseProbability,
-            dimensions[2].mean(),
-        ),
-    ])
-    .ok()
-}
-
-fn comparison(
-    estimates: Vec<
-        axionomy_search::monte_carlo::PolicyEstimate<
-            Policy,
-            axionomy_search::monte_carlo::BernoulliSummary,
-        >,
-    >,
-    samples: usize,
-) -> Option<PolicyComparison> {
-    let coordinated_successes = estimates
-        .iter()
-        .find(|estimate| estimate.policy() == &Policy::ShareAndCoordinate)?
-        .summary()
-        .successes();
-    let direct_successes = estimates
-        .iter()
-        .find(|estimate| estimate.policy() == &Policy::NorthTogether)?
-        .summary()
-        .successes();
-    Some(PolicyComparison {
-        chosen: if coordinated_successes >= direct_successes {
-            Policy::ShareAndCoordinate
-        } else {
-            Policy::NorthTogether
-        },
-        coordinated_successes,
-        direct_successes,
-        samples,
-    })
-}
-
-fn policy_action(world: &World, policy: Policy) -> Option<Action> {
-    if !world
-        .balance(&AccountId::Mission, &Asset::AwaitingScan)
-        .is_zero()
-    {
-        return candidates(world)
-            .into_iter()
-            .find(|exchange| matches!(exchange.rate(), RateId::ResolveScan { .. }));
-    }
-    if !world
-        .balance(&AccountId::Mission, &Asset::Rescued)
-        .is_zero()
-    {
-        return Some(action(RateId::Finish));
-    }
-    if !world
-        .balance(&AccountId::Mission, &Asset::NeedsTreatment)
-        .is_zero()
-    {
-        return Some(action(RateId::Treat));
-    }
-    if !world
-        .balance(&AccountId::Mission, &Asset::AreaSafe)
-        .is_zero()
-    {
-        let location = agent_location(world, AgentId::Scout)?;
-        return Some(action(RateId::Rescue(location)));
-    }
-    if !world
-        .balance(&AccountId::Mission, &Asset::AwaitingEncounter)
-        .is_zero()
-    {
-        return candidates(world)
-            .into_iter()
-            .find(|exchange| matches!(exchange.rate(), RateId::Encounter { .. }));
-    }
-
-    match policy {
-        Policy::NorthTogether => Some(action(RateId::MoveDirect(Location::North))),
-        Policy::ShareAndCoordinate => {
-            let scout = agent_view(world, AgentId::Scout);
-            if scout
-                .balance(&AccountId::Agent(AgentId::Scout), &Asset::Sensor)
-                .is_some_and(|quantity| !quantity.is_zero())
-            {
-                return Some(action(RateId::BeginScan));
-            }
-            if let Some(location) = believed_location(&scout, AgentId::Scout, false) {
-                return Some(action(RateId::Share(location)));
-            }
-            let medic = agent_view(world, AgentId::Medic);
-            believed_location(&medic, AgentId::Medic, false)
-                .map(|location| action(RateId::MoveTogether(location)))
-        }
-    }
-}
-
-fn observed(information: &MissionInformation, account: AccountId, asset: Asset) -> bool {
-    information
-        .key()
-        .balances()
-        .iter()
-        .any(|(present_account, present_asset, quantity)| {
-            present_account == &account && present_asset == &asset && !quantity.is_zero()
-        })
-}
-
-fn nature_outcomes(world: &World) -> Vec<WeightedExchange<Action>> {
-    candidates(world)
-        .into_iter()
-        .filter(|exchange| {
-            matches!(
-                exchange.rate(),
-                RateId::ResolveScan { .. } | RateId::Encounter { .. }
-            )
-        })
-        .map(|exchange| WeightedExchange::new(exchange, 1))
-        .collect()
-}
-
-fn informed_rollout_action(
-    information: &MissionInformation,
-    actions: &[Action],
-    _: &mut SeededSampler,
-) -> Option<Action> {
-    let preferred_location = [Location::North, Location::South]
-        .into_iter()
-        .find(|location| {
-            observed(
-                information,
-                AccountId::Agent(AgentId::Scout),
-                Asset::Intel(*location),
-            ) || observed(
-                information,
-                AccountId::Agent(AgentId::Scout),
-                Asset::SharedIntel(*location),
-            )
-        });
-    for simple in [RateId::Finish, RateId::Treat] {
-        if let Some(action) = actions.iter().find(|exchange| exchange.rate() == &simple) {
-            return Some(action.clone());
-        }
-    }
-    if let Some(action) = actions
-        .iter()
-        .find(|exchange| matches!(exchange.rate(), RateId::Rescue(_)))
-    {
-        return Some(action.clone());
-    }
-    if let Some(location) = preferred_location {
-        for preferred in [RateId::Share(location), RateId::MoveTogether(location)] {
-            if let Some(action) = actions
-                .iter()
-                .find(|exchange| exchange.rate() == &preferred)
-            {
-                return Some(action.clone());
-            }
-        }
-    }
-    for fallback in [
-        RateId::BeginScan,
-        RateId::MoveDirect(Location::North),
-        RateId::MoveDirect(Location::South),
-    ] {
-        if let Some(action) = actions.iter().find(|exchange| exchange.rate() == &fallback) {
-            return Some(action.clone());
-        }
-    }
-    None
-}
-
-fn believed_location(view: &AgentView<'_>, agent: AgentId, shared: bool) -> Option<Location> {
-    [Location::North, Location::South]
-        .into_iter()
-        .find(|location| {
-            let asset = if shared {
-                Asset::SharedIntel(*location)
-            } else {
-                Asset::Intel(*location)
-            };
-            view.balance(&AccountId::Agent(agent), &asset)
-                .is_some_and(|quantity| !quantity.is_zero())
-        })
-}
-
-fn scenarios(model: &World) -> Vec<WeightedExchange<Action>> {
-    candidates(model)
-        .into_iter()
-        .filter_map(|exchange| match *exchange.rate() {
-            RateId::Instantiate {
-                truth,
-                seed,
-                hazard,
-            } => Some(WeightedExchange::new(
-                exchange,
-                model
-                    .balance(
-                        &AccountId::Nature,
-                        &Asset::ScenarioWeight(truth, seed, hazard),
-                    )
-                    .to_u64(),
-            )),
-            _ => None,
-        })
-        .collect()
-}
-
-fn agent_location(world: &World, agent: AgentId) -> Option<Location> {
-    [Location::Base, Location::North, Location::South]
-        .into_iter()
-        .find(|location| {
-            !world
-                .balance(&AccountId::Agent(agent), &Asset::At(*location))
-                .is_zero()
-        })
-}
-
 fn signal(truth: Location, seed: u8) -> Location {
     if seed == 0 {
         match truth {
@@ -1320,7 +518,9 @@ fn signal(truth: Location, seed: u8) -> Location {
     }
 }
 
-fn action(rate: RateId) -> Action {
+/// The exchange of one unit of `rate`, each of its roles bound to the
+/// account that plays it.
+pub fn action(rate: RateId) -> Action {
     let exchange = Exchange::new(rate, Quantity::new(1));
     match rate {
         RateId::Instantiate { .. } => exchange.bind(Role::Nature, AccountId::Nature),
@@ -1351,310 +551,104 @@ fn action(rate: RateId) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy_search::rollout::Unrecorded;
-    use axionomy_search::{action_source::collect_actions, rl::replay_transitions};
+    use axionomy::Trace;
+
+    /// What the Scout's view holds: its own account and the team's.
+    const SCOUT_SEES: [AccountId; 3] = [
+        AccountId::Agent(AgentId::Scout),
+        AccountId::Mission,
+        AccountId::Success,
+    ];
 
     #[test]
-    fn agent_views_hide_nature_and_each_other() {
-        let world = initial();
-        let scout = agent_view(&world, AgentId::Scout);
-        let medic = agent_view(&world, AgentId::Medic);
-
-        assert!(scout.account(&AccountId::Nature).is_none());
-        assert!(scout.account(&AccountId::Agent(AgentId::Medic)).is_none());
-        assert!(medic.account(&AccountId::Nature).is_none());
-        assert!(medic.account(&AccountId::Agent(AgentId::Scout)).is_none());
-    }
-
-    #[test]
-    fn equal_scout_observations_have_equal_public_decisions() {
-        let model = initial();
-        let north = (0..16)
-            .filter_map(|sample| instantiate(&model, sample))
-            .find(|world| {
-                !world
-                    .balance(&AccountId::Nature, &Asset::Truth(Location::North))
-                    .is_zero()
-            })
-            .expect("the prior includes a north world");
-        let south = (0..16)
-            .filter_map(|sample| instantiate(&model, sample))
-            .find(|world| {
-                !world
-                    .balance(&AccountId::Nature, &Asset::Truth(Location::South))
-                    .is_zero()
-            })
-            .expect("the prior includes a south world");
+    fn the_scout_holds_the_same_before_scanning_whatever_the_truth() {
+        let instantiated = |truth| {
+            let mut world = initial();
+            world
+                .apply(action(RateId::Instantiate {
+                    truth,
+                    seed: 0,
+                    hazard: Hazard::Injury,
+                }))
+                .expect("the prior encodes the scenario");
+            world
+        };
+        let north = instantiated(Location::North);
+        let south = instantiated(Location::South);
 
         assert_ne!(north.state_key(), south.state_key());
-        assert_eq!(scout_information(&north), scout_information(&south));
-        let information = scout_information(&north);
-        let mut source = decision_source();
-        let proposals = collect_actions(&mut source, &information);
         assert_eq!(
-            proposals,
-            vec![
-                action(RateId::BeginScan),
-                action(RateId::MoveDirect(Location::North)),
-                action(RateId::MoveDirect(Location::South)),
-            ]
+            north.view(SCOUT_SEES).observation_key(),
+            south.view(SCOUT_SEES).observation_key()
         );
-        assert!(proposals.iter().all(|proposal| {
-            !matches!(
-                proposal.rate(),
-                RateId::Instantiate { .. } | RateId::ResolveScan { .. } | RateId::Encounter { .. }
-            )
-        }));
-
-        let config = MctsConfig::new(1_024, HORIZON).with_seed(29);
-        let beliefs = initial_beliefs(&model);
-        let north_decision = plan(&north, &beliefs, config).expect("north can be planned");
-        let south_decision = plan(&south, &beliefs, config).expect("south can be planned");
-
-        assert_eq!(north_decision.action().rate(), &RateId::BeginScan);
-        assert_eq!(north_decision.action(), south_decision.action());
-        assert!(north.is_applicable(north_decision.action()));
-        assert!(south.is_applicable(south_decision.action()));
-    }
-
-    #[test]
-    fn caller_filters_beliefs_and_replans_after_the_scan() {
-        let model = initial();
-        let beliefs = initial_beliefs(&model);
-        assert_eq!(beliefs.len(), 16);
-        let mut actual = instantiate(&model, 3).expect("scenario exists");
-
-        let first = plan(
-            &actual,
-            &beliefs,
-            MctsConfig::new(1_024, HORIZON).with_seed(29),
-        )
-        .expect("initial information set can be planned");
-        assert_eq!(first.action().rate(), &RateId::BeginScan);
-        actual
-            .apply(first.action().clone())
-            .expect("public scan intent applies");
-        let response = nature_response(&actual).expect("Nature resolves the scan");
-        actual.apply(response).expect("encoded response applies");
-
-        let observation = scout_information(&actual);
-        let posterior = update_beliefs(&beliefs, first.action(), &observation);
-        assert!(!posterior.is_empty());
-        assert!(posterior.len() < beliefs.len());
-        assert!(
-            posterior
-                .iter()
-                .all(|belief| scout_information(belief) == observation)
-        );
-
-        let second = plan(
-            &actual,
-            &posterior,
-            MctsConfig::new(1_024, HORIZON).with_seed(37),
-        )
-        .expect("posterior information set can be replanned");
-        assert!(matches!(second.action().rate(), RateId::Share(_)));
-        assert!(actual.is_applicable(second.action()));
-    }
-
-    #[test]
-    fn planned_mission_commits_search_choices_and_conditions_each_observation() {
-        let model = initial();
-        let before = model.state_key();
-        let run = || {
-            run_planned_with_progress(
-                &model,
-                3,
-                MctsConfig::new(128, HORIZON).with_seed(17),
-                32,
-                |_, _| ControlFlow::Continue(()),
-            )
-            .unwrap()
-            .unwrap()
-        };
-        let result = run();
-        assert!(result.rollout.succeeded());
-        assert!(result.decisions.len() >= 5);
-        assert_eq!(model.state_key(), before);
-        assert_eq!(
-            result.rollout.trace().exchanges(),
-            run().rollout.trace().exchanges()
-        );
-        let mut actual = model.clone();
-        let mut beliefs = initial_beliefs(&model);
-        for (index, exchange) in result.rollout.trace().exchanges().iter().enumerate() {
-            actual.apply(exchange.clone()).unwrap();
-            if let Some(step) = result
-                .decisions
-                .iter()
-                .find(|step| step.trace_index == index)
-            {
-                assert_eq!(step.decision.action(), exchange);
-                assert_eq!(step.prior_worlds, beliefs.len());
-                let mut observed = actual.clone();
-                if let Some(response) = nature_response(&observed) {
-                    observed.apply(response).unwrap();
-                }
-                beliefs = update_beliefs(&beliefs, exchange, &scout_information(&observed));
-                assert_eq!(step.posterior_worlds, beliefs.len());
-                assert!(!beliefs.is_empty());
-            }
-        }
-        assert!(actual.matches(&goal()));
-        assert!(
-            result
-                .decisions
-                .iter()
-                .any(|step| step.posterior_worlds < step.prior_worlds)
-        );
-    }
-
-    #[test]
-    fn planned_mission_can_be_interrupted_without_mutating_the_source() {
-        let model = initial();
-        let before = model.state_key();
-        let result =
-            run_planned_with_progress(&model, 3, MctsConfig::new(128, HORIZON), 8, |_, _| {
-                ControlFlow::Break(())
-            })
-            .unwrap();
-        assert!(result.is_none());
-        assert_eq!(model.state_key(), before);
+        let scan = action(RateId::BeginScan);
+        assert!(north.is_applicable(&scan));
+        assert!(south.is_applicable(&scan));
     }
 
     #[test]
     fn coordinated_sample_replays_with_intelligence_transfer() {
         let model = initial();
-        let rollout = run_policy(&mut model.clone(), Policy::ShareAndCoordinate, 3);
+        let rates = [
+            RateId::Instantiate {
+                truth: Location::North,
+                seed: 1,
+                hazard: Hazard::Safe,
+            },
+            RateId::BeginScan,
+            RateId::ResolveScan {
+                truth: Location::North,
+                seed: 1,
+                report: Location::North,
+                next_seed: 2,
+            },
+            RateId::Share(Location::North),
+            RateId::MoveTogether(Location::North),
+            RateId::Encounter {
+                location: Location::North,
+                hazard: Hazard::Safe,
+            },
+            RateId::Rescue(Location::North),
+            RateId::Finish,
+        ];
+        let trace: Trace<Ontology> = rates.into_iter().map(action).collect();
 
-        assert!(
-            rollout.succeeded(),
-            "trace: {:?}",
-            rollout
-                .trace()
-                .exchanges()
-                .iter()
-                .map(Action::rate)
-                .collect::<Vec<_>>()
-        );
-        assert!(
-            rollout
-                .trace()
-                .exchanges()
-                .iter()
-                .any(|exchange| exchange.rate() == &RateId::BeginScan)
-        );
-        assert!(
-            rollout
-                .trace()
-                .exchanges()
-                .iter()
-                .any(|exchange| matches!(exchange.rate(), RateId::ResolveScan { .. }))
-        );
-        assert!(
-            rollout
-                .trace()
-                .exchanges()
-                .iter()
-                .any(|exchange| matches!(exchange.rate(), RateId::Share(_)))
-        );
-        assert!(
-            rollout
-                .trace()
-                .exchanges()
-                .iter()
-                .any(|exchange| matches!(exchange.rate(), RateId::Encounter { .. }))
-        );
-        let replayed = model
-            .replayed(rollout.trace())
-            .expect("mission trace must replay");
+        // The Medic follows the Scout's intelligence only once it is shared.
+        let scanned = model
+            .replayed(&trace.exchanges()[..3].iter().cloned().collect())
+            .expect("the scan replays");
+        assert!(!scanned.is_applicable(&action(RateId::MoveTogether(Location::North))));
+
+        let replayed = model.replayed(&trace).expect("mission trace must replay");
         assert!(replayed.matches(&goal()));
-        assert!(candidates(&replayed).is_empty());
-    }
-
-    #[test]
-    fn exact_scenario_evaluation_prefers_observe_share_and_coordinate() {
-        let estimate =
-            evaluate_scenarios(&initial(), &mut Unrecorded).expect("mission prior is encoded");
-
-        assert_eq!(estimate.coordinated_successes(), 12);
-        assert_eq!(estimate.direct_successes(), 8);
-        assert_eq!(estimate.chosen(), Policy::ShareAndCoordinate);
-    }
-
-    #[test]
-    fn seeded_monte_carlo_is_reproducible() {
-        let model = initial();
-        assert_eq!(
-            monte_carlo(&model, 64, 23, &mut Unrecorded),
-            monte_carlo(&model, 64, 23, &mut Unrecorded)
-        );
-    }
-
-    #[test]
-    fn sampled_policy_front_keeps_reliability_cost_tradeoff_approximate() {
-        let front = policy_front(&initial(), 64, 23, &mut Unrecorded).unwrap();
-        assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
-        assert_eq!(front.len(), 2);
-        for entry in front.entries() {
-            assert_eq!(entry.payload().summary().dimensions()[0].samples(), 64);
-            assert_eq!(
-                &policy_objectives(entry.payload().summary()).unwrap(),
-                entry.objectives()
-            );
-        }
-    }
-
-    #[test]
-    fn replayed_mission_produces_observation_and_outcome_transitions() {
-        let model = initial();
-        let rollout = run_policy(&mut model.clone(), Policy::ShareAndCoordinate, 3);
-        let transitions = replay_transitions(
-            &model,
-            rollout.trace(),
-            |world| {
-                [
-                    world
-                        .balance(&AccountId::Mission, &Asset::Planning)
-                        .to_u64(),
-                    world
-                        .balance(&AccountId::Mission, &Asset::AwaitingEncounter)
-                        .to_u64(),
-                    world.balance(&AccountId::Success, &Asset::Solved).to_u64(),
-                ]
-            },
-            |world| {
-                [
-                    world.balance(&AccountId::Success, &Asset::Solved).to_u64(),
-                    world
-                        .balance(&AccountId::Mission, &Asset::ElapsedTime)
-                        .to_u64(),
-                ]
-            },
-            |world| world.matches(&goal()),
-        )
-        .expect("valid mission trace becomes learning data");
-
-        assert_eq!(transitions.len(), rollout.trace().exchanges().len());
-        assert!(transitions.last().expect("finish transition").terminal());
-        assert_eq!(
-            transitions.last().expect("finish transition").outcome()[0],
-            1
+        assert!(
+            replayed
+                .rate_ids()
+                .all(|rate| !replayed.is_applicable(&action(*rate)))
         );
     }
 
     #[test]
     fn encoded_roles_reject_resolving_a_scan_into_the_medics_account() {
-        let model = initial();
-        let mut world = instantiate(&model, 0).expect("scenario exists");
+        let mut world = initial();
+        world
+            .apply(action(RateId::Instantiate {
+                truth: Location::North,
+                seed: 0,
+                hazard: Hazard::Injury,
+            }))
+            .expect("the prior encodes the scenario");
         world
             .apply(action(RateId::BeginScan))
             .expect("scout starts scan");
-        let resolution = candidates(&world)
-            .into_iter()
-            .find(|exchange| matches!(exchange.rate(), RateId::ResolveScan { .. }))
-            .expect("nature can resolve the scan");
-        let rebound = Exchange::new(*resolution.rate(), Quantity::new(1))
+        let resolution = RateId::ResolveScan {
+            truth: Location::North,
+            seed: 0,
+            report: Location::South,
+            next_seed: 1,
+        };
+        assert!(world.is_applicable(&action(resolution)));
+        let rebound = Exchange::new(resolution, Quantity::new(1))
             .bind(Role::Scout, AccountId::Agent(AgentId::Medic))
             .bind(Role::Nature, AccountId::Nature)
             .bind(Role::Mission, AccountId::Mission);

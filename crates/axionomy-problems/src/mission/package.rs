@@ -1,14 +1,13 @@
 //! The hidden-information mission as a package. Micro is a `mission`
 //! economy: Nature's weighted prior over where the victim is, the sensor's
 //! seed and the hazard, the scenario its seed draws, a step on from it,
-//! and success, time and medical-kit objectives. Its planner is a game as
-//! the Rust receding-horizon run plays it: Nature answers the team, and
-//! the Scout chooses every public action by information-set tree search
-//! over what it sees, each iteration in a world its observations since the
-//! prior leave possible; the direct-north policy commits without looking.
-//! An experiment on that scenario compares them, and a Monte Carlo
-//! experiment over the prior samples the fixed policies the Rust front
-//! compares, share-and-coordinate and direct north.
+//! and success, time and medical-kit objectives. Its planner is a game:
+//! Nature answers the team, and the Scout chooses every public action by
+//! information-set tree search over what it sees, each iteration in a
+//! world its observations since the prior leave possible; the direct-north
+//! policy commits without looking. An experiment on that scenario compares
+//! them, and a Monte Carlo experiment over the prior samples the fixed
+//! policies, share-and-coordinate and direct north.
 //! Showcase and Stress are `mission/expedition` economies, an ontology of
 //! its own whose hidden sites and hazard the sample's seed sets, so their
 //! goal, policies and objectives are named under `mission/expedition`: radio
@@ -34,7 +33,7 @@ const EXPEDITION: &str = include_str!("../../scripts/expedition.rhai");
 const VIEW: &str = include_str!("../../scripts/mission-view.rhai");
 const EXPEDITION_VIEW: &str = include_str!("../../scripts/expedition-view.rhai");
 
-/// The seed the sample's Rust runs are played with: Micro's scenario and planning
+/// The seed the sample's experiments play: Micro's scenario and planning
 /// seeds, and the expeditions' hidden sites and hazard.
 const SEED: u64 = 17;
 /// Micro's Monte Carlo samples at an effort of 128, clamped to at most 16:
@@ -103,7 +102,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             iterations: SAMPLES,
             depth: HORIZON,
             rollout: Some(micro("informed")),
-            // The Rust planner seeds its kth decision with its seed, plus k.
+            // The kth decision is seeded with the run's seed, plus k.
             salt: 0,
         }],
     };
@@ -117,7 +116,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     };
     let coordinated = kept("mission/coordinated", &planner)?;
     let direct_north = kept("mission/direct-north", &policy("direct_north"))?;
-    // The fixed coordinating policy the Rust front samples beside direct
+    // The fixed coordinating policy the Monte Carlo samples beside direct
     // north; the planner, not it, plays the `coordinated` arm.
     let share_and_coordinate = kept(
         "mission/share-and-coordinate",
@@ -153,9 +152,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         },
         &objectives,
     )?;
-    // The fixed policies' front, as the Rust Monte Carlo samples it: each
-    // trial draws its scenario from the prior by the event `scenario` with
-    // its seed, as that Monte Carlo draws it for the same sample.
+    // The fixed policies over the prior: each trial draws its scenario by
+    // the event `scenario` with its seed.
     experiment(
         engine,
         "mission/micro/monte-carlo",
