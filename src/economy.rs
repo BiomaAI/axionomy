@@ -13,7 +13,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
@@ -590,20 +590,139 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
     issues
 }
 
-/// The next values of an odometer over `domains`, the last turning fastest;
-/// none after the last.
-fn advanced(
-    mut indices: Vec<usize>,
-    domains: &[(VariablePath, Vec<crate::Segment>)],
-) -> Option<Vec<usize>> {
-    for position in (0..indices.len()).rev() {
-        indices[position] += 1;
-        if indices[position] < domains[position].1.len() {
-            return Some(indices);
+/// A rate's variables' values in turn, the first declared outermost, never
+/// going on from values a relation or a distinct pair already refuses.
+struct Values<'a> {
+    domains: Vec<(VariablePath, Vec<crate::Segment>)>,
+    /// What to check once the variable at each position has a value.
+    checks: Vec<Vec<Check<'a>>>,
+    indices: Vec<usize>,
+    depth: usize,
+    done: bool,
+}
+
+enum Check<'a> {
+    /// The values at these positions begin one of a relation's rows, which
+    /// begin these.
+    Related(Vec<usize>, HashSet<Vec<&'a crate::Segment>>),
+    /// The values at these positions differ.
+    Distinct(usize, usize),
+}
+
+impl<'a> Values<'a> {
+    fn new<O: Ontology>(
+        rate: Option<&'a Rate<O>>,
+        domains: Vec<(VariablePath, Vec<crate::Segment>)>,
+    ) -> Self {
+        let position = |name: &VariablePath| domains.iter().position(|(other, _)| other == name);
+        let mut checks: Vec<Vec<Check<'a>>> = domains.iter().map(|_| Vec::new()).collect();
+        // A relation is checked at each of its variables, in declared order:
+        // the values so far must begin one of its rows.
+        for relation in rate.into_iter().flat_map(Rate::relations) {
+            let Some(positions) = relation
+                .variables()
+                .iter()
+                .map(position)
+                .collect::<Option<Vec<usize>>>()
+            else {
+                continue;
+            };
+            let mut columns: Vec<(usize, usize)> = positions
+                .iter()
+                .enumerate()
+                .map(|(column, &position)| (position, column))
+                .collect();
+            columns.sort_unstable();
+            for length in 1..=columns.len() {
+                let (positions, columns): (Vec<usize>, Vec<usize>) =
+                    columns[..length].iter().copied().unzip();
+                let rows = relation
+                    .rows()
+                    .iter()
+                    .filter(|row| row.len() == relation.variables().len())
+                    .map(|row| columns.iter().map(|&column| &row[column]).collect())
+                    .collect();
+                checks[positions[length - 1]].push(Check::Related(positions, rows));
+            }
         }
-        indices[position] = 0;
+        for (left, right) in rate.into_iter().flat_map(Rate::distinct_variable_pairs) {
+            if let (Some(left), Some(right)) = (position(left), position(right)) {
+                checks[left.max(right)].push(Check::Distinct(left, right));
+            }
+        }
+        let done = rate.is_none() || domains.iter().any(|(_, values)| values.is_empty());
+        Self {
+            indices: vec![0; domains.len()],
+            domains,
+            checks,
+            depth: 0,
+            done,
+        }
     }
-    None
+
+    fn value(&self, position: usize) -> &crate::Segment {
+        &self.domains[position].1[self.indices[position]]
+    }
+
+    /// Whether the values up to `depth` pass what is checked there.
+    fn holds(&self, depth: usize) -> bool {
+        self.checks[depth].iter().all(|check| match check {
+            Check::Related(positions, rows) => {
+                let values: Vec<&crate::Segment> = positions
+                    .iter()
+                    .map(|&position| self.value(position))
+                    .collect();
+                rows.contains(&values)
+            }
+            Check::Distinct(left, right) => self.value(*left) != self.value(*right),
+        })
+    }
+
+    fn arguments(&self) -> Arguments {
+        (0..self.domains.len())
+            .map(|position| {
+                (
+                    self.domains[position].0.clone(),
+                    self.value(position).clone(),
+                )
+            })
+            .collect()
+    }
+}
+
+impl Iterator for Values<'_> {
+    type Item = Arguments;
+
+    fn next(&mut self) -> Option<Arguments> {
+        if self.done {
+            return None;
+        }
+        if self.domains.is_empty() {
+            self.done = true;
+            return Some(Arguments::default());
+        }
+        loop {
+            let depth = self.depth;
+            if self.indices[depth] == self.domains[depth].1.len() {
+                if depth == 0 {
+                    self.done = true;
+                    return None;
+                }
+                self.indices[depth] = 0;
+                self.depth -= 1;
+                self.indices[self.depth] += 1;
+            } else if !self.holds(depth) {
+                self.indices[depth] += 1;
+            } else if depth + 1 == self.domains.len() {
+                let found = self.arguments();
+                self.indices[depth] += 1;
+                return Some(found);
+            } else {
+                self.depth += 1;
+                self.indices[self.depth] = 0;
+            }
+        }
+    }
 }
 
 impl<O: Ontology> Default for EconomyBuilder<O> {
@@ -847,10 +966,8 @@ impl<O: Ontology> Economy<O> {
         &'a self,
         key: &'a Pattern<O::Rate>,
     ) -> impl Iterator<Item = O::Rate> + 'a {
-        let domains: Vec<(VariablePath, Vec<crate::Segment>)> = self
-            .rates
-            .entries
-            .get(key)
+        let rate = self.rates.entries.get(key);
+        let domains: Vec<(VariablePath, Vec<crate::Segment>)> = rate
             .map(|rate| {
                 rate.variables()
                     .iter()
@@ -858,18 +975,10 @@ impl<O: Ontology> Economy<O> {
                     .collect()
             })
             .unwrap_or_default();
-        let any = self.rates.entries.contains_key(key)
-            && domains.iter().all(|(_, values)| !values.is_empty());
-        let mut next: Option<Vec<usize>> = any.then(|| vec![0; domains.len()]);
+        let mut values = Values::new(rate, domains);
         std::iter::from_fn(move || {
             loop {
-                let indices = next.take()?;
-                let arguments: Arguments = domains
-                    .iter()
-                    .zip(&indices)
-                    .map(|((name, values), &index)| (name.clone(), values[index].clone()))
-                    .collect();
-                next = advanced(indices, &domains);
+                let arguments = values.next()?;
                 if let Ok(id) = key.instantiate(&arguments)
                     && self.instance(&id).is_ok()
                 {

@@ -1,5 +1,6 @@
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Pattern, Quantity, Rate, Variable, basket, paths,
+    Account, Economy, EconomyBuilder, Exchange, Pattern, Quantity, Rate, Relation, Segment,
+    Variable, basket, paths,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
@@ -179,5 +180,34 @@ fn variables(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, benchmark, variables);
+/// Listing the steps between adjoining cells of a line of `cells`: the
+/// relation, not every pair of cells, decides how many identifiers are tried.
+fn instances(c: &mut Criterion) {
+    for cells in [100, 1_000] {
+        let rows = (1..cells).map(|cell| [Segment::from(cell), Segment::from(cell + 1)]);
+        let world = paths::EconomyBuilder::new()
+            .rate_at(
+                "step/{from}/{to}".parse().unwrap(),
+                paths::Rate::new()
+                    .variable(Variable::range("from".parse().unwrap(), 1, cells))
+                    .variable(Variable::range("to".parse().unwrap(), 1, cells))
+                    .relation(Relation::new(
+                        ["from".parse().unwrap(), "to".parse().unwrap()],
+                        rows,
+                    ))
+                    .produce_at(
+                        "walker".parse().unwrap(),
+                        [("at/{to}".parse::<Pattern<_>>().unwrap(), Quantity::new(1))],
+                    ),
+            )
+            .build()
+            .unwrap();
+        let key = world.rate_ids().next().unwrap().clone();
+        c.bench_function(&format!("instances_of_steps_on_{cells}_cells"), |bencher| {
+            bencher.iter(|| black_box(world.instances_of(&key).count()));
+        });
+    }
+}
+
+criterion_group!(benches, benchmark, variables, instances);
 criterion_main!(benches);
