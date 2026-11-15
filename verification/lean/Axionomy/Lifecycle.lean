@@ -375,6 +375,133 @@ theorem applicable_closes_empty (model : Model AccountId A RateId Role) (proposa
     simp only at assessed prepared
     rw [assessed, prepared]
 
+omit [DecidableEq A] [DecidableEq RateId] [DecidableEq Role] in
+/-- Entries put in the order of their keys find, for each key, what they
+found before. -/
+theorem find_ordered {V : Type} {cmp : AccountId → AccountId → Ordering} (lawful : Ordered.Lawful cmp)
+    (key : AccountId) (entries : List (AccountId × V)) :
+    Account.find? key (Ordered.ordered cmp entries) = Account.find? key entries := by
+  induction entries with
+  | nil => simp [Ordered.ordered]
+  | cons entry rest ih =>
+    obtain ⟨front, back, sorted, restSorted, earlier⟩ := List.mergeSort_cons (le := Ordered.before cmp)
+      (fun a b c ab bc => by
+        simp only [Ordered.before, bne_iff_ne, ne_eq] at *
+        exact lawful.trans a.1 b.1 c.1 ab bc)
+      (fun a b => by
+        simp only [Ordered.before, Bool.or_eq_true, bne_iff_ne, ne_eq]
+        exact lawful.total a.1 b.1)
+      entry rest
+    unfold Ordered.ordered at ih ⊢
+    rw [sorted, Account.find_append]
+    rw [restSorted, Account.find_append] at ih
+    rcases entry with ⟨stored, value⟩
+    by_cases same : key = stored
+    · subst same
+      have absent : Account.find? key front = none := by
+        apply Account.find_absent
+        intro member
+        obtain ⟨other, inFront, otherKey⟩ := List.mem_map.mp member
+        have greater := earlier other inFront
+        simp only [Ordered.before, Bool.not_eq_true', bne_eq_false_iff_eq, otherKey] at greater
+        rcases lawful.total key key with never | never <;> exact never greater
+      simp [Account.find?, absent]
+    · simp only [Account.find?, same, ite_false]
+      exact ih
+
+omit [DecidableEq A] [DecidableEq RateId] [DecidableEq Role] in
+/-- An account found once an exchange's accounts are opened holds what it
+held before, or nothing if the exchange opened it. -/
+theorem find_opened (lawful : Ordered.Lawful cmpAccount) (model : Model AccountId A RateId Role)
+    (accounts : List AccountId) (account : AccountId) (balances : Balances A)
+    (found : Account.find? account (opened cmpAccount model accounts).accounts = some balances) :
+    balances = (Account.find? account model.accounts).getD [] := by
+  simp only [opened] at found
+  rw [find_ordered lawful, Account.find_append] at found
+  cases before : Account.find? account model.accounts with
+  | some held =>
+    simp only [before, Option.some_or, Option.some.injEq] at found
+    simp [found]
+  | none =>
+    simp only [before, Option.none_or] at found
+    simp only [Option.getD_none]
+    clear before
+    induction accounts with
+    | nil => simp [Account.find?] at found
+    | cons first rest ih =>
+      by_cases same : account = first
+      · simp only [List.map_cons, Account.find?, same, ite_true, Option.some.injEq] at found
+        exact found.symm
+      · simp only [List.map_cons, Account.find?, same, ite_false] at found
+        exact ih found
+
+omit [DecidableEq A] [DecidableEq RateId] [DecidableEq Role] in
+/-- A closing check finds an exchange applicable only if it already was. -/
+theorem checkClosing_applicable (accounts : List (AccountId × Balances A)) (closed : List AccountId)
+    (analysis : Analysis AccountId A RateId Role) (entries : List (AccountAssessment AccountId A))
+    (deltas : List (Delta AccountId A))
+    (applicable : (checkClosing accounts closed analysis).assessment = .applicable entries deltas) :
+    analysis.assessment = .applicable entries deltas := by
+  obtain ⟨assessment, prepared⟩ := analysis
+  cases assessment <;> cases prepared <;> simp only [checkClosing] at applicable <;> try exact applicable
+  split at applicable
+  · exact applicable
+  · simp [invalid] at applicable
+
+/-- An exchange found applicable takes, from the account each role of its
+rate is bound to, no more than the account held before it: what the role
+consumes, times the units, and what it preserves. An account the exchange
+opens held nothing, so it is taken nothing. -/
+theorem analyze_holds (laws : Ordered.OrderLaws cmpAccount) (model : Model AccountId A RateId Role)
+    (proposal : Proposal AccountId RateId Role) (analysis : Analysis AccountId A RateId Role) (rule : Rule Role A)
+    (analyzed : analyze cmpAccount cmpRole model proposal = some analysis)
+    (found : Account.find? proposal.rate model.rates = some rule)
+    (unique : ∀ entry ∈ rule.consume, (entry.2.map Prod.fst).Nodup)
+    (entries : List (AccountAssessment AccountId A)) (deltas : List (Delta AccountId A))
+    (assessed : analysis.assessment = .applicable entries deltas) :
+    ∀ role ∈ rule.roles, ∀ account, Evaluation.orderedFind cmpRole role proposal.bindings = some account →
+      TransactionAggregation.Holds cmpRole proposal rule role ((Account.find? account model.accounts).getD [])
+        ((Account.find? account model.accounts).getD []) := by
+  have quiet := applicable_opening cmpAccount cmpRole model proposal analysis rule analyzed found entries deltas assessed
+  unfold analyze at analyzed
+  simp only [found, quiet] at analyzed
+  cases inner : Transaction.analyze cmpAccount cmpRole (opened cmpAccount model (boundTo cmpRole rule.opens proposal)) proposal with
+  | none => simp [inner] at analyzed
+  | some result =>
+    simp only [inner, Option.map_some, Option.some.injEq] at analyzed
+    have applicable := checkClosing_applicable _ _ result entries deltas (by rw [analyzed]; exact assessed)
+    intro role member account bound
+    obtain ⟨balances, present, holds⟩ := Transaction.analyze_holds cmpAccount cmpRole laws.equal
+      (opened cmpAccount model (boundTo cmpRole rule.opens proposal)) proposal rule found unique result inner
+      entries deltas applicable role member account bound
+    rw [← find_opened cmpAccount laws.lawful model _ account balances present]
+    exact holds
+
+/-- Every exchange accepted takes only what is held: each account it binds
+held, before it, at least what the rate consumes from that role, times the
+units, and what it preserves there. An account the exchange opens held
+nothing before it, so it is taken nothing. -/
+theorem accepted_holds (laws : Ordered.OrderLaws cmpAccount) (model after : Model AccountId A RateId Role)
+    (proposal : Proposal AccountId RateId Role) (receipt : Receipt AccountId A RateId Role) (rule : Rule Role A)
+    (found : Account.find? proposal.rate model.rates = some rule)
+    (unique : ∀ entry ∈ rule.consume, (entry.2.map Prod.fst).Nodup)
+    (success : apply cmpAccount cmpRole model proposal = some (.ok receipt, after))
+    {role : Role} (member : role ∈ rule.roles) {account : AccountId}
+    (bound : Evaluation.orderedFind cmpRole role proposal.bindings = some account) :
+    (∀ asset amount, (asset, amount) ∈ (Evaluation.orderedFind cmpRole role rule.consume).getD [] →
+      amount * proposal.units ≤ Account.balance 0 ((Account.find? account model.accounts).getD []) asset) ∧
+    (∀ asset amount, (asset, amount) ∈ (Evaluation.orderedFind cmpRole role rule.preserve).getD [] →
+      amount ≤ Account.balance 0 ((Account.find? account model.accounts).getD []) asset) := by
+  cases analyzed : analyze cmpAccount cmpRole model proposal with
+  | none => simp [apply, analyzed] at success
+  | some analysis =>
+    cases assessed : analysis.assessment with
+    | invalid issues => cases first : issues.head? <;> simp [apply, analyzed, assessed, first] at success
+    | infeasible accounts missing => simp [apply, analyzed, assessed] at success
+    | applicable accounts deltas =>
+      exact analyze_holds cmpAccount cmpRole laws model proposal analysis rule analyzed found unique accounts deltas
+        assessed role member account bound
+
 theorem accepted_conserves {model after : Model AccountId A RateId Role}
     {actions : List (Proposal AccountId RateId Role)} {receipts : List (Receipt AccountId A RateId Role)}
     (history : Execution.Accepted (apply cmpAccount cmpRole) model actions receipts after) :

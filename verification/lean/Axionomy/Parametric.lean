@@ -306,6 +306,47 @@ theorem fixed_bound (cmpRole : Role → Role → Ordering) (model after : Model 
         List.mem_filterMap.mpr ⟨(role, account), member, by simp [found, same]⟩
       simp [wrong] at reported
 
+/-- Every exchange accepted takes only what is held: each account it binds
+held, before it, at least what its rate's instance consumes from that role,
+times the units, and what it preserves there. An account the exchange opens
+held nothing before it, so it is taken nothing. A kernel may therefore
+refuse, before assessing it, an exchange whose bound accounts do not hold
+that much. -/
+theorem accepted_holds {cmpRole : Role → Role → Ordering} (laws : Ordered.OrderLaws cmpRole)
+    {model after : Model Role} {proposal : Proposal Role}
+    {receipt : Lifecycle.Receipt Written Written Written Role} {rule : Rule Role Written}
+    {fixed : List (Role × Written)} {role : Role} {account : Written}
+    (resolved : resolve cmpRole model proposal.rate = .ok (rule, fixed))
+    (success : apply cmpRole model proposal = some (.ok receipt, after))
+    (member : role ∈ rule.roles)
+    (bound : Evaluation.orderedFind cmpRole role proposal.bindings = some account) :
+    (∀ asset q, (asset, q) ∈ (Evaluation.orderedFind cmpRole role rule.consume).getD [] →
+      q * proposal.units ≤ Account.balance 0 ((Account.find? account model.accounts).getD []) asset) ∧
+    (∀ asset q, (asset, q) ∈ (Evaluation.orderedFind cmpRole role rule.preserve).getD [] →
+      q ≤ Account.balance 0 ((Account.find? account model.accounts).getD []) asset) := by
+  obtain ⟨law, arguments, given, values, -, -, -, -, -, -, built, -⟩ := resolve_allowed resolved
+  have canonical := instantiate_canonical cmpRole laws law.schema values built
+  have unique : ∀ entry ∈ rule.consume, (entry.2.map Prod.fst).Nodup :=
+    fun entry listed => (canonical.consume.2 entry listed).1
+  unfold apply at success
+  rw [resolved] at success
+  cases wrong : wrongAccounts cmpRole proposal fixed with
+  | cons issue issues =>
+    simp only [wrong] at success
+    exact (head_not_accepted success).elim
+  | nil =>
+    simp only [wrong] at success
+    cases lifecycle : Lifecycle.apply Path.compare cmpRole (instanceModel model proposal.rate rule) proposal with
+    | none => rw [lifecycle] at success; simp at success
+    | some outcome =>
+      obtain ⟨result, changed⟩ := outcome
+      rw [lifecycle] at success
+      simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at success
+      obtain ⟨accepted, -⟩ := success
+      subst accepted
+      exact Lifecycle.accepted_holds Path.compare cmpRole Path.orderLaws (instanceModel model proposal.rate rule)
+        changed proposal receipt rule (by simp [instanceModel, Account.find?]) unique lifecycle member bound
+
 /-- Laws no identifier matches two of. -/
 def Apart (rates : List (Law Role)) : Prop :=
   rates.Pairwise fun left right => disjoint left.id right.id = true

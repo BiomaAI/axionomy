@@ -225,6 +225,71 @@ theorem shortfall_valid {A : Type} [DecidableEq A] (limit : Nat)
   have positive : 0 < entry.2 := by omega
   simp [Account.naturals, Nat.ne_of_gt positive]
 
+/-- Scaling leaves an asset it writes no entry for as it was. -/
+theorem scaleInto_frame {A : Type} [DecidableEq A] (limit units : Nat)
+    {entries scaled result : List (A × Nat)} {asset : A} (absent : asset ∉ entries.map Prod.fst)
+    (success : scaleInto (Account.naturals limit) (Quantity.mul limit) units entries scaled = .ok result) :
+    Account.balance 0 result asset = Account.balance 0 scaled asset := by
+  induction entries generalizing scaled with
+  | nil => simp only [scaleInto, Except.ok.injEq] at success; subst success; rfl
+  | cons entry rest ih =>
+    rcases entry with ⟨key, amount⟩
+    simp only [List.map_cons, List.mem_cons, not_or] at absent
+    simp only [scaleInto] at success
+    cases multiplied : Quantity.mul limit amount units with
+    | none => simp [multiplied] at success
+    | some value =>
+      simp only [multiplied] at success
+      rw [ih absent.2 success]
+      exact Account.store_frame (Account.naturals limit) scaled key asset value absent.1
+
+/-- Scaling entries that name each asset once multiplies each by the units. -/
+theorem scaleInto_entries {A : Type} [DecidableEq A] (limit units : Nat)
+    {entries scaled result : List (A × Nat)} (unique : (entries.map Prod.fst).Nodup)
+    (distinct : (scaled.map Prod.fst).Nodup)
+    (success : scaleInto (Account.naturals limit) (Quantity.mul limit) units entries scaled = .ok result) :
+    ∀ asset amount, (asset, amount) ∈ entries → Account.balance 0 result asset = amount * units := by
+  induction entries generalizing scaled with
+  | nil => intro _ _ member; simp at member
+  | cons entry rest ih =>
+    rcases entry with ⟨key, amount⟩
+    simp only [List.map_cons, List.nodup_cons] at unique
+    simp only [scaleInto] at success
+    cases multiplied : Quantity.mul limit amount units with
+    | none => simp [multiplied] at success
+    | some value =>
+      simp only [multiplied] at success
+      have product := (Quantity.mul_exact limit amount units value multiplied).1
+      have stored := Account.store_self limit scaled key value distinct
+      intro asset quantity member
+      rcases List.mem_cons.mp member with same | later
+      · simp only [Prod.mk.injEq] at same
+        obtain ⟨rfl, rfl⟩ := same
+        rw [scaleInto_frame limit units unique.1 success, stored.1, product]
+      · exact ih unique.2 stored.2 success asset quantity later
+
+/-- Scaling a basket that names each asset once multiplies each of its
+entries by the units. -/
+theorem scale_entries {A : Type} [DecidableEq A] (limit units : Nat) {entries result : List (A × Nat)}
+    (unique : (entries.map Prod.fst).Nodup)
+    (success : scale (Account.naturals limit) (Quantity.mul limit) entries units = .ok result) :
+    ∀ asset amount, (asset, amount) ∈ entries → Account.balance 0 result asset = amount * units :=
+  scaleInto_entries limit units unique (by simp) success
+
+/-- An account short of nothing a basket requires holds, of each asset, at
+least what the basket does. -/
+theorem shortfall_empty_balance {A : Type} [DecidableEq A] (limit : Nat) (state required : List (A × Nat))
+    (unique : (required.map Prod.fst).Nodup)
+    (enough : Account.shortfall (Account.naturals limit) state required = []) (asset : A) :
+    Account.balance 0 required asset ≤ Account.balance 0 state asset := by
+  cases found : Account.find? asset required with
+  | none => simp [Account.balance, found]
+  | some amount =>
+    have member := (find_some_iff required unique asset amount).mp found
+    have covered := (Account.shortfall_empty_iff _ state required).mp enough (asset, amount) member
+    simp only [Account.naturals, decide_eq_false_iff_not, Nat.not_lt] at covered
+    simpa [Account.balance, found] using covered
+
 section Conversion
 variable {A Q R : Type} [DecidableEq A]
 variable (ops : Account.Arithmetic Q) (other : Account.Arithmetic R) (f : Q → R)

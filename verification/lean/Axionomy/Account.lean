@@ -295,4 +295,81 @@ theorem store_self {A : Type} [DecidableEq A] (limit : Nat) (entries : List (A �
   · simp only [zero]
     exact ⟨by simp [balance, find_upsert_self], upsert_nodup asset value entries unique⟩
 
+/-- Looking an asset up in two lists joined finds it in the first, else in
+the second. -/
+theorem find_append {A Q : Type} [DecidableEq A] (asset : A) (left right : List (A × Q)) :
+    find? asset (left ++ right) = (find? asset left).or (find? asset right) := by
+  induction left with
+  | nil => simp [find?]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, value⟩
+    by_cases same : asset = key <;> simp [find?, same, ih]
+
+/-- What `entries` hold of `asset` all together: every entry naming it, added
+up. -/
+def total {A : Type} [DecidableEq A] (entries : List (A × Nat)) (asset : A) : Nat :=
+  (entries.map fun entry => if entry.1 = asset then entry.2 else 0).sum
+
+/-- An entry is part of what its list holds of its asset. -/
+theorem le_total {A : Type} [DecidableEq A] {entries : List (A × Nat)} {asset : A} {amount : Nat}
+    (member : (asset, amount) ∈ entries) : amount ≤ total entries asset := by
+  induction entries with
+  | nil => simp at member
+  | cons entry rest ih =>
+    simp only [total, List.map_cons, List.sum_cons] at ih ⊢
+    rcases List.mem_cons.mp member with same | later
+    · subst same; simp
+    · have := ih later; omega
+
+/-- The amount a list records for an asset is part of what it holds of it. -/
+theorem balance_le_total {A : Type} [DecidableEq A] (entries : List (A × Nat)) (asset : A) :
+    balance 0 entries asset ≤ total entries asset := by
+  induction entries with
+  | nil => simp [balance, find?, total]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, amount⟩
+    simp only [balance, total, List.map_cons, List.sum_cons] at ih ⊢
+    by_cases same : asset = key
+    · subst same; simp [find?]
+    · have other : ¬key = asset := fun equal => same equal.symm
+      simp only [find?, same, other, ite_false]
+      omega
+
+/-- Crediting natural numbers adds to each asset everything the credited
+entries hold of it, and keeps one entry per asset. -/
+theorem credit_total {A : Type} [DecidableEq A] (limit : Nat) {state amounts result : List (A × Nat)}
+    (unique : (state.map Prod.fst).Nodup)
+    (credited : credit (naturals limit) state amounts = .ok result) :
+    (∀ asset, balance 0 result asset = balance 0 state asset + total amounts asset) ∧
+      (result.map Prod.fst).Nodup := by
+  induction amounts generalizing state with
+  | nil =>
+    simp only [credit, Except.ok.injEq] at credited
+    subst credited
+    exact ⟨fun asset => by simp [total], unique⟩
+  | cons entry rest ih =>
+    obtain ⟨added, amount⟩ := entry
+    simp only [credit] at credited
+    cases sum : (naturals limit).add (balance (naturals limit).zero state added) amount with
+    | none => simp [sum] at credited
+    | some updated =>
+      simp only [sum] at credited
+      have value : updated = balance 0 state added + amount := by
+        simp only [naturals, Quantity.add, Quantity.checked] at sum
+        split at sum <;> simp_all
+      have stored := store_self limit state added updated unique
+      have next := ih stored.2 credited
+      refine ⟨fun asset => ?_, next.2⟩
+      rw [next.1 asset]
+      simp only [total, List.map_cons, List.sum_cons]
+      by_cases same : added = asset
+      · subst same
+        rw [stored.1, value]
+        simp only [ite_true]
+        omega
+      · have frame := store_frame (naturals limit) state added asset updated (Ne.symm same)
+        rw [show (naturals limit).zero = 0 from rfl] at frame
+        rw [frame]
+        simp [same]
+
 end Axionomy.Account

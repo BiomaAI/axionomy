@@ -83,6 +83,23 @@ def orderedFind {K V : Type} (cmp : K → K → Ordering) (query : K) : List (K 
     | .eq => some value
     | .gt => orderedFind cmp query rest
 
+/-- A value found by its key is one of the entries' values. -/
+theorem orderedFind_mem {K V : Type} {cmp : K → K → Ordering} {query : K} {entries : List (K × V)}
+    {value : V} (found : orderedFind cmp query entries = some value) : ∃ key, (key, value) ∈ entries := by
+  induction entries with
+  | nil => simp [orderedFind] at found
+  | cons entry rest ih =>
+    rcases entry with ⟨key, stored⟩
+    cases compared : cmp query key with
+    | lt => simp [orderedFind, compared] at found
+    | eq =>
+      simp only [orderedFind, compared, Option.some.injEq] at found
+      subst found
+      exact ⟨key, List.mem_cons_self ..⟩
+    | gt =>
+      obtain ⟨other, member⟩ := ih (by simpa [orderedFind, compared] using found)
+      exact ⟨other, List.mem_cons_of_mem _ member⟩
+
 def fromState {AccountId Role Asset Q : Type} [DecidableEq AccountId] [DecidableEq Asset]
     (roleCompare : Role → Role → Ordering) (zero units : Q)
     (parameters : List (String × Q)) (bindings : List (Role × AccountId))
