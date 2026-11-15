@@ -3,24 +3,11 @@
 use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
+    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
-use axionomy_search::{
-    action_source::eager_actions,
-    mcts::{MctsConfig, MctsDecision, MctsSession, search},
-    session::{Continue, WorkBudget},
-    tree::{TreeSearchError, TreeStatus},
-};
-use std::ops::ControlFlow;
 
 #[cfg(feature = "packages")]
 pub mod package;
-mod tactics;
-
-pub use tactics::{
-    Opponent, TacticalEvidence, play_opponent_game, play_opponent_game_from_with_progress,
-    play_opponent_game_with_progress, tactical_candidates, tactical_evidence,
-};
 
 pub const WIDTH: u8 = 4;
 pub const HEIGHT: u8 = 4;
@@ -38,13 +25,6 @@ impl Player {
         match self {
             Self::Red => Self::Yellow,
             Self::Yellow => Self::Red,
-        }
-    }
-
-    const fn index(self) -> usize {
-        match self {
-            Self::Red => 0,
-            Self::Yellow => 1,
         }
     }
 }
@@ -202,39 +182,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Decision = MctsDecision<Action>;
-pub type DecisionError = TreeSearchError<Ontology>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GameProgress {
-    moves_completed: usize,
-    maximum_moves: usize,
-    iterations_completed: usize,
-    iterations_per_move: usize,
-    nodes: usize,
-}
-
-impl GameProgress {
-    pub const fn moves_completed(self) -> usize {
-        self.moves_completed
-    }
-
-    pub const fn maximum_moves(self) -> usize {
-        self.maximum_moves
-    }
-
-    pub const fn iterations_completed(self) -> usize {
-        self.iterations_completed
-    }
-
-    pub const fn iterations_per_move(self) -> usize {
-        self.iterations_per_move
-    }
-
-    pub const fn nodes(self) -> usize {
-        self.nodes
-    }
-}
 
 pub fn initial() -> World {
     let mut game_assets = basket([(Asset::GameIdentity, 1), (Asset::Turn(Player::Red), 1)]);
@@ -470,241 +417,6 @@ pub fn initial_standard() -> World {
         .expect("standard connect four model is valid")
 }
 
-pub fn candidates(world: &World) -> Vec<Action> {
-    let (width, height) = board_dimensions(world);
-    if width == STANDARD_WIDTH && height == STANDARD_HEIGHT {
-        return standard_candidates(world);
-    }
-    let Some(player) = current_player(world) else {
-        return Vec::new();
-    };
-
-    let mut actions = Vec::new();
-    for column in 0..WIDTH {
-        if let Some(row) = next_row(world, column) {
-            let counts = current_counts(world, player, column, row);
-            actions.push(action(RateId::Move {
-                player,
-                column,
-                row,
-                counts,
-            }));
-        }
-    }
-    if actions.is_empty() {
-        actions.push(action(RateId::Draw(player)));
-    }
-    world.applicable(actions)
-}
-
-fn standard_candidates(world: &World) -> Vec<Action> {
-    if let Some(player) = pending_player(world) {
-        let claims = world.applicable(
-            winning_segments()
-                .into_iter()
-                .enumerate()
-                .filter(|(segment, _)| {
-                    world
-                        .balance(
-                            &AccountId::Game,
-                            &Asset::SegmentPieces(player, *segment as u8),
-                        )
-                        .to_u64()
-                        == 4
-                })
-                .map(|(segment, _)| {
-                    action(RateId::ClaimWin {
-                        player,
-                        segment: segment as u8,
-                    })
-                }),
-        );
-        if !claims.is_empty() {
-            return claims;
-        }
-        if (0..STANDARD_WIDTH).all(|column| {
-            !world
-                .balance(&AccountId::Column(column), &Asset::ColumnFull)
-                .is_zero()
-        }) {
-            return world.applicable([action(RateId::StandardDraw(player))]);
-        }
-        return world.applicable([action(RateId::Continue(player))]);
-    }
-    let Some(player) = current_player(world) else {
-        return Vec::new();
-    };
-    world.applicable((0..STANDARD_WIDTH).filter_map(|column| {
-        next_row_bounded(world, column, STANDARD_HEIGHT).map(|row| {
-            action(RateId::StandardMove {
-                player,
-                column,
-                row,
-            })
-        })
-    }))
-}
-
-pub fn terminal_values(world: &World) -> Option<Vec<f64>> {
-    if !world
-        .balance(&AccountId::Result, &Asset::Winner(Player::Red))
-        .is_zero()
-    {
-        Some(vec![1.0, 0.0])
-    } else if !world
-        .balance(&AccountId::Result, &Asset::Winner(Player::Yellow))
-        .is_zero()
-    {
-        Some(vec![0.0, 1.0])
-    } else if !world.balance(&AccountId::Result, &Asset::Draw).is_zero() {
-        Some(vec![0.5, 0.5])
-    } else {
-        None
-    }
-}
-
-pub fn mcts(world: &World, iterations: usize, seed: u64) -> Result<Decision, DecisionError> {
-    search(
-        world,
-        MctsConfig::new(iterations, 20).with_seed(seed),
-        2,
-        tactical_candidates,
-        |_| Vec::new(),
-        |world| current_player(world).map_or(0, Player::index),
-        terminal_values,
-        tactics::cutoff,
-        tactics::rollout,
-    )
-}
-
-pub fn play_game(iterations_per_move: usize, seed: u64) -> Trace<Ontology> {
-    play_game_with_progress(
-        iterations_per_move,
-        seed,
-        iterations_per_move.max(1),
-        |_| ControlFlow::Continue(()),
-    )
-    .expect("uninterrupted MCTS play produces a complete trace")
-}
-
-/// Plays a complete game through bounded MCTS advances.
-///
-/// The observer runs between deterministic iteration chunks. Returning
-/// `Break` leaves the partial game disposable and returns `None`; every move
-/// already accepted into the local trace remains independently replayable.
-pub fn play_game_with_progress(
-    iterations_per_move: usize,
-    seed: u64,
-    chunk_size: usize,
-    observer: impl FnMut(GameProgress) -> ControlFlow<()>,
-) -> Option<Trace<Ontology>> {
-    play_from_with_progress(
-        initial(),
-        usize::from(WIDTH) * usize::from(HEIGHT) + 1,
-        iterations_per_move,
-        seed,
-        chunk_size,
-        observer,
-    )
-}
-
-pub fn play_standard_game_with_progress(
-    iterations_per_action: usize,
-    seed: u64,
-    chunk_size: usize,
-    observer: impl FnMut(GameProgress) -> ControlFlow<()>,
-) -> Option<Trace<Ontology>> {
-    play_from_with_progress(
-        initial_standard(),
-        usize::from(STANDARD_WIDTH) * usize::from(STANDARD_HEIGHT) * 2 + 1,
-        iterations_per_action,
-        seed,
-        chunk_size,
-        observer,
-    )
-}
-
-fn play_from_with_progress(
-    mut world: World,
-    maximum_moves: usize,
-    iterations_per_move: usize,
-    seed: u64,
-    chunk_size: usize,
-    mut observer: impl FnMut(GameProgress) -> ControlFlow<()>,
-) -> Option<Trace<Ontology>> {
-    let mut trace = Trace::new();
-    for turn in 0..maximum_moves {
-        if terminal_values(&world).is_some() {
-            break;
-        }
-        let legal = candidates(&world);
-        if legal.len() == 1 {
-            if observer(GameProgress {
-                moves_completed: turn,
-                maximum_moves,
-                iterations_completed: 0,
-                iterations_per_move,
-                nodes: 1,
-            })
-            .is_break()
-            {
-                return None;
-            }
-            world.apply(legal[0].clone()).ok()?;
-            trace.push(legal[0].clone());
-            continue;
-        }
-        let config = MctsConfig::new(iterations_per_move, 20)
-            .with_seed(seed + u64::try_from(turn).unwrap_or(u64::MAX));
-        let mut session = MctsSession::new(
-            &world,
-            config,
-            2,
-            eager_actions(tactical_candidates),
-            |_| Vec::new(),
-            |world| current_player(world).map_or(0, Player::index),
-            terminal_values,
-            tactics::cutoff,
-            tactics::rollout,
-        )
-        .ok()?;
-        while session.status() == TreeStatus::Running {
-            let report = session
-                .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
-                .ok()?;
-            let progress = *report.progress();
-            if observer(GameProgress {
-                moves_completed: turn,
-                maximum_moves,
-                iterations_completed: progress.iterations(),
-                iterations_per_move,
-                nodes: progress.nodes(),
-            })
-            .is_break()
-            {
-                return None;
-            }
-        }
-        let decision = session.into_decision()?;
-        let exchange = decision.action().clone();
-        world
-            .apply(exchange.clone())
-            .expect("MCTS returns an applicable exchange");
-        trace.push(exchange);
-    }
-    Some(trace)
-}
-
-pub fn column_of(action: &Action) -> Option<u8> {
-    match action.rate() {
-        RateId::Move { column, .. } | RateId::StandardMove { column, .. } => Some(*column),
-        RateId::Draw(_)
-        | RateId::ClaimWin { .. }
-        | RateId::Continue(_)
-        | RateId::StandardDraw(_) => None,
-    }
-}
-
 fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ontology> {
     let mut consumed = basket([(Asset::Turn(player), 1)]);
     let mut produced = Basket::new();
@@ -915,7 +627,10 @@ fn winning_segments() -> Vec<[(u8, u8); 4]> {
     segments
 }
 
-fn action(rate: RateId) -> Action {
+/// The exchange of one unit of `rate`, each of its roles bound to the
+/// account the rate names: the game, the column and cell a drop lands in,
+/// the cells of a claimed win or the columns of a draw, and the result.
+pub fn exchange(rate: RateId) -> Action {
     let exchange = Exchange::new(rate, Quantity::new(1));
     match rate {
         RateId::Move {
@@ -985,71 +700,6 @@ fn action(rate: RateId) -> Action {
     }
 }
 
-fn current_player(world: &World) -> Option<Player> {
-    [Player::Red, Player::Yellow].into_iter().find(|player| {
-        !world
-            .balance(&AccountId::Game, &Asset::Turn(*player))
-            .is_zero()
-    })
-}
-
-fn pending_player(world: &World) -> Option<Player> {
-    [Player::Red, Player::Yellow].into_iter().find(|player| {
-        !world
-            .balance(&AccountId::Game, &Asset::Pending(*player))
-            .is_zero()
-    })
-}
-
-fn next_row(world: &World, column: u8) -> Option<u8> {
-    next_row_bounded(world, column, HEIGHT)
-}
-
-fn next_row_bounded(world: &World, column: u8, height: u8) -> Option<u8> {
-    (0..height).find(|row| {
-        !world
-            .balance(&AccountId::Column(column), &Asset::NextRow(*row))
-            .is_zero()
-    })
-}
-
-pub fn board_dimensions(world: &World) -> (u8, u8) {
-    if !world
-        .balance(
-            &AccountId::Game,
-            &Asset::BoardSize {
-                width: STANDARD_WIDTH,
-                height: STANDARD_HEIGHT,
-            },
-        )
-        .is_zero()
-    {
-        (STANDARD_WIDTH, STANDARD_HEIGHT)
-    } else {
-        (WIDTH, HEIGHT)
-    }
-}
-
-fn current_counts(world: &World, player: Player, column: u8, row: u8) -> LineCounts {
-    LineCounts {
-        row: line_count(world, player, Line::Row(row)),
-        column: line_count(world, player, Line::Column(column)),
-        main_diagonal: (column == row).then(|| line_count(world, player, Line::MainDiagonal)),
-        anti_diagonal: (column + row + 1 == WIDTH)
-            .then(|| line_count(world, player, Line::AntiDiagonal)),
-    }
-}
-
-fn line_count(world: &World, player: Player, line: Line) -> u8 {
-    (0..=4)
-        .find(|count| {
-            !world
-                .balance(&AccountId::Game, &Asset::LineCount(player, line, *count))
-                .is_zero()
-        })
-        .expect("every line owns one encoded counter")
-}
-
 fn count_combinations(column: u8, row: u8) -> Vec<LineCounts> {
     let diagonal = if column == row {
         (0..4).map(Some).collect::<Vec<_>>()
@@ -1082,75 +732,48 @@ fn count_combinations(column: u8, row: u8) -> Vec<LineCounts> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    struct PlainBoard {
-        cells: [[Option<Player>; HEIGHT as usize]; WIDTH as usize],
-        heights: [u8; WIDTH as usize],
-        turn: Player,
-    }
-
-    impl PlainBoard {
-        const fn new() -> Self {
-            Self {
-                cells: [[None; HEIGHT as usize]; WIDTH as usize],
-                heights: [0; WIDTH as usize],
-                turn: Player::Red,
-            }
-        }
-
-        fn legal_columns(self) -> Vec<u8> {
-            if self.winner().is_some() {
-                return Vec::new();
-            }
-            (0..WIDTH)
-                .filter(|column| self.heights[usize::from(*column)] < HEIGHT)
-                .collect()
-        }
-
-        fn played(mut self, column: u8) -> Self {
-            let index = usize::from(column);
-            let row = self.heights[index];
-            self.cells[index][usize::from(row)] = Some(self.turn);
-            self.heights[index] += 1;
-            self.turn = self.turn.other();
-            self
-        }
-
-        fn winner(self) -> Option<Player> {
-            [Player::Red, Player::Yellow]
-                .into_iter()
-                .find(|player| plain_has_line(&self.cells, *player))
-        }
-
-        fn full(self) -> bool {
-            self.heights.into_iter().all(|height| height == HEIGHT)
+    /// What a player already counts on the lines through a cell: its row,
+    /// its column, and the diagonals it lies on.
+    const fn counts(
+        row: u8,
+        column: u8,
+        main_diagonal: Option<u8>,
+        anti_diagonal: Option<u8>,
+    ) -> LineCounts {
+        LineCounts {
+            row,
+            column,
+            main_diagonal,
+            anti_diagonal,
         }
     }
 
-    fn plain_has_line(
-        cells: &[[Option<Player>; HEIGHT as usize]; WIDTH as usize],
-        player: Player,
-    ) -> bool {
-        (0..HEIGHT).any(|row| {
-            (0..WIDTH).all(|column| cells[usize::from(column)][usize::from(row)] == Some(player))
-        }) || (0..WIDTH).any(|column| {
-            (0..HEIGHT).all(|row| cells[usize::from(column)][usize::from(row)] == Some(player))
-        }) || (0..WIDTH).all(|index| cells[usize::from(index)][usize::from(index)] == Some(player))
-            || (0..WIDTH).all(|column| {
-                cells[usize::from(column)][usize::from(HEIGHT - 1 - column)] == Some(player)
-            })
+    /// `player`'s drop on the compact board into `column`, landing in `row`.
+    fn drop(player: Player, column: u8, row: u8, counts: LineCounts) -> Action {
+        exchange(RateId::Move {
+            player,
+            column,
+            row,
+            counts,
+        })
+    }
+
+    /// `player`'s drop on the standard board into `column`, landing in `row`.
+    fn standard_drop(player: Player, column: u8, row: u8) -> Action {
+        exchange(RateId::StandardMove {
+            player,
+            column,
+            row,
+        })
     }
 
     #[test]
     fn gravity_and_line_counts_are_core_validated() {
         let mut world = initial();
-        let first = candidates(&world)
-            .into_iter()
-            .find(|action| column_of(action) == Some(0))
-            .expect("column zero is open");
-        world.apply(first).expect("first piece lands");
+        world
+            .apply(drop(Player::Red, 0, 0, counts(0, 0, Some(0), None)))
+            .expect("first piece lands");
 
         assert_eq!(
             world.balance(
@@ -1170,18 +793,19 @@ mod tests {
             ),
             Quantity::new(1)
         );
+        // A piece cannot land above an empty cell.
+        assert!(!world.is_applicable(&drop(Player::Yellow, 1, 1, counts(0, 0, Some(0), None))));
     }
 
     #[test]
     fn encoded_coordinates_reject_misbinding_an_otherwise_empty_cell() {
         let world = initial();
-        let counts = current_counts(&world, Player::Red, 0, 0);
         let misplaced = Exchange::new(
             RateId::Move {
                 player: Player::Red,
                 column: 0,
                 row: 0,
-                counts,
+                counts: counts(0, 0, Some(0), None),
             },
             Quantity::new(1),
         )
@@ -1193,145 +817,89 @@ mod tests {
     }
 
     #[test]
-    fn mcts_selects_an_immediate_encoded_win() {
+    fn completing_a_line_produces_the_encoded_winner() {
         let mut world = initial();
-        let mut plain = PlainBoard::new();
-        for column in [0, 0, 1, 1, 2, 2] {
-            let exchange = candidates(&world)
-                .into_iter()
-                .find(|action| column_of(action) == Some(column))
-                .expect("scripted column is open");
-            world.apply(exchange).expect("scripted move is valid");
-            plain = plain.played(column);
+        // Red and Yellow alternate in columns 0, 0, 1, 1, 2 and 2; Red's
+        // drop into column 3 completes the bottom row.
+        for exchange in [
+            drop(Player::Red, 0, 0, counts(0, 0, Some(0), None)),
+            drop(Player::Yellow, 0, 1, counts(0, 0, None, None)),
+            drop(Player::Red, 1, 0, counts(1, 0, None, None)),
+            drop(Player::Yellow, 1, 1, counts(1, 0, Some(0), None)),
+            drop(Player::Red, 2, 0, counts(2, 0, None, None)),
+            drop(Player::Yellow, 2, 1, counts(2, 0, None, Some(0))),
+        ] {
+            world.apply(exchange).unwrap();
         }
-
-        assert_eq!(minimax_best_column(plain), Some(3));
-        let decision = mcts(&world, 512, 19).expect("red can choose a move");
-        assert_eq!(column_of(decision.action()), Some(3));
-        let mut won = world.clone();
-        won.apply(decision.action().clone())
+        // A drop consumes the counts its player holds: Red already has
+        // three in the bottom row, not two.
+        assert!(!world.is_applicable(&drop(Player::Red, 3, 0, counts(2, 0, None, Some(0)))));
+        world
+            .apply(drop(Player::Red, 3, 0, counts(3, 0, None, Some(0))))
             .expect("winning move applies");
-        assert_eq!(terminal_values(&won), Some(vec![1.0, 0.0]));
-    }
-
-    #[test]
-    fn complete_mcts_game_is_replayable() {
-        let initial = initial();
-        let trace = play_game(96, 5);
-        let final_world = initial
-            .replayed(&trace)
-            .expect("the complete game must replay");
-
-        assert!(terminal_values(&final_world).is_some());
-        assert!(candidates(&final_world).is_empty());
-        assert!(trace.exchanges().len() <= usize::from(WIDTH * HEIGHT + 1));
-    }
-
-    #[test]
-    fn generated_prefixes_match_a_plain_board_oracle() {
-        compare_prefixes(initial(), PlainBoard::new(), 0, 5);
+        assert_eq!(
+            world.balance(&AccountId::Result, &Asset::Winner(Player::Red)),
+            Quantity::new(1)
+        );
+        assert!(
+            world
+                .balance(&AccountId::Game, &Asset::Turn(Player::Yellow))
+                .is_zero()
+        );
     }
 
     #[test]
     fn standard_board_uses_compact_rates_and_core_validated_win_certificates() {
         let mut world = initial_standard();
-        assert_eq!(board_dimensions(&world), (7, 6));
+        assert_eq!(
+            world.balance(
+                &AccountId::Game,
+                &Asset::BoardSize {
+                    width: 7,
+                    height: 6
+                }
+            ),
+            Quantity::new(1)
+        );
         assert!(world.rate_ids().count() < 300);
 
-        for (index, column) in [0, 0, 1, 1, 2, 2, 3].into_iter().enumerate() {
-            let movement = candidates(&world)
-                .into_iter()
-                .find(|candidate| column_of(candidate) == Some(column))
-                .expect("scripted standard-board column is legal");
-            world.apply(movement).expect("piece placement applies");
-            let adjudication = candidates(&world);
-            if index == 6 {
-                let before = world.state_key();
-                assert!(world.apply(action(RateId::Continue(Player::Red))).is_err());
-                assert_eq!(before, world.state_key());
-                assert!(matches!(
-                    adjudication[0].rate(),
-                    RateId::ClaimWin {
-                        player: Player::Red,
-                        ..
-                    }
-                ));
-            }
+        // Red and Yellow alternate in columns 0, 0, 1, 1, 2 and 2, each drop
+        // adjudicated before the turn passes.
+        for (player, column, row) in [
+            (Player::Red, 0, 0),
+            (Player::Yellow, 0, 1),
+            (Player::Red, 1, 0),
+            (Player::Yellow, 1, 1),
+            (Player::Red, 2, 0),
+            (Player::Yellow, 2, 1),
+        ] {
             world
-                .apply(adjudication[0].clone())
-                .expect("continue or win certificate applies");
+                .apply(standard_drop(player, column, row))
+                .expect("piece placement applies");
+            world
+                .apply(exchange(RateId::Continue(player)))
+                .expect("no win, so the turn passes");
         }
-        assert_eq!(terminal_values(&world), Some(vec![1.0, 0.0]));
-        assert!(candidates(&world).is_empty());
-    }
-
-    fn compare_prefixes(world: World, plain: PlainBoard, depth: usize, limit: usize) {
-        let mut encoded_columns = candidates(&world)
-            .iter()
-            .filter_map(column_of)
-            .collect::<Vec<_>>();
-        encoded_columns.sort_unstable();
-        assert_eq!(encoded_columns, plain.legal_columns());
-        assert_eq!(
-            terminal_values(&world),
-            plain.winner().map(|winner| match winner {
-                Player::Red => vec![1.0, 0.0],
-                Player::Yellow => vec![0.0, 1.0],
-            })
+        // Red's drop into column 3 completes the bottom row: the turn cannot
+        // pass, and the win's certificate applies.
+        world.apply(standard_drop(Player::Red, 3, 0)).unwrap();
+        let before = world.state_key();
+        assert!(
+            world
+                .apply(exchange(RateId::Continue(Player::Red)))
+                .is_err()
         );
-        if depth == limit || plain.winner().is_some() || plain.full() {
-            return;
-        }
-        for column in encoded_columns {
-            let exchange = candidates(&world)
-                .into_iter()
-                .find(|action| column_of(action) == Some(column))
-                .expect("oracle column is encoded");
-            let mut next = world.clone();
-            next.apply(exchange).expect("generated prefix is valid");
-            compare_prefixes(next, plain.played(column), depth + 1, limit);
-        }
-    }
-
-    fn minimax_best_column(board: PlainBoard) -> Option<u8> {
-        let player = board.turn;
-        let mut cache = HashMap::new();
-        board
-            .legal_columns()
-            .into_iter()
-            .max_by_key(|column| minimax_score(board.played(*column), player, &mut cache))
-    }
-
-    fn minimax_score(
-        board: PlainBoard,
-        maximizing: Player,
-        cache: &mut HashMap<PlainBoard, i8>,
-    ) -> i8 {
-        if let Some(winner) = board.winner() {
-            return if winner == maximizing { 1 } else { -1 };
-        }
-        if board.full() {
-            return 0;
-        }
-        if let Some(score) = cache.get(&board) {
-            return *score;
-        }
-        let score = if board.turn == maximizing {
-            board
-                .legal_columns()
-                .into_iter()
-                .map(|column| minimax_score(board.played(column), maximizing, cache))
-                .max()
-                .expect("non-terminal board has a move")
-        } else {
-            board
-                .legal_columns()
-                .into_iter()
-                .map(|column| minimax_score(board.played(column), maximizing, cache))
-                .min()
-                .expect("non-terminal board has a move")
-        };
-        cache.insert(board, score);
-        score
+        assert_eq!(before, world.state_key());
+        world
+            .apply(exchange(RateId::ClaimWin {
+                player: Player::Red,
+                segment: 0,
+            }))
+            .expect("the win certificate applies");
+        assert_eq!(
+            world.balance(&AccountId::Result, &Asset::Winner(Player::Red)),
+            Quantity::new(1)
+        );
+        assert!(!world.is_applicable(&standard_drop(Player::Yellow, 4, 0)));
     }
 }

@@ -15,23 +15,27 @@ successors. A move completing a line consumes the current turn and produces
 that preserves all four `ColumnFull` facts. Terminal truth therefore never
 comes from an external board callback.
 
-Generic vector-valued MCTS uses the encoded current turn to choose which
-player value to maximize. Tree edges are exchanges, transpositions use
-canonical state keys, rollouts use seeded action selection, and the final
-action is revalidated by the live economy.
+The package's games search with generic vector-valued MCTS, which uses the
+encoded current turn to choose which player value to maximize. Tree edges
+are exchanges, transpositions use canonical state keys, rollouts use seeded
+action selection, and the final action is revalidated by the live economy.
 
 ## Required results
 
-- Gravity places a first piece in row zero and advances the column token.
-- Line counters advance atomically with cell and turn state.
+The unit tests check the laws by applying exchanges:
+
+- Gravity places a first piece in row zero and advances the column token;
+  no piece lands above an empty cell.
+- Line counters advance atomically with cell and turn state, and a drop
+  consumes exactly the counts its player holds.
 - Rebinding a move to another empty cell or column is rejected by identities.
-- MCTS selects an immediately winning fourth column.
-- A plain-board minimax oracle independently agrees on that winning move.
-- Generated legal prefixes through depth five agree with the plain-board
-  oracle's legal actions and terminal values.
-- Applying that proposal produces the encoded winner asset.
-- Complete self-play terminates in a win or encoded draw.
-- The full game trace replays deterministically.
+- A move completing a line produces the encoded winner asset. On the
+  standard board the turn cannot pass a completed line, and its win
+  certificate applies.
+
+The package's experiments find the rest, pinned in `tests/outcomes`: every
+game, in self-play or against the center-first or alpha-beta opponent, is
+played to an encoded win or draw, and its trace replays deterministically.
 
 ## API pressure
 
@@ -43,10 +47,8 @@ action is revalidated by the live economy.
 
 ## In this folder
 
-- `mod.rs` is the model: the compact and standard boards, their move and draw
-  rates, MCTS and self-play.
-- `tactics.rs` is read-only board reasoning for opponents and evidence; every
-  move it suggests is still a core exchange.
+- `mod.rs` is the model: the compact and standard boards, their move, win
+  and draw rates, and their typed exchanges.
 - `package.rs` writes its package: its economies under refs, goals,
   strategies, experiments and view, whose scripts are `scripts/connect-four.rhai`
   and `scripts/connect-four-view.rhai`.

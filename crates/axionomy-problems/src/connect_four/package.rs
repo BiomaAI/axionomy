@@ -6,19 +6,16 @@
 //!
 //! Every game is played turn by turn, with no Nature: every turn is a
 //! choice. Red searches each of its drops by Monte Carlo tree search over
-//! the tactical moves, simulating as the Rust players do, with the
-//! search's own tickets; Yellow, who also takes every drop's adjudication,
-//! searches alike in self-play, or drops nearest the center, or as a
-//! depth-five alpha-beta search scores. The search of the game's `k`th turn
-//! is seeded with the sample's seed plus `k`, as the Rust game seeds it,
-//! and searches as many iterations as the Rust game gives a move at that
-//! size. How
+//! the tactical moves, with the search's own tickets; Yellow, who also
+//! takes every drop's adjudication, searches alike in self-play, or drops
+//! nearest the center, or as a depth-five alpha-beta search scores. The
+//! search of the game's `k`th turn is seeded with the sample's seed plus
+//! `k`, and searches as many iterations as the instance gives a move. How
 //! many is Red's strength, its player's own, so the games are named by it,
 //! the same game at every size: `connect-four/mcts-<iterations>/<game>`,
 //! where the game is `self-play`, `center-opponent` or `search-opponent`,
-//! and each instance's experiment plays the games of the strength its Rust
-//! games give. Its view draws the board, its pieces and the tactics of the
-//! player to move.
+//! and each instance's experiment plays the games of its strength. Its view
+//! draws the board, its pieces and the tactics of the player to move.
 
 use crate::{
     connect_four::{self, AccountId, Asset, Ontology, Player},
@@ -35,7 +32,7 @@ use axionomy_store::Checkpoints;
 const SCRIPT: &str = include_str!("../../scripts/connect-four.rhai");
 const VIEW: &str = include_str!("../../scripts/connect-four-view.rhai");
 
-/// The seed the sample's Rust games are played with.
+/// The seed the sample's games are played with.
 const SEED: u64 = 17;
 /// How deep a search's simulations look, counted from the position it
 /// searches.
@@ -88,8 +85,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         objectives.push(objective);
     }
 
-    // Red's iterations per move, as the Rust games give them an effort of
-    // 128: Micro's clamped to at most 64, Showcase's an eighth and Stress's a quarter.
+    // Red's iterations per move: an effort of 128, Micro's clamped to at
+    // most 64, Showcase's an eighth and Stress's a quarter.
     for (instance, initial, iterations) in [
         ("micro", connect_four::initial(), 64),
         ("showcase", connect_four::initial_standard(), 16),
