@@ -1,7 +1,9 @@
 // Sokoban: the exchanges the player may try. Moves and pushes from the
 // player's cell, left, right, up and down; finishing once every crate rests on
 // a goal; latching a panel the player stands on. Only those that apply, in
-// that order.
+// that order. A move, push or latch is its rate's exchange, which fixes the
+// cells it names; finishing binds each crate's goal role to the cell the
+// crate rests on.
 
 fn number(text, prefix) {
     parse_int(text.sub_string(prefix.len()))
@@ -46,8 +48,7 @@ fn candidates(state) {
     let proposals = [];
     for next in neighbours {
         if "empty" in state.balances(`cell/${next}`) {
-            proposals.push(exchange(`move/${player}/${next}`,
-                #{ puzzle: "success", from: `cell/${player}`, to: `cell/${next}` }, 1));
+            proposals.push(state.exchange_of(`move/${player}/${next}`));
             continue;
         }
         let pushed = crates.filter(|pair| pair[1] == next);
@@ -57,8 +58,7 @@ fn candidates(state) {
         if to_x < 0 || to_y < 0 || to_x >= width || to_y >= height { continue; }
         let to = to_y * width + to_x;
         if "empty" in state.balances(`cell/${to}`) {
-            proposals.push(exchange(`push/${player}/${next}/${to}/${pushed[0][0]}`,
-                #{ puzzle: "success", from: `cell/${player}`, middle: `cell/${next}`, to: `cell/${to}` }, 1));
+            proposals.push(state.exchange_of(`push/${player}/${next}/${to}/${pushed[0][0]}`));
         }
     }
     if !crates.is_empty() && crates.all(|pair| "goal-cell" in state.balances(`cell/${pair[1]}`)) {
@@ -68,8 +68,7 @@ fn candidates(state) {
     }
     for circuit in 0..2 {
         if `panel/${circuit}` in state.balances(`cell/${player}`) {
-            proposals.push(exchange(`latch/${circuit}/${player}`,
-                #{ puzzle: "success", from: `cell/${player}` }, 1));
+            proposals.push(state.exchange_of(`latch/${circuit}/${player}`));
         }
     }
     proposals.filter(|proposal| state.applicable(proposal))

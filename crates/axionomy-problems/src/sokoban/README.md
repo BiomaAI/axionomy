@@ -18,8 +18,8 @@ one remain legal, as each instance's deadlock replay shows. Micro is unchanged.
 
 ## Specification
 
-Every board cell is an account that preserves its coordinate identity and
-owns either `Floor` or `Wall`. Walkable cells hold exactly one occupancy asset:
+Every board cell is an account, `cell/{index}`, that owns either `Floor` or
+`Wall`. Walkable cells hold exactly one occupancy asset:
 `Player`, `Empty`, or a stable `Crate(id)`. Goal squares own `GoalCell` in
 addition to their occupant. Board dimensions are ordinary assets on the puzzle
 account, so neither the search nor viewer needs hidden geometry state. A move
@@ -30,10 +30,21 @@ A push atomically rewrites three accounts while preserving crate identity:
 [Player][Crate(0)][Empty] → [Empty][Player][Crate(0)]
 ```
 
+Each is one rate with variables over the board's geometry, which no exchange
+changes and so is a relation: `move/{from}/{to}` over the floors that adjoin,
+`push/{behind}/{crate-at}/{to}/{crate}` over the floors three in a row, and
+`latch/{circuit}/{at}` over the latch panels. Every role is fixed to the cell
+its identifier names, so no cell holds an identity token. A door, a plate or
+the exit is a fact of its cell, and the one law reads it from the cells it
+binds: a door's cell admits the player or a crate only while its circuit is
+pressed or latched, a crate pressing or releasing a plate moves the circuit,
+and the player reaching or leaving the exit moves the puzzle's record.
+
 The Showcase warehouse has boundary walls, an internal obstruction, two crates,
 two goals, and legal moves that do not advance the objective. Completion is
 one `Finish` law: its final exchange binds every stable crate's goal role to
-the distinct goal cell that crate rests on. A second trace
+the distinct goal cell that crate rests on, as the package's search script
+binds it. A second trace
 starts from that same economy and replays a short sequence ending in a legal
 push into a non-goal corner, making the difference between validity and
 decision quality directly inspectable.
@@ -53,7 +64,8 @@ The model's tests apply the rules directly:
 
 - Every floor retains exactly one occupancy token and every crate identity is
   conserved across the full replay.
-- Rebinding a legal move rate to nonadjacent cells is rejected.
+- A move bound to cells other than those its identifier names is refused,
+  and cells that do not adjoin have no move.
 - Completion binds all crates to distinct goals, consumes the active puzzle
   lifecycle, and is quiescent.
 
@@ -64,6 +76,8 @@ The model's tests apply the rules directly:
 - Stable object identity across spatial motion.
 - Terrain/occupant separation for generic grid projections.
 - Spatial invariants, admissible search policy, and deadlock evidence.
+- Geometry as relations of rates with variables, whose effects depend on
+  facts of the cells they bind.
 
 ## In this folder
 

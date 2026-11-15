@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern,
+    Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, Relation, Segment, basket,
 };
 
 #[cfg(feature = "packages")]
@@ -17,7 +17,6 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    CellIdentity(u8),
     BoardWidth(u8),
     BoardHeight(u8),
     Floor,
@@ -207,7 +206,7 @@ fn build_board(rows: &[&str]) -> World {
     for (y, row) in rows.iter().enumerate() {
         for (x, tile) in row.chars().enumerate() {
             let index = cell(width, x as u8, y as u8);
-            let mut assets = Basket::from([(Asset::CellIdentity(index), Quantity::new(1))]);
+            let mut assets = Basket::new();
             if tile == '#' {
                 assets.insert(Asset::Wall, Quantity::new(1));
             } else {
@@ -258,162 +257,197 @@ fn build_board(rows: &[&str]) -> World {
             rows[usize::from(*index / width)].as_bytes()[usize::from(*index % width)] != b'#'
         })
         .collect();
-    let exit_state = |mut rate: Rate<Ontology>, from: u8, to: u8| {
-        if tile_at(from) == 'x' {
-            rate = rate
-                .consume(Role::Puzzle, basket([(Asset::AtExit, 1)]))
-                .produce(Role::Puzzle, basket([(Asset::AwayFromExit, 1)]));
-        }
-        if tile_at(to) == 'x' {
-            rate = rate
-                .consume(Role::Puzzle, basket([(Asset::AwayFromExit, 1)]))
-                .produce(Role::Puzzle, basket([(Asset::AtExit, 1)]));
-        }
-        rate
-    };
-    let gate = |mut rate: Rate<Ontology>, to: u8| {
-        if matches!(tile_at(to), 'd' | 'e') {
-            let circuit = circuit_of(tile_at(to)).unwrap();
-            rate = rate.condition(
-                path!("door-has-pressure-or-a-permanent-latch"),
+    let circuits: Vec<u8> = (0..width * height)
+        .filter(|index| matches!(tile_at(*index), 's' | 't'))
+        .filter_map(|index| circuit_of(tile_at(index)))
+        .collect();
+    // Which floors adjoin, and which line up three in a row: the board's
+    // geometry, which no exchange changes.
+    let steps: Vec<(u8, u8)> = floors
+        .iter()
+        .flat_map(|&from| {
+            neighbors(from, width, height)
+                .into_iter()
+                .filter(|to| floors.contains(to))
+                .map(move |to| (from, to))
+        })
+        .collect();
+    let lines: Vec<(u8, u8, u8)> = push_lines(width, height)
+        .into_iter()
+        .filter(|(behind, middle, to)| {
+            floors.contains(behind) && floors.contains(middle) && floors.contains(to)
+        })
+        .collect();
+    let panels: Vec<(u8, u8)> = floors
+        .iter()
+        .filter(|at| matches!(tile_at(**at), 'l' | 'm'))
+        .map(|&at| (circuit_of(tile_at(at)).unwrap(), at))
+        .collect();
+
+    let (from, to) = (Param::<u8>::new(path!("from")), Param::new(path!("to")));
+    let (behind, crate_at) = (
+        Param::<u8>::new(path!("behind")),
+        Param::new(path!("crate-at")),
+    );
+    let crate_id = Param::<u8>::new(path!("crate"));
+    let (circuit, at) = (Param::<u8>::new(path!("circuit")), Param::new(path!("at")));
+    // A variable over the floor cells, and the cell account it names.
+    let floor = |variable: &Param<u8>| variable.values(floors.iter().copied());
+    let cell_at = |variable: &Param<u8>| AccountIdPattern::Cell(variable.var()).into();
+    let crate_on = || AssetPattern::Crate(crate_id.var()).into();
+    // A door in the cell bound to `role` lets it in only while its circuit's
+    // plate holds a crate or the door is latched.
+    let gated = |rate: Rate<Ontology>, role: Role| {
+        circuits.iter().fold(rate, |rate, &circuit| {
+            rate.condition(
+                path!("door-has-pressure-or-a-permanent-latch")
+                    .join(&path::write(&circuit))
+                    .join(&path::write(&role)),
+                Q::balance(role, Asset::Door(circuit)),
+                C::LessThanOrEqual,
                 Q::balance(Role::Puzzle, Asset::Pressed(circuit))
                     + Q::balance(Role::Puzzle, Asset::Latched(circuit)),
-                C::GreaterThanOrEqual,
-                Q::constant(1),
-            );
-        }
-        rate
+            )
+        })
     };
-    let pressure = |mut rate: Rate<Ontology>, from: u8, to: u8| {
-        for (index, entering) in [(from, false), (to, true)] {
-            if matches!(tile_at(index), 's' | 't') {
-                let circuit = circuit_of(tile_at(index)).unwrap();
-                let (consume, produce) = if entering {
-                    (Asset::Released(circuit), Asset::Pressed(circuit))
-                } else {
-                    (Asset::Pressed(circuit), Asset::Released(circuit))
-                };
-                rate = rate
-                    .consume(Role::Puzzle, basket([(consume, 1)]))
-                    .produce(Role::Puzzle, basket([(produce, 1)]));
+    // The player leaving the exit cell bound to `left`, or reaching the one
+    // bound to `entered`, moves the puzzle's record of where the player is.
+    let walked = |rate: Rate<Ontology>, left: Role, entered: Role| {
+        if !has_exit {
+            return rate;
+        }
+        let leaves = || Q::balance(left, Asset::ExitCell);
+        let reaches = || Q::balance(entered, Asset::ExitCell);
+        rate.consume_computed(Role::Puzzle, Asset::AtExit, leaves())
+            .produce_computed(Role::Puzzle, Asset::AwayFromExit, leaves())
+            .consume_computed(Role::Puzzle, Asset::AwayFromExit, reaches())
+            .produce_computed(Role::Puzzle, Asset::AtExit, reaches())
+    };
+    // A crate pushed off a plate releases it; one pushed onto a plate
+    // presses it.
+    let pressed = |rate: Rate<Ontology>| {
+        circuits.iter().fold(rate, |rate, &circuit| {
+            let leaves = || Q::balance(Role::Middle, Asset::Plate(circuit));
+            let reaches = || Q::balance(Role::To, Asset::Plate(circuit));
+            rate.consume_computed(Role::Puzzle, Asset::Pressed(circuit), leaves())
+                .produce_computed(Role::Puzzle, Asset::Released(circuit), leaves())
+                .consume_computed(Role::Puzzle, Asset::Released(circuit), reaches())
+                .produce_computed(Role::Puzzle, Asset::Pressed(circuit), reaches())
+        })
+    };
+    let board = || {
+        Rate::new()
+            .account(Role::Puzzle, Pattern::literal(AccountId::Success))
+            .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
+    };
+    let step = board()
+        .variable(floor(&from))
+        .variable(floor(&to))
+        .relation(Relation::pairs(&from, &to, steps))
+        .account(Role::From, cell_at(&from))
+        .account(Role::To, cell_at(&to))
+        .consume(Role::From, basket([(Asset::Player, 1)]))
+        .consume(Role::To, basket([(Asset::Empty, 1)]))
+        .produce(Role::From, basket([(Asset::Empty, 1)]))
+        .produce(Role::To, basket([(Asset::Player, 1)]));
+    builder = builder.rate_at(
+        RateIdPattern::Move {
+            from: from.var(),
+            to: to.var(),
+        }
+        .into(),
+        walked(gated(step, Role::To), Role::From, Role::To),
+    );
+    if !crate_ids.is_empty() && !lines.is_empty() {
+        let line = |(behind, middle, to): (u8, u8, u8)| {
+            [behind, middle, to].map(|cell| Segment::from(u64::from(cell)))
+        };
+        let push = board()
+            .variable(floor(&behind))
+            .variable(floor(&crate_at))
+            .variable(floor(&to))
+            .variable(crate_id.values(crate_ids.iter().copied()))
+            .relation(Relation::new(
+                [behind.name(), crate_at.name(), to.name()].map(Clone::clone),
+                lines.into_iter().map(line),
+            ))
+            .account(Role::From, cell_at(&behind))
+            .account(Role::Middle, cell_at(&crate_at))
+            .account(Role::To, cell_at(&to))
+            .consume(Role::From, basket([(Asset::Player, 1)]))
+            .consume_at(Role::Middle, [(crate_on(), Quantity::new(1))])
+            .consume(Role::To, basket([(Asset::Empty, 1)]))
+            .produce(Role::From, basket([(Asset::Empty, 1)]))
+            .produce(Role::Middle, basket([(Asset::Player, 1)]))
+            .produce_at(Role::To, [(crate_on(), Quantity::new(1))]);
+        builder = builder.rate_at(
+            RateIdPattern::Push {
+                behind: behind.var(),
+                crate_at: crate_at.var(),
+                to: to.var(),
+                crate_id: crate_id.var(),
             }
-        }
-        rate
-    };
-    for &from in &floors {
-        for to in neighbors(from, width, height)
-            .into_iter()
-            .filter(|to| floors.contains(to))
-        {
-            builder = builder.rate(
-                RateId::Move { from, to },
-                exit_state(
-                    gate(
-                        Rate::new()
-                            .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
-                            .preserve(Role::From, basket([(Asset::CellIdentity(from), 1)]))
-                            .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
-                            .consume(Role::From, basket([(Asset::Player, 1)]))
-                            .consume(Role::To, basket([(Asset::Empty, 1)]))
-                            .produce(Role::From, basket([(Asset::Empty, 1)]))
-                            .produce(Role::To, basket([(Asset::Player, 1)]))
-                            .distinct(Role::From, Role::To),
-                        to,
-                    ),
-                    from,
-                    to,
-                ),
-            );
-        }
+            .into(),
+            walked(
+                pressed(gated(gated(push, Role::Middle), Role::To)),
+                Role::From,
+                Role::Middle,
+            ),
+        );
     }
-    for (behind, middle, to) in
-        push_lines(width, height)
-            .into_iter()
-            .filter(|(behind, middle, to)| {
-                floors.contains(behind) && floors.contains(middle) && floors.contains(to)
-            })
-    {
-        for &crate_id in &crate_ids {
-            builder = builder.rate(
-                RateId::Push {
-                    behind,
-                    crate_at: middle,
-                    to,
-                    crate_id,
-                },
-                exit_state(
-                    pressure(
-                        gate(
-                            gate(
-                                Rate::new()
-                                    .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
-                                    .preserve(
-                                        Role::From,
-                                        basket([(Asset::CellIdentity(behind), 1)]),
-                                    )
-                                    .preserve(
-                                        Role::Middle,
-                                        basket([(Asset::CellIdentity(middle), 1)]),
-                                    )
-                                    .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
-                                    .consume(Role::From, basket([(Asset::Player, 1)]))
-                                    .consume(Role::Middle, basket([(Asset::Crate(crate_id), 1)]))
-                                    .consume(Role::To, basket([(Asset::Empty, 1)]))
-                                    .produce(Role::From, basket([(Asset::Empty, 1)]))
-                                    .produce(Role::Middle, basket([(Asset::Player, 1)]))
-                                    .produce(Role::To, basket([(Asset::Crate(crate_id), 1)]))
-                                    .distinct(Role::From, Role::Middle)
-                                    .distinct(Role::Middle, Role::To)
-                                    .distinct(Role::From, Role::To),
-                                middle,
-                            ),
-                            to,
-                        ),
-                        middle,
-                        to,
-                    ),
-                    behind,
-                    middle,
-                ),
-            );
-        }
-    }
-    for &at in &floors {
-        if matches!(tile_at(at), 'l' | 'm') {
-            let circuit = circuit_of(tile_at(at)).unwrap();
-            builder = builder.rate(
-                RateId::Latch { circuit, at },
-                Rate::new()
-                    .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
-                    .preserve(
-                        Role::From,
-                        basket([
-                            (Asset::CellIdentity(at), 1),
-                            (Asset::Player, 1),
-                            (Asset::Panel(circuit), 1),
-                        ]),
-                    )
-                    .consume(Role::Puzzle, basket([(Asset::LatchReady(circuit), 1)]))
-                    .produce(Role::Puzzle, basket([(Asset::Latched(circuit), 1)]))
-                    .distinct(Role::Puzzle, Role::From),
-            );
-            builder = builder
-                .invariant(
-                    LinearInvariant::new(path!("circuit-pressure").join(&path::write(&circuit)))
-                        .weight(Asset::Pressed(circuit), 1)
-                        .weight(Asset::Released(circuit), 1),
+    if !panels.is_empty() {
+        builder = builder.rate_at(
+            RateIdPattern::Latch {
+                circuit: circuit.var(),
+                at: at.var(),
+            }
+            .into(),
+            board()
+                .variable(circuit.values(panels.iter().map(|(circuit, _)| *circuit)))
+                .variable(at.values(panels.iter().map(|(_, at)| *at)))
+                .relation(Relation::pairs(&circuit, &at, panels.iter().copied()))
+                .account(Role::From, cell_at(&at))
+                .preserve_at(
+                    Role::From,
+                    [
+                        (Pattern::literal(Asset::Player), Quantity::new(1)),
+                        (AssetPattern::Panel(circuit.var()).into(), Quantity::new(1)),
+                    ],
                 )
-                .invariant(
-                    LinearInvariant::new(path!("circuit-latch").join(&path::write(&circuit)))
-                        .weight(Asset::LatchReady(circuit), 1)
-                        .weight(Asset::Latched(circuit), 1),
-                );
-        }
+                .consume_at(
+                    Role::Puzzle,
+                    [(
+                        AssetPattern::LatchReady(circuit.var()).into(),
+                        Quantity::new(1),
+                    )],
+                )
+                .produce_at(
+                    Role::Puzzle,
+                    [(
+                        AssetPattern::Latched(circuit.var()).into(),
+                        Quantity::new(1),
+                    )],
+                ),
+        );
+    }
+    for &circuit in &circuits {
+        builder = builder
+            .invariant(
+                LinearInvariant::new(path!("circuit-pressure").join(&path::write(&circuit)))
+                    .weight(Asset::Pressed(circuit), 1)
+                    .weight(Asset::Released(circuit), 1),
+            )
+            .invariant(
+                LinearInvariant::new(path!("circuit-latch").join(&path::write(&circuit)))
+                    .weight(Asset::LatchReady(circuit), 1)
+                    .weight(Asset::Latched(circuit), 1),
+            );
     }
     // Each crate's goal role must hold that crate on a goal cell. A crate is
     // in one cell, so the binding names where it rests and the law needs no
     // placement of its own.
     let mut finish = Rate::new()
+        .account(Role::Puzzle, Pattern::literal(AccountId::Success))
         .consume(Role::Puzzle, basket([(Asset::Active, 1)]))
         .produce(Role::Puzzle, basket([(Asset::Solved, 1)]));
     if has_exit {
@@ -553,42 +587,31 @@ pub fn dimensions(world: &World) -> (u8, u8) {
     (width, height)
 }
 
-/// The exchange applying `rate` to `world`'s board: a latch, move or push
-/// binds the cells its rate names, and finishing binds each crate's goal role
-/// to the cell the crate is on.
+/// The exchange applying `rate` to `world`'s board: each role its rate fixes
+/// bound to that account, the cells a latch, move or push names, and
+/// finishing binds each crate's goal role to the cell the crate is on.
 pub fn exchange(world: &World, rate: RateId) -> Action {
-    match rate {
-        RateId::Latch { circuit, at } => {
-            Exchange::new(RateId::Latch { circuit, at }, Quantity::new(1))
-                .bind(Role::Puzzle, AccountId::Success)
-                .bind(Role::From, AccountId::Cell(at))
-        }
-        RateId::Move { from, to } => Exchange::new(RateId::Move { from, to }, Quantity::new(1))
-            .bind(Role::Puzzle, AccountId::Success)
-            .bind(Role::From, AccountId::Cell(from))
-            .bind(Role::To, AccountId::Cell(to)),
-        RateId::Push {
-            behind,
-            crate_at,
-            to,
-            crate_id,
-        } => Exchange::new(
-            RateId::Push {
-                behind,
-                crate_at,
-                to,
-                crate_id,
-            },
-            Quantity::new(1),
-        )
-        .bind(Role::Puzzle, AccountId::Success)
-        .bind(Role::From, AccountId::Cell(behind))
-        .bind(Role::Middle, AccountId::Cell(crate_at))
-        .bind(Role::To, AccountId::Cell(to)),
-        RateId::Finish => crate_cells(world).into_iter().fold(
-            Exchange::new(RateId::Finish, Quantity::new(1)).bind(Role::Puzzle, AccountId::Success),
-            |exchange, (crate_id, cell)| exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell)),
-        ),
+    let fixed: Vec<(Role, AccountId)> = world
+        .instance(&rate)
+        .map(|instance| {
+            instance
+                .fixed_accounts()
+                .filter_map(|(role, account)| Some((*role, *account.as_literal()?)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let exchange = fixed.into_iter().fold(
+        Exchange::new(rate, Quantity::new(1)),
+        |exchange, (role, account)| exchange.bind(role, account),
+    );
+    if rate == RateId::Finish {
+        crate_cells(world)
+            .into_iter()
+            .fold(exchange, |exchange, (crate_id, cell)| {
+                exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell))
+            })
+    } else {
+        exchange
     }
 }
 
@@ -765,13 +788,19 @@ mod tests {
     }
 
     #[test]
-    fn encoded_cell_identities_reject_teleports() {
+    fn moves_join_adjacent_floors_and_their_own_cells() {
         let world = initial();
-        let teleport = Exchange::new(RateId::Move { from: 1, to: 2 }, Quantity::new(1))
+        assert!(world.is_applicable(&exchange(&world, step(8, 9))));
+        // A move names the cells it joins: bound to another, it is refused.
+        let teleport = Exchange::new(step(8, 9), Quantity::new(1))
             .bind(Role::Puzzle, AccountId::Success)
-            .bind(Role::From, AccountId::Cell(1))
-            .bind(Role::To, AccountId::Cell(5));
+            .bind(Role::From, AccountId::Cell(8))
+            .bind(Role::To, AccountId::Cell(11));
         assert!(!world.is_applicable(&teleport));
+        // Cells that do not adjoin, or are not both floor, have no move.
+        for (from, to) in [(8, 10), (1, 8)] {
+            assert!(world.instance(&step(from, to)).is_err(), "{from} → {to}");
+        }
     }
 
     #[test]
@@ -780,8 +809,8 @@ mod tests {
         assert!(
             solved
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
-                .all(|rate| !solved.is_applicable(&exchange(&solved, *rate)))
+                .flat_map(|key| solved.instances_of(key))
+                .all(|rate| !solved.is_applicable(&exchange(&solved, rate)))
         );
     }
 

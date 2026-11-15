@@ -23,20 +23,21 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
 
     let warehouse_showcase = sokoban::initial_showcase();
     let warehouse_stress = sokoban::initial_stress();
-    assert_eq!(
-        warehouse_showcase
+    // The latches a warehouse has: the instances of its latch rate.
+    let latches = |world: &sokoban::World| -> usize {
+        world
             .rate_ids()
-            .filter(|rate| matches!(rate.as_literal(), Some(sokoban::RateId::Latch { .. })))
-            .count(),
-        1
-    );
-    assert_eq!(
-        warehouse_stress
-            .rate_ids()
-            .filter(|rate| matches!(rate.as_literal(), Some(sokoban::RateId::Latch { .. })))
-            .count(),
-        2
-    );
+            .filter(|key| {
+                matches!(
+                    world.instances_of(key).next(),
+                    Some(sokoban::RateId::Latch { .. })
+                )
+            })
+            .map(|key| world.instances_of(key).count())
+            .sum()
+    };
+    assert_eq!(latches(&warehouse_showcase), 1);
+    assert_eq!(latches(&warehouse_stress), 2);
     assert!(
         warehouse_showcase
             .accounts()
