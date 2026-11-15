@@ -1,8 +1,8 @@
-use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, ModelIssue, Quantity,
     Rate, Trace, basket,
 };
+use axionomy::{Pattern, path};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -426,5 +426,52 @@ fn a_typed_rate_with_variables_written_down_is_a_paths_rate() {
     assert_eq!(
         serde_json::to_value(&untyped).unwrap(),
         serde_json::to_value(&typed).unwrap()
+    );
+}
+
+/// A rate answers to each identifier its variables' values write that names
+/// an instance, the first variable turning slowest; one without variables,
+/// to its own.
+#[test]
+fn a_rate_answers_to_each_instance_in_order() {
+    use visits::{Place, RateId};
+
+    let world = visits::world();
+    let instances: Vec<Vec<RateId>> = world
+        .rate_ids()
+        .map(|key| world.instances_of(key).collect())
+        .collect();
+    assert_eq!(
+        instances,
+        [
+            vec![RateId::Rest],
+            vec![RateId::Step(1, 2), RateId::Step(2, 3), RateId::Step(3, 4)],
+            vec![
+                RateId::Visit(1),
+                RateId::Visit(2),
+                RateId::Visit(3),
+                RateId::Visit(4)
+            ],
+            vec![
+                RateId::Wait(Some(Place::North)),
+                RateId::Wait(Some(Place::South))
+            ],
+        ]
+    );
+    let (key, arguments) = world.named(&RateId::Step(2, 3)).unwrap();
+    assert_eq!(key.text(), "step/{from}/{to}");
+    assert_eq!(
+        arguments
+            .iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect::<Vec<_>>(),
+        ["from=2", "to=3"]
+    );
+    assert!(world.named(&RateId::Visit(9)).is_some());
+    assert_eq!(
+        world
+            .instances_of(&Pattern::literal(RateId::Visit(9)))
+            .count(),
+        0
     );
 }

@@ -36,7 +36,7 @@ use axionomy_store::{
     Checkpoints, DefinitionPath, Durability, Point, Reader, RefPath, Run, Store, StoreError,
 };
 use cache::Cache;
-use definitions::definition;
+use definitions::{Offer, definition};
 use script::Scripts;
 use serde::{Serialize, de::DeserializeOwned};
 use std::{num::NonZeroU64, sync::Arc};
@@ -344,16 +344,18 @@ impl Engine {
     }
 
     /// The exchanges the candidate set at `set` offers at `at`: what its
-    /// script proposes, or those of its listed exchanges that apply.
+    /// script proposes, or those of its listed exchanges or instances that
+    /// apply.
     pub fn candidates(
         &self,
         at: Point,
         set: &CandidatesPath,
     ) -> Result<Vec<paths::Exchange>, EngineError> {
         let economy = &self.reach(at)?.state.economy;
-        match self.defined(set)? {
-            CandidateSet::Script(call) => self.propose(&call, economy),
-            CandidateSet::Listed(exchanges) => Ok(economy.applicable(exchanges)),
+        let set: CandidateSet = self.defined(set)?;
+        match set.offer(economy) {
+            Offer::Exchanges(exchanges) => Ok(economy.applicable(exchanges)),
+            Offer::Script(call) => self.propose(call, economy),
         }
     }
 

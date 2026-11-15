@@ -15,7 +15,11 @@
 //! file or the network; each imported script is compiled and evaluated once,
 //! as a module, and sees the same host API.
 
-use crate::{EngineError, ScriptFunction, cache::Cache, definitions::definition};
+use crate::{
+    EngineError, ScriptFunction,
+    cache::Cache,
+    definitions::{definition, exchange_of, instance_exchanges},
+};
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Basket, ObservationKey, PathKind, Pattern, Quantity,
     RatePath, RolePath, Rounding,
@@ -790,6 +794,30 @@ fn states(rhai: &mut rhai::Engine) {
                     economy: state.economy.clone(),
                     visible: Some(Arc::new(visible)),
                 })
+            },
+        )
+        .register_fn(
+            "moves",
+            |state: &mut ScriptState, under: &str| -> Result<Array, Failure> {
+                let under: Option<RatePath> = if under.is_empty() {
+                    None
+                } else {
+                    Some(parsed(under)?)
+                };
+                let economy = state.whole("which moves apply")?;
+                Ok(economy
+                    .applicable(instance_exchanges(economy, under.as_ref()))
+                    .into_iter()
+                    .map(Dynamic::from)
+                    .collect())
+            },
+        )
+        .register_fn(
+            "exchange_of",
+            |state: &mut ScriptState, rate: &str| -> Result<paths::Exchange, Failure> {
+                let rate: RatePath = parsed(rate)?;
+                exchange_of(&state.economy, rate.clone())
+                    .ok_or_else(|| Failure::from(format!("the economy has no rate `{rate}`")))
             },
         )
         .register_fn(

@@ -98,11 +98,16 @@ impl<O: Ontology> Rates<O> {
         }
     }
 
-    /// The rate an identifier names, with the values it gives the rate's
-    /// variables.
-    fn find(&self, id: &O::Rate) -> Option<(&Rate<O>, Arguments)> {
+    /// The rate an identifier names, under the identifier it is written
+    /// with, and the values it gives the rate's variables.
+    fn named(&self, id: &O::Rate) -> Option<Named<'_, O>> {
         if let Some(&index) = self.concrete.get(id) {
-            return Some((&self.entries[index], Arguments::default()));
+            let (key, rate) = self.entries.get_index(index).expect("an index of a rate");
+            return Some(Named {
+                key,
+                rate,
+                arguments: Arguments::default(),
+            });
         }
         if self.written.is_empty() {
             return None;
@@ -111,9 +116,27 @@ impl<O: Ontology> Rates<O> {
         let segments: Vec<&str> = text.split('/').collect();
         self.written.iter().find_map(|&index| {
             let (key, rate) = self.entries.get_index(index).expect("an index of a rate");
-            key.read(&segments).map(|arguments| (rate, arguments))
+            key.read(&segments).map(|arguments| Named {
+                key,
+                rate,
+                arguments,
+            })
         })
     }
+
+    /// The rate an identifier names, with the values it gives the rate's
+    /// variables.
+    fn find(&self, id: &O::Rate) -> Option<(&Rate<O>, Arguments)> {
+        self.named(id).map(|named| (named.rate, named.arguments))
+    }
+}
+
+/// The rate an identifier names, the identifier it is written with, and the
+/// values the identifier gives its variables.
+struct Named<'a, O: Ontology> {
+    key: &'a Pattern<O::Rate>,
+    rate: &'a Rate<O>,
+    arguments: Arguments,
 }
 
 /// The logical state of an economy's accounts, independent of creation order:
@@ -567,6 +590,22 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
     issues
 }
 
+/// The next values of an odometer over `domains`, the last turning fastest;
+/// none after the last.
+fn advanced(
+    mut indices: Vec<usize>,
+    domains: &[(VariablePath, Vec<crate::Segment>)],
+) -> Option<Vec<usize>> {
+    for position in (0..indices.len()).rev() {
+        indices[position] += 1;
+        if indices[position] < domains[position].1.len() {
+            return Some(indices);
+        }
+        indices[position] = 0;
+    }
+    None
+}
+
 impl<O: Ontology> Default for EconomyBuilder<O> {
     fn default() -> Self {
         Self::new()
@@ -790,6 +829,56 @@ impl<O: Ontology> Economy<O> {
         self.rates.entries.iter()
     }
 
+    /// The identifier of the rate an identifier names, as the rate is
+    /// written, and the values it gives the rate's variables: `stabilize/
+    /// {patient}` and `patient = 1` for `stabilize/1`. None where no rate
+    /// matches it.
+    pub fn named(&self, id: &O::Rate) -> Option<(&Pattern<O::Rate>, Arguments)> {
+        self.rates
+            .named(id)
+            .map(|named| (named.key, named.arguments))
+    }
+
+    /// Every identifier the rate written `key` answers to, in order: each
+    /// variable's values in turn, the first declared outermost, kept where
+    /// they name an instance. A rate without variables answers to its own
+    /// identifier; an identifier the economy has no rate under, to none.
+    pub fn instances_of<'a>(
+        &'a self,
+        key: &'a Pattern<O::Rate>,
+    ) -> impl Iterator<Item = O::Rate> + 'a {
+        let domains: Vec<(VariablePath, Vec<crate::Segment>)> = self
+            .rates
+            .entries
+            .get(key)
+            .map(|rate| {
+                rate.variables()
+                    .iter()
+                    .map(|variable| (variable.name().clone(), variable.domain().values()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let any = self.rates.entries.contains_key(key)
+            && domains.iter().all(|(_, values)| !values.is_empty());
+        let mut next: Option<Vec<usize>> = any.then(|| vec![0; domains.len()]);
+        std::iter::from_fn(move || {
+            loop {
+                let indices = next.take()?;
+                let arguments: Arguments = domains
+                    .iter()
+                    .zip(&indices)
+                    .map(|((name, values), &index)| (name.clone(), values[index].clone()))
+                    .collect();
+                next = advanced(indices, &domains);
+                if let Ok(id) = key.instantiate(&arguments)
+                    && self.instance(&id).is_ok()
+                {
+                    return Some(id);
+                }
+            }
+        })
+    }
+
     /// The instance an identifier names: the rate keyed by it, or the
     /// instance of the rate with variables whose identifier it matches, for
     /// the values it gives them. Refused where no rate matches, a value lies
@@ -874,9 +963,11 @@ impl<O: Ontology> Economy<O> {
 
     /// Returns every asset identity referenced by the closed model.
     ///
-    /// The set covers initial balances, every rate effect and requirement,
-    /// and declared invariant weights. It supports construction-time schema
-    /// validation without giving validators mutation authority.
+    /// The set covers initial balances, every rate effect and requirement
+    /// written out, and declared invariant weights; an asset a rate names
+    /// through its variables, `at/{location}`, is an asset of each instance,
+    /// not of the model. It supports construction-time schema validation
+    /// without giving validators mutation authority.
     pub fn asset_keys(&self) -> BTreeSet<&O::Asset> {
         let balances = self
             .accounts

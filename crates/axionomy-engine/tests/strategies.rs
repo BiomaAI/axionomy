@@ -1242,3 +1242,101 @@ fn searches_without_a_session_of_their_own_stop_as_they_expand() {
         assert_eq!(looks.len(), 2, "{strategy:?}");
     }
 }
+
+/// A walker on a line of four cells, a rate with variables for every step
+/// between cells that adjoin, which fixes the walker's account, and the
+/// point the economy starts at.
+fn line() -> (Engine, Point) {
+    use axionomy::{Pattern, Relation, Variable};
+
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let cells = || Variable::range(path("from"), 1, 4);
+    let steps = [[1, 2], [2, 3], [3, 4], [2, 1], [3, 2], [4, 3]];
+    let economy = paths::EconomyBuilder::new()
+        .account(path("walker"), basket([(path("at/1"), 1)]).into())
+        .rate_at(
+            "step/{from}/{to}".parse().unwrap(),
+            Rate::new()
+                .variable(cells())
+                .variable(Variable::range(path("to"), 1, 4))
+                .relation(Relation::new(
+                    [path("from"), path("to")],
+                    steps.map(|row| row.map(u64::into)),
+                ))
+                .account(path("walker"), Pattern::literal(path("walker")))
+                .consume_at(
+                    path("walker"),
+                    [("at/{from}".parse().unwrap(), Quantity::new(1))],
+                )
+                .produce_at(
+                    path("walker"),
+                    [("at/{to}".parse().unwrap(), Quantity::new(1))],
+                ),
+        )
+        .build()
+        .unwrap();
+    engine
+        .keep_script(
+            &path("line"),
+            r#"
+            fn offered(state) { state.moves("step") }
+            fn onward(state, random) { state.exchange_of("step/" + where(state) + "/" + (where(state) + 1)) }
+            fn where(state) {
+                let at = 0;
+                for asset in state.balances("walker").keys() { at = parse_int(asset.split("/")[1]); }
+                at
+            }
+            "#,
+        )
+        .unwrap();
+    engine
+        .keep_goal(
+            &path("end"),
+            &paths::Goal::new().require(path("walker"), basket([(path("at/4"), 1)])),
+        )
+        .unwrap();
+    engine
+        .keep_candidates(&path("steps"), &CandidateSet::Instances { under: None })
+        .unwrap();
+    engine
+        .keep_candidates(
+            &path("scripted"),
+            &CandidateSet::Script(ScriptCall::new(path("line"), "offered".parse().unwrap())),
+        )
+        .unwrap();
+    let start = engine.author(economy).unwrap();
+    (engine, start)
+}
+
+#[test]
+fn a_rate_with_variables_offers_its_instances_that_apply() {
+    let (engine, start) = line();
+    let walk = |rate: &str| {
+        paths::Exchange::new(path(rate), Quantity::new(1)).bind(path("walker"), path("walker"))
+    };
+    for set in ["steps", "scripted"] {
+        assert_eq!(
+            engine.candidates(start, &path(set)).unwrap(),
+            vec![walk("step/1/2")],
+            "{set}"
+        );
+    }
+    let ran = run(
+        &engine,
+        start,
+        &Strategy::BreadthFirst {
+            candidates: path("steps"),
+        },
+        "end",
+        EFFORT,
+    );
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(ran.end.step, start.step + 3);
+
+    let onward = Strategy::Policy {
+        policy: ScriptCall::new(path("line"), "onward".parse().unwrap()),
+    };
+    let ran = run(&engine, start, &onward, "end", EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(ran.end.step, start.step + 3);
+}

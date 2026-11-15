@@ -4,7 +4,7 @@
 
 use crate::{
     CandidatesPath, Engine, EngineError, GoalPath, ObjectivePath, Random, ScriptCall, ScriptState,
-    definitions::{CandidateSet, Measure, Objective},
+    definitions::{CandidateSet, Measure, Objective, Offer},
 };
 use axionomy::{
     ObservationKey, Quantity,
@@ -714,9 +714,9 @@ impl Engine {
         if failure.borrow().is_some() {
             return Vec::new();
         }
-        let proposed = match set {
-            CandidateSet::Listed(exchanges) => Ok(exchanges.clone()),
-            CandidateSet::Script(call) => self.propose(call, economy),
+        let proposed = match set.offer(economy) {
+            Offer::Exchanges(exchanges) => Ok(exchanges),
+            Offer::Script(call) => self.propose(call, economy),
         };
         match proposed {
             Ok(exchanges) => economy.applicable(exchanges),
@@ -925,9 +925,9 @@ impl Engine {
         if failure.borrow().is_some() {
             return Vec::new();
         }
-        let proposed = match set {
-            CandidateSet::Listed(exchanges) => Ok(exchanges.clone()),
-            CandidateSet::Script(call) => self
+        let proposed = match set.offer(seen.view.economy()) {
+            Offer::Exchanges(exchanges) => Ok(exchanges),
+            Offer::Script(call) => self
                 .call(&call.script, call.function.as_str(), (seen.view.clone(),))
                 .and_then(crate::exchanges_of),
         };

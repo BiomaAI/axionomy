@@ -39,7 +39,8 @@ goes.
 - `keep_goal`, `keep_objective` and `keep_candidates` keep a goal, an
   objective (a script's measure of a state, or its step costs summed over a
   history, with a direction) and a candidate set (a script function returning
-  exchanges); `holds`, `measure` and `candidates` evaluate them at a point, and
+  exchanges, exchanges listed, or `Instances`: every instance of the rates
+  under a prefix that fixes the account of each of its roles, at one unit); `holds`, `measure` and `candidates` evaluate them at a point, and
   `measure_state`, `step_cost` and `propose` on an economy in memory.
 - `keep_strategy` keeps a strategy, an algorithm naming the candidates and
   scripts it uses: how to choose, never what for. `run_strategy` runs one
@@ -118,7 +119,9 @@ Scripts are how a package says what a generic algorithm cannot know. They
 read a `ScriptState`, the whole economy or a view of the accounts an actor may
 see, through the host API (balances, accounts and rates by prefix, a rate's
 roles and what it fixes for a role to consume, produce or preserve,
-`exchange(...)`, `applicable`, `assess`, `distances` over a list of edges),
+`exchange(...)`, `exchange_of(rate)` with the accounts the rate fixes bound,
+`moves(prefix)` for every instance under a prefix that fixes all its roles
+and applies, `applicable`, `assess`, `distances` over a list of edges),
 and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;
 randomness is only a `Random` the host seeds (below); scripts have no clock;
