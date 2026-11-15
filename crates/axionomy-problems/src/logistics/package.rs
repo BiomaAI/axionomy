@@ -1,10 +1,9 @@
 //! Stochastic logistics as a package. Micro is a `logistics` economy: one
 //! vehicle with one package left to deliver, its direct and reliable route
 //! policies, its planner, and completion, delivery and elapsed-time
-//! objectives. The planner is a game as the Rust receding-horizon run
-//! plays it: Nature draws each leg's weather by its event, the leg at the
-//! vehicle's elapsed time, from the run's seed, the
-//! vehicle takes the one move it has when it has one, and otherwise the
+//! objectives. The planner is a game: Nature draws each leg's weather by
+//! its event, the leg at the vehicle's elapsed time, from the run's seed,
+//! the vehicle takes the one move it has when it has one, and otherwise the
 //! dispatcher replans by Monte Carlo tree search over its moves and
 //! Nature's draws, simulating the reliable policy. Showcase and Stress are
 //! `logistics/fleet` economies, an ontology of their own whose orders and
@@ -32,7 +31,7 @@ const FLEET: &str = include_str!("../../scripts/fleet.rhai");
 const VIEW: &str = include_str!("../../scripts/logistics-view.rhai");
 const FLEET_VIEW: &str = include_str!("../../scripts/fleet-view.rhai");
 
-/// The seed the sample's Rust runs are played with: the weather Micro's runs meet,
+/// The seed the sample's experiments play: the weather Micro's runs meet,
 /// and the fleet's route tickets.
 const SEED: u64 = 17;
 /// What the seed is XORed with to seed the planner's searches,

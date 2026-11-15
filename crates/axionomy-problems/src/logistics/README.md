@@ -18,12 +18,13 @@ direct transfers require actual co-location and free compatible capacity.
 
 One fuel pump, one repair bay and one tow truck remain occupied for their whole
 service duration. Fuel and repair parts are finite, maintenance clears actual
-wear, and breakdown recovery consumes time and operating funds. Three responsive
-fleet policies run identical initial orders and route tickets; the larger-profile
-comparison is an evaluated policy frontier. Micro retains the original stochastic
-model and full repeated MCTS execution. Tests cover 24 fleet/scenario combinations,
-replay, cargo compatibility, paid service occupancy, handoff conservation, and
-dispatch independence from unrealized weather tickets.
+wear, and breakdown recovery consumes time and operating funds. The package's
+three fleet policies run identical initial orders and route tickets; their
+comparison is an evaluated policy frontier. Micro keeps the original
+stochastic model, which the package's planner replans by Monte Carlo tree
+search. The model's tests apply exchanges directly: cargo compatibility, trunk
+occupancy, paid service occupancy, handoff conservation, and a rate catalog
+that does not disclose unrealized weather tickets.
 
 ## Specification
 
@@ -50,54 +51,39 @@ leg begins or, after a repair, which takes time, when it resumes. A run
 seeded alike that meets the same leg at the same time meets the same weather,
 whichever policy brought it there.
 
+
 ## Required results
 
-- A reliable-policy trajectory delivers all four orders and exceeds forty
-  exchanges.
-- Every sampled travel outcome appears as a Nature exchange.
-- The complete long trajectory replays from the initial economy.
-- Fuel, money, time, cargo, order lifecycle, and position invariants hold.
-- Generic Monte Carlo compares both policies over 64 seeded rollouts.
-- Encoded reliability makes the reliable policy's mean utility higher.
-- Mean and lower-decile selection both use caller-chosen projections of the
-  same sampled encoded outcomes.
-- MCTS repeatedly selects and executes actions through deliveries and
-  disruptions, retaining each searched decision at its actual trace index.
-  Completion, no feasible action, and horizon exhaustion are distinct outcomes.
-  Search randomness is independent of realized Nature sampling; cancellation
-  discards the fork. Fleet coordination is not implemented yet.
-- A vector Monte Carlo evaluation exposes completion probability, mean
-  deliveries, and mean elapsed time as an explicitly approximate policy front.
-- A repeatable workload reports rollouts and exchanges per second.
+The package's experiments find these, pinned in `tests/outcomes`:
+
+- In Micro, with one order left, the direct policy delivers in five exchanges
+  and two time units; the reliable policy and the planner both deliver in ten
+  exchanges and four time units.
+- Every fleet policy closes Showcase and Stress.
+
+The model's tests check its rules: a delivery through a breakdown replays with
+its weather as explicit Nature exchanges, a broken-down vehicle arrives only
+after its repair and a fresh draw, failed travel changes nothing, and a
+package loads only from its own order. Fuel, money, time, cargo,
+order-lifecycle and position invariants are declared, so every exchange keeps
+them.
 
 ## API pressure
 
 - Long-horizon stochastic trajectories rather than one-step decisions.
 - Recurrent Nature outcomes and retry loops.
-- Outcome distributions, mean values, and risk statistics.
 - Disposable MCTS route planning over the same transition system.
 - Efficient forks sharing immutable laws and untouched account data.
 - Candidate generation from current route, custody, and resource assets.
-- Sampled dominance may remove a policy while preserving its underlying
-  encoded rollouts for audit and alternative statistics.
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro vehicle and its routes, Nature, rollouts,
-  Monte Carlo and MCTS planning.
+- `mod.rs` is the model: the Micro vehicle, its routes and Nature.
 - `fleet/` is the Showcase and Stress fleet, an ontology of its own laid out
   the same way: its model in `mod.rs`, and its scripts `scripts/fleet.rhai`
   and `scripts/fleet-view.rhai`.
 - `package.rs` writes its package: its economies under refs, goals,
   strategies, experiments and view, whose scripts are `scripts/logistics.rhai`
   and `scripts/logistics-view.rhai`.
-
-[`examples/logistics.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/logistics.rs) runs it, and the
-`rollout_throughput` bench measures its long-horizon workload:
-
-```console
-cargo run -p axionomy-problems --example logistics
-cargo bench -p axionomy-problems --bench rollout_throughput
-```
 
 Logistics is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

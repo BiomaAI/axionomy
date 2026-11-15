@@ -1,10 +1,9 @@
 //! Timed heterogeneous fleet with cargo, a shared road and finite services.
 use axionomy::path;
 use axionomy::{
-    Account, Apply, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Rounding, basket,
 };
-use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Van {
@@ -186,12 +185,6 @@ pub enum RateId {
     EndTow(Van),
     Tick,
     Close,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Policy {
-    Fastest,
-    Reliable,
-    Relay,
 }
 pub type World = Economy<Ontology>;
 
@@ -1015,392 +1008,26 @@ pub fn action(rate: RateId) -> Action {
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
 }
-pub fn location(world: &World, van: Van) -> Option<Location> {
-    LOCATIONS
-        .into_iter()
-        .find(|at| value(world, AccountId::Vehicle(van), Asset::At(*at)) > 0)
-}
-/// Static route planning uses public road costs; the realized ticket account is
-/// deliberately absent. Dispatch also checks actual trunk-road occupancy.
-pub fn route(from: Location, to: Location, reliable: bool) -> Option<(Location, u64)> {
-    if from == to {
-        return None;
-    }
-    let mut queue = std::collections::VecDeque::from([(from, None, 0)]);
-    let mut seen = std::collections::BTreeSet::from([from]);
-    while let Some((at, first, cost)) = queue.pop_front() {
-        for (a, b) in ROADS {
-            let next = if at == a {
-                b
-            } else if at == b {
-                a
-            } else {
-                continue;
-            };
-            if reliable && express(at, next) {
-                continue;
-            }
-            let first = first.unwrap_or(next);
-            if next == to {
-                return Some((first, cost + 1));
-            }
-            if seen.insert(next) {
-                queue.push_back((next, Some(first), cost + 1));
-            }
-        }
-    }
-    None
-}
-pub fn nature_response(world: &World) -> Option<Action> {
-    let count = value(world, AccountId::World, Asset::Count) as u8;
-    for id in 0..count {
-        let release = action(RateId::Release(id));
-        if world.is_applicable(&release) {
-            return Some(release);
-        }
-        for carrier in [None, Some(Van::Cold), Some(Van::Freight)] {
-            for at in [Location::Depot, Location::Hub] {
-                let exchange = action(RateId::Expire {
-                    order: id,
-                    carrier,
-                    at,
-                });
-                if world.is_applicable(&exchange) {
-                    return Some(exchange);
-                }
-            }
-        }
-    }
-    for van in VANS {
-        let own = AccountId::Vehicle(van);
-        for (a, b) in ROADS {
-            for (from, to) in [(a, b), (b, a)] {
-                if value(world, own, Asset::Travelling(from, to)) == 0 {
-                    continue;
-                }
-                if value(world, own, Asset::AwaitingOutcome) > 0 {
-                    for outcome in [Outcome::Clear, Outcome::Delayed, Outcome::Breakdown] {
-                        let exchange = action(RateId::Resolve {
-                            van,
-                            from,
-                            to,
-                            outcome,
-                        });
-                        if world.is_applicable(&exchange) {
-                            return Some(exchange);
-                        }
-                    }
-                }
-                let arrive = action(RateId::Arrive { van, from, to });
-                if world.is_applicable(&arrive) {
-                    return Some(arrive);
-                }
-            }
-        }
-        for rate in [
-            RateId::EndRefuel(van),
-            RateId::EndTow(van),
-            RateId::EndRepair { van, damaged: true },
-            RateId::EndRepair {
-                van,
-                damaged: false,
-            },
-        ] {
-            let exchange = action(rate);
-            if world.is_applicable(&exchange) {
-                return Some(exchange);
-            }
-        }
-    }
-    None
-}
-pub fn decision(world: &World, van: Van, policy: Policy) -> Option<Action> {
-    if value(world, AccountId::World, Asset::Resolved)
-        == value(world, AccountId::World, Asset::Count)
-    {
-        return None;
-    }
-    let own = AccountId::Vehicle(van);
-    let val = |asset| value(world, own, asset);
-    if val(Asset::Ready) == 0 || value(world, AccountId::World, Asset::Permit(van)) == 0 {
-        return None;
-    }
-    let from = location(world, van)?;
-    let count = value(world, AccountId::World, Asset::Count) as u8;
-    let propose = |rate| {
-        let exchange = action(rate);
-        world.is_applicable(&exchange).then_some(exchange)
-    };
-    let drive = |to| {
-        route(from, to, policy != Policy::Fastest).and_then(|(next, _)| {
-            propose(RateId::Depart {
-                van,
-                from,
-                to: next,
-            })
-        })
-    };
-    let mut cargo: Vec<_> = (0..count).filter(|id| val(Asset::Cargo(*id)) > 0).collect();
-    cargo.sort_by_key(|id| {
-        (
-            !cold(*id),
-            value(world, AccountId::Order(*id), Asset::Deadline),
-        )
-    });
-    for id in &cargo {
-        for late in [false, true] {
-            if let Some(deliver) = propose(RateId::Deliver {
-                van,
-                order: *id,
-                late,
-            }) {
-                return Some(deliver);
-            }
-        }
-    }
-    if policy == Policy::Relay
-        && from == Location::Hub
-        && van == Van::Cold
-        && cargo.iter().any(|id| cold(*id))
-    {
-        for id in cargo.iter().filter(|id| !cold(**id)) {
-            if let Some(stage) = propose(RateId::Stage { van, order: *id }) {
-                return Some(stage);
-            }
-        }
-    }
-    // A working teammate can recover a compatible load from a stranded van.
-    if val(Asset::Damage) > 0 || val(Asset::Fuel) == 0 {
-        let other = if van == Van::Cold {
-            Van::Freight
-        } else {
-            Van::Cold
-        };
-        for id in &cargo {
-            if let Some(transfer) = propose(RateId::Transfer {
-                from: van,
-                to: other,
-                order: *id,
-                at: from,
-            }) {
-                return Some(transfer);
-            }
-        }
-        if from != Location::Depot {
-            return propose(RateId::Tow { van, from });
-        }
-    }
-    if from == Location::Depot {
-        if (val(Asset::Damage) > 0 || val(Asset::Wear) >= 4)
-            && let Some(repair) = propose(RateId::Repair {
-                van,
-                damaged: val(Asset::Damage) > 0,
-            })
-        {
-            return Some(repair);
-        }
-        if val(Asset::Fuel) < 4
-            && let Some(refuel) = propose(RateId::Refuel(van))
-        {
-            return Some(refuel);
-        }
-    }
-    // Relay packs the cold van's spare slot for hub staging. Other policies
-    // keep one destination per trip. Heavy freight never fits the cold van.
-    let may_load = cargo.is_empty()
-        || (policy == Policy::Relay
-            && van == Van::Cold
-            && from == Location::Depot
-            && cargo.iter().any(|id| cold(*id)));
-    if may_load {
-        let mut waiting: Vec<_> = (0..count)
-            .filter(|id| {
-                value(world, AccountId::Order(*id), Asset::Waiting) > 0
-                    && value(world, AccountId::Order(*id), Asset::At(from)) > 0
-            })
-            .collect();
-        waiting.sort_by_key(|id| {
-            (
-                if van == Van::Cold {
-                    !cold(*id)
-                } else {
-                    weight(*id) != 3
-                },
-                value(world, AccountId::Order(*id), Asset::Deadline),
-            )
-        });
-        for id in waiting {
-            if policy == Policy::Relay && from == Location::Hub && van == Van::Cold && !cold(id) {
-                continue;
-            }
-            if let Some(load) = propose(RateId::Load {
-                van,
-                order: id,
-                at: from,
-            }) {
-                return Some(load);
-            }
-        }
-    }
-    if let Some(id) = cargo.first() {
-        let target = if policy == Policy::Relay
-            && van == Van::Cold
-            && from == Location::Depot
-            && cargo.len() > 1
-        {
-            Location::Hub
-        } else {
-            destination(*id)
-        };
-        if let Some(next) = drive(target) {
-            return Some(next);
-        }
-    } else {
-        if policy == Policy::Relay
-            && van == Van::Freight
-            && (0..count).any(|id| {
-                value(world, AccountId::Order(id), Asset::Waiting) > 0
-                    && value(world, AccountId::Order(id), Asset::At(Location::Hub)) > 0
-                    && !cold(id)
-            })
-            && let Some(next) = drive(Location::Hub)
-        {
-            return Some(next);
-        }
-        if from != Location::Depot
-            && let Some(next) = drive(Location::Depot)
-        {
-            return Some(next);
-        }
-    }
-    // Recovery from exhausted fuel or wear can use the paid shared tow truck.
-    if from != Location::Depot && (val(Asset::Wear) >= 6 || val(Asset::Fuel) == 0) {
-        return propose(RateId::Tow { van, from });
-    }
-    None
-}
 /// The most steps a fleet season takes before it is cut short.
 pub const HORIZON: usize = 700;
-
-/// Runs `policy` on `world` until every order is closed: Nature responds
-/// first, then the season closes when it can, then the first van with a
-/// decision acts, and otherwise the clock ticks.
-pub fn run(world: &mut impl Apply<Ontology>, policy: Policy) -> RolloutResult<Ontology> {
-    run_to_goal(world, &goal(), RolloutConfig::new(HORIZON), |world, _| {
-        RolloutDecision::Propose(
-            nature_response(world)
-                .or_else(|| {
-                    let close = action(RateId::Close);
-                    world.is_applicable(&close).then_some(close)
-                })
-                .or_else(|| {
-                    VANS.into_iter()
-                        .find_map(|van| decision(world, van, policy))
-                })
-                .unwrap_or_else(|| action(RateId::Tick)),
-        )
-    })
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::Trace;
 
-    /// The trace of a run of `policy` from `source`, which must end at the
-    /// goal.
-    fn trace_of(source: &World, policy: Policy) -> Trace<Ontology> {
-        let result = run(&mut source.clone(), policy);
-        assert!(
-            result.termination().is_terminal(),
-            "{policy:?}: {:?}",
-            result.termination()
-        );
-        result.trace().cloned().expect("runs keep their trace")
-    }
-    fn settle(world: &mut World) {
-        while let Some(exchange) = nature_response(world) {
-            world.apply(exchange).unwrap();
+    fn apply_all(world: &mut World, rates: &[RateId]) {
+        for rate in rates {
+            world
+                .apply(action(*rate))
+                .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
         }
     }
-    #[test]
-    fn fleet_policies_replay_common_tickets_and_distinct_physical_outcomes() {
-        let mut outcomes = std::collections::BTreeSet::new();
-        let mut stages = false;
-        let mut recovered = false;
-        let mut overlap = false;
-        for stress in [false, true] {
-            for seed in [0, 3, 17, 29] {
-                for policy in [Policy::Fastest, Policy::Reliable, Policy::Relay] {
-                    let source = initial(stress, seed);
-                    let before = source.state_key();
-                    let trace = trace_of(&source, policy);
-                    assert_eq!(trace, trace_of(&source, policy));
-                    let mut replay = source.clone();
-                    for exchange in trace.exchanges() {
-                        replay.apply(exchange.clone()).unwrap();
-                        let busy: u64 = VANS
-                            .into_iter()
-                            .map(|van| value(&replay, AccountId::Vehicle(van), Asset::OnMainRoad))
-                            .sum();
-                        assert_eq!(busy + value(&replay, AccountId::World, Asset::RoadSpace), 1);
-                        overlap |= VANS
-                            .into_iter()
-                            .all(|van| value(&replay, AccountId::Vehicle(van), Asset::Ready) == 0);
-                        for van in VANS {
-                            let own = AccountId::Vehicle(van);
-                            assert_eq!(
-                                value(&replay, own, Asset::Fuel)
-                                    + value(&replay, own, Asset::TankSpace),
-                                8
-                            );
-                            let cargo: u64 = (0..value(&source, AccountId::World, Asset::Count)
-                                as u8)
-                                .map(|id| value(&replay, own, Asset::Cargo(id)) * weight(id))
-                                .sum();
-                            assert_eq!(
-                                cargo + value(&replay, own, Asset::Space),
-                                if van == Van::Cold { 2 } else { 3 }
-                            );
-                        }
-                    }
-                    assert_eq!(before, source.state_key());
-                    assert!(replay.matches(&goal()));
-                    assert_eq!(
-                        value(&replay, AccountId::World, Asset::Resolved),
-                        value(&source, AccountId::World, Asset::Count)
-                    );
-                    assert_eq!(value(&replay, AccountId::Station, Asset::FuelPump), 1);
-                    assert_eq!(value(&replay, AccountId::Station, Asset::RepairBay), 1);
-                    assert_eq!(value(&replay, AccountId::Station, Asset::TowTruck), 1);
-                    stages |= trace
-                        .exchanges()
-                        .iter()
-                        .any(|exchange| matches!(exchange.rate(), RateId::Stage { .. }));
-                    recovered |= trace.exchanges().iter().any(|exchange| {
-                        matches!(exchange.rate(), RateId::Tow { .. } | RateId::Repair { .. })
-                    });
-                    let delivered = value(&replay, AccountId::World, Asset::DeliveredCount);
-                    let expired = value(&replay, AccountId::World, Asset::ExpiredCount);
-                    outcomes.insert((delivered, expired, now(&replay)));
-                    if seed == 17 {
-                        eprintln!(
-                            "{stress:?} {policy:?}: delivered {delivered} expired {expired} time {} stage {} revenue {}",
-                            now(&replay),
-                            value(&replay, AccountId::World, Asset::StagedCount),
-                            value(&replay, AccountId::World, Asset::Revenue)
-                        );
-                    }
-                }
-            }
-        }
-        assert!(stages && recovered && overlap);
-        assert!(outcomes.len() >= 4, "{outcomes:?}");
-    }
+    /// Nature's opening: the season's first orders released.
+    const RELEASES: [RateId; 3] = [RateId::Release(0), RateId::Release(1), RateId::Release(2)];
     #[test]
     fn cargo_compatibility_and_trunk_occupancy_are_core_constraints() {
         let mut world = initial(false, 17);
-        settle(&mut world);
+        apply_all(&mut world, &RELEASES);
         assert!(!world.is_applicable(&action(RateId::Load {
             van: Van::Freight,
             order: 0,
@@ -1441,16 +1068,27 @@ mod tests {
             from: Location::Depot,
             to: Location::Hub
         })));
-        settle(&mut world);
-        assert!(!world.is_applicable(&action(RateId::Arrive {
+        // Nature's ticket delays the trip: the van arrives only once its
+        // time has passed.
+        apply_all(
+            &mut world,
+            &[RateId::Resolve {
+                van: Van::Cold,
+                from: Location::Depot,
+                to: Location::Hub,
+                outcome: Outcome::Delayed,
+            }],
+        );
+        let arrive = RateId::Arrive {
             van: Van::Cold,
             from: Location::Depot,
-            to: Location::Hub
-        })));
-        while value(&world, AccountId::World, Asset::RoadSpace) == 0 {
-            world.apply(action(RateId::Tick)).unwrap();
-            settle(&mut world);
-        }
+            to: Location::Hub,
+        };
+        assert!(!world.is_applicable(&action(arrive)));
+        apply_all(&mut world, &[RateId::Tick, RateId::Tick, RateId::Tick]);
+        assert!(!world.is_applicable(&action(arrive)));
+        apply_all(&mut world, &[RateId::Tick, arrive]);
+        assert_eq!(value(&world, AccountId::World, Asset::RoadSpace), 1);
         assert!(world.is_applicable(&action(RateId::Depart {
             van: Van::Freight,
             from: Location::Depot,
@@ -1460,7 +1098,7 @@ mod tests {
     #[test]
     fn handoff_and_service_use_real_cargo_funds_and_capacity() {
         let mut world = initial(false, 3);
-        settle(&mut world);
+        apply_all(&mut world, &RELEASES);
         world
             .apply(action(RateId::Load {
                 van: Van::Cold,
@@ -1493,11 +1131,11 @@ mod tests {
         assert_eq!(value(&world, AccountId::Station, Asset::Fuel), 12);
     }
     #[test]
-    fn dispatch_does_not_use_unrealized_weather_tickets() {
+    fn rates_do_not_disclose_unrealized_weather_tickets() {
         let mut a = initial(false, 0);
         let mut b = initial(false, 17);
-        settle(&mut a);
-        settle(&mut b);
+        apply_all(&mut a, &RELEASES);
+        apply_all(&mut b, &RELEASES);
         assert_ne!(a.state_key(), b.state_key());
         let catalog = |world: &World| {
             let mut rates: Vec<_> = world.rate_ids().copied().collect();
@@ -1509,10 +1147,5 @@ mod tests {
             catalog(&b),
             "rate availability must not disclose future weather"
         );
-        for policy in [Policy::Fastest, Policy::Reliable, Policy::Relay] {
-            for van in VANS {
-                assert_eq!(decision(&a, van, policy), decision(&b, van, policy));
-            }
-        }
     }
 }
