@@ -2,8 +2,9 @@
 // and formats name its identifiers; the scene draws the sectors and the
 // roads between them, each teammate where it stands and what it is doing,
 // every objective the Scout has found, and each sector surveyed, hazardous
-// or not. Its sectors, roads, teammates and objectives, and its quantities,
-// are read as the expedition's economy script reads them.
+// or not. Its sectors, its roads from the world's map, its teammates and
+// objectives, and its quantities are read as the expedition's economy
+// script reads them.
 
 import "mission/expedition" as expedition;
 
@@ -47,10 +48,6 @@ fn label(item) {
     }
     if category == "asset" {
         return switch name {
-            "world-identity" => "Expedition identity",
-            "nature-identity" => "Nature identity",
-            "agent-identity" => `${capital(parts[2])} identity`,
-            "objective-identity" => `${objective_subject(parts[2])} identity`,
             "active" => "Mission in progress",
             "closed" => "Mission closed",
             "time" => "Mission time",
@@ -70,6 +67,7 @@ fn label(item) {
             "weather-blocked" => `${capital(parts[2])} blocked by the hazard`,
             "at" => `At ${capital(parts[2])}`,
             "travelling" => `Travelling to ${capital(parts[2])}`,
+            "distance" => `Roads from ${capital(parts[2])} to ${capital(parts[3])}`,
             "team-at" => `${capital(parts[2])} at ${capital(parts[3])}`,
             "team-travelling" => `${capital(parts[2])} travelling`,
             "ready" => "Ready",
@@ -301,7 +299,7 @@ fn scene(state, frame) {
         });
     }
     let edges = [];
-    for road in expedition::roads() {
+    for road in expedition::roads(state) {
         edges.push(#{
             id: `road/${road[0]}/${road[1]}`, source: road[0], target: road[1],
             label: "1 tick + injury delay", classes: [],

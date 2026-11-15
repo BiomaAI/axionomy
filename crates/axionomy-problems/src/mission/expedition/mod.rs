@@ -1,8 +1,9 @@
 //! Independent teammates, private observations and timed cooperative extraction.
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
+    QuantityComparison as C, QuantityExpression as Q, Rate, Relation, Segment, Slot, Variable,
+    basket,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -43,10 +44,6 @@ pub enum AccountId {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    WorldIdentity,
-    NatureIdentity,
-    AgentIdentity(Agent),
-    ObjectiveIdentity(u8),
     Active,
     Closed,
     Time,
@@ -66,6 +63,8 @@ pub enum Asset {
     WeatherBlocked(Location),
     At(Location),
     Travelling(Location),
+    /// How many roads apart two places are: a fact of the world's map.
+    Distance(Location, Location),
     TeamAt(Agent, Location),
     TeamTravelling(Agent),
     Ready,
@@ -208,6 +207,10 @@ pub type Action = Exchange<Ontology>;
 pub fn patient(id: u8) -> bool {
     id.is_multiple_of(2)
 }
+/// Whether objective `id` is an archive: the odd ones are.
+fn archive(id: u8) -> bool {
+    !patient(id)
+}
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
     world.balance(&account, &asset).to_u64()
 }
@@ -227,20 +230,26 @@ fn q(role: Role, asset: Asset) -> Q<Ontology> {
 fn clock() -> Q<Ontology> {
     q(Role::World, Asset::Time)
 }
+/// One unit of each asset `assets` name.
+fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset, Quantity::new(1)))
+        .collect()
+}
+/// One event of the mission, between the world and both teammates, each
+/// role fixed to its account.
 fn identity() -> Rate<Ontology> {
     Rate::new()
-        .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
-        .preserve(
+        .account(Role::World, Pattern::literal(AccountId::World))
+        .account(
             Role::Scout,
-            basket([(Asset::AgentIdentity(Agent::Scout), 1)]),
+            Pattern::literal(AccountId::Agent(Agent::Scout)),
         )
-        .preserve(
+        .account(
             Role::Medic,
-            basket([(Asset::AgentIdentity(Agent::Medic), 1)]),
+            Pattern::literal(AccountId::Agent(Agent::Medic)),
         )
-        .distinct(Role::World, Role::Scout)
-        .distinct(Role::World, Role::Medic)
-        .distinct(Role::Scout, Role::Medic)
         .condition(
             path!("one-mission-event"),
             Q::units(),
@@ -270,17 +279,25 @@ fn permit(rate: Rate<Ontology>, agent: Agent, energy: u64) -> Rate<Ontology> {
 fn work(agent: Agent, energy: u64) -> Rate<Ontology> {
     permit(law(), agent, energy).preserve(role(agent), basket([(Asset::Ready, 1)]))
 }
-fn objective(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
-    rate.preserve(Role::Objective, basket([(Asset::ObjectiveIdentity(id), 1)]))
-        .distinct(Role::Objective, Role::World)
-        .distinct(Role::Objective, Role::Scout)
-        .distinct(Role::Objective, Role::Medic)
+/// `rate` for each objective `objectives` takes, `{objective}`, its role
+/// fixed to that objective's account.
+fn each_objective(
+    rate: Rate<Ontology>,
+    objective: &Param<u8>,
+    objectives: Variable,
+) -> Rate<Ontology> {
+    rate.variable(objectives).account(
+        Role::Objective,
+        AccountIdPattern::Objective(objective.var()).into(),
+    )
 }
+/// `rate` for the one objective `id`, its role fixed to its account.
+fn objective(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
+    rate.account(Role::Objective, Pattern::literal(AccountId::Objective(id)))
+}
+/// `rate` with Nature, its role fixed to Nature's account.
 fn nature(rate: Rate<Ontology>) -> Rate<Ontology> {
-    rate.preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
-        .distinct(Role::Nature, Role::World)
-        .distinct(Role::Nature, Role::Scout)
-        .distinct(Role::Nature, Role::Medic)
+    rate.account(Role::Nature, Pattern::literal(AccountId::Nature))
 }
 fn before_horizon(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
     rate.condition(
@@ -322,6 +339,8 @@ pub fn distance(from: Location, to: Location) -> u64 {
     }
     unreachable!("connected mission roads")
 }
+/// The days a clinical pulse falls on.
+const PULSES: [u8; 3] = [8, 16, 24];
 pub fn initial(stress: bool, seed: u64) -> World {
     let count: u8 = if stress { 3 } else { 2 };
     let horizon: u64 = if stress { 32 } else { 28 };
@@ -333,7 +352,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .collect();
     let hazard = locations[((seed / 4) % u64::from(count)) as usize];
     let mut world = basket([
-        (Asset::WorldIdentity, 1),
         (Asset::Active, 1),
         (Asset::EnvironmentReady, 1),
         (Asset::NextClinical, 8),
@@ -346,12 +364,18 @@ pub fn initial(stress: bool, seed: u64) -> World {
     ]);
     for location in LOCATIONS {
         world.insert(Asset::WeatherOpen(location), Quantity::new(1));
+        for to in LOCATIONS.into_iter().filter(|to| *to != location) {
+            world.insert(
+                Asset::Distance(location, to),
+                Quantity::new(distance(location, to)),
+            );
+        }
     }
     for agent in AGENTS {
         world.insert(Asset::Permit(agent), Quantity::new(1));
         world.insert(Asset::TeamAt(agent, Location::Base), Quantity::new(1));
     }
-    let mut hidden = basket([(Asset::NatureIdentity, 1), (Asset::HazardSite(hazard), 1)]);
+    let mut hidden = basket([(Asset::HazardSite(hazard), 1)]);
     for (id, location) in locations.iter().copied().enumerate() {
         hidden.insert(Asset::Truth(id as u8, location), Quantity::new(1));
     }
@@ -371,9 +395,26 @@ pub fn initial(stress: bool, seed: u64) -> World {
     let mut builder = EconomyBuilder::new()
         .account(AccountId::World, Account::from(world))
         .account(AccountId::Nature, Account::from(hidden));
+
+    // The rates' variables: an objective, a site, two places, a scan round
+    // and a pulse day.
+    let objective_id = Param::<u8>::new(path!("objective"));
+    let location = Param::<Location>::new(path!("location"));
+    let (from, to) = (
+        Param::<Location>::new(path!("from")),
+        Param::new(path!("to")),
+    );
+    let (round, next) = (Param::<u8>::new(path!("round")), Param::new(path!("next")));
+    let day = Param::<u8>::new(path!("day"));
+    let site = || location.values(sites.iter().copied());
+    let at = |place: &Param<Location>| AssetPattern::At(place.var()).into();
+    let known = || AssetPattern::Known(objective_id.var(), location.var()).into();
+    let every_objective = || objective_id.range(0, count - 1);
+    let objectives =
+        |which: fn(u8) -> bool| objective_id.values((0..count).filter(|id| which(*id)));
+
     for agent in AGENTS {
         let mut stock = basket([
-            (Asset::AgentIdentity(agent), 1),
             (Asset::At(Location::Base), 1),
             (Asset::Ready, 1),
             (Asset::Health, 2),
@@ -391,65 +432,85 @@ pub fn initial(stress: bool, seed: u64) -> World {
             stock.insert(Asset::Seat, Quantity::new(1));
         }
         builder = builder.account(AccountId::Agent(agent), Account::from(stock));
-        for from in LOCATIONS {
-            for to in LOCATIONS.into_iter().filter(|to| *to != from) {
-                let duration = Q::constant(distance(from, to)) + q(role(agent), Asset::Harm);
-                builder = builder.rate(
-                    RateId::Depart { agent, from, to },
-                    before_horizon(permit(law(), agent, 0), duration.clone())
-                        .preserve(Role::World, basket([(Asset::WeatherOpen(to), 1)]))
-                        .consume(
-                            role(agent),
-                            basket([(Asset::Ready, 1), (Asset::At(from), 1)]),
-                        )
-                        .consume(Role::World, basket([(Asset::TeamAt(agent, from), 1)]))
-                        .produce(Role::World, basket([(Asset::TeamTravelling(agent), 1)]))
-                        .produce(role(agent), basket([(Asset::Travelling(to), 1)]))
-                        .consume_computed(role(agent), Asset::Energy, duration.clone())
-                        .produce_computed(role(agent), Asset::SpentEnergy, duration.clone())
-                        .produce_computed(role(agent), Asset::ReadyAt, clock() + duration),
-                );
+        // A journey takes the road distance between two places, as the
+        // world's map records it, slowed by the traveller's harm.
+        let duration = Q::balance_at(
+            Role::World,
+            AssetPattern::Distance(from.var(), to.var()).into(),
+        ) + q(role(agent), Asset::Harm);
+        builder = builder.rate_at(
+            RateIdPattern::Depart {
+                agent: Slot::Is(agent),
+                from: from.var(),
+                to: to.var(),
             }
-        }
-        for to in LOCATIONS {
-            for hazardous in [false, true] {
-                let mut arrive = law()
-                    .preserve(
-                        Role::World,
-                        basket([(
-                            if hazardous {
-                                Asset::WeatherBlocked(to)
-                            } else {
-                                Asset::WeatherOpen(to)
-                            },
-                            1,
-                        )]),
-                    )
-                    .condition(
-                        path!("travel-time-elapsed"),
-                        clock(),
-                        C::GreaterThanOrEqual,
-                        q(role(agent), Asset::ReadyAt),
-                    )
-                    .consume(role(agent), basket([(Asset::Travelling(to), 1)]))
-                    .consume(Role::World, basket([(Asset::TeamTravelling(agent), 1)]))
-                    .produce(Role::World, basket([(Asset::TeamAt(agent, to), 1)]))
-                    .produce(role(agent), basket([(Asset::Ready, 1), (Asset::At(to), 1)]))
-                    .consume_computed(role(agent), Asset::ReadyAt, q(role(agent), Asset::ReadyAt));
-                if hazardous {
-                    arrive = arrive
-                        .consume(role(agent), basket([(Asset::Health, 1)]))
-                        .produce(role(agent), basket([(Asset::Harm, 1)]));
+            .into(),
+            before_horizon(permit(law(), agent, 0), duration.clone())
+                .variable(from.every())
+                .variable(to.every())
+                .distinct_variables(from.name().clone(), to.name().clone())
+                .preserve_at(
+                    Role::World,
+                    one([AssetPattern::WeatherOpen(to.var()).into()]),
+                )
+                .consume_at(
+                    role(agent),
+                    one([Pattern::literal(Asset::Ready), at(&from)]),
+                )
+                .consume_at(
+                    Role::World,
+                    one([AssetPattern::TeamAt(Slot::Is(agent), from.var()).into()]),
+                )
+                .produce(Role::World, basket([(Asset::TeamTravelling(agent), 1)]))
+                .produce_at(
+                    role(agent),
+                    one([AssetPattern::Travelling(to.var()).into()]),
+                )
+                .consume_computed(role(agent), Asset::Energy, duration.clone())
+                .produce_computed(role(agent), Asset::SpentEnergy, duration.clone())
+                .produce_computed(role(agent), Asset::ReadyAt, clock() + duration),
+        );
+        // Arriving where the weather has closed in harms the traveller.
+        for hazardous in [false, true] {
+            let weather = if hazardous {
+                AssetPattern::WeatherBlocked(to.var())
+            } else {
+                AssetPattern::WeatherOpen(to.var())
+            };
+            let mut arrive = law()
+                .variable(to.every())
+                .preserve_at(Role::World, one([weather.into()]))
+                .condition(
+                    path!("travel-time-elapsed"),
+                    clock(),
+                    C::GreaterThanOrEqual,
+                    q(role(agent), Asset::ReadyAt),
+                )
+                .consume_at(
+                    role(agent),
+                    one([AssetPattern::Travelling(to.var()).into()]),
+                )
+                .consume(Role::World, basket([(Asset::TeamTravelling(agent), 1)]))
+                .produce_at(
+                    Role::World,
+                    one([AssetPattern::TeamAt(Slot::Is(agent), to.var()).into()]),
+                )
+                .produce_at(role(agent), one([Pattern::literal(Asset::Ready), at(&to)]))
+                .consume_computed(role(agent), Asset::ReadyAt, q(role(agent), Asset::ReadyAt));
+            if hazardous {
+                arrive = arrive
+                    .consume(role(agent), basket([(Asset::Health, 1)]))
+                    .produce(role(agent), basket([(Asset::Harm, 1)]));
+            }
+            builder = builder.rate_at(
+                RateIdPattern::Arrive {
+                    agent: Slot::Is(agent),
+                    to: to.var(),
+                    hazardous: Slot::Is(hazardous),
                 }
-                builder = builder.rate(
-                    RateId::Arrive {
-                        agent,
-                        to,
-                        hazardous,
-                    },
-                    arrive,
-                );
-            }
+                .into(),
+                arrive,
+            );
         }
         builder = builder.rate(
             RateId::Resupply(agent),
@@ -470,200 +531,244 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     basket([(Asset::MedicalKit, u64::from(agent == Agent::Medic))]),
                 ),
         );
-        for location in LOCATIONS {
-            let mut treatment = work(Agent::Medic, 1)
-                .preserve(Role::Medic, basket([(Asset::At(location), 1)]))
-                .consume(Role::Medic, basket([(Asset::MedicalKit, 1)]))
-                .produce(Role::Medic, basket([(Asset::UsedMedicalKit, 1)]))
-                .consume(role(agent), basket([(Asset::Harm, 1)]))
-                .produce(role(agent), basket([(Asset::Health, 1)]));
-            if agent != Agent::Medic {
-                treatment = treatment.preserve(
-                    Role::Scout,
-                    basket([(Asset::At(location), 1), (Asset::Ready, 1)]),
-                );
-            }
-            builder = builder.rate(
-                RateId::TreatAgent {
-                    target: agent,
-                    location,
-                },
-                treatment,
+        // The Medic treats itself where it stands, or the Scout where both
+        // stand.
+        let mut treatment = work(Agent::Medic, 1)
+            .variable(location.every())
+            .preserve_at(Role::Medic, one([at(&location)]))
+            .consume(Role::Medic, basket([(Asset::MedicalKit, 1)]))
+            .produce(Role::Medic, basket([(Asset::UsedMedicalKit, 1)]))
+            .consume(role(agent), basket([(Asset::Harm, 1)]))
+            .produce(role(agent), basket([(Asset::Health, 1)]));
+        if agent != Agent::Medic {
+            treatment = treatment.preserve_at(
+                Role::Scout,
+                one([at(&location), Pattern::literal(Asset::Ready)]),
             );
         }
+        builder = builder.rate_at(
+            RateIdPattern::TreatAgent {
+                target: Slot::Is(agent),
+                location: location.var(),
+            }
+            .into(),
+            treatment,
+        );
     }
     for id in 0..count {
-        let mut stock = basket([
-            (Asset::ObjectiveIdentity(id), 1),
-            (Asset::Hidden, 1),
-            (Asset::Deadline, horizon - 2),
-        ]);
+        let mut stock = basket([(Asset::Hidden, 1), (Asset::Deadline, horizon - 2)]);
         if patient(id) {
             stock.insert(Asset::Health, Quantity::new(3));
             stock.insert(Asset::Unstable, Quantity::new(1));
-            for day in [8, 16, 24] {
+            for day in PULSES {
                 stock.insert(Asset::ClinicalDue(day), Quantity::new(1));
             }
         }
         builder = builder.account(AccountId::Objective(id), Account::from(stock));
-        for location in sites.iter().copied() {
-            builder = builder.rate(
-                RateId::Discover {
-                    objective: id,
-                    location,
-                },
-                nature(objective(law(), id))
-                    .preserve(Role::Scout, basket([(Asset::Surveyed(location), 1)]))
-                    .preserve(Role::Nature, basket([(Asset::Truth(id, location), 1)]))
-                    .consume(Role::Objective, basket([(Asset::Hidden, 1)]))
-                    .produce(Role::Objective, basket([(Asset::Located, 1)]))
-                    .produce(Role::Scout, basket([(Asset::Known(id, location), 1)])),
-            );
-            for remote in [false, true] {
-                let mut share = work(Agent::Scout, 0)
-                    .preserve(Role::Scout, basket([(Asset::Known(id, location), 1)]))
-                    .condition(
-                        path!("recipient-does-not-already-know"),
-                        q(Role::Medic, Asset::Known(id, location)),
-                        C::Equal,
-                        Q::constant(0),
-                    )
-                    .produce(Role::Scout, basket([(Asset::Shared(id, location), 1)]))
-                    .produce(Role::Medic, basket([(Asset::Known(id, location), 1)]));
-                if remote {
-                    share = share
-                        .consume(Role::Scout, basket([(Asset::Radio, 1)]))
-                        .produce(Role::Scout, basket([(Asset::UsedRadio, 1)]));
-                } else {
-                    // A local briefing can take place at any rendezvous, but its
-                    // two locations must actually coincide in the ledger.
-                    let colocated = LOCATIONS
-                        .into_iter()
-                        .map(|site| {
-                            q(Role::Scout, Asset::At(site)) * q(Role::Medic, Asset::At(site))
-                        })
-                        .reduce(|a, b| a + b)
-                        .unwrap();
-                    share = share.condition(
-                        path!("local-briefing-requires-rendezvous"),
-                        colocated,
-                        C::Equal,
-                        Q::constant(1),
-                    );
-                }
-                builder = builder.rate(
-                    RateId::Share {
-                        objective: id,
-                        location,
-                        remote,
-                    },
-                    share,
-                );
-            }
-            if patient(id) {
-                for restore in [false, true] {
-                    let mut treat = objective(work(Agent::Medic, 1), id)
-                        .preserve(
-                            Role::Medic,
-                            basket([(Asset::At(location), 1), (Asset::Known(id, location), 1)]),
-                        )
-                        .preserve(Role::Objective, basket([(Asset::Located, 1)]))
-                        .condition(
-                            path!("patient-alive"),
-                            q(Role::Objective, Asset::Health),
-                            C::GreaterThanOrEqual,
-                            Q::constant(1),
-                        )
-                        .consume(Role::Medic, basket([(Asset::MedicalKit, 1)]))
-                        .produce(Role::Medic, basket([(Asset::UsedMedicalKit, 1)]))
-                        .consume(Role::Objective, basket([(Asset::Unstable, 1)]))
-                        .produce(Role::Objective, basket([(Asset::Stable, 1)]));
-                    if restore {
-                        treat = treat
-                            .consume(Role::Objective, basket([(Asset::Harm, 1)]))
-                            .produce(Role::Objective, basket([(Asset::Health, 1)]));
-                    } else {
-                        treat = treat.condition(
-                            path!("no-damage-to-restore"),
-                            q(Role::Objective, Asset::Harm),
-                            C::Equal,
-                            Q::constant(0),
-                        );
-                    }
-                    builder = builder.rate(
-                        RateId::TreatPatient {
-                            objective: id,
-                            location,
-                            restore,
-                        },
-                        treat,
-                    );
-                }
-                let mut extract = before_horizon(objective(law(), id), Q::constant(2))
-                    .preserve(Role::Objective, basket([(Asset::Stable, 1)]))
-                    .condition(
-                        path!("patient-alive"),
-                        q(Role::Objective, Asset::Health),
-                        C::GreaterThanOrEqual,
-                        Q::constant(1),
-                    )
-                    .consume(Role::Objective, basket([(Asset::Located, 1)]))
-                    .produce(Role::Objective, basket([(Asset::Working, 1)]))
-                    .consume(Role::Medic, basket([(Asset::Seat, 1)]))
-                    .produce(Role::Medic, basket([(Asset::ReservedSeat(id), 1)]));
-                for agent in AGENTS {
-                    extract = permit(extract, agent, 1)
-                        .preserve(
-                            role(agent),
-                            basket([(Asset::At(location), 1), (Asset::Known(id, location), 1)]),
-                        )
-                        .consume(role(agent), basket([(Asset::Ready, 1)]))
-                        .produce(role(agent), basket([(Asset::Extracting(id), 1)]))
-                        .produce_computed(role(agent), Asset::ReadyAt, clock() + Q::constant(2));
-                }
-                builder = builder.rate(
-                    RateId::Extract {
-                        objective: id,
-                        location,
-                    },
-                    extract,
-                );
-            } else {
-                builder = builder.rate(
-                    RateId::Collect {
-                        objective: id,
-                        location,
-                    },
-                    before_horizon(
-                        objective(permit(law(), Agent::Scout, 2), id),
-                        Q::constant(3),
-                    )
-                    .preserve(
-                        Role::Scout,
-                        basket([(Asset::At(location), 1), (Asset::Known(id, location), 1)]),
-                    )
-                    .consume(Role::Scout, basket([(Asset::Ready, 1)]))
-                    .produce(Role::Scout, basket([(Asset::Collecting(id), 1)]))
-                    .produce_computed(Role::Scout, Asset::ReadyAt, clock() + Q::constant(3))
-                    .consume(Role::Objective, basket([(Asset::Located, 1)]))
-                    .produce(Role::Objective, basket([(Asset::Working, 1)])),
-                );
-            }
+    }
+
+    builder = builder.rate_at(
+        RateIdPattern::Discover {
+            objective: objective_id.var(),
+            location: location.var(),
         }
-        let carrier = if patient(id) {
-            Role::Medic
+        .into(),
+        nature(each_objective(law(), &objective_id, every_objective()))
+            .variable(site())
+            .preserve_at(
+                Role::Scout,
+                one([AssetPattern::Surveyed(location.var()).into()]),
+            )
+            .preserve_at(
+                Role::Nature,
+                one([AssetPattern::Truth(objective_id.var(), location.var()).into()]),
+            )
+            .consume(Role::Objective, basket([(Asset::Hidden, 1)]))
+            .produce(Role::Objective, basket([(Asset::Located, 1)]))
+            .produce_at(Role::Scout, one([known()])),
+    );
+    // Sharing what the Scout knows of an objective with the Medic, by radio
+    // or at a rendezvous.
+    for remote in [false, true] {
+        let mut share = work(Agent::Scout, 0)
+            .variable(every_objective())
+            .variable(site())
+            .preserve_at(Role::Scout, one([known()]))
+            .condition(
+                path!("recipient-does-not-already-know"),
+                Q::balance_at(Role::Medic, known()),
+                C::Equal,
+                Q::constant(0),
+            )
+            .produce_at(
+                Role::Scout,
+                one([AssetPattern::Shared(objective_id.var(), location.var()).into()]),
+            )
+            .produce_at(Role::Medic, one([known()]));
+        if remote {
+            share = share
+                .consume(Role::Scout, basket([(Asset::Radio, 1)]))
+                .produce(Role::Scout, basket([(Asset::UsedRadio, 1)]));
         } else {
-            Role::Scout
+            // A local briefing can take place at any rendezvous, but its
+            // two locations must actually coincide in the ledger.
+            let colocated = LOCATIONS
+                .into_iter()
+                .map(|site| q(Role::Scout, Asset::At(site)) * q(Role::Medic, Asset::At(site)))
+                .reduce(|a, b| a + b)
+                .unwrap();
+            share = share.condition(
+                path!("local-briefing-requires-rendezvous"),
+                colocated,
+                C::Equal,
+                Q::constant(1),
+            );
+        }
+        builder = builder.rate_at(
+            RateIdPattern::Share {
+                objective: objective_id.var(),
+                location: location.var(),
+                remote: Slot::Is(remote),
+            }
+            .into(),
+            share,
+        );
+    }
+    // Stabilizing a casualty who has lost health restores one; one who has
+    // lost none is only stabilized.
+    for restore in [false, true] {
+        let mut treat = each_objective(work(Agent::Medic, 1), &objective_id, objectives(patient))
+            .variable(site())
+            .preserve_at(Role::Medic, one([at(&location), known()]))
+            .preserve(Role::Objective, basket([(Asset::Located, 1)]))
+            .condition(
+                path!("patient-alive"),
+                q(Role::Objective, Asset::Health),
+                C::GreaterThanOrEqual,
+                Q::constant(1),
+            )
+            .consume(Role::Medic, basket([(Asset::MedicalKit, 1)]))
+            .produce(Role::Medic, basket([(Asset::UsedMedicalKit, 1)]))
+            .consume(Role::Objective, basket([(Asset::Unstable, 1)]))
+            .produce(Role::Objective, basket([(Asset::Stable, 1)]));
+        if restore {
+            treat = treat
+                .consume(Role::Objective, basket([(Asset::Harm, 1)]))
+                .produce(Role::Objective, basket([(Asset::Health, 1)]));
+        } else {
+            treat = treat.condition(
+                path!("no-damage-to-restore"),
+                q(Role::Objective, Asset::Harm),
+                C::Equal,
+                Q::constant(0),
+            );
+        }
+        builder = builder.rate_at(
+            RateIdPattern::TreatPatient {
+                objective: objective_id.var(),
+                location: location.var(),
+                restore: Slot::Is(restore),
+            }
+            .into(),
+            treat,
+        );
+    }
+    // A casualty is extracted by both teammates together.
+    let mut extract = before_horizon(
+        each_objective(law(), &objective_id, objectives(patient)),
+        Q::constant(2),
+    )
+    .variable(site())
+    .preserve(Role::Objective, basket([(Asset::Stable, 1)]))
+    .condition(
+        path!("patient-alive"),
+        q(Role::Objective, Asset::Health),
+        C::GreaterThanOrEqual,
+        Q::constant(1),
+    )
+    .consume(Role::Objective, basket([(Asset::Located, 1)]))
+    .produce(Role::Objective, basket([(Asset::Working, 1)]))
+    .consume(Role::Medic, basket([(Asset::Seat, 1)]))
+    .produce_at(
+        Role::Medic,
+        one([AssetPattern::ReservedSeat(objective_id.var()).into()]),
+    );
+    for agent in AGENTS {
+        extract = permit(extract, agent, 1)
+            .preserve_at(role(agent), one([at(&location), known()]))
+            .consume(role(agent), basket([(Asset::Ready, 1)]))
+            .produce_at(
+                role(agent),
+                one([AssetPattern::Extracting(objective_id.var()).into()]),
+            )
+            .produce_computed(role(agent), Asset::ReadyAt, clock() + Q::constant(2));
+    }
+    builder = builder.rate_at(
+        RateIdPattern::Extract {
+            objective: objective_id.var(),
+            location: location.var(),
+        }
+        .into(),
+        extract,
+    );
+    builder = builder.rate_at(
+        RateIdPattern::Collect {
+            objective: objective_id.var(),
+            location: location.var(),
+        }
+        .into(),
+        before_horizon(
+            each_objective(
+                permit(law(), Agent::Scout, 2),
+                &objective_id,
+                objectives(archive),
+            ),
+            Q::constant(3),
+        )
+        .variable(site())
+        .preserve_at(Role::Scout, one([at(&location), known()]))
+        .consume(Role::Scout, basket([(Asset::Ready, 1)]))
+        .produce_at(
+            Role::Scout,
+            one([AssetPattern::Collecting(objective_id.var()).into()]),
+        )
+        .produce_computed(Role::Scout, Asset::ReadyAt, clock() + Q::constant(3))
+        .consume(Role::Objective, basket([(Asset::Located, 1)]))
+        .produce(Role::Objective, basket([(Asset::Working, 1)])),
+    );
+    // Finishing the work: an archive's collection by the Scout, a
+    // casualty's extraction by both teammates, the casualty taking the
+    // Medic's reserved seat.
+    for casualty in [false, true] {
+        let (carrier, workers, working): (Role, &[Agent], _) = if casualty {
+            (
+                Role::Medic,
+                &AGENTS[..],
+                AssetPattern::Extracting(objective_id.var()),
+            )
+        } else {
+            (
+                Role::Scout,
+                &AGENTS[..1],
+                AssetPattern::Collecting(objective_id.var()),
+            )
         };
-        let mut finish = objective(law(), id)
-            .consume(Role::Objective, basket([(Asset::Working, 1)]))
-            .produce(Role::Objective, basket([(Asset::Carried, 1)]))
-            .produce(carrier, basket([(Asset::Cargo(id), 1)]));
-        for agent in if patient(id) {
-            &AGENTS[..]
-        } else {
-            &AGENTS[..1]
-        } {
+        let mut finish = each_objective(
+            law(),
+            &objective_id,
+            if casualty {
+                objectives(patient)
+            } else {
+                objectives(archive)
+            },
+        )
+        .consume(Role::Objective, basket([(Asset::Working, 1)]))
+        .produce(Role::Objective, basket([(Asset::Carried, 1)]))
+        .produce_at(
+            carrier,
+            one([AssetPattern::Cargo(objective_id.var()).into()]),
+        );
+        for agent in workers {
             finish = finish
                 .condition(
                     path!("work-duration-elapsed"),
@@ -671,17 +776,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     C::GreaterThanOrEqual,
                     q(role(*agent), Asset::ReadyAt),
                 )
-                .consume(
-                    role(*agent),
-                    basket([(
-                        if patient(id) {
-                            Asset::Extracting(id)
-                        } else {
-                            Asset::Collecting(id)
-                        },
-                        1,
-                    )]),
-                )
+                .consume_at(role(*agent), one([working.clone().into()]))
                 .produce(role(*agent), basket([(Asset::Ready, 1)]))
                 .consume_computed(
                     role(*agent),
@@ -689,17 +784,110 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     q(role(*agent), Asset::ReadyAt),
                 );
         }
-        if patient(id) {
-            finish = finish.consume(Role::Medic, basket([(Asset::ReservedSeat(id), 1)]));
+        if casualty {
+            finish = finish.consume_at(
+                Role::Medic,
+                one([AssetPattern::ReservedSeat(objective_id.var()).into()]),
+            );
         }
-        builder = builder.rate(
-            if patient(id) {
-                RateId::FinishExtract(id)
+        builder = builder.rate_at(
+            if casualty {
+                RateIdPattern::FinishExtract(objective_id.var())
             } else {
-                RateId::FinishCollect(id)
-            },
+                RateIdPattern::FinishCollect(objective_id.var())
+            }
+            .into(),
             finish,
         );
+    }
+    // An objective is lost once its deadline passes, or a casualty once it
+    // dies, from each phase: a law of its own for each, what it gives back
+    // differing by phase. One carried is lost by whoever carries it, so an
+    // archive's and a casualty's loss in transit, like their deliveries,
+    // differ by carrier, and are each objective's own.
+    for phase in [Phase::Hidden, Phase::Located, Phase::Carried] {
+        for dead in [false, true] {
+            let lost = |rate: Rate<Ontology>| {
+                let rate = rate
+                    .consume(Role::Objective, basket([(phase_asset(phase), 1)]))
+                    .produce(Role::Objective, basket([(Asset::Failed, 1)]))
+                    .produce(
+                        Role::World,
+                        basket([(Asset::Resolved, 1), (Asset::FailedCount, 1)]),
+                    );
+                if dead {
+                    rate.condition(
+                        path!("patient-died"),
+                        q(Role::Objective, Asset::Health),
+                        C::Equal,
+                        Q::constant(0),
+                    )
+                } else {
+                    rate.condition(
+                        path!("deadline-passed"),
+                        clock(),
+                        C::GreaterThanOrEqual,
+                        q(Role::Objective, Asset::Deadline) + Q::constant(1),
+                    )
+                }
+            };
+            if phase == Phase::Carried && !dead {
+                for id in 0..count {
+                    let carrier = if patient(id) {
+                        Role::Medic
+                    } else {
+                        Role::Scout
+                    };
+                    let mut fail = lost(objective(law(), id))
+                        .consume(carrier, basket([(Asset::Cargo(id), 1)]));
+                    if patient(id) {
+                        fail = fail.produce(Role::Medic, basket([(Asset::Seat, 1)]));
+                    }
+                    builder = builder.rate(
+                        RateId::Fail {
+                            objective: id,
+                            phase,
+                            dead,
+                        },
+                        fail,
+                    );
+                }
+                continue;
+            }
+            let mut fail = lost(each_objective(
+                law(),
+                &objective_id,
+                if dead {
+                    objectives(patient)
+                } else {
+                    every_objective()
+                },
+            ));
+            if phase == Phase::Carried {
+                fail = fail
+                    .consume_at(
+                        Role::Medic,
+                        one([AssetPattern::Cargo(objective_id.var()).into()]),
+                    )
+                    .produce(Role::Medic, basket([(Asset::Seat, 1)]));
+            }
+            builder = builder.rate_at(
+                RateIdPattern::Fail {
+                    objective: objective_id.var(),
+                    phase: Slot::Is(phase),
+                    dead: Slot::Is(dead),
+                }
+                .into(),
+                fail,
+            );
+        }
+    }
+    for id in 0..count {
+        let carrier = if patient(id) {
+            Role::Medic
+        } else {
+            Role::Scout
+        };
         let mut deliver = objective(
             work(
                 if patient(id) {
@@ -741,170 +929,157 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 );
         }
         builder = builder.rate(RateId::Deliver(id), deliver);
-        for phase in [Phase::Hidden, Phase::Located, Phase::Carried] {
-            for dead in [false, true] {
-                if dead && !patient(id) {
-                    continue;
-                }
-                let mut fail = objective(law(), id)
-                    .consume(Role::Objective, basket([(phase_asset(phase), 1)]))
-                    .produce(Role::Objective, basket([(Asset::Failed, 1)]))
-                    .produce(
-                        Role::World,
-                        basket([(Asset::Resolved, 1), (Asset::FailedCount, 1)]),
-                    );
-                fail = if dead {
-                    fail.condition(
-                        path!("patient-died"),
-                        q(Role::Objective, Asset::Health),
-                        C::Equal,
-                        Q::constant(0),
-                    )
-                } else {
-                    fail.condition(
-                        path!("deadline-passed"),
-                        clock(),
-                        C::GreaterThanOrEqual,
-                        q(Role::Objective, Asset::Deadline) + Q::constant(1),
-                    )
-                };
-                if phase == Phase::Carried {
-                    fail = fail.consume(carrier, basket([(Asset::Cargo(id), 1)]));
-                    if patient(id) {
-                        fail = fail.produce(Role::Medic, basket([(Asset::Seat, 1)]));
-                    }
-                }
-                builder = builder.rate(
-                    RateId::Fail {
-                        objective: id,
-                        phase,
-                        dead,
-                    },
-                    fail,
-                );
-            }
-        }
-        if patient(id) {
-            for day in [8, 16, 24] {
-                for active in [false, true] {
-                    let unresolved = q(Role::Objective, Asset::Hidden)
-                        + q(Role::Objective, Asset::Located)
-                        + q(Role::Objective, Asset::Working)
-                        + q(Role::Objective, Asset::Carried);
-                    let mut clinical = objective(
-                        event().preserve(Role::World, basket([(Asset::EnvironmentReady, 1)])),
-                        id,
-                    )
-                    .condition(
-                        path!("clinical-pulse-time-reached"),
-                        clock(),
-                        C::GreaterThanOrEqual,
-                        Q::constant(day.into()),
-                    )
-                    .condition(
-                        path!("scheduled-pulse"),
-                        q(Role::World, Asset::NextClinical),
-                        C::Equal,
-                        Q::constant(day.into()),
-                    )
-                    .consume(Role::Objective, basket([(Asset::ClinicalDue(day), 1)]))
-                    .produce(Role::Objective, basket([(Asset::ClinicalSettled(day), 1)]))
-                    .produce(Role::World, basket([(Asset::ClinicalCount, 1)]))
-                    .condition(
-                        path!("match-living-unresolved-patient"),
-                        unresolved * Q::minimum(q(Role::Objective, Asset::Health), Q::constant(1)),
-                        C::Equal,
-                        Q::constant(u64::from(active)),
-                    );
-                    if active {
-                        clinical = clinical
-                            .consume(Role::Objective, basket([(Asset::Health, 1)]))
-                            .produce(Role::Objective, basket([(Asset::Harm, 1)]))
-                            .consume_computed(
-                                Role::Objective,
-                                Asset::Stable,
-                                q(Role::Objective, Asset::Stable),
-                            )
-                            .produce_computed(
-                                Role::Objective,
-                                Asset::Unstable,
-                                q(Role::Objective, Asset::Stable),
-                            );
-                    }
-                    builder = builder.rate(
-                        RateId::Clinical {
-                            objective: id,
-                            day,
-                            active,
-                        },
-                        clinical,
-                    );
-                }
-            }
-        }
     }
-    for location in sites.iter().copied() {
-        builder = builder.rate(
-            RateId::Survey(location),
-            work(Agent::Scout, 1)
-                .preserve(Role::Scout, basket([(Asset::At(location), 1)]))
-                .consume(Role::Scout, basket([(Asset::Unsearched(location), 1)]))
-                .produce(Role::Scout, basket([(Asset::Surveyed(location), 1)])),
+    // A clinical pulse, on each of its days, harms a living casualty still
+    // in the field and undoes its stabilization, and passes over any other.
+    let pulse_days = || {
+        Relation::new(
+            [day.name().clone()],
+            PULSES.map(|pulse| [Segment::from(u64::from(pulse))]),
+        )
+    };
+    for active in [false, true] {
+        let unresolved = q(Role::Objective, Asset::Hidden)
+            + q(Role::Objective, Asset::Located)
+            + q(Role::Objective, Asset::Working)
+            + q(Role::Objective, Asset::Carried);
+        let mut clinical = each_objective(
+            event().preserve(Role::World, basket([(Asset::EnvironmentReady, 1)])),
+            &objective_id,
+            objectives(patient),
+        )
+        .variable(day.range(PULSES[0], PULSES[2]))
+        .relation(pulse_days())
+        .condition(
+            path!("clinical-pulse-time-reached"),
+            clock(),
+            C::GreaterThanOrEqual,
+            day.quantity(),
+        )
+        .condition(
+            path!("scheduled-pulse"),
+            q(Role::World, Asset::NextClinical),
+            C::Equal,
+            day.quantity(),
+        )
+        .consume_at(
+            Role::Objective,
+            one([AssetPattern::ClinicalDue(day.var()).into()]),
+        )
+        .produce_at(
+            Role::Objective,
+            one([AssetPattern::ClinicalSettled(day.var()).into()]),
+        )
+        .produce(Role::World, basket([(Asset::ClinicalCount, 1)]))
+        .condition(
+            path!("match-living-unresolved-patient"),
+            unresolved * Q::minimum(q(Role::Objective, Asset::Health), Q::constant(1)),
+            C::Equal,
+            Q::constant(u64::from(active)),
         );
-        for round in 0..2 {
-            builder = builder.rate(
-                RateId::Report { round, location },
-                nature(law())
-                    .preserve(Role::Nature, basket([(Asset::Signal(round, location), 1)]))
-                    .consume(
-                        Role::Scout,
-                        basket([(Asset::AwaitingReport, 1), (Asset::ScanRound(round), 1)]),
-                    )
-                    .produce(
-                        Role::Scout,
-                        basket([
-                            (Asset::Ready, 1),
-                            (Asset::ScanRound(round + 1), 1),
-                            (Asset::Hint(round, location), 1),
-                        ]),
-                    ),
-            );
+        if active {
+            clinical = clinical
+                .consume(Role::Objective, basket([(Asset::Health, 1)]))
+                .produce(Role::Objective, basket([(Asset::Harm, 1)]))
+                .consume_computed(
+                    Role::Objective,
+                    Asset::Stable,
+                    q(Role::Objective, Asset::Stable),
+                )
+                .produce_computed(
+                    Role::Objective,
+                    Asset::Unstable,
+                    q(Role::Objective, Asset::Stable),
+                );
         }
-        for opening in [false, true] {
-            builder = builder.rate(
-                RateId::Weather { location, opening },
-                nature(event())
-                    .preserve(Role::Nature, basket([(Asset::HazardSite(location), 1)]))
-                    .consume(
-                        Role::World,
-                        basket([
-                            (Asset::WeatherDue(opening), 1),
-                            (
-                                if opening {
-                                    Asset::WeatherBlocked(location)
-                                } else {
-                                    Asset::WeatherOpen(location)
-                                },
-                                1,
-                            ),
-                        ]),
-                    )
-                    .produce(
-                        Role::World,
-                        basket([
-                            (Asset::EnvironmentReady, 1),
-                            (
-                                if opening {
-                                    Asset::WeatherOpen(location)
-                                } else {
-                                    Asset::WeatherBlocked(location)
-                                },
-                                1,
-                            ),
-                        ]),
-                    ),
-            );
+        builder = builder.rate_at(
+            RateIdPattern::Clinical {
+                objective: objective_id.var(),
+                day: day.var(),
+                active: Slot::Is(active),
+            }
+            .into(),
+            clinical,
+        );
+    }
+    builder = builder.rate_at(
+        RateIdPattern::Survey(location.var()).into(),
+        work(Agent::Scout, 1)
+            .variable(site())
+            .preserve_at(Role::Scout, one([at(&location)]))
+            .consume_at(
+                Role::Scout,
+                one([AssetPattern::Unsearched(location.var()).into()]),
+            )
+            .produce_at(
+                Role::Scout,
+                one([AssetPattern::Surveyed(location.var()).into()]),
+            ),
+    );
+    builder = builder.rate_at(
+        RateIdPattern::Report {
+            round: round.var(),
+            location: location.var(),
         }
+        .into(),
+        nature(law())
+            .variable(round.range(0, 1))
+            .variable(site())
+            .derive(next.name().clone(), round.quantity() + Q::constant(1))
+            .preserve_at(
+                Role::Nature,
+                one([AssetPattern::Signal(round.var(), location.var()).into()]),
+            )
+            .consume_at(
+                Role::Scout,
+                one([
+                    Pattern::literal(Asset::AwaitingReport),
+                    AssetPattern::ScanRound(round.var()).into(),
+                ]),
+            )
+            .produce_at(
+                Role::Scout,
+                one([
+                    Pattern::literal(Asset::Ready),
+                    AssetPattern::ScanRound(next.var()).into(),
+                    AssetPattern::Hint(round.var(), location.var()).into(),
+                ]),
+            ),
+    );
+    // The hazard site's weather closes, and later opens again.
+    for opening in [false, true] {
+        let (before, after) = if opening {
+            (
+                AssetPattern::WeatherBlocked(location.var()),
+                AssetPattern::WeatherOpen(location.var()),
+            )
+        } else {
+            (
+                AssetPattern::WeatherOpen(location.var()),
+                AssetPattern::WeatherBlocked(location.var()),
+            )
+        };
+        builder = builder.rate_at(
+            RateIdPattern::Weather {
+                location: location.var(),
+                opening: Slot::Is(opening),
+            }
+            .into(),
+            nature(event())
+                .variable(site())
+                .preserve_at(
+                    Role::Nature,
+                    one([AssetPattern::HazardSite(location.var()).into()]),
+                )
+                .consume_at(
+                    Role::World,
+                    one([Pattern::literal(Asset::WeatherDue(opening)), before.into()]),
+                )
+                .produce_at(
+                    Role::World,
+                    one([Pattern::literal(Asset::EnvironmentReady), after.into()]),
+                ),
+        );
     }
     builder = builder.rate(
         RateId::Scan,
@@ -1118,33 +1293,27 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .expect("expedition resources and stages conserved")
 }
 
-pub fn action(rate: RateId) -> Action {
-    let mut exchange = Exchange::new(rate, Quantity::new(1))
-        .bind(Role::World, AccountId::World)
-        .bind(Role::Scout, AccountId::Agent(Agent::Scout))
-        .bind(Role::Medic, AccountId::Agent(Agent::Medic));
-    match rate {
-        RateId::Discover { objective, .. } => {
-            exchange = exchange
-                .bind(Role::Objective, AccountId::Objective(objective))
-                .bind(Role::Nature, AccountId::Nature);
-        }
-        RateId::Collect { objective, .. }
-        | RateId::TreatPatient { objective, .. }
-        | RateId::Extract { objective, .. }
-        | RateId::FinishCollect(objective)
-        | RateId::FinishExtract(objective)
-        | RateId::Deliver(objective)
-        | RateId::Clinical { objective, .. }
-        | RateId::Fail { objective, .. } => {
-            exchange = exchange.bind(Role::Objective, AccountId::Objective(objective));
-        }
-        RateId::Report { .. } | RateId::Weather { .. } => {
-            exchange = exchange.bind(Role::Nature, AccountId::Nature);
-        }
-        _ => {}
-    }
-    exchange
+/// The exchange of `rate` once, each of its roles bound to the account
+/// `world`'s rate fixes it to.
+///
+/// # Panics
+///
+/// If `rate` names no instance of `world`'s rates.
+pub fn action(world: &World, rate: RateId) -> Action {
+    let instance = world
+        .instance(&rate)
+        .unwrap_or_else(|_| panic!("the expedition has no rate {rate:?}"));
+    instance.fixed_accounts().fold(
+        Exchange::new(rate, Quantity::new(1)),
+        |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
+            )
+        },
+    )
 }
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
@@ -1159,7 +1328,7 @@ mod tests {
     fn apply_all(world: &mut World, rates: &[RateId]) {
         for rate in rates {
             world
-                .apply(action(*rate))
+                .apply(action(world, *rate))
                 .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
         }
     }
@@ -1181,13 +1350,18 @@ mod tests {
     fn base_resupply_does_not_teleport_medicine_to_an_absent_medic() {
         let mut world = initial(false, 17);
         world
-            .apply(action(RateId::Depart {
-                agent: Agent::Medic,
-                from: Location::Base,
-                to: Location::North,
-            }))
+            .apply(action(
+                &world,
+                RateId::Depart {
+                    agent: Agent::Medic,
+                    from: Location::Base,
+                    to: Location::North,
+                },
+            ))
             .unwrap();
-        world.apply(action(RateId::Resupply(Agent::Scout))).unwrap();
+        world
+            .apply(action(&world, RateId::Resupply(Agent::Scout)))
+            .unwrap();
         assert_eq!(
             value(&world, AccountId::Agent(Agent::Medic), Asset::MedicalKit),
             2
@@ -1197,7 +1371,7 @@ mod tests {
             value(&world, AccountId::Agent(Agent::Scout), Asset::Energy),
             20
         );
-        assert!(!world.is_applicable(&action(RateId::Resupply(Agent::Medic))));
+        assert!(!world.is_applicable(&action(&world, RateId::Resupply(Agent::Medic))));
     }
     #[test]
     fn private_discovery_requires_a_real_briefing_before_joint_extraction() {
@@ -1233,10 +1407,13 @@ mod tests {
                 },
             ],
         );
-        let extract = action(RateId::Extract {
-            objective: 0,
-            location: east,
-        });
+        let extract = action(
+            &world,
+            RateId::Extract {
+                objective: 0,
+                location: east,
+            },
+        );
         assert_eq!(known(&world, Agent::Scout), 1);
         assert_eq!(known(&world, Agent::Medic), 0);
         assert!(!world.is_applicable(&extract));
@@ -1299,25 +1476,34 @@ mod tests {
     fn movement_occupies_agents_and_scheduled_updates_cannot_be_skipped() {
         let mut world = initial(false, 0);
         world
-            .apply(action(RateId::Depart {
-                agent: Agent::Scout,
-                from: Location::Base,
-                to: Location::North,
-            }))
+            .apply(action(
+                &world,
+                RateId::Depart {
+                    agent: Agent::Scout,
+                    from: Location::Base,
+                    to: Location::North,
+                },
+            ))
             .unwrap();
         world
-            .apply(action(RateId::Depart {
-                agent: Agent::Medic,
-                from: Location::Base,
-                to: Location::South,
-            }))
+            .apply(action(
+                &world,
+                RateId::Depart {
+                    agent: Agent::Medic,
+                    from: Location::Base,
+                    to: Location::South,
+                },
+            ))
             .unwrap();
-        assert!(!world.is_applicable(&action(RateId::Arrive {
-            agent: Agent::Scout,
-            to: Location::North,
-            hazardous: false
-        })));
-        assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
+        assert!(!world.is_applicable(&action(
+            &world,
+            RateId::Arrive {
+                agent: Agent::Scout,
+                to: Location::North,
+                hazardous: false
+            }
+        )));
+        assert!(!world.is_applicable(&action(&world, RateId::Survey(Location::North))));
         apply_all(
             &mut world,
             &[
@@ -1351,10 +1537,10 @@ mod tests {
             1
         );
         for tick in 1..5 {
-            world.apply(action(RateId::Tick(tick))).unwrap();
+            world.apply(action(&world, RateId::Tick(tick))).unwrap();
         }
-        assert!(!world.is_applicable(&action(RateId::Tick(5))));
-        assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
+        assert!(!world.is_applicable(&action(&world, RateId::Tick(5))));
+        assert!(!world.is_applicable(&action(&world, RateId::Survey(Location::North))));
         apply_all(
             &mut world,
             &[RateId::Weather {
@@ -1363,10 +1549,10 @@ mod tests {
             }],
         );
         for tick in 5..8 {
-            world.apply(action(RateId::Tick(tick))).unwrap();
+            world.apply(action(&world, RateId::Tick(tick))).unwrap();
         }
-        assert!(!world.is_applicable(&action(RateId::Tick(8))));
-        assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
+        assert!(!world.is_applicable(&action(&world, RateId::Tick(8))));
+        assert!(!world.is_applicable(&action(&world, RateId::Survey(Location::North))));
         apply_all(
             &mut world,
             &[
@@ -1379,6 +1565,6 @@ mod tests {
             ],
         );
         assert_eq!(value(&world, AccountId::Objective(0), Asset::Health), 2);
-        assert!(world.is_applicable(&action(RateId::Tick(8))));
+        assert!(world.is_applicable(&action(&world, RateId::Tick(8))));
     }
 }

@@ -12,74 +12,58 @@
 
 fn locations() { ["base", "north", "east", "south", "west"] }
 fn agents() { ["scout", "medic"] }
-fn roads() {
-    [["base", "north"], ["base", "south"], ["north", "east"], ["east", "south"],
-     ["south", "west"], ["west", "north"]]
+// The fewest roads from `from` to `to`, as the world's map records it.
+fn distance(state, from, to) {
+    if from == to { 0 } else { state.balance("world", `distance/${from}/${to}`).to_int() }
 }
 
-// The fewest roads from `from` to `to`.
-fn distance(from, to) { distances(roads(), from)[to] }
+// The roads between the expedition's places, each once: the places the map
+// records one road apart.
+fn roads(state) {
+    let places = locations();
+    let roads = [];
+    for (from, index) in places {
+        for to in places.extract(index + 1) {
+            if distance(state, from, to) == 1 { roads.push([from, to]); }
+        }
+    }
+    roads
+}
 
 // Even objectives are casualties, odd ones archives.
 fn patient(id) { id % 2 == 0 }
 
-// The exchange of `rate`, with the accounts its roles bind: the world and
-// both teammates always, the objective a rate names, and Nature where it
-// acts.
-fn action(rate) {
-    let parts = rate.split("/");
-    let kind = parts[0];
-    let bindings = #{ world: "world", scout: "agent/scout", medic: "agent/medic" };
-    if kind == "discover" {
-        bindings.objective = `objective/${parts[1]}`;
-        bindings.nature = "nature";
-    } else if ["collect", "treat-patient", "extract", "finish-collect", "finish-extract", "deliver",
-               "clinical", "fail"].contains(kind) {
-        bindings.objective = `objective/${parts[1]}`;
-    } else if kind == "report" || kind == "weather" {
-        bindings.nature = "nature";
-    }
-    exchange(rate, bindings, 1)
-}
-
 fn now(state) { state.balance("world", "time").to_int() }
 
 // What Nature and the clock's events settle, in the order they settle: the
-// weather, the clinical pulses and their end, each objective's decline,
-// failure, finished work and discovery, each teammate's arrival, and the
-// scans' reports; the first that applies, or nothing.
+// weather and the end of a clinical pulse; then objective by objective, its
+// decline, failure, finished work and discovery; then teammate by teammate,
+// its arrival; then a scan's report. The first that applies, or nothing.
 fn nature_response(state) {
-    let count = state.balance("world", "count").to_int();
-    let rates = [];
-    for location in locations() {
-        for opening in [false, true] { rates.push(`weather/${location}/${opening}`); }
-    }
-    for day in [8, 16, 24] { rates.push(`finish-clinical/${day}`); }
-    for id in 0..count {
-        if patient(id) {
-            for day in [8, 16, 24] {
-                for active in [true, false] { rates.push(`clinical/${id}/${day}/${active}`); }
+    let settling = state.moves("weather") + state.moves("finish-clinical");
+    if !settling.is_empty() { return settling[0]; }
+    let kinds = [
+        state.moves("clinical"),
+        state.moves("fail"),
+        state.moves("finish-extract") + state.moves("finish-collect"),
+        state.moves("discover"),
+    ];
+    for id in 0..state.balance("world", "count").to_int() {
+        let objective = `objective/${id}`;
+        for moves in kinds {
+            for due in moves {
+                if due.account("objective") == objective { return due; }
             }
         }
-        for phase in ["hidden", "located", "carried"] {
-            for dead in [true, false] { rates.push(`fail/${id}/${phase}/${dead}`); }
-        }
-        rates.push(if patient(id) { `finish-extract/${id}` } else { `finish-collect/${id}` });
-        for location in locations() { rates.push(`discover/${id}/${location}`); }
     }
+    let arrivals = state.moves("arrive");
     for agent in agents() {
-        for to in locations() {
-            for hazardous in [false, true] { rates.push(`arrive/${agent}/${to}/${hazardous}`); }
+        for due in arrivals {
+            if due.rate().split("/")[1] == agent { return due; }
         }
     }
-    for round in 0..2 {
-        for location in locations() { rates.push(`report/${round}/${location}`); }
-    }
-    for rate in rates {
-        let response = action(rate);
-        if state.applicable(response) { return response; }
-    }
-    ()
+    let reports = state.moves("report");
+    if reports.is_empty() { () } else { reports[0] }
 }
 
 // What `agent` sees: its own account, the world's, and every objective it
@@ -115,8 +99,8 @@ fn known(seen, own, id) {
 fn move_to(seen, agent, from, to) {
     let own = `agent/${agent}`;
     if to != from && val(seen, "world", `weather-open/${to}`) > 0
-        && val(seen, own, "energy") >= distance(from, to) + val(seen, own, "harm") {
-        return action(`depart/${agent}/${from}/${to}`);
+        && val(seen, own, "energy") >= distance(seen, from, to) + val(seen, own, "harm") {
+        return seen.exchange_of(`depart/${agent}/${from}/${to}`);
     }
     ()
 }
@@ -143,17 +127,17 @@ fn decision(seen, agent, policy) {
     let count = val(seen, "world", "count");
     for id in 0..count {
         if val(seen, own, `cargo/${id}`) > 0 {
-            if from == "base" { return action(`deliver/${id}`); }
+            if from == "base" { return seen.exchange_of(`deliver/${id}`); }
             return move_to(seen, agent, from, "base");
         }
     }
     if from == "base" && val(seen, "world", "supply") > 0
         && (val(seen, own, "energy") < 7 || (agent == "medic" && val(seen, own, "medical-kit") == 0)) {
-        return action(`resupply/${agent}`);
+        return seen.exchange_of(`resupply/${agent}`);
     }
     if agent == "medic" {
         if val(seen, own, "medical-kit") > 1 && val(seen, own, "harm") >= 2 {
-            return action(`treat-agent/medic/${from}`);
+            return seen.exchange_of(`treat-agent/medic/${from}`);
         }
         for id in 0..count {
             if !patient(id) { continue; }
@@ -169,7 +153,7 @@ fn decision(seen, agent, policy) {
             if val(seen, objective, "unstable") > 0 && val(seen, own, "medical-kit") > 0 {
                 if val(seen, "world", "next-clinical") <= val(seen, "world", "time") + 1 { return (); }
                 let restore = val(seen, objective, "harm") > 0;
-                return action(`treat-patient/${id}/${site}/${restore}`);
+                return seen.exchange_of(`treat-patient/${id}/${site}/${restore}`);
             }
             return ();
         }
@@ -177,7 +161,7 @@ fn decision(seen, agent, policy) {
         return ();
     }
     // The Scout learns a sector before acting on a fallible hint.
-    if val(seen, own, `unsearched/${from}`) > 0 { return action(`survey/${from}`); }
+    if val(seen, own, `unsearched/${from}`) > 0 { return seen.exchange_of(`survey/${from}`); }
     for id in 0..count {
         if !patient(id) { continue; }
         let site = known(seen, own, id);
@@ -186,16 +170,16 @@ fn decision(seen, agent, policy) {
         if val(seen, objective, "located") == 0 { continue; }
         if val(seen, own, `shared/${id}/${site}`) == 0 {
             if val(seen, "world", `team-at/medic/${from}`) > 0 {
-                return action(`share/${id}/${site}/false`);
+                return seen.exchange_of(`share/${id}/${site}/false`);
             }
             if policy == "radio-coordination" && val(seen, own, "radio") > 0 {
-                return action(`share/${id}/${site}/true`);
+                return seen.exchange_of(`share/${id}/${site}/true`);
             }
             return move_to(seen, agent, from, "base");
         }
         if from == site && val(seen, "world", `team-at/medic/${site}`) > 0
             && val(seen, "world", "permit/medic") > 0 && val(seen, objective, "stable") > 0 {
-            return action(`extract/${id}/${site}`);
+            return seen.exchange_of(`extract/${id}/${site}`);
         }
         if from != site && val(seen, "world", `weather-open/${site}`) > 0 {
             return move_to(seen, agent, from, site);
@@ -208,14 +192,14 @@ fn decision(seen, agent, policy) {
         if val(seen, `objective/${id}`, "located") == 0 { continue; }
         let site = known(seen, own, id);
         if site != () {
-            if from == site { return action(`collect/${id}/${site}`); }
+            if from == site { return seen.exchange_of(`collect/${id}/${site}`); }
             let moved = move_to(seen, agent, from, site);
             if moved != () { return moved; }
         }
     }
     if policy != "north-first" && from == "base" && val(seen, own, "sensor") > 0
         && (val(seen, own, "used-sensor") == 0 || val(seen, "world", "completed") > 0) {
-        return action("scan");
+        return seen.exchange_of("scan");
     }
     let sites = [];
     for site in locations() {
@@ -229,7 +213,7 @@ fn decision(seen, agent, policy) {
                 }
                 hinted
             };
-            sites.push([if preferred { 0 } else { 1 }, distance(from, site), site]);
+            sites.push([if preferred { 0 } else { 1 }, distance(seen, from, site), site]);
         }
     }
     sites.sort(|a, b| ranked(a, b));
@@ -244,13 +228,13 @@ fn decision(seen, agent, policy) {
 fn turn(state, policy) {
     let response = nature_response(state);
     if response != () { return response; }
-    let close = action("close");
+    let close = state.exchange_of("close");
     if state.applicable(close) { return close; }
     for agent in agents() {
         let decided = decision(agent_view(state, agent), agent, policy);
         if decided != () && state.applicable(decided) { return decided; }
     }
-    action(`tick/${now(state)}`)
+    state.exchange_of(`tick/${now(state)}`)
 }
 
 // The policies, as a strategy calls a policy: brief by radio, brief only

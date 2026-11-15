@@ -11,6 +11,23 @@ Archive recovery takes three ticks; casualty extraction needs both teammates,
 a stabilized patient and the Medic's single evacuation seat. Carried objectives
 must reach base before their deadlines.
 
+The expedition's rates have variables: one law serves every objective, site
+and pair of places, `share/{objective}/{location}/true`, and laws split only
+where their shape differs: each teammate's journeys, arrivals and
+treatment, since each plays a role of its own, sharing by radio or in
+person, each phase and cause of a loss, a clinical pulse that harms or
+passes over. A journey takes the road distance between two places, which
+the world's map holds as `Distance(from, to)` facts; the policies read the
+same map. A pulse falls on the days a relation lists, and a report advances
+the scan to the round it derives. A delivery and a loss in transit are each
+objective's own, since an archive's carrier and a casualty's differ, and the
+clock's ticks and the pulses' ends stay one rate per day, two ticks bringing
+the weather and the last pulse scheduling none. Each role is fixed to its
+account, so no identity token pins a binding. Nature takes the weather or a
+pulse's end, then, objective by objective, a decline, a loss, finished work
+or a discovery, then each teammate's arrival and a report (`state.moves`);
+a teammate's decision is its rate's exchange (`state.exchange_of`).
+
 A seeded sector hazard closes access at tick five and clears at tick ten;
 arrivals already in flight can cause injury that slows future travel. Scheduled
 clinical pulses reduce casualty health and invalidate stabilization. The core
