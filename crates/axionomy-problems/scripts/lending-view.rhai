@@ -33,22 +33,12 @@ fn asset_label(name, parts) {
         "collateral" => "Collateral",
         "posted-collateral" => "Posted collateral",
         "collateral-price" => "Collateral price",
-        "base-rate" => "Base rate",
-        "kink" => "Utilization kink",
-        "slope-below-kink" => "Rate slope below the kink",
-        "slope-above-kink" => "Rate slope above the kink",
-        "reserve-factor" => "Reserve factor",
-        "loan-to-value" => "Loan-to-value limit",
-        "liquidation-threshold" => "Liquidation threshold",
-        "liquidation-bonus" => "Liquidation bonus",
         "invoice" => "Supplier invoice",
         "bill-paid" => "Bill paid",
         "purchase-order" => `Purchase order ${ordinal(parts[2])}`,
         "period" => "Time remaining",
         "elapsed-period" => "Time elapsed",
         "pending-shock" => "Pending price drop",
-        "shock-after" => "Price drop after",
-        "price-drop" => "Price drop",
         _ => (),
     }
 }
@@ -87,16 +77,13 @@ fn label(item) {
     }
 }
 
-// The market's terms are basis points scaled by WAD, so 10^16 atoms are one
-// percent; the borrow index is a WAD-scaled multiplier. Values the market
-// keeps in cash read as cash, and the clock counts periods.
+// The borrow index is a WAD-scaled multiplier. Values the market keeps in
+// cash read as cash, and the clock counts periods.
 fn format(asset) {
     switch asset.split("/")[0] {
         "borrow-index" => #{ scale: 18 },
-        "base-rate" | "kink" | "slope-below-kink" | "slope-above-kink" | "reserve-factor"
-            | "loan-to-value" | "liquidation-threshold" | "liquidation-bonus" => #{ scale: 16, unit: "%" },
-        "cash" | "reserves" | "collateral-price" | "price-drop" => #{ scale: 0, unit: "cash" },
-        "period" | "elapsed-period" | "shock-after" => #{ scale: 0, unit: "periods" },
+        "cash" | "reserves" | "collateral-price" => #{ scale: 0, unit: "cash" },
+        "period" | "elapsed-period" => #{ scale: 0, unit: "periods" },
         _ => (),
     }
 }
@@ -122,13 +109,14 @@ fn utilization(state) {
     mul_div(lent, lending::wad(), gross, "ceil")
 }
 
-// Interest per period at the current utilization, scaled by WAD.
+// Interest per period at the current utilization, scaled by WAD, from the
+// market's terms.
 fn interest(state) {
     let used = utilization(state);
-    let kink = market_balance(state, "kink");
-    market_balance(state, "base-rate")
-        + mul_div(min(used, kink), market_balance(state, "slope-below-kink"), lending::wad(), "ceil")
-        + mul_div(max(used, kink) - kink, market_balance(state, "slope-above-kink"), lending::wad(), "ceil")
+    let kink = state.constant("kink");
+    state.constant("base-rate")
+        + mul_div(min(used, kink), state.constant("slope-below-kink"), lending::wad(), "ceil")
+        + mul_div(max(used, kink) - kink, state.constant("slope-above-kink"), lending::wad(), "ceil")
 }
 
 // A WAD-scaled share as a percentage with two decimals.

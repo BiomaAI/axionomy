@@ -17,7 +17,7 @@ fn owed(state) {
 // down.
 fn limit(state, term) {
     let value = state.balance("borrower", "posted-collateral") * state.balance("market", "collateral-price");
-    mul_div(value, state.balance("market", term), wad(), "floor")
+    mul_div(value, state.constant(term), wad(), "floor")
 }
 
 // The exchanges whose amounts or parties the caller chooses, each bound to

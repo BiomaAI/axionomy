@@ -58,6 +58,22 @@ pub enum Asset {
     PostedCollateral,
     /// Cash value of one collateral unit, set by the oracle.
     CollateralPrice,
+    /// The supplier's claim on the borrower's bill.
+    Invoice,
+    /// The borrower settled its bill.
+    BillPaid,
+    /// A customer's commitment to pay one revenue installment.
+    PurchaseOrder(u8),
+    Period,
+    ElapsedPeriod,
+    /// One while the scheduled price drop has not happened.
+    PendingShock,
+}
+
+/// A term of the market, scaled by `WAD`: one value for the whole market
+/// that never changes, so a constant every rate reads by name, as `{kink}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+pub enum Term {
     /// Interest per period at zero utilization.
     BaseRate,
     /// Utilization where the rate curve steepens.
@@ -74,20 +90,24 @@ pub enum Asset {
     LiquidationThreshold,
     /// Extra collateral a keeper receives, as a share of the debt it repays.
     LiquidationBonus,
-    /// The supplier's claim on the borrower's bill.
-    Invoice,
-    /// The borrower settled its bill.
-    BillPaid,
-    /// A customer's commitment to pay one revenue installment.
-    PurchaseOrder(u8),
-    Period,
-    ElapsedPeriod,
-    /// One while the scheduled price drop has not happened.
-    PendingShock,
-    /// Closed periods after which the price drop happens.
-    ShockAfter,
-    /// How far the price drops.
-    PriceDrop,
+}
+
+impl Term {
+    pub const ALL: [Self; 8] = [
+        Self::BaseRate,
+        Self::Kink,
+        Self::SlopeBelowKink,
+        Self::SlopeAboveKink,
+        Self::ReserveFactor,
+        Self::LoanToValue,
+        Self::LiquidationThreshold,
+        Self::LiquidationBonus,
+    ];
+
+    /// The constant the term is, named as it is: `{kink}`.
+    pub fn param(self) -> Param<u64> {
+        Param::new(path::write(&self))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -178,6 +198,20 @@ impl Terms {
             liquidation_bonus: basis_points(800),
         }
     }
+
+    /// The value these terms give `term`.
+    pub const fn of(&self, term: Term) -> u64 {
+        match term {
+            Term::BaseRate => self.base_rate,
+            Term::Kink => self.kink,
+            Term::SlopeBelowKink => self.slope_below_kink,
+            Term::SlopeAboveKink => self.slope_above_kink,
+            Term::ReserveFactor => self.reserve_factor,
+            Term::LoanToValue => self.loan_to_value,
+            Term::LiquidationThreshold => self.liquidation_threshold,
+            Term::LiquidationBonus => self.liquidation_bonus,
+        }
+    }
 }
 
 /// An amount of cash tied to a number of closed periods.
@@ -187,7 +221,8 @@ pub struct Payment {
     pub period: u64,
 }
 
-/// The oracle lowers the price by `drop` once `after` periods have closed.
+/// The oracle lowers the price by `drop` once `after` periods have closed:
+/// one drop, so constants, `{shock-after}` and `{price-drop}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shock {
     pub after: u64,
@@ -307,6 +342,21 @@ fn wad() -> Q {
     Q::constant(WAD)
 }
 
+/// The market's `term`, a constant.
+fn term(term: Term) -> Q {
+    term.param().quantity()
+}
+
+/// Closed periods after which the scheduled price drop happens.
+fn shock_after() -> Param<u64> {
+    Param::new(path!("shock-after"))
+}
+
+/// How far the scheduled price drop lowers the price.
+fn price_drop() -> Param<u64> {
+    Param::new(path!("price-drop"))
+}
+
 fn market(asset: Asset) -> Q {
     Q::balance(Role::Market, asset)
 }
@@ -346,10 +396,10 @@ fn owed_for(debt_shares: Q) -> Q {
 
 /// A share of the posted collateral's value, rounded down: the borrower
 /// receives borrowing room and protection, so neither rounds in its favor.
-fn collateral_limit(posted: Q, term: Asset) -> Q {
+fn collateral_limit(posted: Q, limit: Term) -> Q {
     Q::mul_div(
         posted * market(Asset::CollateralPrice),
-        market(term),
+        term(limit),
         wad(),
         Rounding::Floor,
     )
@@ -370,18 +420,18 @@ fn utilization() -> Q {
 /// rounds up.
 fn rate_per_period() -> Q {
     let below = Q::mul_div(
-        Q::minimum(utilization(), market(Asset::Kink)),
-        market(Asset::SlopeBelowKink),
+        Q::minimum(utilization(), term(Term::Kink)),
+        term(Term::SlopeBelowKink),
         wad(),
         Rounding::Ceil,
     );
     let above = Q::mul_div(
-        Q::maximum(utilization(), market(Asset::Kink)) - market(Asset::Kink),
-        market(Asset::SlopeAboveKink),
+        Q::maximum(utilization(), term(Term::Kink)) - term(Term::Kink),
+        term(Term::SlopeAboveKink),
         wad(),
         Rounding::Ceil,
     );
-    market(Asset::BaseRate) + (below + above)
+    term(Term::BaseRate) + (below + above)
 }
 
 fn index_growth() -> Q {
@@ -399,7 +449,7 @@ fn reserve_cut() -> Q {
     );
     Q::mul_div(
         debt_after - debt_value(),
-        market(Asset::ReserveFactor),
+        term(Term::ReserveFactor),
         wad(),
         Rounding::Ceil,
     )
@@ -493,7 +543,7 @@ fn withdraw_collateral_rate() -> Rate<Ontology> {
             path!("the-remaining-collateral-covers-the-loan"),
             owed(),
             QuantityComparison::LessThanOrEqual,
-            collateral_limit(posted() - Q::units(), Asset::LoanToValue),
+            collateral_limit(posted() - Q::units(), Term::LoanToValue),
         )
 }
 
@@ -509,7 +559,7 @@ fn borrow_rate() -> Rate<Ontology> {
             path!("within-the-loan-to-value-limit"),
             owed_after,
             QuantityComparison::LessThanOrEqual,
-            collateral_limit(posted(), Asset::LoanToValue),
+            collateral_limit(posted(), Term::LoanToValue),
         )
 }
 
@@ -596,9 +646,11 @@ fn collect_revenue_rate(installment: &Param<u8>, revenue: &[Payment]) -> Rate<On
     )
 }
 
-fn accrue_rate() -> Rate<Ontology> {
+/// Closing a period, which waits for the scheduled price drop, if `shocked`
+/// the market has one.
+fn accrue_rate(shocked: bool) -> Rate<Ontology> {
     let pending = Q::balance(Role::Oracle, Asset::PendingShock);
-    let rate = oracle_bound(clock_bound(borrower_rate()))
+    let mut rate = oracle_bound(clock_bound(borrower_rate()))
         .consume(Role::Clock, basket([(Asset::Period, 1)]))
         .produce(Role::Clock, basket([(Asset::ElapsedPeriod, 1)]))
         .produce_computed(Role::Market, Asset::BorrowIndex, index_growth())
@@ -607,15 +659,17 @@ fn accrue_rate() -> Rate<Ontology> {
             path!("the-loan-is-not-liquidatable"),
             owed(),
             QuantityComparison::LessThanOrEqual,
-            collateral_limit(posted(), Asset::LiquidationThreshold),
-        )
+            collateral_limit(posted(), Term::LiquidationThreshold),
+        );
+    if shocked {
         // While the drop is pending, the clock cannot pass its period.
-        .condition(
+        rate = rate.condition(
             path!("the-scheduled-price-drop-has-happened"),
             pending * (elapsed() + Q::constant(1)),
             QuantityComparison::LessThanOrEqual,
-            Q::balance(Role::Oracle, Asset::ShockAfter),
+            shock_after().quantity(),
         );
+    }
     one_unit(rate, path!("one-period-at-a-time"))
 }
 
@@ -625,13 +679,13 @@ fn reprice_rate() -> Rate<Ontology> {
         .consume_computed(
             Role::Market,
             Asset::CollateralPrice,
-            Q::balance(Role::Oracle, Asset::PriceDrop),
+            price_drop().quantity(),
         )
         .condition(
             path!("at-the-scheduled-period"),
             elapsed(),
             QuantityComparison::Equal,
-            Q::balance(Role::Oracle, Asset::ShockAfter),
+            shock_after().quantity(),
         );
     one_unit(rate, path!("one-price-drop"))
 }
@@ -642,7 +696,7 @@ fn liquidate_rate() -> Rate<Ontology> {
         Q::divide(
             Q::mul_div(
                 owed(),
-                wad() + market(Asset::LiquidationBonus),
+                wad() + term(Term::LiquidationBonus),
                 wad(),
                 Rounding::Floor,
             ),
@@ -662,7 +716,7 @@ fn liquidate_rate() -> Rate<Ontology> {
             path!("the-loan-is-past-its-liquidation-threshold"),
             owed(),
             QuantityComparison::GreaterThanOrEqual,
-            collateral_limit(posted(), Asset::LiquidationThreshold) + Q::constant(1),
+            collateral_limit(posted(), Term::LiquidationThreshold) + Q::constant(1),
         )
         .distinct(Role::Market, Role::Keeper)
         .distinct(Role::Borrower, Role::Keeper);
@@ -690,14 +744,6 @@ pub fn world(config: &Config) -> World {
                 (Asset::ShareSupply, LOCKED_SHARES + deposited),
                 (Asset::BorrowIndex, WAD),
                 (Asset::CollateralPrice, config.collateral_price),
-                (Asset::BaseRate, terms.base_rate),
-                (Asset::Kink, terms.kink),
-                (Asset::SlopeBelowKink, terms.slope_below_kink),
-                (Asset::SlopeAboveKink, terms.slope_above_kink),
-                (Asset::ReserveFactor, terms.reserve_factor),
-                (Asset::LoanToValue, terms.loan_to_value),
-                (Asset::LiquidationThreshold, terms.liquidation_threshold),
-                (Asset::LiquidationBonus, terms.liquidation_bonus),
             ])),
         )
         .account(
@@ -707,11 +753,7 @@ pub fn world(config: &Config) -> World {
         .account(
             AccountId::Oracle,
             Account::from(match config.shock {
-                Some(shock) => basket([
-                    (Asset::PendingShock, 1),
-                    (Asset::ShockAfter, shock.after),
-                    (Asset::PriceDrop, shock.drop),
-                ]),
+                Some(_) => basket([(Asset::PendingShock, 1)]),
                 None => basket([]),
             }),
         )
@@ -750,9 +792,19 @@ pub fn world(config: &Config) -> World {
         .rate(RateId::Repay, repay_rate())
         .rate(RateId::RepayShares, repay_shares_rate())
         .rate(RateId::PayBill, pay_bill_rate(config.bill))
-        .rate(RateId::Accrue, accrue_rate())
-        .rate(RateId::Reprice, reprice_rate())
+        .rate(RateId::Accrue, accrue_rate(config.shock.is_some()))
         .rate(RateId::Liquidate, liquidate_rate());
+    // The market's terms and its one scheduled price drop never change:
+    // constants, which every rate reads by name.
+    for term in Term::ALL {
+        builder = builder.constant(&term.param(), terms.of(term));
+    }
+    if let Some(shock) = config.shock {
+        builder = builder
+            .constant(&shock_after(), shock.after)
+            .constant(&price_drop(), shock.drop)
+            .rate(RateId::Reprice, reprice_rate());
+    }
     if !config.revenue.is_empty() {
         let installment = Param::<u8>::new(path!("installment"));
         builder = builder.rate_at(
@@ -943,28 +995,38 @@ mod tests {
 
     /// Interest per period at the current utilization, scaled by `WAD`.
     fn rate_view(world: &World) -> u128 {
-        let terms = |asset| u128::from(market_balance(world, asset));
+        let terms = |term| u128::from(term_view(world, term));
         let wad = u128::from(WAD);
         let utilization = utilization_view(world);
-        let kink = terms(Asset::Kink);
-        terms(Asset::BaseRate)
-            + (utilization.min(kink) * terms(Asset::SlopeBelowKink)).div_ceil(wad)
-            + ((utilization.max(kink) - kink) * terms(Asset::SlopeAboveKink)).div_ceil(wad)
+        let kink = terms(Term::Kink);
+        terms(Term::BaseRate)
+            + (utilization.min(kink) * terms(Term::SlopeBelowKink)).div_ceil(wad)
+            + ((utilization.max(kink) - kink) * terms(Term::SlopeAboveKink)).div_ceil(wad)
+    }
+
+    /// The market's `term`, as its economy names it.
+    fn term_view(world: &World, term: Term) -> u64 {
+        let name = term.param();
+        world
+            .constants()
+            .find(|(constant, _)| *constant == name.name())
+            .and_then(|(_, value)| value.number())
+            .expect("the market names its terms")
     }
 
     /// A share of the posted collateral's value, rounded down.
-    fn limit_view(world: &World, term: Asset) -> u128 {
+    fn limit_view(world: &World, term: Term) -> u128 {
         let value = u128::from(balance(world, AccountId::Borrower, Asset::PostedCollateral))
             * u128::from(market_balance(world, Asset::CollateralPrice));
-        value * u128::from(market_balance(world, term)) / u128::from(WAD)
+        value * u128::from(term_view(world, term)) / u128::from(WAD)
     }
 
     fn borrow_limit_view(world: &World) -> u128 {
-        limit_view(world, Asset::LoanToValue)
+        limit_view(world, Term::LoanToValue)
     }
 
     fn liquidation_limit_view(world: &World) -> u128 {
-        limit_view(world, Asset::LiquidationThreshold)
+        limit_view(world, Term::LiquidationThreshold)
     }
 
     /// Cash a depositor's shares redeem for now, rounded down.

@@ -14,10 +14,10 @@ period's interest stays with the market. An oracle lowers the collateral price
 once, at a scheduled period: the clock cannot pass that period before it. A
 period cannot close while the loan is past its liquidation threshold; the
 borrower may cure it by posting collateral or repaying, or a keeper repays it
-and seizes collateral plus a bonus. Market terms, the index, reserves and the
-price are balances, never caller parameters. One thousand genesis shares are
-permanently locked with matching seed cash, so no first depositor can set the
-share price.
+and seizes collateral plus a bonus. The market's terms are constants, and the
+index, reserves and the price balances: never caller parameters. One thousand
+genesis shares are permanently locked with matching seed cash, so no first
+depositor can set the share price.
 
 Every division is an explicit full-width `MulDiv` rounded against the caller.
 Amounts a participant pays round up and amounts a participant receives round
@@ -49,8 +49,11 @@ rate over the installments, `collect-revenue/{installment}`: each
 installment's amount, `{amount}`, and the periods it is due after, `{due}`,
 are terms of its purchase order that never change, law structure a
 relation's row for each installment gives; the customer holds only the
-purchase orders and their cash. The market's terms and the oracle's
-schedule stay balances: they are the whole market's, no case of a law.
+purchase orders and their cash. The market's terms and the oracle's one
+scheduled drop are the whole market's and never change, so they are the
+economy's constants, such as `{kink}` and `{shock-after}`, which the laws
+and the policies read by name (`state.constant`); the oracle holds only
+whether the drop is still pending.
 
 The package's moves borrow exactly the bill's shortfall while it is unpaid,
 repay everything owed or all available cash after, and return collateral
@@ -95,8 +98,8 @@ The unit tests check the laws by applying exchanges:
 
 - Full-width `MulDiv` with explicit `Rounding` inside state-evaluated laws,
   including a kinked curve built from `minimum`, `maximum` and `subtract`.
-- Fixed-point indexes and market terms as ordinary balances, without a special
-  numeric type.
+- Fixed-point indexes as ordinary balances and market terms as constants,
+  without a special numeric type.
 - Schedules and safety gates as rate conditions over balances, so time cannot
   pass an unsafe loan or a pending price drop.
 - Rounding discipline as an economic safety property enforced by invariants.
