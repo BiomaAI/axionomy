@@ -1,9 +1,7 @@
 // Sokoban: the exchanges the player may try. Moves and pushes from the
-// player's cell, left, right, up and down; finishing once every crate rests on
-// a goal; latching a panel the player stands on. Only those that apply, in
-// that order. A move, push or latch is its rate's exchange, which fixes the
-// cells it names; finishing binds each crate's goal role to the cell the
-// crate rests on.
+// player's cell, left, right, up and down; finishing; latching a panel. Only
+// those that apply, in that order. Each is its rate's exchange, which fixes
+// every role to the cell or puzzle it names.
 
 fn number(text, prefix) {
     parse_int(text.sub_string(prefix.len()))
@@ -20,6 +18,16 @@ fn dimensions(state) {
     [width, height]
 }
 
+// The goal cells: the cells finishing fixes its goal roles to.
+fn goals(state) {
+    let finish = state.exchange_of("finish");
+    let goals = [];
+    for role in state.roles("finish") {
+        if role.starts_with("goal/") { goals.push(number(finish.account(role), "cell/")); }
+    }
+    goals
+}
+
 fn candidates(state) {
     let size = dimensions(state);
     let width = size[0];
@@ -30,7 +38,7 @@ fn candidates(state) {
     for account in state.accounts("cell/") {
         let cell = number(account, "cell/");
         let holds = state.balances(account);
-        if "floor" in holds && "player" in holds { player = cell; }
+        if "player" in holds { player = cell; }
         for asset in holds.keys() {
             if asset.starts_with("crate/") { crates.push([number(asset, "crate/"), cell]); }
         }
@@ -61,17 +69,8 @@ fn candidates(state) {
             proposals.push(state.exchange_of(`push/${player}/${next}/${to}/${pushed[0][0]}`));
         }
     }
-    if !crates.is_empty() && crates.all(|pair| "goal-cell" in state.balances(`cell/${pair[1]}`)) {
-        let bindings = #{ puzzle: "success" };
-        for pair in crates { bindings[`goal/${pair[0]}`] = `cell/${pair[1]}`; }
-        proposals.push(exchange("finish", bindings, 1));
-    }
-    for circuit in 0..2 {
-        if `panel/${circuit}` in state.balances(`cell/${player}`) {
-            proposals.push(state.exchange_of(`latch/${circuit}/${player}`));
-        }
-    }
-    proposals.filter(|proposal| state.applicable(proposal))
+    proposals.push(state.exchange_of("finish"));
+    proposals.filter(|proposal| state.applicable(proposal)) + state.moves("latch")
 }
 
 // A*'s lower bound: each crate's distance to its nearest goal cell, in
@@ -79,16 +78,12 @@ fn candidates(state) {
 fn crate_goal_distance(state) {
     let width = dimensions(state)[0];
     let crates = [];
-    let goals = [];
     for account in state.accounts("cell/") {
-        let holds = state.balances(account);
-        if !("floor" in holds) { continue; }
-        let cell = number(account, "cell/");
-        if "goal-cell" in holds { goals.push(cell); }
-        for asset in holds.keys() {
-            if asset.starts_with("crate/") { crates.push(cell); }
+        for asset in state.balances(account).keys() {
+            if asset.starts_with("crate/") { crates.push(number(account, "cell/")); }
         }
     }
+    let goals = goals(state);
     let total = 0;
     for crate_cell in crates {
         let nearest = ();

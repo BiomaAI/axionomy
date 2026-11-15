@@ -24,14 +24,9 @@ pub enum Asset {
     Player,
     Crate(u8),
     Empty,
-    GoalCell,
     DeadSquare,
-    ExitCell,
     AtExit,
     AwayFromExit,
-    Plate(u8),
-    Door(u8),
-    Panel(u8),
     Pressed(u8),
     Released(u8),
     LatchReady(u8),
@@ -46,6 +41,7 @@ pub enum Role {
     Middle,
     To,
     Puzzle,
+    /// A goal cell, by its order on the board, which finishing fixes to it.
     Goal(u8),
 }
 
@@ -65,8 +61,8 @@ pub enum RateId {
         to: u8,
         crate_id: u8,
     },
-    /// Every crate rests on a goal cell. One law for every placement: an
-    /// exchange binds each crate's goal role to the cell the crate is on.
+    /// Every goal cell holds a crate. One law for every placement: its goal
+    /// roles are fixed to the goal cells, whichever crates rest on them.
     Finish,
 }
 
@@ -145,6 +141,56 @@ pub fn crate_cells(world: &World) -> Vec<(u8, u8)> {
         .collect()
 }
 
+/// What a floor cell is, which no exchange changes: the exit, or a
+/// circuit's door or plate. A law reads it of the cells it binds from its
+/// relations' rows, which give `1` where the cell is so and `0` where not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Fact {
+    Exit,
+    Door(u8),
+    Plate(u8),
+}
+
+impl Fact {
+    /// Whether a cell drawn as `tile` is so.
+    fn of(self, tile: char) -> bool {
+        match self {
+            Self::Exit => tile == 'x',
+            Self::Door(circuit) => matches!(tile, 'd' | 'e') && circuit_of(tile) == Some(circuit),
+            Self::Plate(circuit) => matches!(tile, 's' | 't') && circuit_of(tile) == Some(circuit),
+        }
+    }
+
+    /// The number a relation gives of the cell `cell` names, named after
+    /// it: `behind-exit`, `to-door-0`, `crate-at-plate-1`.
+    fn given(self, cell: &Param<u8>) -> Param<u64> {
+        let fact = match self {
+            Self::Exit => "exit".to_owned(),
+            Self::Door(circuit) => format!("door-{circuit}"),
+            Self::Plate(circuit) => format!("plate-{circuit}"),
+        };
+        Param::new(
+            format!("{}-{fact}", cell.name())
+                .parse()
+                .expect("a variable's name is one segment"),
+        )
+    }
+}
+
+/// Whether a cell drawn as `tile` is a goal.
+const fn is_goal(tile: char) -> bool {
+    matches!(tile, '.' | '*' | '+')
+}
+
+/// The circuit a plate, door or panel drawn as `tile` belongs to.
+const fn circuit_of(tile: char) -> Option<u8> {
+    match tile {
+        's' | 'd' | 'l' => Some(0),
+        't' | 'e' | 'm' => Some(1),
+        _ => None,
+    }
+}
+
 fn build_board(rows: &[&str]) -> World {
     let height = u8::try_from(rows.len()).expect("small encoded board");
     let width = u8::try_from(rows.first().expect("board has rows").chars().count())
@@ -156,14 +202,11 @@ fn build_board(rows: &[&str]) -> World {
 
     let mut next_crate = 0_u8;
     let mut crate_ids = Vec::new();
-    let mut goal_cells = Vec::new();
     let tile_at =
         |index: u8| rows[(index / width) as usize].as_bytes()[(index % width) as usize] as char;
-    let circuit_of = |tile| match tile {
-        's' | 'd' | 'l' => Some(0),
-        't' | 'e' | 'm' => Some(1),
-        _ => None,
-    };
+    let goal_cells: Vec<u8> = (0..width * height)
+        .filter(|index| is_goal(tile_at(*index)))
+        .collect();
     // Reverse-push reachability assumes every door is open and no other crate
     // exists. A square outside this optimistic set cannot reach any goal.
     let floors: std::collections::BTreeSet<_> = (0..width * height)
@@ -172,7 +215,7 @@ fn build_board(rows: &[&str]) -> World {
     let mut reachable: std::collections::BTreeSet<_> = floors
         .iter()
         .copied()
-        .filter(|index| matches!(tile_at(*index), '.' | '*' | '+'))
+        .filter(|index| is_goal(tile_at(*index)))
         .collect();
     loop {
         let before = reachable.len();
@@ -227,21 +270,6 @@ fn build_board(rows: &[&str]) -> World {
                         assets.insert(Asset::Empty, Quantity::new(1));
                     }
                 }
-                if tile == 'x' {
-                    assets.insert(Asset::ExitCell, Quantity::new(1));
-                }
-                if let Some(circuit) = circuit_of(tile) {
-                    let asset = match tile {
-                        's' | 't' => Asset::Plate(circuit),
-                        'd' | 'e' => Asset::Door(circuit),
-                        _ => Asset::Panel(circuit),
-                    };
-                    assets.insert(asset, Quantity::new(1));
-                }
-                if matches!(tile, '.' | '*' | '+') {
-                    assets.insert(Asset::GoalCell, Quantity::new(1));
-                    goal_cells.push(index);
-                }
             }
             builder = builder.account(AccountId::Cell(index), Account::from(assets));
         }
@@ -295,29 +323,57 @@ fn build_board(rows: &[&str]) -> World {
     let floor = |variable: &Param<u8>| variable.values(floors.iter().copied());
     let cell_at = |variable: &Param<u8>| AccountIdPattern::Cell(variable.var()).into();
     let crate_on = || AssetPattern::Crate(crate_id.var()).into();
-    // A door in the cell bound to `role` lets it in only while its circuit's
-    // plate holds a crate or the door is latched.
-    let gated = |rate: Rate<Ontology>, role: Role| {
+    // `rate`, given what the cell `cell` binds is in the respects `facts`
+    // lists: the board's layout, a row for each floor.
+    let described = |rate: Rate<Ontology>, cell: &Param<u8>, facts: &[Fact]| {
+        if facts.is_empty() {
+            return rate;
+        }
+        rate.relation(Relation::giving(
+            [cell.name().clone()],
+            facts.iter().map(|fact| fact.given(cell).name().clone()),
+            floors.iter().map(|&at| {
+                std::iter::once(Segment::from(u64::from(at))).chain(
+                    facts
+                        .iter()
+                        .map(move |fact| Segment::from(u64::from(fact.of(tile_at(at))))),
+                )
+            }),
+        ))
+    };
+    let exit: &[Fact] = if has_exit { &[Fact::Exit] } else { &[] };
+    let doors: Vec<Fact> = circuits
+        .iter()
+        .map(|&circuit| Fact::Door(circuit))
+        .collect();
+    let plates: Vec<Fact> = circuits
+        .iter()
+        .map(|&circuit| Fact::Plate(circuit))
+        .collect();
+    // A door in the cell `cell` binds lets the role bound to it in only
+    // while its circuit's plate holds a crate or the door is latched.
+    let gated = |rate: Rate<Ontology>, role: Role, cell: &Param<u8>| {
         circuits.iter().fold(rate, |rate, &circuit| {
             rate.condition(
                 path!("door-has-pressure-or-a-permanent-latch")
                     .join(&path::write(&circuit))
                     .join(&path::write(&role)),
-                Q::balance(role, Asset::Door(circuit)),
+                Fact::Door(circuit).given(cell).quantity(),
                 C::LessThanOrEqual,
                 Q::balance(Role::Puzzle, Asset::Pressed(circuit))
                     + Q::balance(Role::Puzzle, Asset::Latched(circuit)),
             )
         })
     };
-    // The player leaving the exit cell bound to `left`, or reaching the one
-    // bound to `entered`, moves the puzzle's record of where the player is.
-    let walked = |rate: Rate<Ontology>, left: Role, entered: Role| {
+    // The player leaving the exit, the cell `left` binds, or reaching it,
+    // the cell `entered` binds, moves the puzzle's record of where the
+    // player is.
+    let walked = |rate: Rate<Ontology>, left: &Param<u8>, entered: &Param<u8>| {
         if !has_exit {
             return rate;
         }
-        let leaves = || Q::balance(left, Asset::ExitCell);
-        let reaches = || Q::balance(entered, Asset::ExitCell);
+        let leaves = || Fact::Exit.given(left).quantity();
+        let reaches = || Fact::Exit.given(entered).quantity();
         rate.consume_computed(Role::Puzzle, Asset::AtExit, leaves())
             .produce_computed(Role::Puzzle, Asset::AwayFromExit, leaves())
             .consume_computed(Role::Puzzle, Asset::AwayFromExit, reaches())
@@ -327,8 +383,8 @@ fn build_board(rows: &[&str]) -> World {
     // presses it.
     let pressed = |rate: Rate<Ontology>| {
         circuits.iter().fold(rate, |rate, &circuit| {
-            let leaves = || Q::balance(Role::Middle, Asset::Plate(circuit));
-            let reaches = || Q::balance(Role::To, Asset::Plate(circuit));
+            let leaves = || Fact::Plate(circuit).given(&crate_at).quantity();
+            let reaches = || Fact::Plate(circuit).given(&to).quantity();
             rate.consume_computed(Role::Puzzle, Asset::Pressed(circuit), leaves())
                 .produce_computed(Role::Puzzle, Asset::Released(circuit), leaves())
                 .consume_computed(Role::Puzzle, Asset::Released(circuit), reaches())
@@ -350,13 +406,15 @@ fn build_board(rows: &[&str]) -> World {
         .consume(Role::To, basket([(Asset::Empty, 1)]))
         .produce(Role::From, basket([(Asset::Empty, 1)]))
         .produce(Role::To, basket([(Asset::Player, 1)]));
+    let step = described(step, &from, exit);
+    let step = described(step, &to, &[exit, &doors].concat());
     builder = builder.rate_at(
         RateIdPattern::Move {
             from: from.var(),
             to: to.var(),
         }
         .into(),
-        walked(gated(step, Role::To), Role::From, Role::To),
+        walked(gated(step, Role::To, &to), &from, &to),
     );
     if !crate_ids.is_empty() && !lines.is_empty() {
         let line = |(behind, middle, to): (u8, u8, u8)| {
@@ -380,6 +438,9 @@ fn build_board(rows: &[&str]) -> World {
             .produce(Role::From, basket([(Asset::Empty, 1)]))
             .produce(Role::Middle, basket([(Asset::Player, 1)]))
             .produce_at(Role::To, [(crate_on(), Quantity::new(1))]);
+        let push = described(push, &behind, exit);
+        let push = described(push, &crate_at, &[exit, &doors, &plates].concat());
+        let push = described(push, &to, &[&doors[..], &plates].concat());
         builder = builder.rate_at(
             RateIdPattern::Push {
                 behind: behind.var(),
@@ -389,9 +450,9 @@ fn build_board(rows: &[&str]) -> World {
             }
             .into(),
             walked(
-                pressed(gated(gated(push, Role::Middle), Role::To)),
-                Role::From,
-                Role::Middle,
+                pressed(gated(gated(push, Role::Middle, &crate_at), Role::To, &to)),
+                &behind,
+                &crate_at,
             ),
         );
     }
@@ -407,13 +468,7 @@ fn build_board(rows: &[&str]) -> World {
                 .variable(at.values(panels.iter().map(|(_, at)| *at)))
                 .relation(Relation::pairs(&circuit, &at, panels.iter().copied()))
                 .account(Role::From, cell_at(&at))
-                .preserve_at(
-                    Role::From,
-                    [
-                        (Pattern::literal(Asset::Player), Quantity::new(1)),
-                        (AssetPattern::Panel(circuit.var()).into(), Quantity::new(1)),
-                    ],
-                )
+                .preserve(Role::From, basket([(Asset::Player, 1)]))
                 .consume_at(
                     Role::Puzzle,
                     [(
@@ -443,9 +498,8 @@ fn build_board(rows: &[&str]) -> World {
                     .weight(Asset::Latched(circuit), 1),
             );
     }
-    // Each crate's goal role must hold that crate on a goal cell. A crate is
-    // in one cell, so the binding names where it rests and the law needs no
-    // placement of its own.
+    // Finishing is one law for every placement: each goal role is fixed to
+    // its goal cell, which must hold a crate, whichever crate it is.
     let mut finish = Rate::new()
         .account(Role::Puzzle, Pattern::literal(AccountId::Success))
         .consume(Role::Puzzle, basket([(Asset::Active, 1)]))
@@ -453,18 +507,21 @@ fn build_board(rows: &[&str]) -> World {
     if has_exit {
         finish = finish.preserve(Role::Puzzle, basket([(Asset::AtExit, 1)]));
     }
-    for &crate_id in &crate_ids {
+    for (goal, &cell) in (0..).zip(&goal_cells) {
+        let role = Role::Goal(goal);
+        let crates = crate_ids
+            .iter()
+            .map(|&crate_id| Q::balance(role, Asset::Crate(crate_id)))
+            .reduce(|left, right| left + right)
+            .expect("a goal for each crate, and a crate");
         finish = finish
-            .preserve(
-                Role::Goal(crate_id),
-                basket([(Asset::Crate(crate_id), 1), (Asset::GoalCell, 1)]),
-            )
-            .distinct(Role::Goal(crate_id), Role::Puzzle);
-    }
-    for left in 0..crate_ids.len() {
-        for right in left + 1..crate_ids.len() {
-            finish = finish.distinct(Role::Goal(crate_ids[left]), Role::Goal(crate_ids[right]));
-        }
+            .account(role, Pattern::literal(AccountId::Cell(cell)))
+            .condition(
+                path!("goal-holds-a-crate").join(&path::write(&goal)),
+                crates,
+                C::GreaterThanOrEqual,
+                Q::constant(1),
+            );
     }
     builder = builder.rate(RateId::Finish, finish);
 
@@ -587,32 +644,25 @@ pub fn dimensions(world: &World) -> (u8, u8) {
     (width, height)
 }
 
-/// The exchange applying `rate` to `world`'s board: each role its rate fixes
-/// bound to that account, the cells a latch, move or push names, and
-/// finishing binds each crate's goal role to the cell the crate is on.
+/// The exchange applying `rate` to `world`'s board: each role bound to the
+/// account its rate fixes it to, the cells a latch, move or push names and
+/// the puzzle; bound to nothing where `rate` names no instance of `world`'s
+/// rates, so that `world` refuses it.
 pub fn exchange(world: &World, rate: RateId) -> Action {
-    let fixed: Vec<(Role, AccountId)> = world
-        .instance(&rate)
-        .map(|instance| {
-            instance
-                .fixed_accounts()
-                .filter_map(|(role, account)| Some((*role, *account.as_literal()?)))
-                .collect()
+    let exchange = Exchange::new(rate, Quantity::new(1));
+    let Ok(instance) = world.instance(&rate) else {
+        return exchange;
+    };
+    instance
+        .fixed_accounts()
+        .fold(exchange, |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
+            )
         })
-        .unwrap_or_default();
-    let exchange = fixed.into_iter().fold(
-        Exchange::new(rate, Quantity::new(1)),
-        |exchange, (role, account)| exchange.bind(role, account),
-    );
-    if rate == RateId::Finish {
-        crate_cells(world)
-            .into_iter()
-            .fold(exchange, |exchange, (crate_id, cell)| {
-                exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell))
-            })
-    } else {
-        exchange
-    }
 }
 
 #[cfg(test)]
@@ -814,40 +864,71 @@ mod tests {
         );
     }
 
+    /// The cells `rows` draws as goals, read from the drawing rather than
+    /// the economy.
+    fn drawn_goals(rows: &[&str]) -> Vec<AccountId> {
+        rows.concat()
+            .bytes()
+            .enumerate()
+            .filter(|(_, tile)| matches!(tile, b'.' | b'*' | b'+'))
+            .map(|(cell, _)| AccountId::Cell(u8::try_from(cell).unwrap()))
+            .collect()
+    }
+
     #[test]
-    fn finishing_is_one_law_bound_to_where_each_crate_rests() {
+    fn finishing_is_one_law_fixed_to_the_goal_cells() {
+        for (world, rows) in [
+            (initial(), MICRO),
+            (initial_showcase(), SHOWCASE),
+            (initial_stress(), STRESS),
+        ] {
+            assert_eq!(
+                world
+                    .rate_ids()
+                    .filter_map(|rate| rate.as_literal())
+                    .filter(|rate| **rate == RateId::Finish)
+                    .count(),
+                1
+            );
+            // Every role it binds is fixed: there is no placement to choose.
+            let finish = world.instance(&RateId::Finish).unwrap();
+            assert_eq!(finish.roles().count(), finish.fixed_accounts().count());
+            let goals: Vec<AccountId> = finish
+                .fixed_accounts()
+                .filter(|(role, _)| matches!(role, Role::Goal(_)))
+                .map(|(_, account)| *account.as_literal().unwrap())
+                .collect();
+            assert_eq!(goals, drawn_goals(rows));
+        }
+    }
+
+    #[test]
+    fn finishing_needs_every_goal_to_hold_a_crate() {
         let world = initial_showcase();
-        assert_eq!(
-            world
-                .rate_ids()
-                .filter_map(|rate| rate.as_literal())
-                .filter(|rate| **rate == RateId::Finish)
-                .count(),
-            1
-        );
-        let (finish, moves) = SHOWCASE_SOLUTION.split_last().expect("a solution finishes");
-        assert_eq!(finish, &RateId::Finish);
+        let (last, moves) = SHOWCASE_SOLUTION.split_last().expect("a solution finishes");
+        assert_eq!(last, &RateId::Finish);
         let before = played(&world, moves);
         assert!(before.is_applicable(&exchange(&before, RateId::Finish)));
-
-        // Each goal role must be bound to the cell holding its own crate.
-        let placements = crate_cells(&before);
-        let [(first, first_cell), (second, second_cell)] = placements[..] else {
-            panic!("the showcase has two crates");
-        };
-        let bound = |pairs: [(u8, u8); 2]| {
-            pairs.into_iter().fold(
-                Exchange::new(RateId::Finish, Quantity::new(1))
-                    .bind(Role::Puzzle, AccountId::Success),
-                |exchange, (crate_id, cell)| {
-                    exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell))
-                },
-            )
-        };
-        assert!(before.is_applicable(&bound([(first, first_cell), (second, second_cell)])));
-        assert!(!before.is_applicable(&bound([(first, second_cell), (second, first_cell)])));
-        let player = player_cell(&before).unwrap();
-        assert!(!before.is_applicable(&bound([(first, player), (second, second_cell)])));
+        // With crate 0 still staged on the plate, one goal is empty: it is
+        // refused, though the player has reached the exit.
+        let delivered_one = [
+            &SHOWCASE_SOLUTION[..14],
+            &[
+                step(29, 30),
+                step(30, 31),
+                step(31, 32),
+                step(32, 41),
+                step(41, 42),
+                step(42, 51),
+            ],
+        ]
+        .concat();
+        let short = played(&world, &delivered_one);
+        assert_eq!(
+            short.balance(&AccountId::Success, &Asset::AtExit).to_u64(),
+            1
+        );
+        assert!(!short.is_applicable(&exchange(&short, RateId::Finish)));
     }
 
     #[test]

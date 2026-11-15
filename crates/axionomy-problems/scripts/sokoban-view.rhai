@@ -2,7 +2,8 @@
 // moves and roles; the scene draws the floor, walls, goals and dead squares,
 // the exit and the plate, door and latch mechanisms, the player and every
 // crate, and counts held plates, latched doors and crates on goals. The
-// board's size is read as the puzzle's economy script reads it.
+// board's size and its goals are read as the puzzle's economy script reads
+// them; the exit, doors, plates and panels as the laws that read them say.
 
 import "sokoban" as sokoban;
 
@@ -22,12 +23,8 @@ fn label(item) {
     if category == "asset" {
         return switch name {
             "dead-square" => "A crate cannot reach a goal from here",
-            "exit-cell" => "Warehouse exit",
             "at-exit" => "Player at the exit",
             "away-from-exit" => "Player inside the warehouse",
-            "plate" => `Pressure plate ${ordinal(parts[2])}`,
-            "door" => `Door ${ordinal(parts[2])}`,
-            "panel" => `Latch panel ${ordinal(parts[2])}`,
             "pressed" => `Plate ${ordinal(parts[2])} has a crate`,
             "released" => `Plate ${ordinal(parts[2])} is released`,
             "latch-ready" => `Door ${ordinal(parts[2])} can be latched`,
@@ -39,7 +36,6 @@ fn label(item) {
             "player" => "Player",
             "crate" => `Crate ${ordinal(parts[2])}`,
             "empty" => "Empty cell",
-            "goal-cell" => "Goal square",
             "active" => "Puzzle in progress",
             "solved" => "Puzzle solved",
             _ => (),
@@ -51,7 +47,7 @@ fn label(item) {
             "middle" => "Crate's cell",
             "to" => "Destination cell",
             "puzzle" => "Puzzle",
-            "goal" => `Goal for crate ${ordinal(parts[2])}`,
+            "goal" => `Goal square ${ordinal(parts[2])}`,
             _ => (),
         };
     }
@@ -88,18 +84,47 @@ fn metric(key, label, value) {
     #{ key: key, label: label, value: value.to_string(), unit: () }
 }
 
+// What the laws say each cell is, keyed by the cell: `goal` where finishing
+// fixes a goal role; `exit`, `door-0` or `plate-1` where a move or push
+// enters the cell `{to}` and its relations give `{to-exit}`, `{to-door-0}`
+// or `{to-plate-1}`; `panel-0` where a latch stands.
+fn layout(state) {
+    let layout = #{};
+    for cell in sokoban::goals(state) { layout[cell.to_string()] = ["goal"]; }
+    for rate in state.instances("move") + state.instances("push") {
+        let values = state.values(rate);
+        let at = values["to"].to_string();
+        let facts = if at in layout { layout[at] } else { [] };
+        for name in values.keys() {
+            let fact = name.sub_string(3);
+            if name.starts_with("to-") && values[name] == 1 && !facts.contains(fact) { facts.push(fact); }
+        }
+        layout[at] = facts;
+    }
+    for rate in state.instances("latch") {
+        let values = state.values(rate);
+        let at = values["at"].to_string();
+        let facts = if at in layout { layout[at] } else { [] };
+        facts.push(`panel-${values["circuit"]}`);
+        layout[at] = facts;
+    }
+    layout
+}
+
 fn scene(state, frame) {
     let size = sokoban::dimensions(state);
     let width = size[0];
     let height = size[1];
     let puzzle = state.balances("success");
+    let layout = layout(state);
     let cells = [];
     let entities = [];
     let on_goals = 0;
     for cell in 0..width * height {
         let holds = state.balances(`cell/${cell}`);
+        let facts = if cell.to_string() in layout { layout[cell.to_string()] } else { [] };
         let wall = "wall" in holds;
-        let goal = "goal-cell" in holds;
+        let goal = facts.contains("goal");
         let dead = "dead-square" in holds;
         let classes = [if wall { "wall" } else { "floor" }];
         if goal { classes.push("goal"); }
@@ -113,7 +138,7 @@ fn scene(state, frame) {
             account: `sokoban/account/cell/${cell}`,
         });
 
-        if "exit-cell" in holds {
+        if facts.contains("exit") {
             entities.push(entity(
                 "exit", "Exit", "goal", at_cell(cell, width), "structure", "goal",
                 "leave after all deliveries",
@@ -121,8 +146,8 @@ fn scene(state, frame) {
         }
         for circuit in 0..2 {
             for mechanism in [["plate", "Plate", "constraint"], ["door", "Door", "door"], ["panel", "Latch panel", "constraint"]] {
-                let asset = `${mechanism[0]}/${circuit}`;
-                if !(asset in holds) { continue; }
+                let fact = `${mechanism[0]}-${circuit}`;
+                if !facts.contains(fact) { continue; }
                 let pressed = `pressed/${circuit}` in puzzle;
                 let latched = `latched/${circuit}` in puzzle;
                 let status = switch mechanism[0] {
@@ -131,7 +156,7 @@ fn scene(state, frame) {
                     _ => if latched { "latched" } else { "ready to latch" },
                 };
                 entities.push(entity(
-                    `mechanism/${asset}`, `${mechanism[1]} ${circuit + 1}`, mechanism[2],
+                    `mechanism/${mechanism[0]}/${circuit}`, `${mechanism[1]} ${circuit + 1}`, mechanism[2],
                     at_cell(cell, width), "structure",
                     if latched || pressed { "success" } else { "warning" }, status,
                 ));

@@ -20,9 +20,9 @@ one remain legal, as each instance's deadlock replay shows. Micro is unchanged.
 
 Every board cell is an account, `cell/{index}`, that owns either `Floor` or
 `Wall`. Walkable cells hold exactly one occupancy asset:
-`Player`, `Empty`, or a stable `Crate(id)`. Goal squares own `GoalCell` in
-addition to their occupant. Board dimensions are ordinary assets on the puzzle
-account, so neither the search nor viewer needs hidden geometry state. A move
+`Player`, `Empty`, or a stable `Crate(id)`. Board dimensions are ordinary
+assets on the puzzle account, so neither the search nor viewer needs hidden
+geometry state. A move
 atomically exchanges player and empty tokens between adjacent floor accounts.
 A push atomically rewrites three accounts while preserving crate identity:
 
@@ -34,17 +34,21 @@ Each is one rate with variables over the board's geometry, which no exchange
 changes and so is a relation: `move/{from}/{to}` over the floors that adjoin,
 `push/{behind}/{crate-at}/{to}/{crate}` over the floors three in a row, and
 `latch/{circuit}/{at}` over the latch panels. Every role is fixed to the cell
-its identifier names, so no cell holds an identity token. A door, a plate or
-the exit is a fact of its cell, and the one law reads it from the cells it
-binds: a door's cell admits the player or a crate only while its circuit is
-pressed or latched, a crate pressing or releasing a plate moves the circuit,
-and the player reaching or leaving the exit moves the puzzle's record.
+its identifier names, so no cell holds an identity token. Whether a cell is
+the exit, or a circuit's door or plate, never changes either: a relation over
+each variable gives it, `1` or `0`, for every floor, named after the
+variable, such as `{to-door-0}` or `{crate-at-plate-1}`, and the one law
+reads it of the cells it binds. A door's cell admits the player or a crate
+only while its circuit is pressed or latched, a crate pressing or releasing a
+plate moves the circuit, and the player reaching or leaving the exit moves
+the puzzle's record. Micro has 3 rates as written, for 15 instances;
+Showcase 4, for 132; Stress 4, for 259.
 
 The Showcase warehouse has boundary walls, an internal obstruction, two crates,
 two goals, and legal moves that do not advance the objective. Completion is
-one `Finish` law: its final exchange binds every stable crate's goal role to
-the distinct goal cell that crate rests on, as the package's search script
-binds it. A second trace
+one `Finish` law with a goal role fixed to each goal cell, which must hold a
+crate, whichever crate it is; the goal cells are the law's, and the search
+and view read them from it. A second trace
 starts from that same economy and replays a short sequence ending in a legal
 push into a non-goal corner, making the difference between validity and
 decision quality directly inspectable.
@@ -66,8 +70,8 @@ The model's tests apply the rules directly:
   conserved across the full replay.
 - A move bound to cells other than those its identifier names is refused,
   and cells that do not adjoin have no move.
-- Completion binds all crates to distinct goals, consumes the active puzzle
-  lifecycle, and is quiescent.
+- Completion is one law fixed to the drawn goal cells, refused while any of
+  them is empty, consumes the active puzzle lifecycle, and is quiescent.
 
 ## API pressure
 
@@ -76,8 +80,8 @@ The model's tests apply the rules directly:
 - Stable object identity across spatial motion.
 - Terrain/occupant separation for generic grid projections.
 - Spatial invariants, admissible search policy, and deadlock evidence.
-- Geometry as relations of rates with variables, whose effects depend on
-  facts of the cells they bind.
+- Geometry as relations of rates with variables, whose rows give what each
+  cell they bind is, and whose effects depend on it.
 
 ## In this folder
 

@@ -171,9 +171,9 @@ Rates can also:
 every customer; each exchange binds `Buyer` to whichever customer is buying.
 Put data in a rate's identifier only when the law itself differs. For example,
 `Move { from, to }` consumes `At(from)` and produces `At(to)`, so every pair of
-rooms needs its own law. Sokoban's `Finish` is the other side: whichever goal
-cells the crates rest on, finishing is one law, and each exchange binds every
-crate's `Goal` role to the cell that crate is on.
+rooms needs its own law. Sokoban's `Finish` is the other side: whichever
+crates rest on the goal cells, finishing is one law, its `Goal` roles fixed
+to the goal cells and each requiring a crate, whichever crate it is.
 
 **A rate may have variables** instead of one rate per value. Its identifier
 is a pattern, `move/{from}/{to}`, each `{name}` one segment of the

@@ -38,10 +38,14 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
     };
     assert_eq!(latches(&warehouse_showcase), 1);
     assert_eq!(latches(&warehouse_stress), 2);
+    // A move into the exit is given that its cell is the exit.
+    let exit: axionomy::VariablePath = axionomy::path!("to-exit");
     assert!(
         warehouse_showcase
-            .accounts()
-            .any(|(_, account)| account.balance(&sokoban::Asset::ExitCell).to_u64() == 1)
+            .rate_ids()
+            .flat_map(|key| warehouse_showcase.instances_of(key))
+            .filter_map(|rate| warehouse_showcase.values(&rate).ok())
+            .any(|values| values.get(&exit).and_then(axionomy::Segment::number) == Some(1))
     );
 
     let bridge_showcase = bridge::initial_showcase();

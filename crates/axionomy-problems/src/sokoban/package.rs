@@ -85,6 +85,10 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         },
     )?;
     engine.keep_goal(&path!("sokoban/solved"), &written(&sokoban::goal()))?;
+    // Every rate fixes each role, so `CandidateSet::Instances` could offer
+    // the moves; but trying every one of Stress's 259 instances at each
+    // state searches four to five times slower than the script, which
+    // proposes the few from the player's cell.
     engine.keep_candidates(
         &path!("sokoban/moves"),
         &CandidateSet::Script(call("candidates")),
