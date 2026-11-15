@@ -9,9 +9,8 @@
 //! branch-and-bound over the gross value a clearing forgoes, and its Pareto
 //! picks rank the exact front of the participants' utility. Showcase and
 //! Stress fund contracts that are dispatched and delivered over time,
-//! planned as the Rust planner plans them, by the same strategies at either size:
-//! a beam of 24 states scored for volume, or weighted toward buyers or
-//! sellers.
+//! planned by the same strategies at either size: a beam of 24 states scored
+//! for volume, or weighted toward buyers or sellers.
 
 use crate::{
     marketplace::{self, Ontology},
@@ -32,13 +31,13 @@ use axionomy_store::Checkpoints;
 const SCRIPT: &str = include_str!("../../scripts/marketplace.rhai");
 const VIEW: &str = include_str!("../../scripts/marketplace-view.rhai");
 
-/// The states each depth of the Rust fulfillment planner keeps.
+/// The states each depth of the fulfillment beam keeps.
 const WIDTH: u64 = 24;
-/// The planner runs forty rounds, each taking the goal states of its depth
-/// and expanding the others, so a plan it keeps settles every order within
-/// 39 exchanges.
+/// The beam runs forty rounds, each taking the goal states of its depth and
+/// expanding the others, so a plan it keeps settles every order within 39
+/// exchanges.
 const DEPTH: u64 = 39;
-/// Of the plans scoring best alike, the planner keeps the last it finds.
+/// Of the plans scoring best alike, the beam keeps the last it finds.
 const TIE: Tie = Tie::Last;
 
 /// Writes the marketplace's package into `engine`'s store, everything named
@@ -112,7 +111,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         tie: TIE,
     };
     // Every allocation on Micro's front gives its buyers 55 and its sellers
-    // 20; of equals the Rust ranking takes the one the search keeps last, which
+    // 20; of equals the ranking takes the one the search keeps last, which
     // gives buyer B and seller B the most.
     let pareto = |by: [&str; 3]| Strategy::Pareto {
         candidates: path!("marketplace/settlements"),

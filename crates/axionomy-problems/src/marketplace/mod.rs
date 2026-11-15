@@ -2,11 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, AssessmentStatus, Economy, EconomyBuilder, Exchange, ExchangeAssessment, Goal,
-    LinearInvariant, Quantity, Rate, Trace, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
-use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult};
-use std::collections::HashSet;
 
 pub mod fulfillment;
 #[cfg(feature = "packages")]
@@ -168,16 +165,9 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Assessment = ExchangeAssessment<Ontology>;
-pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectiveKey {
-    Buyer(BuyerId),
-    Seller(SellerId),
-}
-
-/// One possible order, buyer, seller, and carrier binding.
+/// An order and the parties its exchanges bind: its buyer, seller and
+/// carrier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MarketMatch {
     order: OrderId,
@@ -214,49 +204,6 @@ impl MarketMatch {
 
     pub fn exchange(self) -> Action {
         settlement(self.order, self.buyer, self.seller, self.carrier)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClearingProposal {
-    trace: Trace<Ontology>,
-    settled_orders: usize,
-    gross_value: u64,
-}
-
-impl ClearingProposal {
-    pub const fn trace(&self) -> &Trace<Ontology> {
-        &self.trace
-    }
-
-    pub const fn settled_orders(&self) -> usize {
-        self.settled_orders
-    }
-
-    pub const fn gross_value(&self) -> u64 {
-        self.gross_value
-    }
-}
-
-/// A proposed match paired with the core's non-mutating explanation.
-#[derive(Debug, Clone)]
-pub struct AssessedMatch {
-    candidate: MarketMatch,
-    exchange: Action,
-    assessment: Assessment,
-}
-
-impl AssessedMatch {
-    pub const fn candidate(&self) -> MarketMatch {
-        self.candidate
-    }
-
-    pub const fn exchange(&self) -> &Action {
-        &self.exchange
-    }
-
-    pub const fn assessment(&self) -> &Assessment {
-        &self.assessment
     }
 }
 
@@ -464,38 +411,6 @@ fn goal_for(orders: &[OrderId]) -> Goal<Ontology> {
     })
 }
 
-/// Derives the finite Cartesian candidate set from participant accounts.
-pub fn candidate_matches(world: &World) -> Vec<MarketMatch> {
-    let mut buyers = Vec::new();
-    let mut sellers = Vec::new();
-    let mut carriers = Vec::new();
-
-    for (account, _) in world.accounts() {
-        match account {
-            AccountId::Buyer(buyer) => buyers.push(*buyer),
-            AccountId::Seller(seller) => sellers.push(*seller),
-            AccountId::Carrier(carrier) => carriers.push(*carrier),
-            AccountId::Platform | AccountId::TaxAuthority | AccountId::Order(_) => {}
-        }
-    }
-
-    buyers.sort();
-    sellers.sort();
-    carriers.sort();
-
-    let mut matches = Vec::new();
-    for order in orders(world) {
-        for buyer in &buyers {
-            for seller in &sellers {
-                for carrier in &carriers {
-                    matches.push(MarketMatch::new(order, *buyer, *seller, *carrier));
-                }
-            }
-        }
-    }
-    matches
-}
-
 pub fn orders(world: &World) -> Vec<OrderId> {
     let mut orders = world
         .rate_ids()
@@ -507,118 +422,6 @@ pub fn orders(world: &World) -> Vec<OrderId> {
     orders.sort();
     orders.dedup();
     orders
-}
-
-pub fn candidates(world: &World) -> Vec<Action> {
-    if fulfillment::enabled(world) {
-        return fulfillment::candidates(world);
-    }
-    candidate_matches(world)
-        .into_iter()
-        .map(MarketMatch::exchange)
-        .collect()
-}
-
-/// Filters candidate bindings through the core's applicability decision.
-pub fn exact_matches(world: &World) -> Vec<Action> {
-    world.applicable(candidates(world))
-}
-
-/// Assesses every candidate without mutating the market.
-pub fn assessed_matches(world: &World) -> Vec<AssessedMatch> {
-    candidate_matches(world)
-        .into_iter()
-        .map(|candidate| {
-            let exchange = candidate.exchange();
-            let assessment = world.assess(&exchange);
-            AssessedMatch {
-                candidate,
-                exchange,
-                assessment,
-            }
-        })
-        .collect()
-}
-
-/// Ranks structurally valid but infeasible matches with caller-owned policy.
-///
-/// The cost function may turn the complete sparse shortfall vector into a
-/// scalar heuristic, but it cannot change exchange validity or effects.
-pub fn rank_near_matches(
-    world: &World,
-    mut cost: impl FnMut(&Assessment) -> u64,
-) -> Vec<AssessedMatch> {
-    let mut scored = assessed_matches(world)
-        .into_iter()
-        .filter(|candidate| candidate.assessment.status() == AssessmentStatus::Infeasible)
-        .map(|candidate| (cost(candidate.assessment()), candidate))
-        .collect::<Vec<_>>();
-
-    scored.sort_by_key(|(score, candidate)| (*score, candidate.candidate));
-    scored.into_iter().map(|(_, candidate)| candidate).collect()
-}
-
-/// Searches the finite concrete fixture for the best compatible settlement set.
-///
-/// The search state is disposable. Every edge is still a core-assessed
-/// settlement exchange, and the returned trace is replay-validated.
-pub fn clear_market(world: &World) -> ClearingProposal {
-    if fulfillment::enabled(world) {
-        let trace = fulfillment::plan(world, fulfillment::Preference::Volume)
-            .expect("bounded fulfillment plan");
-        let final_world = world.replayed(&trace).expect("fulfillment trace replays");
-        return ClearingProposal {
-            settled_orders: settled_orders(&final_world),
-            gross_value: gross_value(&final_world),
-            trace,
-        };
-    }
-    let mut visited = HashSet::new();
-    let mut best = ClearingProposal {
-        trace: Trace::new(),
-        settled_orders: settled_orders(world),
-        gross_value: gross_value(world),
-    };
-    clear_branch(world.clone(), Trace::new(), &mut visited, &mut best);
-    let replayed = world
-        .replayed(best.trace())
-        .expect("clearing search only records applicable exchanges");
-    assert_eq!(settled_orders(&replayed), best.settled_orders);
-    assert_eq!(gross_value(&replayed), best.gross_value);
-    best
-}
-
-/// Exhaustively exposes non-dominated participant-utility allocations among
-/// complete, atomic market clearings.
-pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    let goal = goal_for(&orders(world));
-    pareto::search(world, &goal, exact_matches, objectives)
-}
-
-pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    ObjectiveVector::try_new([
-        Objective::maximize(
-            ObjectiveKey::Buyer(BuyerId::A),
-            utility(world, AccountId::Buyer(BuyerId::A)),
-        ),
-        Objective::maximize(
-            ObjectiveKey::Buyer(BuyerId::B),
-            utility(world, AccountId::Buyer(BuyerId::B)),
-        ),
-        Objective::maximize(
-            ObjectiveKey::Seller(SellerId::A),
-            utility(world, AccountId::Seller(SellerId::A)),
-        ),
-        Objective::maximize(
-            ObjectiveKey::Seller(SellerId::B),
-            utility(world, AccountId::Seller(SellerId::B)),
-        ),
-    ])
-    .expect("market objective schema is static and unique")
-}
-
-pub fn utility(world: &World, account: AccountId) -> u64 {
-    world.balance(&account, &Asset::Utility).to_u64()
 }
 
 pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
@@ -707,61 +510,6 @@ const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
     }
 }
 
-fn clear_branch(
-    world: World,
-    trace: Trace<Ontology>,
-    visited: &mut HashSet<axionomy::StateKey<Ontology>>,
-    best: &mut ClearingProposal,
-) {
-    if !visited.insert(world.state_key()) {
-        return;
-    }
-    let candidate = (settled_orders(&world), gross_value(&world));
-    if candidate > (best.settled_orders, best.gross_value) {
-        best.trace = trace.clone();
-        best.settled_orders = candidate.0;
-        best.gross_value = candidate.1;
-    }
-    for exchange in exact_matches(&world) {
-        let mut next = world.clone();
-        if next.apply(exchange.clone()).is_err() {
-            continue;
-        }
-        let mut next_trace = trace.clone();
-        next_trace.push(exchange);
-        clear_branch(next, next_trace, visited, best);
-    }
-}
-
-fn settled_orders(world: &World) -> usize {
-    orders(world)
-        .into_iter()
-        .filter(|order| {
-            !world
-                .balance(&AccountId::Order(*order), &Asset::SettledOrder(*order))
-                .is_zero()
-        })
-        .count()
-}
-
-fn gross_value(world: &World) -> u64 {
-    orders(world)
-        .into_iter()
-        .map(|order| {
-            let gross = order_terms(order).1;
-            [gross, gross - 10, gross - 20]
-                .into_iter()
-                .map(|value| {
-                    world
-                        .balance(&AccountId::Order(order), &Asset::SettledValue(value))
-                        .to_u64()
-                        * value
-                })
-                .sum::<u64>()
-        })
-        .sum()
-}
-
 fn all_distinct(mut rate: Rate<Ontology>) -> Rate<Ontology> {
     let roles = [
         Role::Buyer,
@@ -782,17 +530,33 @@ fn all_distinct(mut rate: Rate<Ontology>) -> Rate<Ontology> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::{ApplyError, ExchangeAssessment, Trace};
+    use axionomy::{ApplyError, AssessmentStatus, ExchangeAssessment, Trace};
+
+    /// Every binding of a settlement of each of the market's orders: each
+    /// buyer, seller and carrier the market has.
+    fn every_settlement(world: &World) -> Vec<Action> {
+        let mut settlements = Vec::new();
+        for order in orders(world) {
+            for buyer in [BuyerId::A, BuyerId::B, BuyerId::C] {
+                for seller in [SellerId::A, SellerId::B, SellerId::C] {
+                    for carrier in [CarrierId::A, CarrierId::B] {
+                        settlements.push(settlement(order, buyer, seller, carrier));
+                    }
+                }
+            }
+        }
+        settlements
+    }
 
     #[test]
-    fn derives_and_filters_all_candidate_bindings_without_mutation() {
+    fn five_of_the_thirty_six_settlements_apply_and_assessing_changes_nothing() {
         let world = initial();
         let before = world.state_key();
 
-        assert_eq!(candidate_matches(&world).len(), 36);
-        let exact = exact_matches(&world);
+        let every = every_settlement(&world);
+        assert_eq!(every.len(), 36);
+        let exact = world.applicable(every);
         assert_eq!(exact.len(), 5);
-        assert!(exact.iter().all(|exchange| world.is_applicable(exchange)));
         assert_eq!(world.state_key(), before);
 
         for exchange in exact {
@@ -913,7 +677,15 @@ mod tests {
             ),
             Quantity::new(1)
         );
-        assert_eq!(exact_matches(&world).len(), 1);
+        assert_eq!(
+            world.applicable(every_settlement(&world)),
+            [settlement(
+                OrderId::B,
+                BuyerId::A,
+                SellerId::C,
+                CarrierId::A
+            )]
+        );
 
         let mut trace = Trace::new();
         trace.push(replay_exchange);
@@ -922,18 +694,35 @@ mod tests {
     }
 
     #[test]
-    fn clearing_search_selects_two_compatible_settlements_and_replays() {
+    fn two_compatible_settlements_clear_the_market_and_replay() {
         let world = initial();
-        let clearing = clear_market(&world);
-
-        assert_eq!(clearing.settled_orders(), 2);
-        assert_eq!(clearing.gross_value(), GROSS_PAYMENT + SECOND_GROSS_PAYMENT);
-        assert_eq!(clearing.trace().exchanges().len(), 2);
+        // Buyer A's budget covers both orders exactly, with seller A's
+        // widget, seller C's gadget and both of carrier A's capacity.
+        let clearing: Trace<Ontology> = [
+            settlement(OrderId::A, BuyerId::A, SellerId::A, CarrierId::A),
+            settlement(OrderId::B, BuyerId::A, SellerId::C, CarrierId::A),
+        ]
+        .into_iter()
+        .collect();
         let replayed = world
-            .replayed(clearing.trace())
+            .replayed(&clearing)
             .expect("clearing trace must replay");
         assert!(replayed.matches(&goal()));
-        assert!(exact_matches(&replayed).is_empty());
+        let settled = |order, value| {
+            replayed
+                .balance(&AccountId::Order(order), &Asset::SettledValue(value))
+                .to_u64()
+                * value
+        };
+        assert_eq!(
+            settled(OrderId::A, GROSS_PAYMENT) + settled(OrderId::B, SECOND_GROSS_PAYMENT),
+            GROSS_PAYMENT + SECOND_GROSS_PAYMENT
+        );
+        assert!(replayed.applicable(every_settlement(&replayed)).is_empty());
+        assert_eq!(
+            world.replayed(&clearing).unwrap().state_key(),
+            replayed.state_key()
+        );
     }
 
     #[test]
@@ -991,93 +780,5 @@ mod tests {
             .bind(Role::Order, AccountId::Order(OrderId::A));
 
         assert!(!world.is_applicable(&rebound));
-    }
-
-    #[test]
-    fn caller_owned_cost_changes_near_match_ranking() {
-        let world = initial();
-
-        let cash_friendly = rank_near_matches(&world, |assessment| {
-            weighted_shortfall(assessment, 1, 100, 50)
-        });
-        assert_eq!(
-            cash_friendly[0].candidate(),
-            MarketMatch::new(OrderId::A, BuyerId::C, SellerId::A, CarrierId::A)
-        );
-
-        let capacity_friendly = rank_near_matches(&world, |assessment| {
-            weighted_shortfall(assessment, 100, 50, 1)
-        });
-        assert_eq!(
-            capacity_friendly[0].candidate(),
-            MarketMatch::new(OrderId::A, BuyerId::A, SellerId::A, CarrierId::B)
-        );
-    }
-
-    #[test]
-    fn pareto_front_exposes_buyer_and_seller_allocation_choices() {
-        let initial = initial();
-        let result = pareto_front(&initial).unwrap();
-        assert_eq!(result.front().len(), 4);
-
-        let mut outcomes = Vec::new();
-        for entry in result.front().entries() {
-            let replayed = initial.replayed(entry.payload()).unwrap();
-            assert!(replayed.matches(&goal()));
-            assert_eq!(&objectives(&replayed), entry.objectives());
-            outcomes.push((
-                utility(&replayed, AccountId::Buyer(BuyerId::A)),
-                utility(&replayed, AccountId::Buyer(BuyerId::B)),
-                utility(&replayed, AccountId::Seller(SellerId::A)),
-                utility(&replayed, AccountId::Seller(SellerId::B)),
-            ));
-        }
-        outcomes.sort_unstable();
-        assert_eq!(
-            outcomes,
-            [
-                (25, 30, 0, 20),
-                (25, 30, 20, 0),
-                (55, 0, 0, 20),
-                (55, 0, 20, 0),
-            ]
-        );
-    }
-
-    #[test]
-    fn stress_market_couples_six_orders_and_replays_the_clearing() {
-        let showcase = initial_showcase();
-        let stress = initial_stress();
-        assert!(orders(&stress).len() > orders(&showcase).len());
-        assert!(candidate_matches(&stress).len() > candidate_matches(&showcase).len());
-
-        let clearing = clear_market(&stress);
-        assert_eq!(clearing.settled_orders(), STRESS_ORDERS.len());
-        let replayed = stress
-            .replayed(clearing.trace())
-            .expect("stress clearing must replay");
-        assert!(replayed.matches(&goal_stress()));
-    }
-
-    fn weighted_shortfall(
-        assessment: &Assessment,
-        money_weight: u64,
-        widget_weight: u64,
-        capacity_weight: u64,
-    ) -> u64 {
-        assessment
-            .shortfalls()
-            .iter()
-            .flat_map(|shortfall| shortfall.missing().iter())
-            .map(|(asset, quantity)| {
-                let weight = match asset {
-                    Asset::Money => money_weight,
-                    Asset::Item(Item::Widget | Item::Gadget) => widget_weight,
-                    Asset::ShippingCapacity => capacity_weight,
-                    _ => 1_000,
-                };
-                weight * quantity.to_u64()
-            })
-            .sum()
     }
 }

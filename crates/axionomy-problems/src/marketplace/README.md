@@ -14,8 +14,9 @@ Orders arrive in waves; fast shipping is exposed to known route delays, while
 the slower carrier avoids them. A ten-credit price concession increases buyer
 benefit and reduces seller benefit. Late delivery returns ten credits to the
 buyer from the seller's proceeds. An unshipped reservation expires and can be
-atomically refunded and rebooked. The larger planner is a bounded beam of 24
-states with evaluated buyer/seller tradeoffs; Micro retains exact clearing.
+atomically refunded and rebooked. The package plans these larger markets with
+a bounded beam of 24 states, scored for volume or weighted toward buyers or
+sellers; Micro's clearing is exact.
 
 ## Specification
 
@@ -43,30 +44,36 @@ buyer and seller. They make participant benefit part of the outcome rather
 than a clearing callback.
 
 Money, widgets, buyer and seller lifecycle tokens, shipping capacity, and
-order status are protected by declared invariants. Candidate enumeration
-derives the buyer, seller, and carrier sets from economy accounts and produces
-ordinary exchanges. Exact matching uses core applicability. Near matching
-uses complete core shortfalls plus a caller-provided valuation; that scalar is
-disposable policy and never changes settlement law or feasibility. A
-disposable clearing search explores compatible applicable settlements,
-maximizing encoded settled-order count and gross value. Its result is an
-ordinary replayable exchange trace, not a second market state.
+order status are protected by declared invariants. The package's candidates
+derive the buyer, seller, and carrier sets from economy accounts and propose
+ordinary exchanges, which core applicability filters; a refused settlement
+reports every party's complete shortfall. Its disposable clearing search
+explores compatible applicable settlements, minimizing the gross value a
+clearing forgoes, and its Pareto picks rank the exact front of participant
+utility. Each result is an ordinary replayable exchange trace, not a second
+market state.
 
 ## Required results
 
-- The account-derived Cartesian set contains 36 candidate exchanges.
-- Five candidates are initially exact and filtering does not mutate the market.
-- One candidate reports buyer, seller, and carrier shortfalls together.
-- A successful exchange settles six accounts atomically.
-- Projected assessment deltas exactly equal the resulting receipt deltas.
+The unit tests check the laws by applying exchanges:
+
+- Of the 36 settlement bindings the accounts allow, five apply at first, and
+  assessing them does not mutate the market.
+- One settlement reports buyer, seller, and carrier shortfalls together.
+- A successful exchange settles six accounts atomically, and projected
+  assessment deltas exactly equal the resulting receipt deltas.
 - Failed settlement preserves every account.
-- Changing caller-owned shortfall weights changes near-match ranking without
-  changing validity.
-- Clearing selects two compatible settlements with gross value 190.
-- The two-exchange clearing reaches both encoded order goals and replays
-  deterministically.
-- Exact Pareto clearing retains four participant-utility allocations covering
-  the two eligible Order A buyers and two widget sellers; every entry replays.
+- Two compatible settlements with gross value 190 reach both encoded order
+  goals and replay deterministically.
+- A signed contract locks money, goods and capacity until delivery; an
+  expired reservation refunds every party and can be rebooked.
+
+The package's experiments find these, pinned in `tests/outcomes`:
+
+- Micro's clearing settles both orders in two exchanges, and its Pareto
+  picks each take an allocation from the exact front of participant utility.
+- Showcase and Stress fulfil every order, planned for volume or toward buyers
+  or sellers.
 
 ## API pressure
 
@@ -83,8 +90,8 @@ ordinary replayable exchange trace, not a second market state.
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro market, its settlement rates, matching,
-  ranking and clearing.
+- `mod.rs` is the model: the markets' parties and orders, the Micro market,
+  its settlement rates, goals and typed exchanges.
 - `fulfillment.rs` builds the Showcase and Stress markets: funded offers
   become reservations, shipments and only then settlements.
 - `package.rs` writes its package: its economies under refs, goals,

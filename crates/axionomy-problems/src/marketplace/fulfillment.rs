@@ -3,11 +3,10 @@ use super::*;
 use axionomy::path;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
+/// Whether `world` fulfills its contracts over time, as Showcase and Stress
+/// do, rather than settling each order in one exchange.
 pub fn enabled(world: &World) -> bool {
     world.rate(&RateId::Dispatch(OrderId::A)).is_some()
-}
-pub fn now(world: &World) -> u64 {
-    world.balance(&AccountId::Platform, &Asset::Now).to_u64()
 }
 fn clock() -> Q<Ontology> {
     Q::balance(Role::Platform, Asset::Now)
@@ -320,186 +319,15 @@ pub(super) fn build(source: World) -> World {
         .expect("funded fulfillment conserves money, goods and capacity")
 }
 
-pub fn bind(rate: RateId, candidate: MarketMatch) -> Action {
+/// `rate`'s exchange of one unit, binding `parties` and the institutions.
+pub fn bind(rate: RateId, parties: MarketMatch) -> Action {
     Exchange::new(rate, Quantity::new(1))
-        .bind(Role::Buyer, AccountId::Buyer(candidate.buyer))
-        .bind(Role::Seller, AccountId::Seller(candidate.seller))
-        .bind(Role::Carrier, AccountId::Carrier(candidate.carrier))
-        .bind(Role::Order, AccountId::Order(candidate.order))
+        .bind(Role::Buyer, AccountId::Buyer(parties.buyer))
+        .bind(Role::Seller, AccountId::Seller(parties.seller))
+        .bind(Role::Carrier, AccountId::Carrier(parties.carrier))
+        .bind(Role::Order, AccountId::Order(parties.order))
         .bind(Role::Platform, AccountId::Platform)
         .bind(Role::TaxAuthority, AccountId::TaxAuthority)
-}
-pub fn booking(world: &World, order: OrderId) -> Option<MarketMatch> {
-    let buyer = [BuyerId::A, BuyerId::B, BuyerId::C]
-        .into_iter()
-        .find(|id| {
-            world
-                .balance(&AccountId::Buyer(*id), &Asset::PurchaseLocked(order))
-                .to_u64()
-                > 0
-        })?;
-    let seller = [SellerId::A, SellerId::B, SellerId::C]
-        .into_iter()
-        .find(|id| {
-            world
-                .balance(&AccountId::Seller(*id), &Asset::SaleReserved(order))
-                .to_u64()
-                > 0
-        })?;
-    let carrier = [CarrierId::A, CarrierId::B].into_iter().find(|id| {
-        world
-            .balance(&AccountId::Carrier(*id), &Asset::Booking(order))
-            .to_u64()
-            > 0
-    })?;
-    Some(MarketMatch::new(order, buyer, seller, carrier))
-}
-pub fn candidates(world: &World) -> Vec<Action> {
-    if settled_orders(world) == orders(world).len() {
-        return vec![];
-    }
-    let mut proposed = Vec::new();
-    for candidate in candidate_matches(world) {
-        if world
-            .balance(
-                &AccountId::Order(candidate.order),
-                &Asset::OpenOrder(candidate.order),
-            )
-            .to_u64()
-            > 0
-        {
-            proposed.extend([
-                candidate.exchange(),
-                bind(RateId::DiscountedContract(candidate.order), candidate),
-            ]);
-        }
-    }
-    let mut times = Vec::new();
-    for order in orders(world) {
-        let value = |asset| world.balance(&AccountId::Order(order), &asset).to_u64();
-        if value(Asset::OpenOrder(order)) > 0 {
-            times.push(value(Asset::Arrival));
-        }
-        if let Some(candidate) = booking(world, order) {
-            proposed.push(bind(RateId::Dispatch(order), candidate));
-            for discounted in [false, true] {
-                proposed.push(bind(RateId::Cancel { order, discounted }, candidate));
-                for late in [false, true] {
-                    proposed.push(bind(
-                        RateId::Deliver {
-                            order,
-                            discounted,
-                            late,
-                        },
-                        candidate,
-                    ));
-                }
-            }
-            if value(Asset::Contract(order)) > 0 {
-                times.push(value(Asset::LeaseUntil) + 1);
-            }
-            if value(Asset::InShipment(order)) > 0 {
-                times.push(value(Asset::ReadyAt));
-            }
-        }
-    }
-    if let Some(to) = times
-        .into_iter()
-        .filter(|t| *t > now(world) && *t <= 32)
-        .min()
-    {
-        proposed.push(
-            Exchange::new(RateId::Advance { to: to as u8 }, Quantity::new(1))
-                .bind(Role::Platform, AccountId::Platform),
-        );
-    }
-    world.applicable(proposed)
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Preference {
-    Volume,
-    Buyers,
-    Sellers,
-}
-fn score(world: &World, preference: Preference) -> i64 {
-    let buyers = [BuyerId::A, BuyerId::B, BuyerId::C]
-        .into_iter()
-        .map(|id| utility(world, AccountId::Buyer(id)))
-        .sum::<u64>();
-    let sellers = [SellerId::A, SellerId::B, SellerId::C]
-        .into_iter()
-        .map(|id| utility(world, AccountId::Seller(id)))
-        .sum::<u64>();
-    let mut value = settled_orders(world) as i64 * 100_000 - now(world) as i64 * 100;
-    value += match preference {
-        Preference::Volume => (buyers + sellers) as i64,
-        Preference::Buyers => buyers as i64 * 20 + sellers as i64,
-        Preference::Sellers => sellers as i64 * 20 + buyers as i64,
-    };
-    for order in orders(world) {
-        let account = AccountId::Order(order);
-        let active = world.balance(&account, &Asset::Contract(order)).to_u64()
-            + world.balance(&account, &Asset::InShipment(order)).to_u64();
-        if active > 0 {
-            value += 40_000;
-            let discounted = world
-                .balance(&account, &Asset::AgreedPrice(order_terms(order).1 - 10))
-                .to_u64()
-                > 0;
-            let (bu, su) = utility_terms(order);
-            let cut = if discounted { 10 } else { 0 };
-            value += match preference {
-                Preference::Buyers => (bu + cut) as i64 * 20,
-                Preference::Sellers => (su - cut) as i64 * 20,
-                Preference::Volume => (bu + su) as i64,
-            };
-        }
-    }
-    value
-}
-/// Bounded beam search, not an exact Pareto solver. Every successor is a core
-/// exchange; all preferences use the same arrivals, delays and initial funds.
-pub fn plan(initial: &World, preference: Preference) -> Option<Trace<Ontology>> {
-    let target = goal_for(&orders(initial));
-    let mut beam = vec![(initial.clone(), Trace::new())];
-    let mut complete = Vec::new();
-    let mut seen = HashSet::new();
-    for _ in 0..40 {
-        let mut next = Vec::new();
-        for (world, trace) in beam {
-            if world.matches(&target) {
-                complete.push((world, trace));
-                continue;
-            }
-            let mut choices = candidates(&world);
-            if let Some(ready) = choices
-                .iter()
-                .find(|a| matches!(a.rate(), RateId::Deliver { .. } | RateId::Dispatch(_)))
-            {
-                choices = vec![ready.clone()];
-            }
-            for exchange in choices {
-                let mut world = world.clone();
-                world.apply(exchange.clone()).ok()?;
-                if seen.insert(world.state_key()) {
-                    let mut trace = trace.clone();
-                    trace.push(exchange);
-                    next.push((world, trace));
-                }
-            }
-        }
-        next.sort_by_key(|(world, _)| std::cmp::Reverse(score(world, preference)));
-        next.truncate(24);
-        if next.is_empty() {
-            break;
-        }
-        beam = next;
-    }
-    complete
-        .into_iter()
-        .max_by_key(|(world, _)| score(world, preference))
-        .map(|(_, trace)| trace)
 }
 
 #[cfg(test)]
@@ -600,27 +428,5 @@ mod tests {
             2
         );
         world.apply(candidate.exchange()).unwrap();
-    }
-    #[test]
-    fn bounded_plans_complete_the_same_market_with_opposing_price_preferences() {
-        for world in [initial_showcase(), initial_stress()] {
-            let mut utilities = Vec::new();
-            for preference in [Preference::Volume, Preference::Buyers, Preference::Sellers] {
-                let trace = plan(&world, preference).expect("all contracts fulfilled");
-                let final_world = world.replayed(&trace).unwrap();
-                assert!(final_world.matches(&goal_for(&orders(&world))));
-                assert!(candidates(&final_world).is_empty());
-                utilities.push(
-                    [BuyerId::A, BuyerId::B, BuyerId::C]
-                        .into_iter()
-                        .map(|id| utility(&final_world, AccountId::Buyer(id)))
-                        .sum::<u64>(),
-                );
-            }
-            assert!(
-                utilities[1] > utilities[2],
-                "price concessions change buyer benefit: {utilities:?}"
-            );
-        }
     }
 }
