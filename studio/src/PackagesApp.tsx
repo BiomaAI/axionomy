@@ -140,6 +140,35 @@ function described(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
+/** How often, at most, the page draws a run's progress, in ms. */
+const PROGRESS_SHOWN_EVERY = 200;
+
+/**
+ * `show` called with the latest value pushed, at most once every
+ * {@link PROGRESS_SHOWN_EVERY} ms. A run reports progress as fast as it
+ * makes it; drawing each report would keep the page's thread so busy that
+ * reports queue up behind it, the run's answer last among them.
+ */
+export function coalesced<T>(show: (value: T) => void): { push: (value: T) => void; stop: () => void } {
+  let latest: { value: T } | undefined;
+  let timer: number | undefined;
+  return {
+    push: (value) => {
+      latest = { value };
+      timer ??= window.setTimeout(() => {
+        timer = undefined;
+        if (latest) show(latest.value);
+        latest = undefined;
+      }, PROGRESS_SHOWN_EVERY);
+    },
+    stop: () => {
+      window.clearTimeout(timer);
+      timer = undefined;
+      latest = undefined;
+    },
+  };
+}
+
 /** A value as it waits: settled once it has not changed for `delay` ms. */
 function useSettled<T>(value: T, delay: number): T {
   const [settled, setSettled] = useState(value);
@@ -449,7 +478,8 @@ export function PackagesApp() {
     if (!engine || !screenPoint || !asked.goal) return;
     report();
     const from = screenPoint;
-    const work = engine.runStrategy(from, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, (progress) => setFinding((current) => current && { ...current, progress }));
+    const shown = coalesced((progress: SearchProgress) => setFinding((current) => current && { ...current, progress }));
+    const work = engine.runStrategy(from, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, shown.push);
     setFinding({ cancel: work.cancel, strategy, from });
     try {
       const ran = await work.result;
@@ -461,6 +491,7 @@ export function PackagesApp() {
     } catch (cause) {
       if (!findingStopped.current) report(failed(cause));
     } finally {
+      shown.stop();
       setFinding(undefined);
       findingStopped.current = false;
     }
@@ -499,10 +530,11 @@ export function PackagesApp() {
     const path = experiment.experiment;
     if (!engine || experimenting.has(path)) return;
     const before = results.find((result) => result.experiment === path);
-    const work = engine.runExperiment(path, (progress) => setExperimenting((current) => {
+    const shown = coalesced((progress: ExperimentProgress) => setExperimenting((current) => {
       const run = current.get(path);
       return run ? changed(current, path, { ...run, progress }) : current;
     }));
+    const work = engine.runExperiment(path, shown.push);
     setExperimenting((current) => changed(current, path, { cancel: work.cancel, experiment }));
     try {
       const next = await work.result;
@@ -512,6 +544,7 @@ export function PackagesApp() {
     } catch (cause) {
       report(experimentsStopped.current.has(path) ? caution(`Stopped ${path}: no results kept.`) : failed(cause));
     } finally {
+      shown.stop();
       experimentsStopped.current.delete(path);
       setExperimenting((current) => changed(current, path));
     }
