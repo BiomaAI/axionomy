@@ -2,7 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity, Rate,
+    basket,
 };
 
 pub mod fulfillment;
@@ -88,8 +89,6 @@ pub enum Asset {
     PurchaseReceipt(OrderId),
     SaleOffer(Item),
     CompletedSale(OrderId),
-    MarketplaceLicense,
-    TaxPolicy,
     ShippingCapacity,
     UsedShippingCapacity,
     OpenOrder(OrderId),
@@ -330,24 +329,15 @@ fn build(size: MarketSize) -> World {
                 if stress { 3 } else { u64::from(showcase) },
             )])),
         )
-        .account(
-            AccountId::Platform,
-            Account::from(basket([(Asset::MarketplaceLicense, 1)])),
-        )
-        .account(
-            AccountId::TaxAuthority,
-            Account::from(basket([(Asset::TaxPolicy, 1)])),
-        );
+        .account(AccountId::Platform, Account::from(basket([])))
+        .account(AccountId::TaxAuthority, Account::from(basket([])));
     for &order in orders {
         builder = builder
             .account(
                 AccountId::Order(order),
                 Account::from(basket([(Asset::OpenOrder(order), 1)])),
             )
-            .rate(
-                RateId::SettleOrder(order),
-                all_distinct(settlement_rate(order)),
-            );
+            .rate(RateId::SettleOrder(order), settlement_rate(order));
     }
     let buyer_lifecycle = orders.iter().copied().fold(
         LinearInvariant::new(path!("buyer-order-lifecycle")),
@@ -438,7 +428,7 @@ pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: Car
 fn settlement_rate(order: OrderId) -> Rate<Ontology> {
     let (item, gross, seller_proceeds, tax, commission, shipping) = order_terms(order);
     let (buyer_utility, seller_utility) = utility_terms(order);
-    Rate::new()
+    among(platform(), Pattern::literal(AccountId::Order(order)))
         .consume(
             Role::Buyer,
             basket([(Asset::Money, gross), (Asset::PurchaseIntent(order), 1)]),
@@ -463,9 +453,7 @@ fn settlement_rate(order: OrderId) -> Rate<Ontology> {
                 (Asset::Utility, seller_utility),
             ]),
         )
-        .preserve(Role::Platform, basket([(Asset::MarketplaceLicense, 1)]))
         .produce(Role::Platform, basket([(Asset::Money, commission)]))
-        .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
         .produce(Role::TaxAuthority, basket([(Asset::Money, tax)]))
         .consume(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
         .produce(
@@ -511,18 +499,32 @@ const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
     }
 }
 
-fn all_distinct(mut rate: Rate<Ontology>) -> Rate<Ontology> {
-    let roles = [
-        Role::Buyer,
-        Role::Seller,
-        Role::Platform,
-        Role::TaxAuthority,
-        Role::Carrier,
-        Role::Order,
-    ];
-    for (index, left) in roles.iter().enumerate() {
-        for right in &roles[index + 1..] {
-            rate = rate.distinct(*left, *right);
+/// The parties an order's exchange chooses: its buyer, seller and carrier.
+const PARTIES: [Role; 3] = [Role::Buyer, Role::Seller, Role::Carrier];
+
+/// A law of the market, its platform role fixed to the platform's account.
+fn platform() -> Rate<Ontology> {
+    Rate::new().account(Role::Platform, Pattern::literal(AccountId::Platform))
+}
+
+/// `rate` as an exchange of the order whose account `order` names: its
+/// institutions fixed to their accounts, the tax authority and the order's
+/// own, and its parties distinct from one another and from the
+/// institutions.
+fn among(rate: Rate<Ontology>, order: Pattern<AccountId>) -> Rate<Ontology> {
+    let mut rate = rate
+        .account(
+            Role::TaxAuthority,
+            Pattern::literal(AccountId::TaxAuthority),
+        )
+        .account(Role::Order, order);
+    for (index, party) in PARTIES.iter().enumerate() {
+        for other in
+            PARTIES[index + 1..]
+                .iter()
+                .chain(&[Role::Platform, Role::TaxAuthority, Role::Order])
+        {
+            rate = rate.distinct(*party, *other);
         }
     }
     rate
@@ -770,7 +772,7 @@ mod tests {
     }
 
     #[test]
-    fn role_capabilities_reject_swapped_institutions() {
+    fn fixed_accounts_reject_swapped_institutions() {
         let world = initial();
         let rebound = Exchange::new(RateId::SettleOrder(OrderId::A), Quantity::new(1))
             .bind(Role::Buyer, AccountId::Buyer(BuyerId::A))

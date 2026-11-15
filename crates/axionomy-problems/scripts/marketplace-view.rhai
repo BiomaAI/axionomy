@@ -49,8 +49,6 @@ fn label(item) {
             "purchase-receipt" => `Bought Order ${letter(parts[2])}`,
             "sale-offer" => `Offers one ${parts[2]}`,
             "completed-sale" => `Sold Order ${letter(parts[2])}`,
-            "marketplace-license" => "Marketplace licence",
-            "tax-policy" => "Tax policy",
             "shipping-capacity" => "Shipping capacity left",
             "used-shipping-capacity" => "Shipping capacity used",
             "open-order" => `Order ${letter(parts[2])} is open`,
@@ -160,7 +158,7 @@ fn entity(key, label, glyph, node, tone, status, account) {
 }
 
 fn scene(state, frame) {
-    let timed = state.rates("dispatch/").contains("dispatch/a");
+    let timed = !state.rates("dispatch/").is_empty();
     let orders = marketplace::order_ids(state);
     let nodes = [];
     for (buyer, index) in ["a", "b", "c"] {

@@ -201,7 +201,7 @@ fn fulfillment(state) {
         }
     }
     if next != () {
-        proposed.push(exchange(`advance/${next}`, #{ platform: "platform" }, 1));
+        proposed.push(state.exchange_of(`advance/${next}`));
     }
     let proposals = [];
     for proposal in proposed {

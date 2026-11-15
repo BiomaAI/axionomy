@@ -33,11 +33,23 @@ Each order-specific settlement rate binds the same six distinct roles:
 ```text
 Buyer pays 100 and receives widget + receipt
 Seller provides widget + offer and receives 80
-Platform preserves its license and receives 5
-Tax authority preserves its policy and receives 10
+Platform receives 5
+Tax authority receives 10
 Carrier spends one capacity and receives 5
 Order account converts matching OpenOrder into SettledOrder + SettledValue
 ```
+
+The institutions are fixed accounts: every rate fixes its platform role to
+the platform, its tax authority to the tax authority and its order role to
+the order's own account, so no licence or policy token pins them. The
+buyer, seller and carrier are the exchange's to choose, distinct from one
+another and from the institutions.
+
+In the larger markets a dispatch is one rate over every order,
+`dispatch/{order}`, and the clock one over every tick, `advance/{to}`.
+Contracts, cancellations and deliveries stay one rate per order: each
+order's law trades its own item at its own prices, which a variable could
+only carry in the rate's identifier.
 
 The settlement terms also produce declared `Utility` assets for the bound
 buyer and seller. They make participant benefit part of the outcome rather

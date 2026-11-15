@@ -1,7 +1,7 @@
 //! Funded offers become reservations, shipments, and only then settlements.
 use super::*;
 use axionomy::path;
-use axionomy::{QuantityComparison as C, QuantityExpression as Q};
+use axionomy::{Param, QuantityComparison as C, QuantityExpression as Q, Slot};
 
 /// Whether `world` fulfills its contracts over time, as Showcase and Stress
 /// do, rather than settling each order in one exchange.
@@ -12,14 +12,12 @@ fn clock() -> Q<Ontology> {
     Q::balance(Role::Platform, Asset::Now)
 }
 fn law() -> Rate<Ontology> {
-    Rate::new()
-        .preserve(Role::Platform, basket([(Asset::MarketplaceLicense, 1)]))
-        .condition(
-            path!("one-market-event"),
-            Q::units(),
-            C::Equal,
-            Q::constant(1),
-        )
+    platform().condition(
+        path!("one-market-event"),
+        Q::units(),
+        C::Equal,
+        Q::constant(1),
+    )
 }
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
@@ -70,45 +68,42 @@ pub(super) fn build(source: World) -> World {
         for discounted in [false, true] {
             let discount = if discounted { 10 } else { 0 };
             let price = gross - discount;
-            let contract = all_distinct(
-                law()
-                    .preserve(Role::Buyer, basket([(Asset::BuyerLicense, 1)]))
-                    .preserve(Role::Seller, basket([(Asset::SellerLicense, 1)]))
-                    .preserve(Role::Carrier, basket([(Asset::CarrierLicense, 1)]))
-                    .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
-                    .condition(
-                        path!("order-has-arrived"),
-                        clock(),
-                        C::GreaterThanOrEqual,
-                        Q::balance(Role::Order, Asset::Arrival),
-                    )
-                    .consume(
-                        Role::Buyer,
-                        basket([(Asset::Money, price), (Asset::PurchaseIntent(order), 1)]),
-                    )
-                    .produce(Role::Buyer, basket([(Asset::PurchaseLocked(order), 1)]))
-                    .consume(
-                        Role::Seller,
-                        basket([(Asset::Item(item), 1), (Asset::SaleOffer(item), 1)]),
-                    )
-                    .produce(Role::Seller, basket([(Asset::SaleReserved(order), 1)]))
-                    .consume(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
-                    .produce(
-                        Role::Carrier,
-                        basket([(Asset::UsedShippingCapacity, 1), (Asset::Booking(order), 1)]),
-                    )
-                    .consume(Role::Order, basket([(Asset::OpenOrder(order), 1)]))
-                    .produce(
-                        Role::Order,
-                        basket([
-                            (Asset::Contract(order), 1),
-                            (Asset::Money, price),
-                            (Asset::Item(item), 1),
-                            (Asset::AgreedPrice(price), 1),
-                        ]),
-                    )
-                    .produce_computed(Role::Order, Asset::LeaseUntil, clock() + Q::constant(2)),
-            );
+            let contract = among(law(), own(order))
+                .preserve(Role::Buyer, basket([(Asset::BuyerLicense, 1)]))
+                .preserve(Role::Seller, basket([(Asset::SellerLicense, 1)]))
+                .preserve(Role::Carrier, basket([(Asset::CarrierLicense, 1)]))
+                .condition(
+                    path!("order-has-arrived"),
+                    clock(),
+                    C::GreaterThanOrEqual,
+                    Q::balance(Role::Order, Asset::Arrival),
+                )
+                .consume(
+                    Role::Buyer,
+                    basket([(Asset::Money, price), (Asset::PurchaseIntent(order), 1)]),
+                )
+                .produce(Role::Buyer, basket([(Asset::PurchaseLocked(order), 1)]))
+                .consume(
+                    Role::Seller,
+                    basket([(Asset::Item(item), 1), (Asset::SaleOffer(item), 1)]),
+                )
+                .produce(Role::Seller, basket([(Asset::SaleReserved(order), 1)]))
+                .consume(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
+                .produce(
+                    Role::Carrier,
+                    basket([(Asset::UsedShippingCapacity, 1), (Asset::Booking(order), 1)]),
+                )
+                .consume(Role::Order, basket([(Asset::OpenOrder(order), 1)]))
+                .produce(
+                    Role::Order,
+                    basket([
+                        (Asset::Contract(order), 1),
+                        (Asset::Money, price),
+                        (Asset::Item(item), 1),
+                        (Asset::AgreedPrice(price), 1),
+                    ]),
+                )
+                .produce_computed(Role::Order, Asset::LeaseUntil, clock() + Q::constant(2));
             builder = builder.rate(
                 if discounted {
                     RateId::DiscountedContract(order)
@@ -117,125 +112,119 @@ pub(super) fn build(source: World) -> World {
                 },
                 contract,
             );
-            let cancel = all_distinct(
-                clear(law(), Role::Order, Asset::LeaseUntil)
+            let cancel = clear(among(law(), own(order)), Role::Order, Asset::LeaseUntil)
+                .condition(
+                    path!("unshipped-reservation-expired"),
+                    clock(),
+                    C::GreaterThanOrEqual,
+                    Q::balance(Role::Order, Asset::LeaseUntil) + Q::constant(1),
+                )
+                .consume(Role::Buyer, basket([(Asset::PurchaseLocked(order), 1)]))
+                .produce(
+                    Role::Buyer,
+                    basket([(Asset::PurchaseIntent(order), 1), (Asset::Money, price)]),
+                )
+                .consume(Role::Seller, basket([(Asset::SaleReserved(order), 1)]))
+                .produce(
+                    Role::Seller,
+                    basket([(Asset::SaleOffer(item), 1), (Asset::Item(item), 1)]),
+                )
+                .consume(
+                    Role::Carrier,
+                    basket([(Asset::Booking(order), 1), (Asset::UsedShippingCapacity, 1)]),
+                )
+                .produce(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
+                .consume(
+                    Role::Order,
+                    basket([
+                        (Asset::Contract(order), 1),
+                        (Asset::Money, price),
+                        (Asset::Item(item), 1),
+                        (Asset::AgreedPrice(price), 1),
+                    ]),
+                )
+                .produce(
+                    Role::Order,
+                    basket([(Asset::OpenOrder(order), 1), (Asset::Refunded, 1)]),
+                );
+            builder = builder.rate(RateId::Cancel { order, discounted }, cancel);
+            for late in [false, true] {
+                let rebate = if late { 10 } else { 0 };
+                let deliver = clear(among(law(), own(order)), Role::Order, Asset::ReadyAt)
                     .condition(
-                        path!("unshipped-reservation-expired"),
+                        path!("delivery-time-elapsed"),
                         clock(),
                         C::GreaterThanOrEqual,
-                        Q::balance(Role::Order, Asset::LeaseUntil) + Q::constant(1),
+                        Q::balance(Role::Order, Asset::ReadyAt),
+                    )
+                    .condition(
+                        path!("deadline-outcome"),
+                        if late {
+                            clock()
+                        } else {
+                            Q::balance(Role::Order, Asset::Deadline)
+                        },
+                        C::GreaterThanOrEqual,
+                        if late {
+                            Q::balance(Role::Order, Asset::Deadline) + Q::constant(1)
+                        } else {
+                            clock()
+                        },
+                    )
+                    .preserve(Role::Order, basket([(Asset::AgreedPrice(price), 1)]))
+                    .consume(
+                        Role::Order,
+                        basket([
+                            (Asset::InShipment(order), 1),
+                            (Asset::Money, price),
+                            (Asset::Item(item), 1),
+                        ]),
+                    )
+                    .produce(
+                        Role::Order,
+                        basket([
+                            (Asset::SettledOrder(order), 1),
+                            (Asset::SettledValue(price - rebate), 1),
+                            (if late { Asset::Late } else { Asset::OnTime }, 1),
+                        ]),
                     )
                     .consume(Role::Buyer, basket([(Asset::PurchaseLocked(order), 1)]))
                     .produce(
                         Role::Buyer,
-                        basket([(Asset::PurchaseIntent(order), 1), (Asset::Money, price)]),
+                        basket([
+                            (Asset::PurchaseReceipt(order), 1),
+                            (Asset::Item(item), 1),
+                            (Asset::Money, rebate),
+                            (Asset::Utility, buyer_utility + discount - rebate),
+                        ]),
                     )
                     .consume(Role::Seller, basket([(Asset::SaleReserved(order), 1)]))
                     .produce(
                         Role::Seller,
-                        basket([(Asset::SaleOffer(item), 1), (Asset::Item(item), 1)]),
+                        basket([
+                            (Asset::CompletedSale(order), 1),
+                            (Asset::Money, proceeds - discount - rebate),
+                            (
+                                Asset::Utility,
+                                seller_utility.saturating_sub(discount + rebate),
+                            ),
+                        ]),
                     )
                     .consume(
                         Role::Carrier,
                         basket([(Asset::Booking(order), 1), (Asset::UsedShippingCapacity, 1)]),
                     )
-                    .produce(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
-                    .consume(
-                        Role::Order,
+                    .produce(
+                        Role::Carrier,
                         basket([
-                            (Asset::Contract(order), 1),
-                            (Asset::Money, price),
-                            (Asset::Item(item), 1),
-                            (Asset::AgreedPrice(price), 1),
+                            (Asset::ShippingCapacity, 1),
+                            (Asset::Money, shipping),
+                            (Asset::DeliveredBy(order), 1),
+                            (if late { Asset::Late } else { Asset::OnTime }, 1),
                         ]),
                     )
-                    .produce(
-                        Role::Order,
-                        basket([(Asset::OpenOrder(order), 1), (Asset::Refunded, 1)]),
-                    )
-                    .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)])),
-            );
-            builder = builder.rate(RateId::Cancel { order, discounted }, cancel);
-            for late in [false, true] {
-                let rebate = if late { 10 } else { 0 };
-                let deliver = all_distinct(
-                    clear(law(), Role::Order, Asset::ReadyAt)
-                        .condition(
-                            path!("delivery-time-elapsed"),
-                            clock(),
-                            C::GreaterThanOrEqual,
-                            Q::balance(Role::Order, Asset::ReadyAt),
-                        )
-                        .condition(
-                            path!("deadline-outcome"),
-                            if late {
-                                clock()
-                            } else {
-                                Q::balance(Role::Order, Asset::Deadline)
-                            },
-                            C::GreaterThanOrEqual,
-                            if late {
-                                Q::balance(Role::Order, Asset::Deadline) + Q::constant(1)
-                            } else {
-                                clock()
-                            },
-                        )
-                        .preserve(Role::Order, basket([(Asset::AgreedPrice(price), 1)]))
-                        .consume(
-                            Role::Order,
-                            basket([
-                                (Asset::InShipment(order), 1),
-                                (Asset::Money, price),
-                                (Asset::Item(item), 1),
-                            ]),
-                        )
-                        .produce(
-                            Role::Order,
-                            basket([
-                                (Asset::SettledOrder(order), 1),
-                                (Asset::SettledValue(price - rebate), 1),
-                                (if late { Asset::Late } else { Asset::OnTime }, 1),
-                            ]),
-                        )
-                        .consume(Role::Buyer, basket([(Asset::PurchaseLocked(order), 1)]))
-                        .produce(
-                            Role::Buyer,
-                            basket([
-                                (Asset::PurchaseReceipt(order), 1),
-                                (Asset::Item(item), 1),
-                                (Asset::Money, rebate),
-                                (Asset::Utility, buyer_utility + discount - rebate),
-                            ]),
-                        )
-                        .consume(Role::Seller, basket([(Asset::SaleReserved(order), 1)]))
-                        .produce(
-                            Role::Seller,
-                            basket([
-                                (Asset::CompletedSale(order), 1),
-                                (Asset::Money, proceeds - discount - rebate),
-                                (
-                                    Asset::Utility,
-                                    seller_utility.saturating_sub(discount + rebate),
-                                ),
-                            ]),
-                        )
-                        .consume(
-                            Role::Carrier,
-                            basket([(Asset::Booking(order), 1), (Asset::UsedShippingCapacity, 1)]),
-                        )
-                        .produce(
-                            Role::Carrier,
-                            basket([
-                                (Asset::ShippingCapacity, 1),
-                                (Asset::Money, shipping),
-                                (Asset::DeliveredBy(order), 1),
-                                (if late { Asset::Late } else { Asset::OnTime }, 1),
-                            ]),
-                        )
-                        .produce(Role::Platform, basket([(Asset::Money, commission)]))
-                        .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
-                        .produce(Role::TaxAuthority, basket([(Asset::Money, tax)])),
-                );
+                    .produce(Role::Platform, basket([(Asset::Money, commission)]))
+                    .produce(Role::TaxAuthority, basket([(Asset::Money, tax)]));
                 builder = builder.rate(
                     RateId::Deliver {
                         order,
@@ -246,55 +235,60 @@ pub(super) fn build(source: World) -> World {
                 );
             }
         }
-        builder = builder.rate(
-            RateId::Dispatch(order),
-            all_distinct(
-                clear(law(), Role::Order, Asset::LeaseUntil)
-                    .preserve(Role::Buyer, basket([(Asset::PurchaseLocked(order), 1)]))
-                    .preserve(Role::Seller, basket([(Asset::SaleReserved(order), 1)]))
-                    .preserve(Role::Carrier, basket([(Asset::Booking(order), 1)]))
-                    .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
-                    .condition(
-                        path!("reservation-remains-valid"),
-                        clock(),
-                        C::LessThanOrEqual,
-                        Q::balance(Role::Order, Asset::LeaseUntil),
-                    )
-                    .consume(Role::Order, basket([(Asset::Contract(order), 1)]))
-                    .produce(Role::Order, basket([(Asset::InShipment(order), 1)]))
-                    .produce_computed(
-                        Role::Order,
-                        Asset::ReadyAt,
-                        clock()
-                            + Q::balance(Role::Carrier, Asset::TransitTime)
-                            + Q::balance(Role::Carrier, Asset::DelayRisk)
-                                * Q::balance(Role::Order, Asset::RouteDelay),
-                    ),
-            ),
-        );
     }
-    for to in 1..=32 {
-        builder = builder.rate(
-            RateId::Advance { to },
-            law()
-                .condition(
-                    path!("clock-moves-forward"),
-                    clock() + Q::constant(1),
-                    C::LessThanOrEqual,
-                    Q::constant(u64::from(to)),
-                )
-                .consume_computed(
-                    Role::Platform,
-                    Asset::TimeRemaining,
-                    Q::constant(u64::from(to)) - clock(),
-                )
-                .produce_computed(
-                    Role::Platform,
-                    Asset::Now,
-                    Q::constant(u64::from(to)) - clock(),
-                ),
-        );
-    }
+    // A reservation's dispatch, of any order, `dispatch/{order}`: its shape
+    // is every order's, its assets the order's own.
+    let order = Param::<OrderId>::new(path!("order"));
+    let of = |asset: fn(Slot<OrderId>) -> AssetPattern| -> Vec<(Pattern<Asset>, Quantity)> {
+        vec![(asset(order.var()).into(), Quantity::new(1))]
+    };
+    builder = builder.rate_at(
+        RateIdPattern::Dispatch(order.var()).into(),
+        clear(
+            among(law(), AccountIdPattern::Order(order.var()).into()),
+            Role::Order,
+            Asset::LeaseUntil,
+        )
+        .variable(order.values(orders.iter().copied()))
+        .preserve_at(Role::Buyer, of(AssetPattern::PurchaseLocked))
+        .preserve_at(Role::Seller, of(AssetPattern::SaleReserved))
+        .preserve_at(Role::Carrier, of(AssetPattern::Booking))
+        .condition(
+            path!("reservation-remains-valid"),
+            clock(),
+            C::LessThanOrEqual,
+            Q::balance(Role::Order, Asset::LeaseUntil),
+        )
+        .consume_at(Role::Order, of(AssetPattern::Contract))
+        .produce_at(Role::Order, of(AssetPattern::InShipment))
+        .produce_computed(
+            Role::Order,
+            Asset::ReadyAt,
+            clock()
+                + Q::balance(Role::Carrier, Asset::TransitTime)
+                + Q::balance(Role::Carrier, Asset::DelayRisk)
+                    * Q::balance(Role::Order, Asset::RouteDelay),
+        ),
+    );
+    // The clock advancing to any tick of the market's day, `advance/{to}`.
+    let to = Param::<u8>::new(path!("to"));
+    builder = builder.rate_at(
+        RateIdPattern::Advance { to: to.var() }.into(),
+        law()
+            .variable(to.range(1, 32))
+            .condition(
+                path!("clock-moves-forward"),
+                clock() + Q::constant(1),
+                C::LessThanOrEqual,
+                to.quantity(),
+            )
+            .consume_computed(
+                Role::Platform,
+                Asset::TimeRemaining,
+                to.quantity() - clock(),
+            )
+            .produce_computed(Role::Platform, Asset::Now, to.quantity() - clock()),
+    );
     for invariant in source.invariants() {
         let mut invariant = invariant.clone();
         for order in orders.iter().copied() {
@@ -317,6 +311,11 @@ pub(super) fn build(source: World) -> World {
         )
         .build()
         .expect("funded fulfillment conserves money, goods and capacity")
+}
+
+/// The account of `order`, which its exchanges fix to their order role.
+fn own(order: OrderId) -> Pattern<AccountId> {
+    Pattern::literal(AccountId::Order(order))
 }
 
 /// `rate`'s exchange of one unit, binding `parties` and the institutions.
