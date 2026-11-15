@@ -31,6 +31,17 @@ trading early. Days advance only after every participant has finished. Unmet
 needs and unpaid obligations are recorded before future entitlements become
 current.
 
+Each rate only one account may take fixes that role's account: the pool,
+the treasury, the information account, the calendar's world account, and
+the actor whose need, obligation, production or income it is, so no identity
+token pins a binding; a trader or liquidity provider is any actor. Ending an
+actor's trading is one rate over every actor, `end-trading/{actor}`, and
+each day but the last closes as one rate, `advance-day/{day}`, deriving the
+day it opens, `{next}`, whose sunlight it reads; the world holds the
+season's weather as `Sunlight(day)` and `Shortage(day)` facts. Using energy
+and settling an obligation stay one rate per actor, their amounts and the
+factory's goods differing.
+
 Sunlight limits daily production. Investment pays credit now and increases
 capacity two days later. Energy storage is bounded. Factory output produces
 sellable goods and procurement pays from finite Treasury credit; household

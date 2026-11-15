@@ -2,7 +2,7 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity,
     QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
 };
 
@@ -50,10 +50,6 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    ActorIdentity(Actor),
-    PoolIdentity,
-    TreasuryIdentity,
-    WorldIdentity,
     MarketActive,
     MarketEnded,
     Day,
@@ -72,6 +68,9 @@ pub enum Asset {
     ConstructionDue,
     ReferencePrice,
     Sunlight(u8),
+    /// A day whose sunlight falls short: a fact of the season's weather,
+    /// which the information account signals the day before.
+    Shortage(u8),
     CurrentSunlight,
     LiquidityDecision,
     FutureNeed(Actor),
@@ -279,6 +278,7 @@ fn build(size: MarketSize) -> World {
         .rate(
             RateId::ProduceEnergy,
             Rate::new()
+                .account(Role::Producer, own(Actor::Generator))
                 .consume(Role::Producer, basket([(Asset::SolarPotential, 1)]))
                 .produce(Role::Producer, basket([(Asset::Energy, 1)])),
         );
@@ -288,6 +288,7 @@ fn build(size: MarketSize) -> World {
         builder = builder.rate(
             RateId::UseEnergy(actor),
             Rate::new()
+                .account(Role::Consumer, own(actor))
                 .consume(
                     Role::Consumer,
                     basket([(Asset::Energy, energy), (Asset::Need(actor), 1)]),
@@ -306,7 +307,7 @@ fn build(size: MarketSize) -> World {
         let cost = obligation_cost(actor);
         builder = builder.rate(
             RateId::SettleObligation(actor),
-            Rate::new()
+            with_treasury(Rate::new().account(Role::Consumer, own(actor)))
                 .consume(
                     Role::Consumer,
                     basket([(Asset::Credit, cost), (Asset::Obligation(actor), 1)]),
@@ -315,13 +316,13 @@ fn build(size: MarketSize) -> World {
                     Role::Consumer,
                     basket([(Asset::SettledObligation(actor), 1)]),
                 )
-                .produce(Role::Treasury, basket([(Asset::Credit, cost)]))
-                .distinct(Role::Consumer, Role::Treasury),
+                .produce(Role::Treasury, basket([(Asset::Credit, cost)])),
         );
     }
     builder = builder.rate(
         RateId::LearnShortage(Actor::Speculator),
-        Rate::new()
+        with_information(Rate::new())
+            .account(Role::Observer, own(Actor::Speculator))
             .preserve(Role::Information, basket([(Asset::ShortageSignal, 1)]))
             .consume(
                 Role::Observer,
@@ -330,8 +331,7 @@ fn build(size: MarketSize) -> World {
             .produce(
                 Role::Observer,
                 basket([(Asset::Informed(Actor::Speculator), 1)]),
-            )
-            .distinct(Role::Information, Role::Observer),
+            ),
     );
 
     let mut energy_invariant = LinearInvariant::new(path!("closed-energy-accounting"))
@@ -368,6 +368,28 @@ fn build(size: MarketSize) -> World {
         .expect("the Living Market model is coherent")
 }
 
+/// The account of `actor`, which a rate only it may take fixes to its role.
+fn own(actor: Actor) -> Pattern<AccountId> {
+    Pattern::literal(AccountId::Actor(actor))
+}
+
+/// `rate` against the pool, its pool role fixed to the pool's account.
+fn with_pool(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.account(Role::Pool, Pattern::literal(AccountId::Pool))
+}
+
+/// `rate` paying or paid by the treasury, its role fixed to the treasury's
+/// account.
+fn with_treasury(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.account(Role::Treasury, Pattern::literal(AccountId::Treasury))
+}
+
+/// `rate` reading the shortage signal, its information role fixed to the
+/// information account.
+fn with_information(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.account(Role::Information, Pattern::literal(AccountId::Information))
+}
+
 // The trader receives the output, so it rounds down; the product is full width.
 fn swap_output_expression(input: Asset, output: Asset) -> Q<Ontology> {
     let input_after_fee = Q::constant(FEE_NUMERATOR) * Q::units();
@@ -380,7 +402,7 @@ fn swap_output_expression(input: Asset, output: Asset) -> Q<Ontology> {
 }
 
 fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Ontology>) -> Rate<Ontology> {
-    Rate::new()
+    with_pool(Rate::new())
         .consume(Role::Trader, basket([(input, 1)]))
         .produce(Role::Pool, basket([(input, 1)]))
         .consume_computed(Role::Pool, output, output_quantity.clone())
@@ -430,7 +452,7 @@ pub(crate) fn withdrawn_reserve(reserve: Asset) -> Q<Ontology> {
 
 fn add_liquidity_rate() -> Rate<Ontology> {
     let minted = minted_lp_expression();
-    Rate::new()
+    with_pool(Rate::new())
         .consume_computed(
             Role::LiquidityProvider,
             Asset::Energy,
@@ -471,7 +493,7 @@ fn add_liquidity_rate() -> Rate<Ontology> {
 fn remove_liquidity_rate() -> Rate<Ontology> {
     let energy = withdrawn_reserve(Asset::Energy);
     let credit = withdrawn_reserve(Asset::Credit);
-    Rate::new()
+    with_pool(Rate::new())
         .consume(Role::LiquidityProvider, basket([(Asset::LpShare, 1)]))
         .produce(Role::Pool, basket([(Asset::UnissuedLpShare, 1)]))
         .consume_computed(Role::Pool, Asset::Energy, energy.clone())

@@ -53,10 +53,6 @@ fn label(item) {
     }
     if category == "asset" {
         return switch name {
-            "actor-identity" => `Identity: ${actor_label(parts[2])}`,
-            "pool-identity" => "Identity: energy pool",
-            "treasury-identity" => "Identity: procurement treasury",
-            "world-identity" => "Identity: market calendar",
             "market-active" => "Market season active",
             "market-ended" => "Market season closed",
             "day" => "Time elapsed",
@@ -75,6 +71,7 @@ fn label(item) {
             "construction-due" => "Construction completes at",
             "reference-price" => "Smoothed prior closing price",
             "sunlight" => `Day ${ordinal(parts[2])} sunlight`,
+            "shortage" => `Day ${ordinal(parts[2])} falls short of sunlight`,
             "current-sunlight" => "Current sunlight",
             "liquidity-decision" => "Liquidity adjustment available",
             "need" => `${actor_label(parts[2])} need due today`,

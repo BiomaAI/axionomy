@@ -57,7 +57,8 @@ fn held(state, actor, asset) { state.balance(`actor/${actor}`, asset) }
 // `proposal` when it applies, and nothing otherwise.
 fn allowed(state, proposal) { if state.applicable(proposal) { proposal } else { () } }
 
-// The exchanges an actor proposes.
+// The exchanges an actor proposes whose amounts it chooses; a rate whose
+// law fixes every role's account is taken as `state.exchange_of` binds it.
 fn buy(actor, credit, minimum) {
     exchange("buy-energy", #{ pool: "pool", trader: `actor/${actor}` }, credit)
         .parameter("minimum-output", minimum)
@@ -79,14 +80,6 @@ fn fund(actor, shares) {
     exchange("fund-liquidity", #{ pool: "pool", "liquidity-provider": `actor/${actor}` }, shares)
 }
 fn production(actor, units) { exchange("produce-energy", #{ producer: `actor/${actor}` }, units) }
-fn consumption(actor) { exchange(`use-energy/${actor}`, #{ consumer: `actor/${actor}` }, 1) }
-fn settlement(actor) {
-    exchange(`settle-obligation/${actor}`, #{ consumer: `actor/${actor}`, treasury: "treasury" }, 1)
-}
-fn learning(actor) {
-    exchange(`learn-shortage/${actor}`, #{ information: "information", observer: `actor/${actor}` }, 1)
-}
-fn end_trading(actor) { exchange(`end-trading/${actor}`, #{ consumer: `actor/${actor}` }, 1) }
 
 // Micro: one market day, planned whole.
 
@@ -172,11 +165,11 @@ fn day_plan(state, scenario) {
     plan.push(production("generator", 1500 * scale));
     plan.push(pool.sold_for("generator", quantity(2500 * scale)));
     plan.push(pool.bought_at_least("factory", quantity(26000 * scale), 1500));
-    plan.push(consumption("factory"));
-    plan.push(settlement("factory"));
+    plan.push(state.exchange_of("use-energy/factory"));
+    plan.push(state.exchange_of("settle-obligation/factory"));
     plan.push(pool.bought_at_least("household", quantity(5000 * scale), 350));
-    plan.push(consumption("household"));
-    plan.push(learning("speculator"));
+    plan.push(state.exchange_of("use-energy/household"));
+    plan.push(state.exchange_of("learn-shortage/speculator"));
     plan.push(pool.bought_with("speculator", quantity(16000 * scale)));
     if scenario != "no-whale" {
         plan.push(pool.bought_with("whale", quantity(45000 * scale)));
@@ -184,7 +177,7 @@ fn day_plan(state, scenario) {
     plan.push(production("generator", 1800 * scale));
     plan.push(pool.sold_for("generator", quantity(1800 * scale)));
     plan.push(pool.sold_for("arbitrageur", quantity(1200 * scale)));
-    plan.push(settlement("generator"));
+    plan.push(state.exchange_of("settle-obligation/generator"));
     plan
 }
 
@@ -232,18 +225,14 @@ fn decision(state, actor) {
     if (actor == "factory" || actor == "generator")
         && held(state, actor, `obligation/${actor}`) > 0
         && (remaining <= 2 || (actor == "factory" && held(state, actor, "need/factory") == 0)) {
-        let settle = settlement(actor);
+        let settle = state.exchange_of(`settle-obligation/${actor}`);
         if state.applicable(settle) { return settle; }
     }
     switch actor {
         "founder" => (),
         "generator" => {
             if price > 12500 && cash > 10000 * scale {
-                let invest = exchange(
-                    "invest-production",
-                    #{ producer: "actor/generator", world: "world", treasury: "treasury" },
-                    1
-                );
+                let invest = state.exchange_of("invest-production");
                 if state.applicable(invest) { return invest; }
             }
             if energy > 800 * scale || (energy > 0 && (price > 9000 || cash < 4000 * scale)) {
@@ -257,14 +246,14 @@ fn decision(state, actor) {
             if amount > 0 && price >= 7000 {
                 allowed(state, production(actor, amount))
             } else {
-                allowed(state, settlement(actor))
+                allowed(state, state.exchange_of("settle-obligation/generator"))
             }
         }
         "factory" => {
-            let deliver = exchange("deliver-goods", #{ producer: "actor/factory", treasury: "treasury" }, 1);
+            let deliver = state.exchange_of("deliver-goods");
             if state.applicable(deliver) { return deliver; }
             if held(state, actor, "need/factory") > 0 {
-                let consume = consumption(actor);
+                let consume = state.exchange_of("use-energy/factory");
                 if state.applicable(consume) { return consume; }
                 // Production can be declined when input prices exceed the
                 // procurement revenue.
@@ -272,20 +261,20 @@ fn decision(state, actor) {
                     return buy_to(state, actor, 1500 * scale, less(cash, 2000 * scale));
                 }
             }
-            allowed(state, settlement(actor))
+            allowed(state, state.exchange_of("settle-obligation/factory"))
         }
         "household" => {
-            let income = exchange("collect-income", #{ consumer: "actor/household", treasury: "treasury" }, 1);
+            let income = state.exchange_of("collect-income");
             if state.applicable(income) { return income; }
             if held(state, actor, "need/household") > 0 {
-                let consume = consumption(actor);
+                let consume = state.exchange_of("use-energy/household");
                 if state.applicable(consume) { return consume; }
                 return buy_to(state, actor, 350 * scale, cash);
             }
             if price < 8000 { buy_to(state, actor, 700 * scale, divided(cash, 2)) } else { () }
         }
         "speculator" => {
-            let learn = learning(actor);
+            let learn = state.exchange_of("learn-shortage/speculator");
             if state.applicable(learn) { return learn; }
             let dear = divided(reference * 11, 10);
             if energy > 0 && price > dear { return sell(state, actor, 500 * scale); }
@@ -343,10 +332,7 @@ fn turns(state, actor) {
 // entitlements, or, on the last day, the market's close.
 fn day_end(state, day) {
     let last = day + 1 == state.balance("world", "days").to_int();
-    let bindings = #{ world: "world", pool: "pool" };
-    for actor in actors() { bindings[`participant/${actor}`] = `actor/${actor}`; }
-    if !last { bindings["information"] = "information"; }
-    exchange(if last { "close-market" } else { `advance-day/${day}` }, bindings, 1)
+    state.exchange_of(if last { "close-market" } else { `advance-day/${day}` })
 }
 
 // One turn of a season. Thin liquidity opens with the founder withdrawing
@@ -361,7 +347,7 @@ fn season_turn(state, scenario) {
     if scenario == "thin-liquidity" && day == 0 && held(state, "founder", "liquidity-decision") > 0 {
         return remove_liquidity("founder", divided(issued(state), 2));
     }
-    let due = exchange("commission-production", #{ producer: "actor/generator", world: "world" }, 1);
+    let due = state.exchange_of("commission-production");
     if state.applicable(due) { return due; }
     let everyone = actors();
     let trading = [];
@@ -379,7 +365,7 @@ fn season_turn(state, scenario) {
         let actor = everyone[(first + offset) % everyone.len()];
         if trading.contains(actor) && turns(state, actor) == round {
             let decided = if scenario == "no-whale" && actor == "whale" { () } else { decision(state, actor) };
-            return if decided == () { end_trading(actor) } else { decided };
+            return if decided == () { state.exchange_of(`end-trading/${actor}`) } else { decided };
         }
     }
     ()

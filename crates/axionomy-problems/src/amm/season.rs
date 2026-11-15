@@ -3,8 +3,8 @@
 //! construction and production limits are balances, not runner-owned state.
 
 use super::*;
-use axionomy::QuantityComparison as C;
 use axionomy::path;
+use axionomy::{Param, QuantityComparison as C};
 
 const DECISIONS: u64 = 6;
 
@@ -21,7 +21,7 @@ fn actor_law(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
 }
 fn world_law() -> Rate<Ontology> {
     Rate::new()
-        .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
+        .account(Role::World, Pattern::literal(AccountId::World))
         .condition(
             path!("market-remains-active"),
             q(Role::World, Asset::MarketActive),
@@ -50,13 +50,10 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         let mut additions = axionomy::Basket::new();
         match id {
             AccountId::Pool => {
-                additions = basket([(Asset::PoolIdentity, 1), (Asset::MarketOpen, 1)]);
+                additions = basket([(Asset::MarketOpen, 1)]);
             }
             AccountId::Treasury => {
-                additions = basket([
-                    (Asset::TreasuryIdentity, 1),
-                    (Asset::Credit, 80_000 * scale),
-                ]);
+                additions = basket([(Asset::Credit, 80_000 * scale)]);
             }
             AccountId::Information => {
                 account
@@ -76,7 +73,6 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                     _ => 3_000,
                 } * scale;
                 additions = basket([
-                    (Asset::ActorIdentity(*actor), 1),
                     (Asset::MarketOpen, 1),
                     (Asset::Trading, 1),
                     (Asset::Decisions, DECISIONS),
@@ -125,7 +121,6 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         builder = builder.account(*id, account);
     }
     let mut world = basket([
-        (Asset::WorldIdentity, 1),
         (Asset::MarketActive, 1),
         (Asset::AtDay(0), 1),
         (Asset::Days, u64::from(days)),
@@ -134,6 +129,9 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     ]);
     for day in 0..days {
         world.insert(Asset::Sunlight(day), Quantity::new(weather(seed, day)));
+        if weather(seed, day) < 100 {
+            world.insert(Asset::Shortage(day), Quantity::new(1));
+        }
     }
     builder = builder.account(AccountId::World, Account::from(world));
 
@@ -161,7 +159,6 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             }
             RateId::ProduceEnergy => {
                 rate = rate
-                    .preserve_computed(role, Asset::ActorIdentity(Actor::Generator), Q::constant(1))
                     .consume_computed(role, Asset::ProductionAllowance, Q::units())
                     .condition(
                         path!("production-fits-storage"),
@@ -173,7 +170,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             RateId::UseEnergy(actor) => {
                 let (energy, utility) = energy_use(*actor);
                 rate = Rate::new()
-                    .preserve(role, basket([(Asset::ActorIdentity(*actor), 1)]))
+                    .account(role, own(*actor))
                     .consume(
                         role,
                         basket([(Asset::Energy, energy * scale), (Asset::Need(*actor), 1)]),
@@ -194,16 +191,13 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             }
             RateId::SettleObligation(actor) => {
                 let cost = obligation_cost(*actor) * scale;
-                rate = Rate::new()
-                    .preserve(role, basket([(Asset::ActorIdentity(*actor), 1)]))
+                rate = with_treasury(Rate::new().account(role, own(*actor)))
                     .consume(
                         role,
                         basket([(Asset::Credit, cost), (Asset::Obligation(*actor), 1)]),
                     )
                     .produce(role, basket([(Asset::SettledObligation(*actor), 1)]))
-                    .preserve(Role::Treasury, basket([(Asset::TreasuryIdentity, 1)]))
-                    .produce(Role::Treasury, basket([(Asset::Credit, cost)]))
-                    .distinct(role, Role::Treasury);
+                    .produce(Role::Treasury, basket([(Asset::Credit, cost)]));
             }
             RateId::AddLiquidity => {
                 rate = rate.condition(
@@ -227,9 +221,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             id,
             RateId::BuyEnergy | RateId::SellEnergy | RateId::AddLiquidity | RateId::RemoveLiquidity
         ) {
-            rate = rate
-                .preserve_computed(Role::Pool, Asset::PoolIdentity, Q::constant(1))
-                .preserve_computed(Role::Pool, Asset::MarketOpen, Q::constant(1));
+            rate = rate.preserve_computed(Role::Pool, Asset::MarketOpen, Q::constant(1));
         }
         if matches!(id, RateId::AddLiquidity | RateId::RemoveLiquidity) {
             rate = rate.consume_computed(role, Asset::LiquidityDecision, Q::constant(1));
@@ -237,161 +229,73 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         builder = builder.rate(*id, actor_law(rate, role));
     }
 
-    for actor in ACTORS {
-        builder = builder.rate(
-            RateId::EndTrading(actor),
-            clear(Rate::new(), Role::Consumer, Asset::Decisions)
-                .preserve(
-                    Role::Consumer,
-                    basket([(Asset::ActorIdentity(actor), 1), (Asset::MarketOpen, 1)]),
-                )
-                .consume(Role::Consumer, basket([(Asset::Trading, 1)]))
-                .produce(Role::Consumer, basket([(Asset::Done, 1)])),
-        );
-    }
-    for day in 0..days {
-        let last = day + 1 == days;
-        let mut next = world_law()
-            .consume(Role::World, basket([(Asset::AtDay(day), 1)]))
-            .preserve(Role::Pool, basket([(Asset::PoolIdentity, 1)]));
-        for actor in ACTORS {
-            let role = Role::Participant(actor);
-            next = next
-                .preserve(role, basket([(Asset::ActorIdentity(actor), 1)]))
-                .consume(role, basket([(Asset::Done, 1)]));
-            if matches!(actor, Actor::Factory | Actor::Household) {
-                next = clear(next, role, Asset::Need(actor)).produce_computed(
-                    role,
-                    Asset::MissedNeed(actor),
-                    q(role, Asset::Need(actor)),
-                );
-                if !last {
-                    next = next
-                        .consume(role, basket([(Asset::FutureNeed(actor), 1)]))
-                        .produce(role, basket([(Asset::Need(actor), 1)]));
-                }
-            }
-            if matches!(actor, Actor::Generator | Actor::Factory) {
-                next = clear(next, role, Asset::Obligation(actor)).produce_computed(
-                    role,
-                    Asset::DefaultedObligation(actor),
-                    q(role, Asset::Obligation(actor)),
-                );
-                if !last {
-                    next = next
-                        .consume(role, basket([(Asset::FutureObligation(actor), 1)]))
-                        .produce(role, basket([(Asset::Obligation(actor), 1)]));
-                }
-            }
-            if actor == Actor::Household {
-                next = clear(next, role, Asset::IncomeDue).produce_computed(
-                    role,
-                    Asset::MissedIncome,
-                    q(role, Asset::IncomeDue),
-                );
-                if !last {
-                    next = next
-                        .consume(role, basket([(Asset::FutureIncome, 1)]))
-                        .produce(role, basket([(Asset::IncomeDue, 1)]));
-                }
-            }
-            if actor == Actor::Generator {
-                next = clear(next, role, Asset::ProductionAllowance);
-                if !last {
-                    next = next.produce_computed(
-                        role,
-                        Asset::ProductionAllowance,
-                        // The producer receives the allowance: round down.
-                        Q::mul_div(
-                            q(role, Asset::ProductionCapacity),
-                            q(Role::World, Asset::Sunlight(day + 1)),
-                            Q::constant(100),
-                            Rounding::Floor,
-                        ),
-                    );
-                }
-            }
-            if !last {
-                // A price signal, not a payment; floor keeps it a pure observation.
-                let closing_price = Q::mul_div(
-                    q(Role::Pool, Asset::Credit),
-                    Q::constant(1_000),
-                    q(Role::Pool, Asset::Energy),
-                    Rounding::Floor,
-                );
-                next = clear(
-                    clear(next, role, Asset::ReferencePrice),
-                    role,
-                    Asset::LiquidityDecision,
-                )
-                .produce_computed(
-                    role,
-                    Asset::ReferencePrice,
-                    Q::divide(
-                        q(role, Asset::ReferencePrice) * Q::constant(3) + closing_price,
-                        Q::constant(4),
-                        Rounding::Floor,
-                    ),
-                )
-                .produce(
-                    role,
-                    basket([
-                        (Asset::Trading, 1),
-                        (Asset::Decisions, DECISIONS),
-                        (Asset::LiquidityDecision, 1),
-                    ]),
-                );
-                if actor == Actor::Speculator {
-                    next = clear(
-                        clear(next, role, Asset::Informed(actor)),
-                        role,
-                        Asset::Uninformed(actor),
-                    )
-                    .produce(role, basket([(Asset::Uninformed(actor), 1)]));
-                }
-            } else {
-                next = next.consume(role, basket([(Asset::MarketOpen, 1)]));
-            }
-        }
-        if last {
-            next = next
-                .consume(Role::Pool, basket([(Asset::MarketOpen, 1)]))
-                .consume(Role::World, basket([(Asset::MarketActive, 1)]))
-                .produce(Role::World, basket([(Asset::MarketEnded, 1)]));
-            builder = builder.rate(RateId::CloseMarket, next);
-        } else {
-            next = clear(
-                clear(next, Role::Information, Asset::ShortageSignal),
-                Role::World,
-                Asset::CurrentSunlight,
-            )
-            .produce_computed(
-                Role::World,
-                Asset::CurrentSunlight,
-                q(Role::World, Asset::Sunlight(day + 1)),
-            )
-            .produce(
-                Role::Information,
-                basket([(
+    // Any actor ending its trading for the day, `end-trading/{actor}`.
+    let actor = Param::<Actor>::new(path!("actor"));
+    builder = builder.rate_at(
+        RateIdPattern::EndTrading(actor.var()).into(),
+        clear(Rate::new(), Role::Consumer, Asset::Decisions)
+            .variable(actor.every())
+            .account(Role::Consumer, AccountIdPattern::Actor(actor.var()).into())
+            .preserve(Role::Consumer, basket([(Asset::MarketOpen, 1)]))
+            .consume(Role::Consumer, basket([(Asset::Trading, 1)]))
+            .produce(Role::Consumer, basket([(Asset::Done, 1)])),
+    );
+    // Every day but the last closes as one rate, `advance-day/{day}`, into
+    // day `{next}`, whose sunlight the world makes current and the
+    // generator's allowance takes; the information account signals whether
+    // the day after, `{ahead}`, falls short. The last day closes the market.
+    let day = Param::<u8>::new(path!("day"));
+    let (next, ahead) = (
+        Param::<u8>::new(path!("next")),
+        Param::<u8>::new(path!("ahead")),
+    );
+    let on = |day: &Param<u8>| -> Vec<(Pattern<Asset>, Quantity)> {
+        vec![(AssetPattern::AtDay(day.var()).into(), Quantity::new(1))]
+    };
+    let sunlight = || Q::balance_at(Role::World, AssetPattern::Sunlight(next.var()).into());
+    let advance = close_day(
+        world_law()
+            .variable(day.range(0, days - 2))
+            .derive(next.name().clone(), day.quantity() + Q::constant(1))
+            .derive(ahead.name().clone(), day.quantity() + Q::constant(2))
+            .consume_at(Role::World, on(&day)),
+        Some(sunlight()),
+    );
+    builder = builder
+        .rate_at(
+            RateIdPattern::AdvanceDay(day.var()).into(),
+            clear(
+                clear(
+                    with_information(advance),
+                    Role::Information,
                     Asset::ShortageSignal,
-                    u64::from(day + 2 < days && weather(seed, day + 2) < 100),
-                )]),
-            )
-            .produce(
+                ),
                 Role::World,
-                basket([(Asset::AtDay(day + 1), 1), (Asset::Day, 1)]),
-            );
-            builder = builder.rate(RateId::AdvanceDay(day), next);
-        }
-    }
+                Asset::CurrentSunlight,
+            )
+            .produce_computed(Role::World, Asset::CurrentSunlight, sunlight())
+            .produce_computed(
+                Role::Information,
+                Asset::ShortageSignal,
+                Q::balance_at(Role::World, AssetPattern::Shortage(ahead.var()).into()),
+            )
+            .produce_at(Role::World, on(&next))
+            .produce(Role::World, basket([(Asset::Day, 1)])),
+        )
+        .rate(
+            RateId::CloseMarket,
+            close_day(
+                world_law().consume(Role::World, basket([(Asset::AtDay(days - 1), 1)])),
+                None,
+            )
+            .consume(Role::Pool, basket([(Asset::MarketOpen, 1)]))
+            .consume(Role::World, basket([(Asset::MarketActive, 1)]))
+            .produce(Role::World, basket([(Asset::MarketEnded, 1)])),
+        );
 
     let producer = Role::Producer;
-    let invest = actor_law(world_law(), producer)
-        .preserve(
-            producer,
-            basket([(Asset::ActorIdentity(Actor::Generator), 1)]),
-        )
-        .preserve(Role::Treasury, basket([(Asset::TreasuryIdentity, 1)]))
+    let invest = with_treasury(actor_law(world_law(), producer))
+        .account(producer, own(Actor::Generator))
         .consume(
             producer,
             basket([
@@ -417,17 +321,13 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             q(Role::World, Asset::Day) + Q::constant(3),
             C::LessThanOrEqual,
             q(Role::World, Asset::Days),
-        )
-        .distinct(producer, Role::Treasury);
+        );
     builder = builder.rate(RateId::InvestProduction, invest);
     // Commissioning is a due event, independent of the actor's trading budget.
     // Day-specific sunlight keeps the extra daily production entitlement honest.
     let current_sun = q(Role::World, Asset::CurrentSunlight);
     let commission = clear(world_law(), producer, Asset::ConstructionDue)
-        .preserve(
-            producer,
-            basket([(Asset::ActorIdentity(Actor::Generator), 1)]),
-        )
+        .account(producer, own(Actor::Generator))
         .consume(producer, basket([(Asset::PendingCapacity, 400 * scale)]))
         .produce(producer, basket([(Asset::ProductionCapacity, 400 * scale)]))
         .produce_computed(
@@ -449,36 +349,26 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     builder = builder.rate(RateId::CommissionProduction, commission);
     builder = builder.rate(
         RateId::DeliverGoods,
-        actor_law(Rate::new(), Role::Producer)
-            .preserve(
-                Role::Producer,
-                basket([(Asset::ActorIdentity(Actor::Factory), 1)]),
-            )
-            .preserve(Role::Treasury, basket([(Asset::TreasuryIdentity, 1)]))
+        with_treasury(actor_law(Rate::new(), Role::Producer))
+            .account(Role::Producer, own(Actor::Factory))
             .consume(Role::Producer, basket([(Asset::Goods, 100 * scale)]))
             .produce(
                 Role::Treasury,
                 basket([(Asset::DeliveredGoods, 100 * scale)]),
             )
             .consume(Role::Treasury, basket([(Asset::Credit, 15_000 * scale)]))
-            .produce(Role::Producer, basket([(Asset::Credit, 15_000 * scale)]))
-            .distinct(Role::Producer, Role::Treasury),
+            .produce(Role::Producer, basket([(Asset::Credit, 15_000 * scale)])),
     );
     builder = builder.rate(
         RateId::CollectIncome,
-        actor_law(Rate::new(), Role::Consumer)
-            .preserve(
-                Role::Consumer,
-                basket([(Asset::ActorIdentity(Actor::Household), 1)]),
-            )
-            .preserve(Role::Treasury, basket([(Asset::TreasuryIdentity, 1)]))
+        with_treasury(actor_law(Rate::new(), Role::Consumer))
+            .account(Role::Consumer, own(Actor::Household))
             .consume(Role::Consumer, basket([(Asset::IncomeDue, 1)]))
             .produce(
                 Role::Consumer,
                 basket([(Asset::ReceivedIncome, 1), (Asset::Credit, 4_000 * scale)]),
             )
-            .consume(Role::Treasury, basket([(Asset::Credit, 4_000 * scale)]))
-            .distinct(Role::Consumer, Role::Treasury),
+            .consume(Role::Treasury, basket([(Asset::Credit, 4_000 * scale)])),
     );
     // The provider pays reserves to mint shares, so each side rounds up.
     let deposit = |reserve| {
@@ -493,8 +383,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     let credit = deposit(Asset::Credit);
     builder = builder.rate(
         RateId::FundLiquidity,
-        actor_law(Rate::new(), Role::LiquidityProvider)
-            .preserve_computed(Role::Pool, Asset::PoolIdentity, Q::constant(1))
+        with_pool(actor_law(Rate::new(), Role::LiquidityProvider))
             .preserve_computed(Role::Pool, Asset::MarketOpen, Q::constant(1))
             .consume_computed(
                 Role::LiquidityProvider,
@@ -553,6 +442,118 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         )
         .build()
         .expect("seasonal market is coherent")
+}
+
+/// `next` closing a day for every participant, each role fixed to its
+/// actor's account, the pool's too: the needs, obligations and income left
+/// are recorded missed, and the generator's allowance lapses. Then, where
+/// `tomorrow` is the next day's sunlight, come the next day's entitlements,
+/// the generator's allowance under that sunlight, each reference price moved
+/// toward the closing price and the speculator uninformed again; without
+/// one, the last day closes the market to every participant.
+fn close_day(mut next: Rate<Ontology>, tomorrow: Option<Q<Ontology>>) -> Rate<Ontology> {
+    let last = tomorrow.is_none();
+    next = with_pool(next);
+    for actor in ACTORS {
+        let role = Role::Participant(actor);
+        next = next
+            .account(role, own(actor))
+            .consume(role, basket([(Asset::Done, 1)]));
+        if matches!(actor, Actor::Factory | Actor::Household) {
+            next = clear(next, role, Asset::Need(actor)).produce_computed(
+                role,
+                Asset::MissedNeed(actor),
+                q(role, Asset::Need(actor)),
+            );
+            if !last {
+                next = next
+                    .consume(role, basket([(Asset::FutureNeed(actor), 1)]))
+                    .produce(role, basket([(Asset::Need(actor), 1)]));
+            }
+        }
+        if matches!(actor, Actor::Generator | Actor::Factory) {
+            next = clear(next, role, Asset::Obligation(actor)).produce_computed(
+                role,
+                Asset::DefaultedObligation(actor),
+                q(role, Asset::Obligation(actor)),
+            );
+            if !last {
+                next = next
+                    .consume(role, basket([(Asset::FutureObligation(actor), 1)]))
+                    .produce(role, basket([(Asset::Obligation(actor), 1)]));
+            }
+        }
+        if actor == Actor::Household {
+            next = clear(next, role, Asset::IncomeDue).produce_computed(
+                role,
+                Asset::MissedIncome,
+                q(role, Asset::IncomeDue),
+            );
+            if !last {
+                next = next
+                    .consume(role, basket([(Asset::FutureIncome, 1)]))
+                    .produce(role, basket([(Asset::IncomeDue, 1)]));
+            }
+        }
+        if actor == Actor::Generator {
+            next = clear(next, role, Asset::ProductionAllowance);
+            if let Some(sunlight) = &tomorrow {
+                next = next.produce_computed(
+                    role,
+                    Asset::ProductionAllowance,
+                    // The producer receives the allowance: round down.
+                    Q::mul_div(
+                        q(role, Asset::ProductionCapacity),
+                        sunlight.clone(),
+                        Q::constant(100),
+                        Rounding::Floor,
+                    ),
+                );
+            }
+        }
+        if last {
+            next = next.consume(role, basket([(Asset::MarketOpen, 1)]));
+            continue;
+        }
+        // A price signal, not a payment; floor keeps it a pure observation.
+        let closing_price = Q::mul_div(
+            q(Role::Pool, Asset::Credit),
+            Q::constant(1_000),
+            q(Role::Pool, Asset::Energy),
+            Rounding::Floor,
+        );
+        next = clear(
+            clear(next, role, Asset::ReferencePrice),
+            role,
+            Asset::LiquidityDecision,
+        )
+        .produce_computed(
+            role,
+            Asset::ReferencePrice,
+            Q::divide(
+                q(role, Asset::ReferencePrice) * Q::constant(3) + closing_price,
+                Q::constant(4),
+                Rounding::Floor,
+            ),
+        )
+        .produce(
+            role,
+            basket([
+                (Asset::Trading, 1),
+                (Asset::Decisions, DECISIONS),
+                (Asset::LiquidityDecision, 1),
+            ]),
+        );
+        if actor == Actor::Speculator {
+            next = clear(
+                clear(next, role, Asset::Informed(actor)),
+                role,
+                Asset::Uninformed(actor),
+            )
+            .produce(role, basket([(Asset::Uninformed(actor), 1)]));
+        }
+    }
+    next
 }
 
 pub fn market_goal(world: &World) -> Goal<Ontology> {
