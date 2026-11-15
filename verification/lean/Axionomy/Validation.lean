@@ -11,6 +11,12 @@ inductive Issue (AccountId RateId Role : Type) where
   | unknownParameter (parameter : String)
   | rolesMustDiffer (left right : Role)
   | missingAccount (account : AccountId)
+  /-- An identifier gives a rate's variable a value outside its domain. -/
+  | outsideDomain (rate : RateId) (name : String)
+  /-- An identifier gives two variables a rate requires to differ one value. -/
+  | variablesMustDiffer (rate : RateId) (left right : String)
+  /-- A role is bound to an account other than the one its rate fixes. -/
+  | wrongAccount (role : Role) (expected : AccountId)
   deriving DecidableEq, Repr
 
 structure Metadata (Role : Type) where

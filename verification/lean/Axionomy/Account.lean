@@ -205,4 +205,94 @@ theorem store_frame {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
   unfold store balance
   split <;> simp [find_upsert_other _ _ _ _ different, find_erase_other _ _ _ different]
 
+theorem find_upsert_self {A Q : Type} [DecidableEq A] (asset : A) (value : Q)
+    (entries : List (A × Q)) : find? asset (upsert asset value entries) = some value := by
+  induction entries with
+  | nil => simp [upsert, find?]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, old⟩
+    by_cases equal : asset = key
+    · subst key; simp [upsert, find?]
+    · simp [upsert, find?, equal, ih]
+
+theorem find_erase_self {A Q : Type} [DecidableEq A] (asset : A) (entries : List (A × Q))
+    (unique : (entries.map Prod.fst).Nodup) : find? asset (erase asset entries) = none := by
+  induction entries with
+  | nil => rfl
+  | cons entry rest ih =>
+    rcases entry with ⟨key, old⟩
+    simp only [List.map_cons, List.nodup_cons] at unique
+    by_cases equal : asset = key
+    · subst key; simpa [erase] using find_absent asset rest unique.1
+    · simp [erase, find?, equal, ih unique.2]
+
+theorem upsert_keys {A Q : Type} [DecidableEq A] (asset : A) (value : Q) (entries : List (A × Q)) :
+    ∀ key, key ∈ (upsert asset value entries).map Prod.fst ↔ key = asset ∨ key ∈ entries.map Prod.fst := by
+  induction entries with
+  | nil => simp [upsert]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, old⟩
+    intro other
+    by_cases equal : asset = key
+    · subst key; simp [upsert]
+    · simp [upsert, equal, ih, or_left_comm]
+
+theorem upsert_nodup {A Q : Type} [DecidableEq A] (asset : A) (value : Q) (entries : List (A × Q))
+    (unique : (entries.map Prod.fst).Nodup) : ((upsert asset value entries).map Prod.fst).Nodup := by
+  induction entries with
+  | nil => simp [upsert]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, old⟩
+    simp only [List.map_cons, List.nodup_cons] at unique
+    by_cases equal : asset = key
+    · subst key; simpa [upsert] using unique
+    · simp only [upsert, equal, ite_false, List.map_cons, List.nodup_cons]
+      refine ⟨?_, ih unique.2⟩
+      rw [upsert_keys]
+      rintro (same | later)
+      · exact equal same.symm
+      · exact unique.1 later
+
+theorem erase_keys {A Q : Type} [DecidableEq A] (asset : A) (entries : List (A × Q)) :
+    ∀ key, key ∈ (erase asset entries).map Prod.fst → key ∈ entries.map Prod.fst := by
+  induction entries with
+  | nil => simp [erase]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, value⟩
+    intro other member
+    simp only [List.map_cons, List.mem_cons]
+    by_cases same : asset = key
+    · simp only [erase, same, ite_true] at member
+      exact Or.inr member
+    · simp only [erase, same, ite_false, List.map_cons, List.mem_cons] at member
+      rcases member with first | later
+      · exact Or.inl first
+      · exact Or.inr (ih other later)
+
+theorem erase_nodup {A Q : Type} [DecidableEq A] (asset : A) (entries : List (A × Q))
+    (unique : (entries.map Prod.fst).Nodup) : ((erase asset entries).map Prod.fst).Nodup := by
+  induction entries with
+  | nil => simp [erase]
+  | cons entry rest ih =>
+    rcases entry with ⟨key, old⟩
+    simp only [List.map_cons, List.nodup_cons] at unique
+    by_cases equal : asset = key
+    · simpa [erase, equal] using unique.2
+    · simp only [erase, equal, ite_false, List.map_cons, List.nodup_cons]
+      exact ⟨fun member => unique.1 (erase_keys asset rest key member), ih unique.2⟩
+
+/-- Storing a value keeps one entry per asset, and the asset then holds it. -/
+theorem store_self {A : Type} [DecidableEq A] (limit : Nat) (entries : List (A × Nat))
+    (asset : A) (value : Nat) (unique : (entries.map Prod.fst).Nodup) :
+    balance 0 (store (naturals limit) entries asset value) asset = value ∧
+      ((store (naturals limit) entries asset value).map Prod.fst).Nodup := by
+  unfold store
+  by_cases zero : (naturals limit).isZero value = true
+  · simp only [zero, ite_true]
+    have : value = 0 := by simpa [naturals] using zero
+    subst this
+    exact ⟨by simp [balance, find_erase_self asset entries unique], erase_nodup asset entries unique⟩
+  · simp only [zero]
+    exact ⟨by simp [balance, find_upsert_self], upsert_nodup asset value entries unique⟩
+
 end Axionomy.Account

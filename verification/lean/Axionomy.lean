@@ -20,6 +20,9 @@ import Axionomy.MulDiv
 import Axionomy.Observations
 import Axionomy.Ordered
 import Axionomy.Path
+import Axionomy.Pattern
+import Axionomy.Schema
+import Axionomy.Parametric
 import Axionomy.OrderedEffects
 import Axionomy.Quantity
 import Axionomy.RateConstruction

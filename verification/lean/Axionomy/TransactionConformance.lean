@@ -37,6 +37,10 @@ def failure : Transaction.Failure Nat Nat Nat Nat → Json
   | .structural (.unknownBinding role) => tagged "unknown_binding" [("role", toJson role)]
   | .structural (.rolesMustDiffer left right) => tagged "roles_must_differ" [("left", toJson left), ("right", toJson right)]
   | .structural (.missingAccount id) => tagged "missing_account" [("account", toJson id)]
+  | .structural (.outsideDomain id name) => tagged "outside_domain" [("rate", toJson id), ("variable", toJson name)]
+  | .structural (.variablesMustDiffer id left right) => tagged "variables_must_differ"
+      [("rate", toJson id), ("left", toJson left), ("right", toJson right)]
+  | .structural (.wrongAccount role expected) => tagged "wrong_account" [("role", toJson role), ("expected", toJson expected)]
   | .structural .zeroUnits => tagged "zero_units"
   | .structural (.missingParameter key) => tagged "missing_parameter" [("parameter", toJson key)]
   | .structural (.unknownParameter key) => tagged "unknown_parameter" [("parameter", toJson key)]

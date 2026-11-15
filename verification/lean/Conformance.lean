@@ -13,6 +13,7 @@ import Axionomy.ModelConstruction
 import Axionomy.Discovery
 import Axionomy.Validation
 import Axionomy.TransactionConformance
+import Axionomy.ParametricConformance
 import Axionomy.BasketCollectionConformance
 import Axionomy.InvariantInputConformance
 
@@ -385,6 +386,9 @@ def validationIssue (issue : Validation.Issue Nat Nat Nat) : ValidationIssueCase
   | .unknownParameter parameter => ⟨"unknownParameter", [], parameter⟩
   | .rolesMustDiffer left right => ⟨"rolesMustDiffer", [left, right], ""⟩
   | .missingAccount id => ⟨"missingAccount", [id], ""⟩
+  | .outsideDomain id name => ⟨"outsideDomain", [id], name⟩
+  | .variablesMustDiffer id left right => ⟨"variablesMustDiffer", [id], left ++ "," ++ right⟩
+  | .wrongAccount role expected => ⟨"wrongAccount", [role, expected], ""⟩
 
 structure ValidationCase where
   roles : List Nat
@@ -655,5 +659,7 @@ def main : IO Unit := do
     ("lifecycleAccounting", toJson (LifecycleConformance.fixtures expressionJson)),
     ("basketCollections", toJson BasketCollectionConformance.fixtures),
     ("invariantInputs", toJson InvariantInputConformance.fixtures),
-    ("pathOrder", toJson pathOrder)]
+    ("pathOrder", toJson pathOrder),
+    ("parametricTransactions", toJson ParametricConformance.fixtures),
+    ("parametricModels", toJson ParametricConformance.models)]
   IO.println document.compress
