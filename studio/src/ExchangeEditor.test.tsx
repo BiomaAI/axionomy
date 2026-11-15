@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { RateData } from "./api";
-import { ExchangeEditor, instanceOf, pathUnder, variableChoices, writeExchange, type Draft } from "./ExchangeEditor";
+import { ExchangeEditor, pathUnder, variableChoices, writeExchange, written, type Draft } from "./ExchangeEditor";
 import type { Candidate, Exchange } from "./packageEngine";
 
 const role = (path: string, label: string) => ({ role: { key: `paths/role/${path}`, label }, consumed: [], produced: [], preserved: [] });
@@ -9,6 +9,7 @@ const role = (path: string, label: string) => ({ role: { key: `paths/role/${path
 /** `step/{from}/{to}`: from and to as a relation allows, the walker fixed, a witness free, and a reach read by a condition. */
 const step: RateData = {
   rate: { key: "paths/rate/step/from/to", label: "step/{from}/{to}" },
+  pattern: [{ kind: "segment", value: "step" }, { kind: "variable", name: "from" }, { kind: "variable", name: "to" }],
   variables: [
     { name: "from", domain: { kind: "range", first: 1, last: 3 } },
     { name: "to", domain: { kind: "range", first: 1, last: 3 } },
@@ -25,10 +26,10 @@ const accounts = [{ key: "paths/account/walker", label: "Walker" }, { key: "path
 
 describe("writing an exchange from a rate", () => {
   test("a pattern writes the identifier its variables' values give", () => {
-    expect(instanceOf("step/{from}/{to}", { from: "1", to: "2" })).toBe("step/1/2");
-    expect(instanceOf("stabilize/{patient}", { patient: "0" })).toBe("stabilize/0");
-    expect(instanceOf("step/{from}/{to}", { from: "1" })).toBeUndefined();
-    expect(instanceOf("finish", {})).toBe("finish");
+    expect(written(step.pattern!, { from: "1", to: "2" })).toBe("step/1/2");
+    expect(written([{ kind: "segment", value: "stabilize" }, { kind: "variable", name: "patient" }], { patient: "0" })).toBe("stabilize/0");
+    expect(written(step.pattern!, { from: "1" })).toBeUndefined();
+    expect(written([{ kind: "segment", value: "finish" }], {})).toBe("finish");
   });
 
   test("a view's key names its path under the ontology and category", () => {
@@ -46,11 +47,18 @@ describe("writing an exchange from a rate", () => {
   });
 
   test("an account the rate fixes through a pattern is written with the variables' values", () => {
-    const moving: RateData = { ...step, accounts: [{ role: { key: "paths/role/walker", label: "Walker" }, account: { key: "paths/account/cell/to", label: "cell/{to}" } }], parameters: [] };
+    const moving: RateData = { ...step, accounts: [{ role: { key: "paths/role/walker", label: "Walker" }, account: { key: "paths/account/cell/to", label: "cell/{to}" }, pattern: [{ kind: "segment", value: "cell" }, { kind: "variable", name: "to" }] }], parameters: [] };
     const draft: Draft = { rate: moving.rate.key, values: { from: "1", to: "2" }, bindings: { "paths/role/witness": "paths/account/bystander" }, units: "1", parameters: {} };
     expect(writeExchange(moving, draft, "paths")).toEqual({ exchange: { rate: "step/1/2", bindings: { walker: "cell/2", witness: "bystander" }, units: "1", parameters: {} } });
     expect(writeExchange(moving, { ...draft, bindings: {} }, "paths")).toEqual({ lacks: "an account for Witness" });
     expect(writeExchange(moving, { ...draft, units: "0" }, "paths")).toEqual({ lacks: "units, a whole number from 1" });
+  });
+
+  test("a role the rate opens names a new account, which must be a path", () => {
+    const opening: RateData = { ...step, opens: [{ key: "paths/role/witness", label: "Witness" }], parameters: [] };
+    const draft: Draft = { rate: opening.rate.key, values: { from: "1", to: "2" }, bindings: { "paths/role/witness": "paths/account/witnesses/7" }, units: "1", parameters: {} };
+    expect(writeExchange(opening, draft, "paths")).toEqual({ exchange: { rate: "step/1/2", bindings: { walker: "walker", witness: "witnesses/7" }, units: "1", parameters: {} } });
+    expect(writeExchange(opening, { ...draft, bindings: { "paths/role/witness": "paths/account/Witness 7" } }, "paths")).toEqual({ lacks: "an account for Witness" });
   });
 
   test("the editor writes the instance, checks it, and applies it only once it applies", async () => {

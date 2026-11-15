@@ -4,23 +4,25 @@ import { ExchangeView, Written } from "./ExchangeView";
 import type { Candidate, Exchange } from "./packageEngine";
 import { Term } from "./Term";
 
-/** A variable's name in a rate's pattern: `{from}` in `step/{from}/{to}`. */
-const VARIABLE = /\{([^}]+)\}/g;
+type Pieces = NonNullable<RateData["pattern"]>;
 
 /**
- * The identifier a pattern writes with values for its variables:
+ * The identifier a pattern's pieces write with values for its variables:
  * `step/{from}/{to}` with from 1 and to 2 writes `step/1/2`. Undefined
  * while a variable has no value.
  */
-export function instanceOf(pattern: string, values: Readonly<Record<string, string>>): string | undefined {
-  let complete = true;
-  const written = pattern.replace(VARIABLE, (_, name: string) => {
-    const value = values[name];
-    if (!value) complete = false;
-    return value ?? "";
-  });
-  return complete ? written : undefined;
+export function written(pieces: Pieces, values: Readonly<Record<string, string>>): string | undefined {
+  const segments: string[] = [];
+  for (const piece of pieces) {
+    const segment = piece.kind === "segment" ? piece.value : values[piece.name];
+    if (!segment) return undefined;
+    segments.push(segment);
+  }
+  return segments.join("/");
 }
+
+/** A path as identifiers are written: lowercase segments of letters, digits and inner hyphens. */
+const PATH = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
 
 /**
  * The path a view's key names in its ontology: a view keys a value
@@ -31,11 +33,6 @@ export function instanceOf(pattern: string, values: Readonly<Record<string, stri
 export function pathUnder(ontology: string, category: "rate" | "role" | "account", key: string): string | undefined {
   const prefix = `${ontology}/${category}/`;
   return key.startsWith(prefix) && key.length > prefix.length ? key.slice(prefix.length) : undefined;
-}
-
-/** A pattern as a view labels it, `cell/{to}`: its own text, with a variable in it. */
-function isPattern(label: string): boolean {
-  return /^[a-z0-9/{}-]+$/.test(label) && /\{[^}]+\}/.test(label);
 }
 
 /** The most values a variable is chosen from in a list; more are typed. */
@@ -106,8 +103,8 @@ export type Draft = {
 export function fixedAccount(rate: RateData, role: string, ontology: string, values: Readonly<Record<string, string>>): string | undefined {
   const fixed = (rate.accounts ?? []).find((each) => each.role.key === role);
   if (!fixed) return undefined;
-  if (!isPattern(fixed.account.label)) return fixed.account.key;
-  const path = instanceOf(fixed.account.label, values);
+  if (!fixed.pattern?.length) return fixed.account.key;
+  const path = written(fixed.pattern, values);
   return path ? `${ontology}/account/${path}` : undefined;
 }
 
@@ -118,15 +115,15 @@ function natural(text: string): boolean {
 
 /** The exchange a draft writes, or what it still lacks. */
 export function writeExchange(rate: RateData, draft: Draft, ontology: string): { exchange: Exchange } | { lacks: string } {
-  const variables = rate.variables ?? [];
-  const id = variables.length > 0 ? instanceOf(rate.rate.label, draft.values) : pathUnder(ontology, "rate", rate.rate.key);
-  if (!id) return { lacks: variables.length > 0 ? "a value for each variable" : `a rate of ${ontology}` };
+  const pattern = rate.pattern ?? [];
+  const id = pattern.length > 0 ? written(pattern, draft.values) : pathUnder(ontology, "rate", rate.rate.key);
+  if (!id) return { lacks: pattern.length > 0 ? "a value for each variable" : `a rate of ${ontology}` };
   const bindings: Record<string, string> = {};
   for (const role of rate.roles) {
     const rolePath = pathUnder(ontology, "role", role.role.key);
     const account = fixedAccount(rate, role.role.key, ontology, draft.values) ?? draft.bindings[role.role.key];
     const accountPath = account ? pathUnder(ontology, "account", account) : undefined;
-    if (!rolePath || !accountPath) return { lacks: `an account for ${role.role.label}` };
+    if (!rolePath || !accountPath || !PATH.test(accountPath)) return { lacks: `an account for ${role.role.label}` };
     bindings[rolePath] = accountPath;
   }
   if (!natural(draft.units) || BigInt(draft.units) === 0n) return { lacks: "units, a whole number from 1" };
@@ -212,8 +209,12 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
     <div className="settings-fields">
       {rate.roles.map((role) => {
         const fixed = fixedAccount(rate, role.role.key, ontology, draft.values);
+        const opens = (rate.opens ?? []).some((opened) => opened.key === role.role.key);
+        const bound = draft.bindings[role.role.key];
         return <label className="field" key={role.role.key}><span>{role.role.label}</span>{fixed !== undefined
           ? <output name={`role-${role.role.key}`}>{accounts.find((account) => account.key === fixed)?.label ?? pathUnder(ontology, "account", fixed) ?? fixed}</output>
+          : opens
+          ? <input name={`role-${role.role.key}`} placeholder="new account" spellCheck={false} value={bound ? pathUnder(ontology, "account", bound) ?? "" : ""} onChange={(event) => change({ bindings: { ...draft.bindings, [role.role.key]: `${ontology}/account/${event.target.value.trim()}` } })} />
           : <select name={`role-${role.role.key}`} value={draft.bindings[role.role.key] ?? ""} onChange={(event) => change({ bindings: { ...draft.bindings, [role.role.key]: event.target.value } })}>
             <option value="">—</option>
             {accounts.map((account) => <option key={account.key} value={account.key}>{account.label}</option>)}

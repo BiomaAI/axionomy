@@ -410,17 +410,49 @@ pub struct DerivedView {
     pub value: String,
 }
 
+/// One segment of an identifier as written: a segment, or a variable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PieceView {
+    Segment { value: Segment },
+    Variable { name: VariablePath },
+}
+
+/// The pieces of a pattern with variables; none for an identifier written
+/// out, which its `ViewId` names.
+fn pieces_view<T: axionomy::path::Segments>(pattern: &Pattern<T>) -> Vec<PieceView> {
+    if pattern.as_literal().is_some() {
+        return Vec::new();
+    }
+    pattern
+        .pieces()
+        .iter()
+        .map(|piece| match piece {
+            Piece::Segment(value) => PieceView::Segment {
+                value: value.clone(),
+            },
+            Piece::Variable(name) => PieceView::Variable { name: name.clone() },
+        })
+        .collect()
+}
+
 /// The account a rate binds a role to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FixedAccountView {
     pub role: ViewId,
     pub account: ViewId,
+    /// The account as written, where it names the rate's variables.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pattern: Vec<PieceView>,
 }
 
 /// One immutable transition rule in the closed model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RateView {
     pub rate: ViewId,
+    /// The rate's identifier as written, where it names variables.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pattern: Vec<PieceView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variables: Vec<VariableView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -434,6 +466,13 @@ pub struct RateView {
     /// How many identifiers the rate answers to, where it has variables.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instances: Option<u64>,
+    /// Roles whose account an exchange of the rate opens: one it names, which
+    /// must not exist.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opens: Vec<ViewId>,
+    /// Roles whose account an exchange of the rate closes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closes: Vec<ViewId>,
     pub roles: Vec<RateRoleView>,
     pub distinct_roles: Vec<[ViewId; 2]>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2008,6 +2047,15 @@ where
             let written = id.as_literal().is_none();
             RateView {
                 rate: ontology.rate_pattern(id),
+                pattern: pieces_view(id),
+                opens: rate
+                    .opened_roles()
+                    .map(|role| ontology.role(role))
+                    .collect(),
+                closes: rate
+                    .closed_roles()
+                    .map(|role| ontology.role(role))
+                    .collect(),
                 variables: rate
                     .variables()
                     .iter()
@@ -2049,6 +2097,7 @@ where
                     .map(|(role, account)| FixedAccountView {
                         role: ontology.role(role),
                         account: ontology.account_pattern(account),
+                        pattern: pieces_view(account),
                     })
                     .collect(),
                 instances: written.then(|| economy.instances_of(id).count() as u64),
@@ -2743,6 +2792,15 @@ mod tests {
         );
         assert_eq!(rate["parameters"], json!(["reach"]));
         assert_eq!(rate["instances"], 2);
+        assert_eq!(
+            rate["pattern"],
+            json!([
+                {"kind": "segment", "value": "step"},
+                {"kind": "variable", "name": "from"},
+                {"kind": "variable", "name": "to"}
+            ])
+        );
+        assert!(rate["accounts"][0].get("pattern").is_none());
 
         let exchange = paths::Exchange::new(path("step/1/2"), Quantity::new(1))
             .bind(path("walker"), path("walker"));

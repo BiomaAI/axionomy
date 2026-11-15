@@ -2388,6 +2388,21 @@ three were removed with their tests and `statrs`. Graph, bounded and Pareto
 search, MCTS, ISMCTS and their tree, sessions, action sources and sampling
 stay.
 
+### D-057: Studio has one link per identifier and one view per kind of thing
+
+Decided with the user with D-054. Every identifier Studio shows (an
+account, asset, rate, ref, step, strategy, experiment or objective) is one
+link: a hover previews it, a click pins an inspector, and a pinned inspector
+follows the step being viewed. Each kind of thing has one view, written from
+data and knowing nothing of the engine or the package, reused wherever the
+thing appears: an account's ledger, an exchange (compact or full), a rate
+with its variables, relations, derived values and fixed accounts, results,
+refs, experiments and strategies. The proof panel, the account cards and the
+rules panel are gone; a rate table opens from the command bar. An exchange
+is written from a rate's variables and accounts, never as JSON, and checked
+before it applies. The browser sweep runs every strategy offered at every
+ref of every sample on the engine in the browser.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
