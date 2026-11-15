@@ -3,8 +3,9 @@
 Reference, non-authoritative search strategies for
 [Axionomy](https://github.com/BiomaAI/axionomy).
 
-This crate provides algorithms and learning projections over closed economic
-states. All structures are disposable accelerators; transitions remain
+This crate provides the algorithms the engine's strategies run over closed
+economic states; repeated trials are the engine's experiments, and learning
+belongs to whatever runs agents outside Axionomy. All structures are disposable accelerators; transitions remain
 ordinary exchanges validated by the `axionomy` kernel.
 
 - `bfs`, `dijkstra`, and `astar` search implicit, core-validated successors.
@@ -13,10 +14,6 @@ ordinary exchanges validated by the `axionomy` kernel.
   they report; `best_first` preserves state-ranked compatibility.
 - `action_source` lazily emits concrete proposals without giving generators
   transition authority.
-- `rollout` executes bounded speculative exchange trajectories on anything
-  that implements `axionomy::Apply`: an economy, whose steps stay in memory,
-  or a recorder that keeps them. `Episodes` makes the same choice for the
-  rollouts of repeated trials, with `Unrecorded` keeping none.
 - `sampling` selects among weighted, encoded Nature exchanges through `rand`,
   including reproducible ChaCha8 and caller-owned generators, or by named
   event: `EventTickets` draws an event's tickets from a seed and the event's
@@ -26,8 +23,6 @@ ordinary exchanges validated by the `axionomy` kernel.
   a lower bound, beam search keeping the best-scoring states of each depth and
   answering with the first or the last of the best goal states it reaches, and
   minimax with alpha-beta pruning for a two-player choice.
-- `monte_carlo` evaluates arbitrary trials with Bernoulli, scalar, vector,
-  quantile, credible-interval, and tail-risk statistics backed by `statrs`.
 - `pareto` compares ordered objective schemas, maintains non-dominated sets,
   and exhaustively searches finite reachable economies for replayable fronts.
 - `mcts` provides deterministic-budget, vector-valued UCT with chance nodes
@@ -35,8 +30,6 @@ ordinary exchanges validated by the `axionomy` kernel.
 - `ismcts` root-samples encoded belief worlds, keys a shared tree by
   actor-visible information, and does not pass hidden full state to decision
   generation or rollout policy.
-- `rl` derives action masks, sparse shortfall features, transition records,
-  and learning trajectories from assessments, receipts, and replay.
 
 Algorithms may choose which valid proposal to explore and how to aggregate
 encoded outcomes. They do not define domain transitions, hidden truth,

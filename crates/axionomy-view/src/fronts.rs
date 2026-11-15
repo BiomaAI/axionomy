@@ -6,10 +6,7 @@ use crate::{
     ParetoPointView, ViewDocument,
 };
 use axionomy::Quantity;
-use axionomy_search::{
-    monte_carlo::PolicyEstimate,
-    pareto::{ParetoEntry, ParetoFront},
-};
+use axionomy_search::pareto::ParetoEntry;
 
 /// The axes of a front over `document`'s objectives, in their order.
 pub fn objective_axes(document: &ViewDocument) -> Vec<ObjectiveAxisView> {
@@ -122,39 +119,6 @@ pub fn evaluated_front(
                 label: document.title.clone(),
                 selected: document.id == selected.id,
                 values: values.iter().map(ToString::to_string).collect(),
-            })
-            .collect(),
-    }
-}
-
-/// A front of fixed policies estimated by sampling: each point is a
-/// policy's mean outcomes, written to three decimals and labeled by `label`.
-pub fn sampled_policy_front<P: Copy, S, K: Eq>(
-    title: &str,
-    axes: Vec<ObjectiveAxisView>,
-    front: &ParetoFront<PolicyEstimate<P, S>, K, f64>,
-    label: impl Fn(P) -> String,
-    selected: impl Fn(P) -> bool,
-) -> ParetoFrontView {
-    ParetoFrontView {
-        title: title.into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes,
-        points: front
-            .entries()
-            .iter()
-            .map(|entry| {
-                let policy = *entry.payload().policy();
-                ParetoPointView {
-                    label: label(policy),
-                    values: entry
-                        .objectives()
-                        .objectives()
-                        .iter()
-                        .map(|objective| format!("{:.3}", objective.value()))
-                        .collect(),
-                    selected: selected(policy),
-                }
             })
             .collect(),
     }

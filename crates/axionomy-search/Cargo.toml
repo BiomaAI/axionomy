@@ -15,7 +15,6 @@ rand.workspace = true
 rand_chacha.workspace = true
 schemars.workspace = true
 serde.workspace = true
-statrs.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

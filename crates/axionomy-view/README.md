@@ -17,5 +17,5 @@ people read it and `Format` says how an asset's quantities are written;
 `ViewOntology` those give, keyed by paths, with the problem's scene and
 leaderboards. Scenes are built from `visual_entity`, `visual_metric` and
 `asset_metric`, keyed through `Keyed` and tied to the economy by
-`link_account` and `link_balance`; `exact_front`, `evaluated_front` and
-`sampled_policy_front` show exact, evaluated and sampled Pareto fronts.
+`link_account` and `link_balance`; `exact_front` and `evaluated_front` show
+exact and evaluated Pareto fronts.

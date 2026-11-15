@@ -27,7 +27,7 @@ as it can: each step reuses what exists.
 | Whether an action applies, and why not | `Economy::assess`, with its shortfalls |
 | What an actor may see | Actor views (`agent_view`, `responder_view`), ISMCTS information states |
 | Choosing | Plain Rust: `Option::or_else` for priorities, `Iterator::min_by_key` for ranking by an ordered key, ties broken by id |
-| Stepping, in memory or recorded | `rollout::run` over `&mut impl Apply`; `Episodes` for repeated experiments, with `Unrecorded` or a `GroupRecorder` |
+| Stepping, in memory or recorded | `Economy::apply`; the engine's runs, and its experiments' trials as groups |
 | Bounded computation | Search sessions: `advance(WorkBudget)`, interrupted and resumed |
 | Several exchanges, all or nothing | `Economy::replay` and `replayed`, Lean's `Execution.replay`, MCP's `axionomy_trace_replay` |
 

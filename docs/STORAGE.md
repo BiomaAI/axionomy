@@ -422,12 +422,8 @@ survive the members they summarize.
   and its runs are stored and read back unchanged.
 - **Producers of runs**: kept search branches and solutions, rollouts,
   simulations, sessions and episodes record as runs with checkpoint rules;
-  Monte Carlo and MPPI record groups. Rollouts and Monte Carlo episodes
-  record where they run: `axionomy_search::rollout` steps any `Apply`, and a
-  problem's Monte Carlo estimates take an `Episodes` destination, either
-  `Unrecorded` or one that starts each episode as a `Recorder` of a
-  `GroupRecorder` and adds it with its metrics when it ends, as
-  `axionomy-problems/tests/storage.rs` does for logistics. Search sessions,
+  an experiment's trials record as a group, each trial a run with its
+  metrics, through the engine. Search sessions,
   MPPI and RL follow.
 
 ## Phases
@@ -452,9 +448,8 @@ Each phase is a validated commit or series of commits.
    identifier is stored as its JSON, and a run is read back only as the
    ontology that recorded it); replay-buffer transitions by root, bisection
    and the time index it gives; every sample problem recordable, with
-   rollouts recorded as runs in a Monte Carlo group (done); rollouts and Monte
-   Carlo episodes recording where they run, through `Apply` and `Episodes`
-   (done); MCP, the Studio server and the browser recording their runs in the
+   rollouts recorded as runs in a Monte Carlo group (done; trials are now
+   the engine's experiments); MCP, the Studio server and the browser recording their runs in the
    store through `axionomy-engine`, with refs that proposers advance by
    compare-and-set and readers follow (done, as
    [SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives) planned); recording from

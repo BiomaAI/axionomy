@@ -117,7 +117,7 @@ models into one-way workspace dependencies:
 | --- | --- |
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
-| `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
+| `axionomy-search` | The algorithms the engine's strategies run: graph, bounded and Pareto search, minimax, perfect-information and information-set MCTS, and seeded sampling |
 | `axionomy-problems` | Sample ontologies, economy builders, and conformance tests; beside each model, its README and the builder of its package, all in `packages()` |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
@@ -176,10 +176,10 @@ packages, the engine; CLI, MCP, HTTP, and Studio remain outer adapters.
 
 ### Search
 
-- BFS, Dijkstra, A*, best-first, branch-and-bound, rollouts, and weighted sampling.
-- Exact Pareto search and sampled multi-objective policy comparison.
-- Reproducible Monte Carlo, vector-valued MCTS, and observation-scoped ISMCTS.
-- Resumable sessions with work budgets, progress, interruption, and RL trajectories.
+- BFS, Dijkstra, A*, best-first, branch-and-bound, beam search, minimax and weighted sampling.
+- Exact Pareto search; experiments compare strategies over seeded trials.
+- Vector-valued MCTS and observation-scoped ISMCTS.
+- Resumable sessions with work budgets, progress and interruption.
 
 ### Interfaces
 

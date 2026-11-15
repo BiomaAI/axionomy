@@ -1648,9 +1648,8 @@ factor.
 4. Finish [storage, runs and replay](docs/STORAGE.md). The canonical tree,
    the redb store with runs, durability rules, tags, groups, metrics and refs,
    MCP on the store, storing any ontology whose identifiers serialize, and
-   rollouts and Monte Carlo episodes recording where they run (`Apply`,
-   `Episodes`, `GroupRecorder`), and every front end recording its economies
-   through the engine are built; next, search sessions, MPPI and RL record, as
+   every front end recording its economies through the engine, its
+   experiments' trials as groups, are built; next, search sessions, MPPI and RL record, as
    [simulation, runs and packages](docs/SIMULATION.md) describes. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
 5. Built: [Axionomy on primitives](docs/SIMULATION.md#plan-axionomy-on-primitives):
@@ -2375,6 +2374,19 @@ through `state.moves(prefix)` and `state.exchange_of(rate)`. A package no
 longer writes a script to enumerate what its rates already say; a script
 proposes only what rates cannot: a choice, a binding of a free role, a
 quantity.
+
+### D-056: The search crate holds what the engine runs
+
+Decided after the samples became packages (D-053) and their moves rates'
+instances (D-055). Every public module of `axionomy-search` is reached
+through the engine, as a strategy, a chooser or what they draw with, or is
+gone. `rollout` and `monte_carlo` duplicated what the engine's policies,
+games and experiments run, and `rl`'s learning projections belong to the
+agents and models that run outside Axionomy
+(`docs/CONTINUOUS_AGENT_SYSTEMS.md`); none of them was reached, so all
+three were removed with their tests and `statrs`. Graph, bounded and Pareto
+search, MCTS, ISMCTS and their tree, sessions, action sources and sampling
+stay.
 
 ## 16. Success criteria
 
