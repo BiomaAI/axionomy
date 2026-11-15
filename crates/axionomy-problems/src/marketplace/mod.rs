@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    QuantityExpression as Q, Rate, Relation, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param, Pattern,
+    Quantity, QuantityExpression as Q, Rate, Relation, basket,
 };
 
 pub mod fulfillment;
@@ -125,20 +125,18 @@ pub enum Role {
     Order,
 }
 
-/// The market's laws. An order's names the item it trades, which its
-/// terms relate to it; a contract, its cancellation and its delivery whether
-/// its price was conceded; a dispatch the carrier that booked it.
+/// The market's laws, each naming its order, whose terms give the item it
+/// trades. A contract, its cancellation and its delivery name whether its
+/// price was conceded; a dispatch the carrier that booked it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum RateId {
     /// Micro's settlement of an order in one exchange.
     SettleOrder {
         order: OrderId,
-        item: Item,
     },
     /// A funded contract: money, goods and capacity locked until delivery.
     Contract {
         order: OrderId,
-        item: Item,
         discounted: bool,
     },
     Dispatch {
@@ -147,13 +145,11 @@ pub enum RateId {
     },
     Deliver {
         order: OrderId,
-        item: Item,
         discounted: bool,
         late: bool,
     },
     Cancel {
         order: OrderId,
-        item: Item,
         discounted: bool,
     },
     Advance {
@@ -352,7 +348,6 @@ fn build(size: MarketSize) -> World {
     builder = builder.rate_at(
         RateIdPattern::SettleOrder {
             order: order().var(),
-            item: item().var(),
         }
         .into(),
         settlement_rate(orders),
@@ -431,33 +426,26 @@ pub fn orders(world: &World) -> Vec<OrderId> {
 }
 
 pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
-    Exchange::new(
-        RateId::SettleOrder {
-            order,
-            item: terms(order).item,
-        },
-        Quantity::new(1),
-    )
-    .bind(Role::Buyer, AccountId::Buyer(buyer))
-    .bind(Role::Seller, AccountId::Seller(seller))
-    .bind(Role::Platform, AccountId::Platform)
-    .bind(Role::TaxAuthority, AccountId::TaxAuthority)
-    .bind(Role::Carrier, AccountId::Carrier(carrier))
-    .bind(Role::Order, AccountId::Order(order))
+    Exchange::new(RateId::SettleOrder { order }, Quantity::new(1))
+        .bind(Role::Buyer, AccountId::Buyer(buyer))
+        .bind(Role::Seller, AccountId::Seller(seller))
+        .bind(Role::Platform, AccountId::Platform)
+        .bind(Role::TaxAuthority, AccountId::TaxAuthority)
+        .bind(Role::Carrier, AccountId::Carrier(carrier))
+        .bind(Role::Order, AccountId::Order(order))
 }
 
-/// Micro's settlement of any of `orders`, `settle-order/{order}/{item}`:
-/// the buyer pays the gross price for the item and a receipt, the seller is
-/// paid its proceeds for the item and its offer, the platform its
-/// commission, the tax authority the tax and the carrier its shipping fee
-/// for a unit of its capacity, and the order settles at its gross price,
-/// each amount per unit as the order's terms give it.
+/// Micro's settlement of any of `orders`, `settle-order/{order}`: the buyer
+/// pays the gross price for the item and a receipt, the seller is paid its
+/// proceeds for the item and its offer, the platform its commission, the
+/// tax authority the tax and the carrier its shipping fee for a unit of its
+/// capacity, and the order settles at its gross price, the item and each
+/// amount per unit as the order's terms give them.
 fn settlement_rate(orders: &[OrderId]) -> Rate<Ontology> {
     let (order, item) = (order(), item());
     let per_unit = |amount: Param<u64>| amount.quantity() * Q::units();
     among(platform(), AccountIdPattern::Order(order.var()).into())
         .variable(order.values(orders.iter().copied()))
-        .variable(item.every())
         .relation(priced(orders))
         .consume_at(
             Role::Buyer,
@@ -512,7 +500,7 @@ fn one<const N: usize>(assets: [AssetPattern; N]) -> Vec<(Pattern<Asset>, Quanti
 /// buyer pays, its seller's proceeds, the tax, the platform's commission,
 /// the carrier's shipping fee, and the utility its buyer and its seller gain
 /// when it settles at that price. Its laws read them from a relation with a
-/// row for each order.
+/// row for each order, the item a word and the rest whole numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Terms {
     pub item: Item,
@@ -561,7 +549,7 @@ fn order() -> Param<OrderId> {
     Param::new(path!("order"))
 }
 
-/// The item an order's law trades, `{item}`, as its terms relate it.
+/// The item an order's law trades, `{item}`, which its terms give.
 fn item() -> Param<Item> {
     Param::new(path!("item"))
 }
@@ -592,34 +580,31 @@ fn seller_utility() -> Param<u64> {
 /// The item each of `orders` trades and the numbers of its terms: law
 /// structure that never changes, a row for each order.
 fn priced(orders: &[OrderId]) -> Relation {
-    Relation::pairs_giving(
-        &order(),
-        &item(),
+    Relation::giving(
+        [order().name().clone()],
         [
-            gross(),
-            proceeds(),
-            tax(),
-            commission(),
-            shipping(),
-            buyer_utility(),
-            seller_utility(),
-        ]
-        .map(|number| number.name().clone()),
+            item().name().clone(),
+            gross().name().clone(),
+            proceeds().name().clone(),
+            tax().name().clone(),
+            commission().name().clone(),
+            shipping().name().clone(),
+            buyer_utility().name().clone(),
+            seller_utility().name().clone(),
+        ],
         orders.iter().map(|&order| {
             let terms = terms(order);
-            (
-                order,
-                terms.item,
-                [
-                    terms.gross,
-                    terms.proceeds,
-                    terms.tax,
-                    terms.commission,
-                    terms.shipping,
-                    terms.buyer_utility,
-                    terms.seller_utility,
-                ],
-            )
+            [
+                order.segment(),
+                terms.item.segment(),
+                terms.gross.into(),
+                terms.proceeds.into(),
+                terms.tax.into(),
+                terms.commission.into(),
+                terms.shipping.into(),
+                terms.buyer_utility.into(),
+                terms.seller_utility.into(),
+            ]
         }),
     )
 }
@@ -660,21 +645,24 @@ mod tests {
     use super::*;
     use axionomy::{ApplyError, AssessmentStatus, ExchangeAssessment, Trace};
 
-    /// Order A's settlement: of a widget, as its terms relate.
-    const SETTLE_A: RateId = RateId::SettleOrder {
-        order: OrderId::A,
-        item: Item::Widget,
-    };
+    /// Order A's settlement: of a widget, as its terms give.
+    const SETTLE_A: RateId = RateId::SettleOrder { order: OrderId::A };
 
     #[test]
-    fn an_order_settles_only_the_item_its_terms_relate() {
-        let world = initial();
-        let gadget = RateId::SettleOrder {
-            order: OrderId::A,
-            item: Item::Gadget,
-        };
-        assert!(world.instance(&SETTLE_A).is_ok());
-        assert!(world.instance(&gadget).is_err());
+    fn an_order_settles_the_item_its_terms_give() {
+        let mut world = initial();
+        world
+            .apply(settlement(
+                OrderId::B,
+                BuyerId::A,
+                SellerId::C,
+                CarrierId::A,
+            ))
+            .unwrap();
+        let held = |account, item| world.balance(&account, &Asset::Item(item)).to_u64();
+        assert_eq!(held(AccountId::Buyer(BuyerId::A), Item::Gadget), 1);
+        assert_eq!(held(AccountId::Buyer(BuyerId::A), Item::Widget), 0);
+        assert_eq!(held(AccountId::Seller(SellerId::C), Item::Gadget), 0);
     }
 
     /// Every binding of a settlement of each of the market's orders: each

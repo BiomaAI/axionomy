@@ -113,14 +113,13 @@ fn concession() -> Relation {
     )
 }
 
-/// `rate` for any of `orders` and the item each trades, `{order}/{item}`, at
-/// its price or ten credits less, `{discounted}`: its order role fixed to the
-/// order's account, its terms and schedule given by their relations, and
-/// `{price}` what the buyer pays.
+/// `rate` for any of `orders`, `{order}`, at its price or ten credits less,
+/// `{discounted}`: its order role fixed to the order's account, its terms,
+/// the item it trades among them, and its schedule given by their relations,
+/// and `{price}` what the buyer pays.
 fn agreed(rate: Rate<Ontology>, orders: &[OrderId]) -> Rate<Ontology> {
     among(rate, AccountIdPattern::Order(order().var()).into())
         .variable(order().values(orders.iter().copied()))
-        .variable(item().every())
         .variable(discounted().every())
         .relation(priced(orders))
         .relation(scheduled(orders))
@@ -270,17 +269,16 @@ pub(super) fn build(source: World) -> World {
         account.deposit(&extra).unwrap();
         builder = builder.account(*id, account);
     }
-    let agreement = |discounted: Slot<bool>| RateIdPattern::Contract {
-        order: order().var(),
-        item: item().var(),
-        discounted,
-    };
     // An open order's contract, once it has arrived, at its price or ten
-    // credits less, `contract/{order}/{item}/{discounted}`: the buyer's
-    // money and the seller's item are held in the order's account, and the
-    // carrier's capacity booked, until the reservation's lease runs out.
+    // credits less, `contract/{order}/{discounted}`: the buyer's money and
+    // the seller's item are held in the order's account, and the carrier's
+    // capacity booked, until the reservation's lease runs out.
     builder = builder.rate_at(
-        agreement(discounted().var()).into(),
+        RateIdPattern::Contract {
+            order: order().var(),
+            discounted: discounted().var(),
+        }
+        .into(),
         agreed(law(), &orders)
             .preserve(Role::Buyer, basket([(Asset::BuyerLicense, 1)]))
             .preserve(Role::Seller, basket([(Asset::SellerLicense, 1)]))
@@ -320,12 +318,11 @@ pub(super) fn build(source: World) -> World {
             .produce_computed(Role::Order, Asset::LeaseUntil, clock() + Q::constant(2)),
     );
     // An unshipped reservation refunded once its lease has run out,
-    // `cancel/{order}/{item}/{discounted}`: every party gets back what it
-    // locked, and the order opens again.
+    // `cancel/{order}/{discounted}`: every party gets back what it locked,
+    // and the order opens again.
     builder = builder.rate_at(
         RateIdPattern::Cancel {
             order: order().var(),
-            item: item().var(),
             discounted: discounted().var(),
         }
         .into(),
@@ -364,13 +361,12 @@ pub(super) fn build(source: World) -> World {
             .produce_at(Role::Order, one([AssetPattern::OpenOrder(order().var())]))
             .produce(Role::Order, basket([(Asset::Refunded, 1)])),
     );
-    // A shipment's delivery, on time or late, `deliver/{order}/{item}/
-    // {discounted}/{late}`: the two differ in the deadline they meet.
+    // A shipment's delivery, on time or late, `deliver/{order}/{discounted}/
+    // {late}`: the two differ in the deadline they meet.
     for late in [false, true] {
         builder = builder.rate_at(
             RateIdPattern::Deliver {
                 order: order().var(),
-                item: item().var(),
                 discounted: discounted().var(),
                 late: Slot::Is(late),
             }
@@ -493,7 +489,6 @@ mod tests {
     fn contract(discounted: bool) -> RateId {
         RateId::Contract {
             order: OrderId::A,
-            item: Item::Widget,
             discounted,
         }
     }
@@ -525,7 +520,6 @@ mod tests {
         );
         let gadget = RateId::Contract {
             order: OrderId::B,
-            item: Item::Gadget,
             discounted: false,
         };
         assert!(!world.is_applicable(&bind(
@@ -550,7 +544,6 @@ mod tests {
         let delivery = bind(
             RateId::Deliver {
                 order: OrderId::A,
-                item: Item::Widget,
                 discounted: false,
                 late: false,
             },
@@ -600,7 +593,6 @@ mod tests {
             .apply(bind(
                 RateId::Cancel {
                     order: OrderId::A,
-                    item: Item::Widget,
                     discounted: true,
                 },
                 candidate,

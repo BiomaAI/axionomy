@@ -80,12 +80,12 @@ fn label(item) {
     }
     switch name {
         "settle-order" => `Agree Order ${letter(parts[2])} at full price`,
-        "contract" => `Agree Order ${letter(parts[2])} ${agreed(parts[4])}`,
+        "contract" => `Agree Order ${letter(parts[2])} ${agreed(parts[3])}`,
         "dispatch" => `Dispatch Order ${letter(parts[2])} with Carrier ${letter(parts[3])}`,
-        "deliver" => `Deliver ${priced(parts[4])} Order ${letter(parts[2])} ${
-            if parts[5] == "true" { "late with a rebate" } else { "on time" }
+        "deliver" => `Deliver ${priced(parts[3])} Order ${letter(parts[2])} ${
+            if parts[4] == "true" { "late with a rebate" } else { "on time" }
         }`,
-        "cancel" => `Refund the expired ${priced(parts[4])} reservation for Order ${letter(parts[2])}`,
+        "cancel" => `Refund the expired ${priced(parts[3])} reservation for Order ${letter(parts[2])}`,
         "advance" => `Advance market time to ${parts[2]}`,
         _ => (),
     }

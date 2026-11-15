@@ -11,8 +11,8 @@ fn id(account) { account.split("/")[1] }
 fn order_ids(state) { state.accounts("order/").map(|account| id(account)) }
 
 // The instance agreeing to each order at its price, by order: Micro's
-// settlement, `settle-order/<order>/<item>`, or a market's contract not
-// conceded, `contract/<order>/<item>/false`.
+// settlement, `settle-order/<order>`, or a market's contract not conceded,
+// `contract/<order>/false`.
 fn agreements(state) {
     let found = #{};
     for rate in state.instances("settle-order") + state.instances("contract") {
@@ -22,9 +22,6 @@ fn agreements(state) {
     }
     found
 }
-
-// The item an order's agreement trades, which its identifier names.
-fn traded(agreement) { agreement.split("/")[2] }
 
 // What `agreement` reads of its order's terms: the item it trades, its
 // gross price, the utility its buyer and seller gain at that price and, in
@@ -172,13 +169,12 @@ fn fulfillment(state) {
     for order in orders {
         if order in booked {
             let party = booked[order].party;
-            let deal = `${order}/${traded(agreements[order])}`;
             for rate in [
                 `dispatch/${order}/${id(party.carrier)}`,
-                `deliver/${deal}/false/false`,
-                `deliver/${deal}/false/true`,
-                `deliver/${deal}/true/false`,
-                `deliver/${deal}/true/true`,
+                `deliver/${order}/false/false`,
+                `deliver/${order}/false/true`,
+                `deliver/${order}/true/false`,
+                `deliver/${order}/true/true`,
             ] {
                 let proposal = bound(rate, order, party);
                 if state.applicable(proposal) {
@@ -192,12 +188,14 @@ fn fulfillment(state) {
         if order in open {
             let deal = open[order];
             for party in parties(state, deal) {
-                proposed.push(bound(`contract/${order}/${deal.item}/false`, order, party));
-                proposed.push(bound(`contract/${order}/${deal.item}/true`, order, party));
+                proposed.push(bound(`contract/${order}/false`, order, party));
+                proposed.push(bound(`contract/${order}/true`, order, party));
             }
         }
     }
     let now = state.balance("platform", "now");
+    // The market's day ends where no time remains.
+    let end = now + state.balance("platform", "time-remaining");
     let next = ();
     for order in orders {
         let times = [];
@@ -207,9 +205,8 @@ fn fulfillment(state) {
         if order in booked {
             let party = booked[order].party;
             let held = booked[order].held;
-            let item = traded(agreements[order]);
-            proposed.push(bound(`cancel/${order}/${item}/false`, order, party));
-            proposed.push(bound(`cancel/${order}/${item}/true`, order, party));
+            proposed.push(bound(`cancel/${order}/false`, order, party));
+            proposed.push(bound(`cancel/${order}/true`, order, party));
             if `contract/${order}` in held {
                 times.push(state.balance(`order/${order}`, "lease-until") + 1);
             }
@@ -218,7 +215,7 @@ fn fulfillment(state) {
             }
         }
         for time in times {
-            if time > now && time <= 32 && (next == () || time < next) {
+            if time > now && time <= end && (next == () || time < next) {
                 next = time;
             }
         }
@@ -261,9 +258,7 @@ fn planned(state, preference) {
             settled += 1;
         }
         if `contract/${order}` in held || `in-shipment/${order}` in held {
-            // The item the order holds in escrow names its contract.
-            let item = held.keys().filter(|asset| asset.starts_with("item/"))[0];
-            let deal = state.values(`contract/${order}/${id(item)}/false`);
+            let deal = state.values(`contract/${order}/false`);
             let buyer = deal["buyer-utility"].to_int();
             let seller = deal["seller-utility"].to_int();
             let cut = if `agreed-price/${deal.gross - 10}` in held { 10 } else { 0 };

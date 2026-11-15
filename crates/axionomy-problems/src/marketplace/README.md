@@ -28,8 +28,8 @@ fund Order A, and Buyer C is 25 short on Order A. Two sellers offer widgets,
 one offers a gadget, Carrier A owns two units of capacity, and Carrier B has no
 capacity.
 
-Settling is one rate over every order, `settle-order/{order}/{item}`,
-binding the same six distinct roles; for order A, of a widget:
+Settling is one rate over every order, `settle-order/{order}`, binding the
+same six distinct roles; for order A, of a widget:
 
 ```text
 Buyer pays 100 and receives widget + receipt
@@ -41,13 +41,12 @@ Order account converts matching OpenOrder into SettledOrder + SettledValue
 ```
 
 An order's terms never change, so they are law structure: a relation's
-row for each order relates it to the item it trades and gives the numbers
-of its terms, its gross price, the seller's proceeds, the tax, the
-commission, the shipping fee and the utility its buyer and seller gain,
-which the rate names as `{gross}`, `{proceeds}` and so on. A relation gives
-only whole numbers, and the item is an asset's name, so the item is a
-variable of the identifier the relation keys: `settle-order/a/widget`
-applies, and `settle-order/a/gadget` names no instance.
+row for each order gives the item it trades, a word the rate writes into
+`item/{item}`, and the numbers of its terms, its gross price, the seller's
+proceeds, the tax, the commission, the shipping fee and the utility its
+buyer and seller gain, which the rate names as `{gross}`, `{proceeds}` and
+so on. No identifier names the item: `settle-order/a` trades a widget
+because order A's row says so.
 
 The institutions are fixed accounts: every rate fixes its platform role to
 the platform, its tax authority to the tax authority and its order role to
@@ -56,20 +55,22 @@ buyer, seller and carrier are the exchange's to choose, distinct from one
 another and from the institutions.
 
 The larger markets have six rates as written. A contract, at the order's
-price or ten credits less, is one rate, `contract/{order}/{item}/
-{discounted}`, and so is its cancellation, `cancel/{order}/{item}/
-{discounted}`, a relation on `{discounted}` giving the concession and
-`{price}` derived from it. A delivery is two, `deliver/{order}/{item}/
-{discounted}/false` on time and `.../true` late with a rebate: the two
-meet the deadline differently and record a different outcome. Each order's
-schedule, when it arrives, its deadline and the delay its route meets, is
-another relation's row, and each carrier's transit time and exposure to
-delays another's, so a dispatch names the carrier that booked it,
-`dispatch/{order}/{carrier}`; the clock is one rate over every tick,
-`advance/{to}`. Micro has one rate as written, for 2 instances; Showcase
-and Stress six, for 72 and 92. The scripts read an order's terms from the
-instance agreeing to it at its price (`state.values`), never from a table
-of their own.
+price or ten credits less, is one rate, `contract/{order}/{discounted}`,
+and so is its cancellation, `cancel/{order}/{discounted}`, a relation on
+`{discounted}` giving the concession and `{price}` derived from it. A
+delivery is two, `deliver/{order}/{discounted}/false` on time and
+`.../true` late with a rebate: the two meet the deadline differently and
+record a different outcome. Each order's schedule, when it arrives, its
+deadline and the delay its route meets, is another relation's row, and
+each carrier's transit time and exposure to delays another's, so a
+dispatch names the carrier that booked it, `dispatch/{order}/{carrier}`;
+the clock is one rate over every tick, `advance/{to}`. Micro has one rate
+as written, for 2 instances; Showcase and Stress six, for 72 and 92. The
+market has no constants: what the platform holds for the whole market,
+the time and the time it has left, changes as the clock advances. The
+scripts read an order's terms, its item among them, from the instance
+agreeing to it at its price (`state.values`), never from a table of their
+own, and where the market's day ends from the time the platform has left.
 
 The settlement terms also produce declared `Utility` assets for the bound
 buyer and seller. They make participant benefit part of the outcome rather
