@@ -52,8 +52,6 @@ fn label(item) {
             "closed" => "Mission closed",
             "time" => "Mission time",
             "time-remaining" => "Time remaining",
-            "horizon" => "Mission horizon",
-            "count" => "Objectives in the mission",
             "resolved" => "Objectives resolved",
             "completed" => "Objectives completed",
             "failed-count" => "Objectives lost",
@@ -92,7 +90,6 @@ fn label(item) {
             "known" => `Knows ${objective(parts[2])} is at ${capital(parts[3])}`,
             "shared" => `Briefed Medic: ${objective(parts[2])} at ${capital(parts[3])}`,
             "truth" => `${objective_subject(parts[2])} is at ${capital(parts[3])}`,
-            "deadline" => "Deadline",
             "hidden" => "Not yet found",
             "located" => "Located",
             "working" => "Recovery under way",
@@ -158,7 +155,7 @@ fn label(item) {
 // The unit quantities of `asset` are read in, or nothing for a count.
 fn unit(asset) {
     switch asset {
-        "time" | "time-remaining" | "horizon" | "ready-at" | "deadline" | "next-clinical" => "ticks",
+        "time" | "time-remaining" | "ready-at" | "next-clinical" => "ticks",
         "energy" | "spent-energy" => "units",
         _ => (),
     }
@@ -277,7 +274,7 @@ fn found_objective(state, id, site) {
     drawn.metrics = [
         metric("knowledge", "Medic briefed",
             if expedition::val(state, "agent/medic", `known/${id}/${site}`) > 0 { "yes" } else { "no" }, ()),
-        asset_metric("deadline", "Deadline", "deadline", expedition::val(state, account, "deadline")),
+        metric("deadline", "Deadline", state.constant("deadline").to_int(), "ticks"),
     ];
     if casualty {
         drawn.metrics.insert(0, metric("health", "Vitality", expedition::val(state, account, "health"), "/ 3"));
@@ -305,7 +302,7 @@ fn scene(state, frame) {
         });
     }
     let entities = [teammate(state, "scout"), teammate(state, "medic")];
-    for id in 0..expedition::val(state, "world", "count") {
+    for id in 0..state.constant("objective-count").to_int() {
         let site = found_at(state, "agent/scout", `known/${id}`);
         if site == () { continue; }
         entities.push(found_objective(state, id, site));

@@ -50,7 +50,7 @@ fn nature_response(state) {
         state.moves("finish-extract") + state.moves("finish-collect"),
         state.moves("discover"),
     ];
-    for id in 0..state.balance("world", "count").to_int() {
+    for id in 0..state.constant("objective-count").to_int() {
         let objective = `objective/${id}`;
         for moves in kinds {
             for due in moves {
@@ -73,7 +73,7 @@ fn nature_response(state) {
 fn agent_view(state, agent) {
     let own = `agent/${agent}`;
     let accounts = ["world", own];
-    let count = state.balance("world", "count").to_int();
+    let count = state.constant("objective-count").to_int();
     for id in 0..count {
         for location in locations() {
             if state.balance(own, `known/${id}/${location}`) > 0 {
@@ -126,7 +126,7 @@ fn decision(seen, agent, policy) {
         if val(seen, own, `at/${location}`) > 0 { from = location; break; }
     }
     if from == () { return (); }
-    let count = val(seen, "world", "count");
+    let count = seen.constant("objective-count").to_int();
     for id in 0..count {
         if val(seen, own, `cargo/${id}`) > 0 {
             if from == "base" { return seen.exchange_of(`deliver/${id}`); }

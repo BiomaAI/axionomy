@@ -52,7 +52,6 @@ fn label(item) {
             "shared-intel" => `Shared sighting: ${place(parts[2])}`,
             "injured" => "Agent injured",
             "unresolved" => "Scenario not yet drawn",
-            "scenario-weight" => `Odds: objective at ${place(parts[2])}, sensor state ${parts[3]}, ${danger(parts[4])}`,
             "truth" => `Objective at ${place(parts[2])}`,
             "seed" => `Sensor state ${parts[2]}`,
             "hazard" => `Drawn: ${danger(parts[2])}`,

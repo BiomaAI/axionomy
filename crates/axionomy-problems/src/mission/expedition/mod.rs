@@ -48,8 +48,6 @@ pub enum Asset {
     Closed,
     Time,
     TimeRemaining,
-    Horizon,
-    Count,
     Resolved,
     Completed,
     FailedCount,
@@ -88,7 +86,6 @@ pub enum Asset {
     Known(u8, Location),
     Shared(u8, Location),
     Truth(u8, Location),
-    Deadline,
     Hidden,
     Located,
     Working,
@@ -299,12 +296,26 @@ fn objective(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
 fn nature(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.account(Role::Nature, Pattern::literal(AccountId::Nature))
 }
+/// The tick the mission ends at, `{horizon}`: one for the whole expedition,
+/// a constant.
+fn mission_horizon() -> Param<u64> {
+    Param::new(path!("horizon"))
+}
+/// How many objectives the mission has, `{objective-count}`: a constant.
+fn objective_count() -> Param<u64> {
+    Param::new(path!("objective-count"))
+}
+/// The tick by which every objective must reach base, `{deadline}`: the
+/// same for each, a constant.
+fn deadline() -> Param<u64> {
+    Param::new(path!("deadline"))
+}
 fn before_horizon(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
     rate.condition(
         path!("activity-ends-within-mission-horizon"),
         clock() + duration,
         C::LessThanOrEqual,
-        q(Role::World, Asset::Horizon),
+        mission_horizon().quantity(),
     )
 }
 fn phase_asset(phase: Phase) -> Asset {
@@ -360,9 +371,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::Active, 1),
         (Asset::EnvironmentReady, 1),
         (Asset::NextClinical, 8),
-        (Asset::Horizon, horizon),
         (Asset::TimeRemaining, horizon),
-        (Asset::Count, count.into()),
         (Asset::Energy, 8),
         (Asset::MedicalKit, 2),
         (Asset::Supply, 2),
@@ -393,7 +402,10 @@ pub fn initial(stress: bool, seed: u64) -> World {
     }
     let mut builder = EconomyBuilder::new()
         .account(AccountId::World, Account::from(world))
-        .account(AccountId::Nature, Account::from(hidden));
+        .account(AccountId::Nature, Account::from(hidden))
+        .constant(&mission_horizon(), horizon)
+        .constant(&objective_count(), count.into())
+        .constant(&deadline(), horizon - 2);
 
     // The rates' variables: an objective, a site, two places, a scan round
     // and a day; and the numbers relations give: how many roads apart two
@@ -567,7 +579,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         );
     }
     for id in 0..count {
-        let mut stock = basket([(Asset::Hidden, 1), (Asset::Deadline, horizon - 2)]);
+        let mut stock = basket([(Asset::Hidden, 1)]);
         if patient(id) {
             stock.insert(Asset::Health, Quantity::new(3));
             stock.insert(Asset::Unstable, Quantity::new(1));
@@ -838,7 +850,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         path!("deadline-passed"),
                         clock(),
                         C::GreaterThanOrEqual,
-                        q(Role::Objective, Asset::Deadline) + Q::constant(1),
+                        deadline().quantity() + Q::constant(1),
                     )
                 }
             };
@@ -915,7 +927,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
             path!("delivery-before-deadline"),
             clock(),
             C::LessThanOrEqual,
-            q(Role::Objective, Asset::Deadline),
+            deadline().quantity(),
         )
         .consume(carrier, basket([(Asset::Cargo(id), 1)]))
         .consume(Role::Objective, basket([(Asset::Carried, 1)]))
@@ -1234,7 +1246,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     path!("all-objectives-resolved"),
                     q(Role::World, Asset::Resolved),
                     C::Equal,
-                    q(Role::World, Asset::Count),
+                    objective_count().quantity(),
                 )
                 .preserve(Role::Scout, basket([(Asset::Ready, 1)]))
                 .preserve(Role::Medic, basket([(Asset::Ready, 1)]))

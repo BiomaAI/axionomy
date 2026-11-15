@@ -52,7 +52,6 @@ pub enum Asset {
     SharedIntel(Location),
     Injured,
     Unresolved,
-    ScenarioWeight(Location, u8, Hazard),
     Truth(Location),
     Seed(u8),
     Hazard(Hazard),
@@ -148,15 +147,6 @@ fn played_by(rate: Rate<Ontology>, roles: &[Role]) -> Rate<Ontology> {
 }
 
 pub fn initial() -> World {
-    let mut nature = basket([(Asset::Unresolved, 1)]);
-    for truth in SITES {
-        for seed in 0..SEEDS {
-            for hazard in [Hazard::Safe, Hazard::Injury] {
-                nature.insert(Asset::ScenarioWeight(truth, seed, hazard), Quantity::new(1));
-            }
-        }
-    }
-
     let builder = EconomyBuilder::new()
         .account(
             AccountId::Agent(AgentId::Scout),
@@ -174,7 +164,10 @@ pub fn initial() -> World {
                 (Asset::MedicalKit, 1),
             ])),
         )
-        .account(AccountId::Nature, Account::from(nature))
+        .account(
+            AccountId::Nature,
+            Account::from(basket([(Asset::Unresolved, 1)])),
+        )
         .account(
             AccountId::Mission,
             Account::from(basket([(Asset::TimeRemaining, 10), (Asset::Planning, 1)])),
@@ -183,13 +176,36 @@ pub fn initial() -> World {
 
     // The rates' variables: the victim's site, the sensor's seed, the
     // site's hazard, the site a scan reports, the seed after it, which the
-    // law derives, and a site the team goes to.
+    // law derives, and a site the team goes to; and the weight Nature draws
+    // each scenario by, which a relation gives.
     let truth = Param::<Location>::new(path!("truth"));
     let seed = Param::<u8>::new(path!("seed"));
     let hazard = Param::<Hazard>::new(path!("hazard"));
     let report = Param::<Location>::new(path!("report"));
     let next = Param::<u8>::new(path!("next"));
     let site = Param::<Location>::new(path!("location"));
+    let weight = Param::<u64>::new(path!("weight"));
+    // Nature's prior: every scenario, each as likely as any other.
+    let prior = Relation::giving(
+        [
+            truth.name().clone(),
+            seed.name().clone(),
+            hazard.name().clone(),
+        ],
+        [weight.name().clone()],
+        SITES.into_iter().flat_map(|place| {
+            (0..SEEDS).flat_map(move |state| {
+                [Hazard::Safe, Hazard::Injury].map(|danger| {
+                    [
+                        place.segment(),
+                        Segment::from(u64::from(state)),
+                        danger.segment(),
+                        Segment::from(1_u64),
+                    ]
+                })
+            })
+        }),
+    );
     // What a scan reports of each site at each seed: the truth, but for
     // seed 0, which reports the other site.
     let readings = Relation::new(
@@ -226,13 +242,8 @@ pub fn initial() -> World {
                 // In the order of their identifiers, as Nature's prior lists
                 // the scenarios.
                 .variable(hazard.values([Hazard::Injury, Hazard::Safe]))
+                .relation(prior)
                 .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
-                .preserve_at(
-                    Role::Nature,
-                    one([
-                        AssetPattern::ScenarioWeight(truth.var(), seed.var(), hazard.var()).into(),
-                    ]),
-                )
                 .produce_at(
                     Role::Nature,
                     one([

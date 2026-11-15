@@ -15,13 +15,11 @@
 fn sites() { ["north", "south"] }
 
 // Nature's prior: every scenario it encodes that applies, in rate order,
-// weighted by what Nature holds of it.
+// weighted as the draw's relation gives it.
 fn scenarios(state) {
     let weighted = [];
     for scenario in state.moves("instantiate") {
-        let parts = scenario.rate().split("/");
-        let weight = state.balance("nature", `scenario-weight/${parts[1]}/${parts[2]}/${parts[3]}`);
-        weighted.push([scenario, weight]);
+        weighted.push([scenario, state.values(scenario.rate()).weight]);
     }
     weighted
 }

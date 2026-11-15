@@ -25,10 +25,14 @@ advances the scan to the round it derives. One law steps the clock,
 in or clears that day, and one ends a pulse, `finish-clinical/{day}`, its
 relation giving how many days on the next pulse falls, the last scheduling
 none. A delivery and a loss in transit are each objective's own, since an
-archive's carrier and a casualty's differ. Each role is fixed to its
-account, so no identity token pins a binding. Nature takes the weather or a
-pulse's end, then, objective by objective, a decline, a loss, finished work
-or a discovery, then each teammate's arrival and a report (`state.moves`);
+archive's carrier and a casualty's differ. The mission's horizon, how many
+objectives it has and the deadline every objective shares are the whole
+expedition's and never change: constants, `{horizon}`, `{objective-count}`
+and `{deadline}`, which the laws and the policies read by name
+(`state.constant`). Each role is fixed to its account, so no identity token
+pins a binding. Nature takes the weather or a pulse's end, then, objective
+by objective, a decline, a loss, finished work or a discovery, then each
+teammate's arrival and a report (`state.moves`);
 a teammate's decision is its rate's exchange (`state.exchange_of`).
 
 A seeded sector hazard closes access at tick five and clears at tick ten;
@@ -44,9 +48,10 @@ Micro specification follows.
 
 ## Specification
 
-Scout and Medic accounts begin at base while Nature holds unresolved weighted
-truth, sensor seed, and hazard state. Neither agent view can inspect Nature or
-the other agent's private account.
+Scout and Medic accounts begin at base while Nature holds the unresolved
+truth, sensor seed, and hazard state, which it draws by weights its law
+gives. Neither agent view can inspect Nature or the other agent's private
+account.
 
 The Scout may begin a scan without naming hidden truth. That public exchange
 creates `AwaitingScan`; Nature then resolves the scan through the uniquely
@@ -62,12 +67,15 @@ can rescue the victim. Every public mission action consumes encoded deadline
 time except the final goal-marking exchange.
 
 Micro's rates have variables: `instantiate/{truth}/{seed}/{hazard}` draws a
-scenario, `resolve-scan/{truth}/{seed}/{report}` answers a scan over a
-relation of what the sensor reports of each site at each seed, and derives
-the seed after it (`{next}`, the first again after the last), and sharing,
+scenario, a relation over the three giving the weight Nature draws it by,
+`{weight}`, which never changes and so is law, not Nature's to hold;
+`resolve-scan/{truth}/{seed}/{report}` answers a scan over a relation of
+what the sensor reports of each site at each seed, and derives the seed
+after it (`{next}`, the first again after the last), and sharing,
 moving, the encounter and the rescue serve each site. Each role is fixed to
 its account, so no identity token pins a binding. Nature draws among the
-scenarios `state.moves` offers, and answers with the response it offers.
+scenarios `state.moves` offers, by their weights (`state.values`), and
+answers with the response it offers.
 
 The package's planner is the Scout choosing every public action by
 information-set tree search over what it sees, each iteration in a world its
