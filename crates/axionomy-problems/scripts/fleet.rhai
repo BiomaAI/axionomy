@@ -40,14 +40,18 @@ fn whereabouts(state, account) {
     ()
 }
 
-// What an order is: one in three needs the refrigerated slot, one in three
-// is three slots of heavy freight, and where it goes.
-fn cold(id) { id % 3 == 0 }
-fn heavy(id) { id % 3 == 1 }
+// How many orders the season has, the economy's constant.
+fn order_count(state) { state.constant("orders").to_int() }
 
-fn destination(id) {
-    if id == 1 || id == 2 { "south" } else if id == 3 || id == 4 { "east" } else { "north" }
-}
+// The order `id`'s terms, as the law gives them: its release's values,
+// where it goes, the payload space it takes, the refrigerated slots it
+// needs, its price, release, deadline and expiry.
+fn terms(state, id) { state.values(`release/${id}`) }
+
+// Whether an order needs the refrigerated slot, or is heavy freight, taking
+// more than one slot.
+fn cold(order) { order.cold > 0 }
+fn heavy(order) { order.weight > 1 }
 
 fn other_van(van) { if van == "cold" { "freight" } else { "cold" } }
 
@@ -95,7 +99,7 @@ fn first_road(roads, from, to, reliable) {
 // ticket or arriving, or its service ending.
 fn nature_response(state) {
     let orders = state.moves("release") + state.moves("expire");
-    for id in 0..value(state, "world", "count") {
+    for id in 0..order_count(state) {
         for due in orders {
             if due.account("order") == `order/${id}` { return due; }
         }
@@ -110,13 +114,14 @@ fn nature_response(state) {
     ()
 }
 
-// Order ids by `first`, a preference, then by deadline, then by id.
+// Order ids by a preference, cold loads first or heavy freight first, then
+// by deadline, then by id.
 fn by_deadline(state, ids, cold_first) {
     let keyed = [];
     for id in ids {
-        let late = value(state, `order/${id}`, "deadline");
-        let preferred = if cold_first { if cold(id) { 0 } else { 1 } } else { if heavy(id) { 0 } else { 1 } };
-        keyed.push([preferred, late, id]);
+        let order = terms(state, id);
+        let preferred = if cold_first { cold(order) } else { heavy(order) };
+        keyed.push([if preferred { 0 } else { 1 }, order.deadline.to_int(), id]);
     }
     keyed.sort(|a, b| {
         if a[0] != b[0] { return a[0] - b[0]; }
@@ -135,7 +140,7 @@ fn by_deadline(state, ids, cold_first) {
 // toward a delivery, the hub or the depot, and call the tow truck when worn
 // out away from the depot.
 fn decision(state, van, policy) {
-    let count = value(state, "world", "count");
+    let count = order_count(state);
     if value(state, "world", "resolved") == count { return (); }
     let own = `vehicle/${van}`;
     if value(state, own, "ready") == 0 || value(state, "world", `permit/${van}`) == 0 {
@@ -152,7 +157,7 @@ fn decision(state, van, policy) {
     let cargo = by_deadline(state, held, true);
     let carries_cold = false;
     for id in cargo {
-        if cold(id) { carries_cold = true; }
+        if cold(terms(state, id)) { carries_cold = true; }
     }
     // The first delivery of what it carries that applies, most urgent first,
     // within the window or late: the rates deliver a cold load only on time.
@@ -168,7 +173,7 @@ fn decision(state, van, policy) {
     }
     if relay && from == "hub" && van == "cold" && carries_cold {
         for id in cargo {
-            if cold(id) { continue; }
+            if cold(terms(state, id)) { continue; }
             let staging = applying(state, `stage/${van}/${id}`);
             if staging != () { return staging; }
         }
@@ -204,7 +209,7 @@ fn decision(state, van, policy) {
             }
         }
         for id in by_deadline(state, ready, van == "cold") {
-            if relay && from == "hub" && van == "cold" && !cold(id) { continue; }
+            if relay && from == "hub" && van == "cold" && !cold(terms(state, id)) { continue; }
             let load = applying(state, `load/${van}/${id}/${from}`);
             if load != () { return load; }
         }
@@ -213,7 +218,7 @@ fn decision(state, van, policy) {
         let target = if relay && van == "cold" && from == "depot" && cargo.len() > 1 {
             "hub"
         } else {
-            destination(cargo[0])
+            terms(state, cargo[0]).destination
         };
         let next = first_road(roads(state), from, target, reliable);
         if next != () {
@@ -226,7 +231,7 @@ fn decision(state, van, policy) {
             for id in 0..count {
                 if value(state, `order/${id}`, "waiting") > 0
                     && value(state, `order/${id}`, "at/hub") > 0
-                    && !cold(id)
+                    && !cold(terms(state, id))
                 {
                     staged = true;
                 }

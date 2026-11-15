@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    Rate, Relation, Slot, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param, Pattern,
+    Quantity, QuantityExpression as Q, Rate, Relation, Slot, basket,
 };
 pub mod fleet;
 #[cfg(feature = "packages")]
@@ -185,25 +185,49 @@ fn build(pending: &[OrderId]) -> World {
     }
 
     // The rates' variables: an order, a route and the weather on it; and
-    // the numbers relations give: the weight of each weather on each route,
-    // and the fuel and time a leg takes.
+    // the values relations give: where each route starts and ends, the
+    // weight of each weather on each route, and the fuel and time a leg
+    // takes. And the economy's constant: what a refuel buys.
     let order = Param::<OrderId>::new(path!("order"));
     let route = Param::<Route>::new(path!("route"));
     let outcome = Param::<TravelOutcome>::new(path!("outcome"));
+    let (start, end) = (
+        Param::<Location>::new(path!("from")),
+        Param::<Location>::new(path!("to")),
+    );
     let weight = Param::<u64>::new(path!("weight"));
     let (fuel, time) = (
         Param::<u64>::new(path!("fuel")),
         Param::<u64>::new(path!("time")),
     );
+    let refuel = Param::<u64>::new(path!("refuel-amount"));
+    builder = builder.constant(&refuel, REFUEL_AMOUNT);
     let package = || AssetPattern::Package(order.var()).into();
     let traveling = || AssetPattern::Traveling(route.var()).into();
+    // The road network: a relation over the routes giving the place each
+    // starts from and the place it ends at.
+    let network = || {
+        Relation::giving(
+            [route.name().clone()],
+            [start.name().clone(), end.name().clone()],
+            ROUTES.map(|route| {
+                [
+                    route.segment(),
+                    route_source(route).segment(),
+                    route_destination(route).segment(),
+                ]
+            }),
+        )
+    };
     // `rate` for each order, `{order}`, its role fixed to that order.
     let each_order = |rate: Rate<Ontology>| {
         with_vehicle(rate)
             .variable(order.every())
             .account(Role::Order, AccountIdPattern::Order(order.var()).into())
     };
-    builder = builder
+    // Arriving takes a clear trip or a delay.
+    let arrived = [TravelOutcome::Clear, TravelOutcome::Delayed];
+    builder
         .rate_at(
             RateIdPattern::Load(order.var()).into(),
             each_order(Rate::new())
@@ -276,61 +300,61 @@ fn build(pending: &[OrderId]) -> World {
                     ]),
                 )
                 .produce(Role::Nature, basket([(Asset::WeatherReady, 1)])),
-        );
-
-    // A route's departure and arrivals are its own: where it starts and
-    // ends are places, which no relation gives. Arriving after a clear trip
-    // or a delay is one law of the route, a relation over the two giving
-    // the fuel and time the leg takes.
-    let arrived = [TravelOutcome::Clear, TravelOutcome::Delayed];
-    for route in ROUTES {
-        builder = builder
-            .rate(
-                RateId::Depart(route),
-                with_vehicle(Rate::new())
-                    .consume(Role::Vehicle, basket([(Asset::At(route_source(route)), 1)]))
-                    .produce(Role::Vehicle, basket([(Asset::Traveling(route), 1)])),
-            )
-            .rate_at(
-                RateIdPattern::Arrive(Slot::Is(route), outcome.var()).into(),
-                with_nature(Rate::new())
-                    .variable(outcome.values(arrived))
-                    .relation(Relation::each_giving(
-                        &outcome,
-                        [fuel.name().clone(), time.name().clone()],
+        )
+        // A departure leaves where its route starts, which the network
+        // gives.
+        .rate_at(
+            RateIdPattern::Depart(route.var()).into(),
+            with_vehicle(Rate::new())
+                .variable(route.every())
+                .relation(network())
+                .consume_at(Role::Vehicle, one([AssetPattern::At(start.var()).into()]))
+                .produce_at(Role::Vehicle, one([traveling()])),
+        )
+        // Arriving after a clear trip or a delay is one law: the network
+        // gives where the route ends, and a relation over the routes and
+        // the two outcomes the fuel and time the leg takes.
+        .rate_at(
+            RateIdPattern::Arrive(route.var(), outcome.var()).into(),
+            with_nature(Rate::new())
+                .variable(route.every())
+                .variable(outcome.values(arrived))
+                .relation(network())
+                .relation(Relation::pairs_giving(
+                    &route,
+                    &outcome,
+                    [fuel.name().clone(), time.name().clone()],
+                    ROUTES.into_iter().flat_map(|route| {
                         arrived.map(|outcome| {
                             let (burnt, taken) = travel_cost(route, outcome);
-                            (outcome, [burnt, taken])
-                        }),
-                    ))
-                    .consume(Role::Vehicle, basket([(Asset::Traveling(route), 1)]))
-                    .consume_computed(Role::Vehicle, Asset::Fuel, fuel.quantity())
-                    .consume_computed(Role::Vehicle, Asset::TimeRemaining, time.quantity())
-                    .produce(
-                        Role::Vehicle,
-                        basket([(Asset::At(route_destination(route)), 1)]),
-                    )
-                    .produce_computed(Role::Vehicle, Asset::SpentFuel, fuel.quantity())
-                    .produce_computed(Role::Vehicle, Asset::ElapsedTime, time.quantity())
-                    .consume_at(
-                        Role::Nature,
-                        one([AssetPattern::Outcome(Slot::Is(route), outcome.var()).into()]),
-                    )
-                    .produce(Role::Nature, basket([(Asset::WeatherReady, 1)])),
-            );
-    }
-
-    builder
-        .rate(
-            RateId::Refuel,
+                            (route, outcome, [burnt, taken])
+                        })
+                    }),
+                ))
+                .consume_at(Role::Vehicle, one([traveling()]))
+                .consume_computed(Role::Vehicle, Asset::Fuel, fuel.quantity())
+                .consume_computed(Role::Vehicle, Asset::TimeRemaining, time.quantity())
+                .produce_at(Role::Vehicle, one([AssetPattern::At(end.var()).into()]))
+                .produce_computed(Role::Vehicle, Asset::SpentFuel, fuel.quantity())
+                .produce_computed(Role::Vehicle, Asset::ElapsedTime, time.quantity())
+                .consume_at(
+                    Role::Nature,
+                    one([AssetPattern::Outcome(route.var(), outcome.var()).into()]),
+                )
+                .produce(Role::Nature, basket([(Asset::WeatherReady, 1)])),
+        )
+        // A refuel buys the economy's refuel amount of fuel, each unit for
+        // a unit of money.
+        .rate(RateId::Refuel, {
+            let bought = || Q::units() * refuel.quantity();
             with_vehicle(Rate::new())
                 .account(Role::FuelStation, Pattern::literal(AccountId::FuelStation))
                 .preserve(Role::Vehicle, basket([(Asset::At(Location::Depot), 1)]))
-                .consume(Role::Vehicle, basket([(Asset::Money, REFUEL_AMOUNT)]))
-                .produce(Role::Vehicle, basket([(Asset::Fuel, REFUEL_AMOUNT)]))
-                .consume(Role::FuelStation, basket([(Asset::Fuel, REFUEL_AMOUNT)]))
-                .produce(Role::FuelStation, basket([(Asset::Money, REFUEL_AMOUNT)])),
-        )
+                .consume_computed(Role::Vehicle, Asset::Money, bought())
+                .produce_computed(Role::Vehicle, Asset::Fuel, bought())
+                .consume_computed(Role::FuelStation, Asset::Fuel, bought())
+                .produce_computed(Role::FuelStation, Asset::Money, bought())
+        })
         .invariant(
             [Location::Depot, Location::Junction, Location::Customer]
                 .into_iter()

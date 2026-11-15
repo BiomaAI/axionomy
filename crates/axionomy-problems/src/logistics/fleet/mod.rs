@@ -1,9 +1,9 @@
 //! Timed heterogeneous fleet with cargo, a shared road and finite services.
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OptionPattern, Param,
-    Pattern, Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, Relation, Rounding,
-    Slot, Variable, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, OptionPattern,
+    Param, Pattern, Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, Relation,
+    Rounding, Segment, Slot, Variable, basket,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -55,8 +55,6 @@ pub enum Asset {
     Closed,
     Time,
     TimeRemaining,
-    Horizon,
-    Count,
     Resolved,
     DeliveredCount,
     OnTimeCount,
@@ -99,15 +97,6 @@ pub enum Asset {
     InTransit,
     Delivered,
     Expired,
-    Arrival,
-    Deadline,
-    /// When an undelivered order expires: a cold shipment the tick after
-    /// its window closes, other freight at the season's horizon.
-    Expiry,
-    Destination(Location),
-    Weight,
-    Price,
-    ColdCargo,
     TicketWord(Van, Location, Location),
     TicketDivisor,
     TransferCount,
@@ -220,6 +209,105 @@ pub fn destination(id: u8) -> Location {
         _ => Location::North,
     }
 }
+/// What an order pays when delivered within its window: a cold load 24,
+/// heavy freight 28, other freight 16.
+pub fn price(id: u8) -> u64 {
+    if cold(id) {
+        24
+    } else if weight(id) == 3 {
+        28
+    } else {
+        16
+    }
+}
+/// The tick each order is released.
+const ARRIVALS: [u64; 6] = [0, 0, 0, 7, 10, 13];
+/// The last tick each order is delivered within its window.
+const DEADLINES: [u64; 6] = [12, 18, 17, 30, 40, 44];
+/// The season's horizon, an economy's constant: the tick by which every
+/// activity ends, and other freight expires.
+fn horizon() -> Param<u64> {
+    Param::new(path!("horizon"))
+}
+/// How many orders the season has, an economy's constant.
+fn order_count() -> Param<u64> {
+    Param::new(path!("orders"))
+}
+/// An order's terms, which never change: what its row in the orders'
+/// relation gives ([`Terms::of`]), read by every rate involving the order.
+/// Its money, where it waits, the hub's staging space it holds and how far
+/// along it is change, so its account holds them.
+struct Terms {
+    /// Where it goes.
+    destination: Param<Location>,
+    /// The payload space its cargo takes.
+    weight: Param<u64>,
+    /// The refrigerated slots its cargo takes: one for a cold load.
+    cold: Param<u64>,
+    /// What it pays, delivered within its window.
+    price: Param<u64>,
+    /// The tick it is released.
+    arrival: Param<u64>,
+    /// The last tick it is delivered within its window.
+    deadline: Param<u64>,
+    /// The tick it expires undelivered: a cold shipment the tick after its
+    /// window closes, other freight at the season's horizon.
+    expiry: Param<u64>,
+}
+impl Terms {
+    fn new() -> Self {
+        Self {
+            destination: Param::new(path!("destination")),
+            weight: Param::new(path!("weight")),
+            cold: Param::new(path!("cold")),
+            price: Param::new(path!("price")),
+            arrival: Param::new(path!("arrival")),
+            deadline: Param::new(path!("deadline")),
+            expiry: Param::new(path!("expiry")),
+        }
+    }
+    /// The relation over `order`, the first `count` orders of a season
+    /// ending at `horizon`, giving each one's terms.
+    fn of(&self, order: &Param<u8>, count: u8, horizon: u64) -> Relation {
+        Relation::giving(
+            [order.name().clone()],
+            [
+                self.destination.name().clone(),
+                self.weight.name().clone(),
+                self.cold.name().clone(),
+                self.price.name().clone(),
+                self.arrival.name().clone(),
+                self.deadline.name().clone(),
+                self.expiry.name().clone(),
+            ],
+            (0..count).map(|id| {
+                let due = DEADLINES[usize::from(id)];
+                [
+                    id.segment(),
+                    destination(id).segment(),
+                    Segment::from(weight(id)),
+                    Segment::from(u64::from(cold(id))),
+                    Segment::from(price(id)),
+                    Segment::from(ARRIVALS[usize::from(id)]),
+                    Segment::from(due),
+                    Segment::from(if cold(id) { due + 1 } else { horizon }),
+                ]
+            }),
+        )
+    }
+    /// `rate` freeing, in the van `role` plays, the payload space the
+    /// order's cargo takes and the refrigerated slot a cold one takes.
+    fn release_capacity(&self, rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
+        rate.produce_computed(role, Asset::Space, self.weight.quantity())
+            .produce_computed(role, Asset::ColdSpace, self.cold.quantity())
+    }
+    /// `rate` taking, in the van `role` plays, the payload space the
+    /// order's cargo takes and the refrigerated slot a cold one takes.
+    fn take_capacity(&self, rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
+        rate.consume_computed(role, Asset::Space, self.weight.quantity())
+            .consume_computed(role, Asset::ColdSpace, self.cold.quantity())
+    }
+}
 pub fn main_road(from: Location, to: Location) -> bool {
     matches!(
         (from, to),
@@ -264,12 +352,6 @@ fn each_van(rate: Rate<Ontology>, van: &Param<Van>) -> Rate<Ontology> {
     rate.variable(van.every())
         .account(Role::Vehicle, AccountIdPattern::Vehicle(van.var()).into())
 }
-/// `rate` for each order `orders` takes, `{order}`, its order role fixed to
-/// that order.
-fn each_order(rate: Rate<Ontology>, order: &Param<u8>, orders: Variable) -> Rate<Ontology> {
-    rate.variable(orders)
-        .account(Role::Order, AccountIdPattern::Order(order.var()).into())
-}
 /// `rate` with the station, its role fixed to the station's account.
 fn station(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.account(Role::Station, Pattern::literal(AccountId::Station))
@@ -286,12 +368,14 @@ fn permit(rate: Rate<Ontology>, van: &Param<Van>) -> Rate<Ontology> {
 fn ready(van: &Param<Van>) -> Rate<Ontology> {
     permit(each_van(law(), van), van).preserve(Role::Vehicle, basket([(Asset::Ready, 1)]))
 }
+/// `rate` starting an activity of `duration` ticks, which ends by the
+/// season's horizon.
 fn deadline(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
     rate.condition(
         path!("activity-fits-remaining-horizon"),
         clock() + Q::constant(duration),
         C::LessThanOrEqual,
-        q(Role::World, Asset::Horizon),
+        horizon().quantity(),
     )
 }
 /// The van `{van}` ending the activity `state` once its time is up.
@@ -311,10 +395,6 @@ fn finish(van: &Param<Van>, state: Pattern<Asset>) -> Rate<Ontology> {
             q(Role::Vehicle, Asset::ReadyAt),
         )
 }
-/// The order's weight, as its account records it.
-fn order_weight() -> Q<Ontology> {
-    q(Role::Order, Asset::Weight)
-}
 /// `rate` freeing the hub's staging space the order holds: none, where it
 /// waits at the depot.
 fn unstaged(rate: Rate<Ontology>) -> Rate<Ontology> {
@@ -329,18 +409,6 @@ fn unstaged(rate: Rate<Ontology>) -> Rate<Ontology> {
         q(Role::Order, Asset::DockUsed),
     )
 }
-/// `rate` freeing, in the van `role` plays, the payload space the order's
-/// cargo takes and the refrigerated slot a cold one takes.
-fn release_capacity(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
-    rate.produce_computed(role, Asset::Space, order_weight())
-        .produce_computed(role, Asset::ColdSpace, q(Role::Order, Asset::ColdCargo))
-}
-/// `rate` taking, in the van `role` plays, the payload space the order's
-/// cargo takes and the refrigerated slot a cold one takes.
-fn take_capacity(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
-    rate.consume_computed(role, Asset::Space, order_weight())
-        .consume_computed(role, Asset::ColdSpace, q(Role::Order, Asset::ColdCargo))
-}
 fn random_ticket(seed: u64, van: Van, attempt: u8, from: Location, to: Location) -> u64 {
     axionomy_search::sampling::splitmix(
         seed,
@@ -353,12 +421,10 @@ fn directed_roads() -> impl Iterator<Item = (Location, Location)> {
 }
 pub fn initial(stress: bool, seed: u64) -> World {
     let count: u8 = if stress { 6 } else { 4 };
-    let horizon = if stress { 52 } else { 40 };
+    let season = if stress { 52 } else { 40 };
     let world = basket([
         (Asset::Active, 1),
-        (Asset::Horizon, horizon),
-        (Asset::TimeRemaining, horizon),
-        (Asset::Count, count.into()),
+        (Asset::TimeRemaining, season),
         (Asset::Money, 20),
         (Asset::RoadSpace, 1),
         (Asset::DockSpace, 2),
@@ -366,6 +432,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::Permit(Van::Freight), 1),
     ]);
     let mut builder = EconomyBuilder::new()
+        .constant(&horizon(), season)
+        .constant(&order_count(), count.into())
         .account(AccountId::World, Account::from(world))
         .account(
             AccountId::Station,
@@ -415,37 +483,32 @@ pub fn initial(stress: bool, seed: u64) -> World {
         }
     }
     builder = builder.account(AccountId::Nature, Account::from(nature));
+    // An order waits to be released at the depot, holding what it pays.
     for id in 0..count {
-        let arrival = [0, 0, 0, 7, 10, 13][id as usize];
-        let due = [12, 18, 17, 30, 40, 44][id as usize];
-        let price = if cold(id) {
-            24
-        } else if weight(id) == 3 {
-            28
-        } else {
-            16
-        };
-        let mut stock = basket([
-            (Asset::Scheduled, 1),
-            (Asset::At(Location::Depot), 1),
-            (Asset::Arrival, arrival),
-            (Asset::Deadline, due),
-            (Asset::Expiry, if cold(id) { due + 1 } else { horizon }),
-            (Asset::Destination(destination(id)), 1),
-            (Asset::Weight, weight(id)),
-            (Asset::Price, price),
-            (Asset::Money, price),
-        ]);
-        if cold(id) {
-            stock.insert(Asset::ColdCargo, Quantity::new(1));
-        }
-        builder = builder.account(AccountId::Order(id), Account::from(stock));
+        builder = builder.account(
+            AccountId::Order(id),
+            Account::from(basket([
+                (Asset::Scheduled, 1),
+                (Asset::At(Location::Depot), 1),
+                (Asset::Money, price(id)),
+            ])),
+        );
     }
 
     // The rates' variables: a van, an order, the two ends of a road and a
-    // trip's outcome; and the numbers the world's map gives a road.
+    // trip's outcome; the numbers the world's map gives a road; and each
+    // order's terms, which every rate involving the order reads.
     let van = Param::<Van>::new(path!("van"));
     let order = Param::<u8>::new(path!("order"));
+    let terms = Terms::new();
+    let rows = terms.of(&order, count, season);
+    // `rate` for each order `orders` takes, `{order}`, its order role fixed
+    // to that order, reading its terms.
+    let each_order = |rate: Rate<Ontology>, orders: Variable| {
+        rate.variable(orders)
+            .relation(rows.clone())
+            .account(Role::Order, AccountIdPattern::Order(order.var()).into())
+    };
     let (from, to) = (
         Param::<Location>::new(path!("from")),
         Param::new(path!("to")),
@@ -725,12 +788,12 @@ pub fn initial(stress: bool, seed: u64) -> World {
 
     builder = builder.rate_at(
         RateIdPattern::Release(order.var()).into(),
-        each_order(law(), &order, every_order())
+        each_order(law(), every_order())
             .condition(
                 path!("customer-order-has-arrived"),
                 clock(),
                 C::GreaterThanOrEqual,
-                q(Role::Order, Asset::Arrival),
+                terms.arrival.quantity(),
             )
             .consume(Role::Order, basket([(Asset::Scheduled, 1)]))
             .produce(Role::Order, basket([(Asset::Waiting, 1)])),
@@ -747,18 +810,15 @@ pub fn initial(stress: bool, seed: u64) -> World {
             at: place.var(),
         }
         .into(),
-        unstaged(take_capacity(
-            each_order(ready(&van), &order, every_order()),
-            Role::Vehicle,
-        ))
-        .variable(place.values(waiting))
-        .preserve_at(Role::Vehicle, one([at(&place)]))
-        .consume_at(
-            Role::Order,
-            one([Pattern::literal(Asset::Waiting), at(&place)]),
-        )
-        .produce(Role::Order, basket([(Asset::InTransit, 1)]))
-        .produce_at(Role::Vehicle, one([cargo()])),
+        unstaged(terms.take_capacity(each_order(ready(&van), every_order()), Role::Vehicle))
+            .variable(place.values(waiting))
+            .preserve_at(Role::Vehicle, one([at(&place)]))
+            .consume_at(
+                Role::Order,
+                one([Pattern::literal(Asset::Waiting), at(&place)]),
+            )
+            .produce(Role::Order, basket([(Asset::InTransit, 1)]))
+            .produce_at(Role::Vehicle, one([cargo()])),
     );
     builder = builder.rate_at(
         RateIdPattern::Stage {
@@ -766,31 +826,24 @@ pub fn initial(stress: bool, seed: u64) -> World {
             order: order.var(),
         }
         .into(),
-        release_capacity(
-            each_order(ready(&van), &order, every_order()),
-            Role::Vehicle,
-        )
-        .preserve(Role::Vehicle, basket([(Asset::At(Location::Hub), 1)]))
-        .consume_at(Role::Vehicle, one([cargo()]))
-        .consume(Role::Order, basket([(Asset::InTransit, 1)]))
-        .produce(
-            Role::Order,
-            basket([(Asset::Waiting, 1), (Asset::At(Location::Hub), 1)]),
-        )
-        .produce_computed(Role::Order, Asset::DockUsed, order_weight())
-        .consume_computed(Role::World, Asset::DockSpace, order_weight())
-        .produce(Role::World, basket([(Asset::StagedCount, 1)])),
+        terms
+            .release_capacity(each_order(ready(&van), every_order()), Role::Vehicle)
+            .preserve(Role::Vehicle, basket([(Asset::At(Location::Hub), 1)]))
+            .consume_at(Role::Vehicle, one([cargo()]))
+            .consume(Role::Order, basket([(Asset::InTransit, 1)]))
+            .produce(
+                Role::Order,
+                basket([(Asset::Waiting, 1), (Asset::At(Location::Hub), 1)]),
+            )
+            .produce_computed(Role::Order, Asset::DockUsed, terms.weight.quantity())
+            .consume_computed(Role::World, Asset::DockSpace, terms.weight.quantity())
+            .produce(Role::World, basket([(Asset::StagedCount, 1)])),
     );
     // A delivery is made where the van stands at the order's destination.
-    let at_destination = LOCATIONS
-        .into_iter()
-        .map(|place| q(Role::Order, Asset::Destination(place)) * q(Role::Vehicle, Asset::At(place)))
-        .reduce(|a, b| a + b)
-        .expect("the fleet has places");
     // A late delivery earns half the price, which is exact since every
     // price is even; a cold load is never delivered late, it expires.
     for late in [false, true] {
-        let price = q(Role::Order, Asset::Price);
+        let price = terms.price.quantity();
         let payment = if late {
             Q::divide(price, Q::constant(2), Rounding::Floor)
         } else {
@@ -801,13 +854,9 @@ pub fn initial(stress: bool, seed: u64) -> World {
         } else {
             every_order()
         };
-        let mut deliver = release_capacity(each_order(ready(&van), &order, orders), Role::Vehicle)
-            .condition(
-                path!("van-at-order-destination"),
-                at_destination.clone(),
-                C::Equal,
-                Q::constant(1),
-            )
+        let mut deliver = terms
+            .release_capacity(each_order(ready(&van), orders), Role::Vehicle)
+            .preserve_at(Role::Vehicle, one([at(&terms.destination)]))
             .consume_at(Role::Vehicle, one([cargo()]))
             .consume(Role::Order, basket([(Asset::InTransit, 1)]))
             .consume_computed(Role::Order, Asset::Money, payment.clone())
@@ -823,7 +872,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 path!("late-delivery-earns-half-payment"),
                 clock(),
                 C::GreaterThanOrEqual,
-                q(Role::Order, Asset::Deadline) + Q::constant(1),
+                terms.deadline.quantity() + Q::constant(1),
             );
         } else {
             deliver = deliver
@@ -831,7 +880,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     path!("within-customer-window"),
                     clock(),
                     C::LessThanOrEqual,
-                    q(Role::Order, Asset::Deadline),
+                    terms.deadline.quantity(),
                 )
                 .produce(Role::World, basket([(Asset::OnTimeCount, 1)]));
         }
@@ -858,11 +907,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
         }
         .into(),
         permit(
-            take_capacity(
-                release_capacity(
-                    each_order(ready(&giver), &order, every_order()),
-                    Role::Vehicle,
-                ),
+            terms.take_capacity(
+                terms.release_capacity(each_order(ready(&giver), every_order()), Role::Vehicle),
                 Role::Other,
             ),
             &taker,
@@ -883,12 +929,12 @@ pub fn initial(stress: bool, seed: u64) -> World {
     );
     // An order expires waiting at the depot or the hub, or aboard a van.
     let expiring = || {
-        each_order(law(), &order, every_order())
+        each_order(law(), every_order())
             .condition(
                 path!("order-has-expired"),
                 clock(),
                 C::GreaterThanOrEqual,
-                q(Role::Order, Asset::Expiry),
+                terms.expiry.quantity(),
             )
             .produce(Role::Order, basket([(Asset::Expired, 1)]))
             .produce(
@@ -917,7 +963,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
             at: Slot::Is(Location::Depot),
         }
         .into(),
-        release_capacity(each_van(expiring(), &van), Role::Vehicle)
+        terms
+            .release_capacity(each_van(expiring(), &van), Role::Vehicle)
             .consume(Role::Order, basket([(Asset::InTransit, 1)]))
             .consume_at(Role::Vehicle, one([cargo()])),
     );
@@ -953,7 +1000,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 path!("all-customer-orders-resolved"),
                 q(Role::World, Asset::Resolved),
                 C::Equal,
-                q(Role::World, Asset::Count),
+                order_count().quantity(),
             )
             .preserve(Role::Vehicle, basket([(Asset::Ready, 1)]))
             .preserve(Role::Other, basket([(Asset::Ready, 1)]))

@@ -17,8 +17,9 @@ fn routes() {
 
 fn outcomes() { ["clear", "delayed", "breakdown"] }
 
-// What a refuel buys, and the fuel below which the vehicle refuels.
-fn refuel_amount() { 4 }
+// What a refuel buys, as the economy's constant gives it, and the fuel
+// below which the vehicle refuels.
+fn refuel_amount(state) { state.constant("refuel-amount") }
 
 // The route the vehicle is on, if it is travelling.
 fn active_route(state) {
@@ -95,7 +96,7 @@ fn decide(state, policy) {
         if carrying != () {
             return state.exchange_of(if policy == "direct" { "depart/direct-out" } else { "depart/safe-out-first" });
         }
-        if state.balance("vehicle", "fuel") < refuel_amount() { return state.exchange_of("refuel"); }
+        if state.balance("vehicle", "fuel") < refuel_amount(state) { return state.exchange_of("refuel"); }
         for order in orders() {
             if state.balance(`order/${order}`, "waiting") > 0 { return state.exchange_of(`load/${order}`); }
         }
@@ -155,7 +156,7 @@ fn moves(state) {
                     if state.balance(`order/${order}`, "waiting") > 0 { rates.push(`load/${order}`); }
                 }
             }
-            if state.balance("vehicle", "fuel") < refuel_amount() { rates.push("refuel"); }
+            if state.balance("vehicle", "fuel") < refuel_amount(state) { rates.push("refuel"); }
         } else if at == "customer" {
             if carrying != () {
                 rates.push(`deliver/${carrying}`);

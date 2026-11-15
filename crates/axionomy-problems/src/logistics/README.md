@@ -27,10 +27,17 @@ Nature resolves a trip by one law, `resolve/{van}/{from}/{to}/{outcome}`,
 a relation over the outcomes giving each one's code in the hidden ticket,
 how long the trip takes and how many breakdowns it brings. Loading, or an
 order expiring while it waits, at the depot or the hub frees the staging
-space the order holds there. An order's payload space, refrigerated slot,
-staging space and payment come from its own account's weight, cold-cargo
-flag and price, a delivery is made where the van stands at the order's
-destination, and an order expires at its `Expiry`. Each role is fixed to its
+space the order holds there. An order's terms never change, so they are
+a relation over the orders that every rate involving one reads: where it
+goes (`{destination}`, a word), the payload space it takes (`{weight}`),
+the refrigerated slots it needs (`{cold}`), what it pays (`{price}`), and
+when it is released, due and expires (`{arrival}`, `{deadline}`,
+`{expiry}`). A delivery is made where the van stands at the destination.
+The order's account holds only what exchanges change: its lifecycle, where
+it waits, its money and the hub's staging space it holds. The season's
+horizon and its number of orders are the economy's constants, `{horizon}`
+and `{orders}`; the policies and the view read the terms with
+`state.values` and the count with `state.constant`. Each role is fixed to its
 account, the world, the station, Nature, the van or the order its
 identifier names, so no identity token pins a binding. Nature takes, order by
 order, a release or an expiry, then, van by van, a trip's resolution or
@@ -69,13 +76,16 @@ delivery, refueling, travel, repair, and order completion are all rates.
 Loading and delivering are one rate each over the orders, `load/{order}`,
 resolving a leg's weather one over the routes and outcomes,
 `resolve/{route}/{outcome}`, a relation over the two giving each
-outcome's weight on each route, and repairing one over the routes. A
-route's departure and arrival stay its own rates, since where it starts
-and ends are places no relation gives, but arriving after a clear trip or
-a delay is one law of the route, `arrive/direct-out/{outcome}`, a relation
-over the two giving the fuel and time the leg takes. Each role is fixed to
-its account, so the policies and the planner propose each move as its
-rate's exchange (`state.exchange_of`).
+outcome's weight on each route, and repairing one over the routes.
+Departing is one law, `depart/{route}`, and arriving after a clear trip
+or a delay another, `arrive/{route}/{outcome}`: the road network is a
+relation over the routes giving the place each starts from and ends at
+(`{from}`, `{to}`), and a relation over the routes and the two outcomes
+gives the fuel and time the leg takes. The routes keep their names, so
+the weather's events do too. What a refuel buys is the economy's constant
+`{refuel-amount}`, which the policies read too. Each role is fixed to its
+account, so the policies and the planner propose each move as its rate's
+exchange (`state.exchange_of`).
 
 Nature draws each resolution by its event, `weather/<route>/<elapsed time>`:
 the weather of that leg, met at the time the vehicle has elapsed when the
