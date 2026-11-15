@@ -8,11 +8,6 @@ mod dynamics;
 #[cfg(feature = "packages")]
 pub mod package;
 
-use axionomy_search::{
-    SearchSolution, astar, bfs, dijkstra,
-    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
-};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Node {
     Start,
@@ -125,14 +120,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Solution = SearchSolution<Ontology>;
-pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectiveKey {
-    Energy,
-    Time,
-}
 
 const MICRO_EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Start, Node::KeyRoom, 2, false),
@@ -438,76 +425,25 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Agent, basket([(Asset::Solved, 1)]))
 }
 
-/// Derives executable exchanges from the rate identifiers encoded in the economy.
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut rate_ids: Vec<_> = world.rate_ids().copied().collect();
-    rate_ids.sort();
-    world.applicable(rate_ids.into_iter().map(action))
+fn nodes_from_edges(edges: &[(Node, Node, u64, bool)]) -> Vec<Node> {
+    let mut nodes = std::collections::BTreeSet::new();
+    for (from, to, _, _) in edges {
+        nodes.insert(*from);
+        nodes.insert(*to);
+    }
+    nodes.into_iter().collect()
 }
 
-pub fn solve_bfs(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), candidates)
+/// The exchange applying `rate` once: the Explorer acting on the world.
+pub fn action(rate: RateId) -> Action {
+    Exchange::new(rate, Quantity::new(1))
+        .bind(Role::Actor, AccountId::Agent)
+        .bind(Role::Environment, AccountId::World)
 }
 
-pub fn solve_dijkstra(world: &World) -> Option<Solution> {
-    dijkstra(world, &goal(), candidates, move_energy)
-}
-
-pub fn solve_astar(world: &World) -> Option<Solution> {
-    astar(world, &goal(), candidates, move_energy, heuristic)
-}
-
-/// Exhaustively exposes the valid energy/time tradeoffs as replayable traces.
-pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    pareto::search(world, &goal(), candidates, objectives)
-}
-
-pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    ObjectiveVector::try_new([
-        Objective::minimize(ObjectiveKey::Energy, spent_energy(world)),
-        Objective::minimize(ObjectiveKey::Time, spent_time(world)),
-    ])
-    .expect("maze objective schema is static and unique")
-}
-
-pub fn spent_energy(world: &World) -> u64 {
-    world
-        .balance(&AccountId::Agent, &Asset::SpentEnergy)
-        .to_u64()
-}
-
-pub fn spent_time(world: &World) -> u64 {
-    world.balance(&AccountId::Agent, &Asset::SpentTime).to_u64()
-}
-
-pub fn heuristic(world: &World) -> u64 {
-    position(world).map_or(0, |node| {
-        world
-            .balance(&AccountId::World, &Asset::Distance(node))
-            .to_u64()
-    })
-}
-
-/// Returns the Explorer's authoritative room, if the lifecycle still carries
-/// a position token.
-pub fn position(world: &World) -> Option<Node> {
-    nodes(world).into_iter().find(|node| {
-        !world
-            .balance(&AccountId::Agent, &Asset::At(*node))
-            .is_zero()
-    })
-}
-
-pub fn has_key(world: &World) -> bool {
-    !world.balance(&AccountId::Agent, &Asset::Key).is_zero()
-}
-
-pub fn gate_is_open(world: &World) -> bool {
-    !world.balance(&AccountId::World, &Asset::Open).is_zero()
-}
-
-/// Returns the topology nodes encoded by the world's edge assets.
-pub fn nodes(world: &World) -> Vec<Node> {
+/// The rooms the world's passages join.
+#[cfg(test)]
+fn nodes(world: &World) -> Vec<Node> {
     let edges = world.rate_ids().filter_map(|rate| match rate {
         RateId::Move { from, to, .. } => Some((*from, *to)),
         _ => None,
@@ -520,45 +456,90 @@ pub fn nodes(world: &World) -> Vec<Node> {
     nodes.into_iter().collect()
 }
 
-fn nodes_from_edges(edges: &[(Node, Node, u64, bool)]) -> Vec<Node> {
-    let mut nodes = std::collections::BTreeSet::new();
-    for (from, to, _, _) in edges {
-        nodes.insert(*from);
-        nodes.insert(*to);
-    }
-    nodes.into_iter().collect()
+/// The room the Explorer stands in.
+#[cfg(test)]
+fn position(world: &World) -> Option<Node> {
+    nodes(world).into_iter().find(|node| {
+        !world
+            .balance(&AccountId::Agent, &Asset::At(*node))
+            .is_zero()
+    })
 }
 
-pub fn move_energy(before: &World, _: &Action, after: &World) -> u64 {
-    spent_energy(after).saturating_sub(spent_energy(before))
+#[cfg(test)]
+fn spent_energy(world: &World) -> u64 {
+    world
+        .balance(&AccountId::Agent, &Asset::SpentEnergy)
+        .to_u64()
 }
 
-pub fn action(rate: RateId) -> Action {
-    Exchange::new(rate, Quantity::new(1))
-        .bind(Role::Actor, AccountId::Agent)
-        .bind(Role::Environment, AccountId::World)
+#[cfg(test)]
+fn spent_time(world: &World) -> u64 {
+    world.balance(&AccountId::Agent, &Asset::SpentTime).to_u64()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// `world` after the Explorer plays `rates`, one exchange each.
+    fn played(world: &World, rates: &[RateId]) -> World {
+        world
+            .replayed(&rates.iter().copied().map(action).collect())
+            .expect("the route replays")
+    }
+
     #[test]
-    fn depth_and_resource_optimizers_choose_different_valid_paths() {
-        let world = initial();
-        let shallow = solve_bfs(&world).expect("detour is feasible");
-        let cheapest = solve_dijkstra(&world).expect("key route is feasible");
-        let astar = solve_astar(&world).expect("key route is feasible");
-
-        assert_eq!(shallow.trace().exchanges().len(), 3);
-        assert_eq!(cheapest.cost(), 6);
-        assert_eq!(astar.cost(), cheapest.cost());
-
-        for solution in [shallow, cheapest, astar] {
-            let mut replay = initial();
-            replay.replay(solution.trace()).expect("trace must replay");
-            assert!(replay.matches(&goal()));
-            assert!(candidates(&replay).is_empty());
+    fn the_key_route_spends_less_energy_and_the_detour_less_time() {
+        let key_route = [
+            RateId::Move {
+                from: Node::Start,
+                to: Node::KeyRoom,
+                energy: 2,
+                needs_open_door: false,
+            },
+            RateId::TakeKey { at: Node::KeyRoom },
+            RateId::UnlockDoor { at: Node::KeyRoom },
+            RateId::Move {
+                from: Node::KeyRoom,
+                to: Node::Gate,
+                energy: 2,
+                needs_open_door: true,
+            },
+            RateId::Move {
+                from: Node::Gate,
+                to: Node::Exit,
+                energy: 2,
+                needs_open_door: false,
+            },
+            RateId::Finish,
+        ];
+        let detour = [
+            RateId::Move {
+                from: Node::Start,
+                to: Node::Detour,
+                energy: 4,
+                needs_open_door: false,
+            },
+            RateId::Move {
+                from: Node::Detour,
+                to: Node::Exit,
+                energy: 5,
+                needs_open_door: false,
+            },
+            RateId::Finish,
+        ];
+        for (route, energy, time) in [(&key_route[..], 6, 6), (&detour[..], 9, 3)] {
+            let solved = played(&initial(), route);
+            assert!(solved.matches(&goal()));
+            assert_eq!(spent_energy(&solved), energy);
+            assert_eq!(spent_time(&solved), time);
+            // A solved maze has no move left.
+            assert!(
+                solved
+                    .rate_ids()
+                    .all(|rate| !solved.is_applicable(&action(*rate)))
+            );
         }
     }
 
@@ -581,65 +562,31 @@ mod tests {
     }
 
     #[test]
-    fn pareto_front_preserves_both_encoded_routes_and_replays_them() {
-        let initial = initial();
-        let result = pareto_front(&initial).unwrap();
-        let mut outcomes = Vec::new();
-
-        for entry in result.front().entries() {
-            let replayed = initial.replayed(entry.payload()).unwrap();
-            assert!(replayed.matches(&goal()));
-            assert_eq!(&objectives(&replayed), entry.objectives());
-            outcomes.push((spent_energy(&replayed), spent_time(&replayed)));
-        }
-
-        outcomes.sort_unstable();
-        assert_eq!(outcomes, [(6, 6), (9, 3)]);
-    }
-
-    #[test]
-    fn stress_profile_adds_routes_and_keeps_search_replayable() {
+    fn stress_adds_routes_to_the_showcase_district() {
         let showcase = initial_showcase();
         let stress = initial_stress();
         assert!(nodes(&stress).len() > nodes(&showcase).len());
         assert!(stress.rate_ids().count() > showcase.rate_ids().count());
 
-        for solution in [
-            solve_bfs(&stress).expect("stress maze has a shortest route"),
-            solve_astar(&stress).expect("stress maze has an energy route"),
-        ] {
-            let replayed = stress
-                .replayed(solution.trace())
-                .expect("stress route must replay");
-            assert!(replayed.matches(&goal()));
-        }
-
-        let frontier = pareto_front(&stress).expect("stress frontier is finite");
-        assert!(frontier.front().len() >= 2);
-    }
-
-    #[test]
-    fn showcase_tradeoffs_include_power_and_protection() {
-        let world = initial_showcase();
-        let dijkstra = solve_dijkstra(&world).expect("showcase has an energy-optimal route");
-        let astar = solve_astar(&world).expect("showcase has a guided energy-optimal route");
-        assert_eq!(dijkstra.cost(), 9);
-        assert_eq!(astar.cost(), dijkstra.cost());
-        assert!(astar.expanded() < dijkstra.expanded());
-
-        let mut outcomes = pareto_front(&world)
-            .unwrap()
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let replayed = world.replayed(entry.payload()).unwrap();
-                assert!(replayed.matches(&goal()));
-                (spent_energy(&replayed), spent_time(&replayed))
-            })
-            .collect::<Vec<_>>();
-        outcomes.sort_unstable();
-        assert_eq!(outcomes, [(9, 12), (11, 6), (12, 5), (15, 4)]);
+        let detour = played(
+            &stress,
+            &[
+                RateId::Move {
+                    from: Node::Start,
+                    to: Node::Detour,
+                    energy: 8,
+                    needs_open_door: false,
+                },
+                RateId::Move {
+                    from: Node::Detour,
+                    to: Node::Exit,
+                    energy: 7,
+                    needs_open_door: false,
+                },
+                RateId::Finish,
+            ],
+        );
+        assert!(detour.matches(&goal()));
     }
 
     #[test]

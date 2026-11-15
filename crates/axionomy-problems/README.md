@@ -86,9 +86,8 @@ let searched = results
     .find(|arm| arm.arm.strategy.as_str() == "maze/breadth-first")
     .expect("the maze's experiment searches breadth first");
 let (_, exchanges) = engine.history(searched.trials[0].end)?;
-// The package's breadth-first search finds the route the Rust solver finds.
-let route = maze::solve_bfs(&maze::initial()).expect("the smallest maze has an exit");
-assert_eq!(exchanges.len(), route.trace().exchanges().len());
+// Breadth first, the package takes the detour: two moves, then the finish.
+assert_eq!(exchanges.len(), 3);
 # }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

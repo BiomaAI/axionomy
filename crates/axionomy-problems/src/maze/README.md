@@ -35,22 +35,27 @@ produces `Solved`, leaving no post-terminal moves applicable.
 
 ## Required results
 
-- BFS chooses the three-exchange detour.
-- Dijkstra and A* choose the six-energy key route.
-- Dijkstra and A* agree on cost.
-- Exact Pareto search retains `(energy=6,time=6)` and `(energy=9,time=3)`;
-  neither route is hidden behind one scalar weight.
-- Every trace replays to `Solved`.
-- Actor/environment role swapping is rejected by encoded requirements.
-- A solved maze has no applicable actions.
+The package's experiments find these, pinned in `tests/outcomes`:
+
+- Breadth-first search takes the three-exchange detour.
+- Dijkstra and A* take the six-energy key route, at the same cost.
+- Exact Pareto search, ranked by energy or by time, finds
+  `(energy=6,time=6)` and `(energy=9,time=3)`; neither route is hidden
+  behind one scalar weight.
+- Every run replays to `Solved`.
+
+The model's tests apply the rules directly: both routes replay at those
+costs, actor/environment role swapping is rejected by encoded requirements,
+and a solved maze has no applicable actions.
 
 The Showcase keeps those laws but expands them into the 15-room Vault
 District: 25 directed passages form cyclic route families with real
 backtracking, the key visibly transfers from the district to the Explorer,
 and the gate can only be unlocked while the Explorer is standing there. Its
-exact frontier holds the four tradeoffs above. Dijkstra and A* agree on the
-least-energy result while A* expands materially fewer states; Studio retains
-each algorithm's own expansion history rather than relabeling one shared log.
+exact frontier holds the four tradeoffs above. The package's Dijkstra and A*
+agree on the least-energy result while A* expands materially fewer states;
+Studio retains each algorithm's own expansion history rather than relabeling
+one shared log.
 
 ## API pressure
 
@@ -65,18 +70,12 @@ each algorithm's own expansion history rather than relabeling one shared log.
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro maze, the Showcase and Stress districts,
-  and the searches over them.
+- `mod.rs` is the model: the Micro maze and the Showcase and Stress
+  districts.
 - `dynamics.rs` adds the larger mazes' shared power, protective gear,
   persistent injuries and recovery.
-- `package.rs` writes its package: its economies under refs, goals,
-  strategies, experiments and view, whose scripts are `scripts/maze.rhai`
-  and `scripts/maze-view.rhai`.
-
-[`examples/maze.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/maze.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example maze
-```
+- `package.rs` writes its package, the maze's only implementation of its
+  searches: its economies under refs, goals, strategies, experiments and
+  view, whose scripts are `scripts/maze.rhai` and `scripts/maze-view.rhai`.
 
 The maze is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
