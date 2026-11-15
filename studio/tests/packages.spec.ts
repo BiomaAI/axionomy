@@ -131,20 +131,22 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   expect(await openRef(page, "maze/showcase")).toBe(start);
   expect(await openRef(page, mine)).toBe(start + 1);
 
-  // An exchange written from a rate is checked before it can be applied.
+  // An exchange written from a rate is checked before it can be applied; the
+  // accounts the rate fixes are filled in.
   const editor = fromHere(page).getByRole("region", { name: "Exchange", exact: true });
   const apply = editor.getByRole("button", { name: "Apply" });
   const check = editor.getByRole("button", { name: "Check" });
-  const offered = await fromHere(page).locator(".move-applicable .exchange-rate").first().textContent();
-  await editor.getByRole("combobox", { name: "Rate" }).selectOption({ label: offered ?? "" });
-  await editor.getByRole("combobox", { name: "Actor" }).selectOption({ label: "Explorer" });
-  await expect(check).toBeDisabled();
-  // Both roles on one account: invalid, and never applied.
-  await editor.getByRole("combobox", { name: "Environment" }).selectOption({ label: "Explorer" });
-  await check.click();
-  await expect(editor.locator(".assessment-invalid")).toBeVisible();
+  const rate = editor.getByRole("combobox", { name: "Rate" });
+  const offered = (await fromHere(page).locator(".move-applicable .exchange-rate").allTextContents()).map((text) => text.trim());
+  const refused = (await rate.locator("option").allTextContents()).find((label) => !offered.includes(label.trim()));
+  // A rate whose move does not apply here is refused, and never applied.
+  await rate.selectOption({ label: refused ?? "" });
+  await expect(editor.locator("output").first()).toBeVisible();
   await expect(apply).toBeDisabled();
-  await editor.getByRole("combobox", { name: "Environment" }).selectOption({ label: "Vault District" });
+  await check.click();
+  await expect(editor.locator(".assessment-infeasible, .assessment-invalid")).toBeVisible();
+  await expect(apply).toBeDisabled();
+  await rate.selectOption({ label: offered[0] });
   await expect(apply).toBeDisabled();
   await check.click();
   await expect(editor.locator(".assessment-applicable")).toBeVisible();
@@ -283,7 +285,7 @@ test("names open inspectors: an account pinned follows the cursor, and the rules
   // Rules lists the model's rates as written, each opening on its name.
   await page.getByRole("button", { name: "Rules" }).click();
   const rules = page.getByRole("region", { name: "Rules" });
-  await expect(rules.locator("tbody tr")).toHaveCount(15);
+  await expect(rules.locator("tbody tr")).toHaveCount(3);
   await rules.getByRole("searchbox", { name: "Filter rates" }).fill("finish");
   await rules.locator("tbody tr").getByRole("button", { name: "Finish" }).click();
   await expect(inspectors(page).getByRole("region", { name: "Rate Finish" })).toContainText("Puzzle");
