@@ -7,15 +7,9 @@ fn number(text, prefix) {
     parse_int(text.sub_string(prefix.len()))
 }
 
-// The board's width and height, as the puzzle account records them.
+// The board's width and height, the economy's constants.
 fn dimensions(state) {
-    let width = 0;
-    let height = 0;
-    for asset in state.balances("success").keys() {
-        if asset.starts_with("board-width/") { width = number(asset, "board-width/"); }
-        if asset.starts_with("board-height/") { height = number(asset, "board-height/"); }
-    }
-    [width, height]
+    [state.constant("board-width").to_int(), state.constant("board-height").to_int()]
 }
 
 // The goal cells: the cells finishing fixes its goal roles to.

@@ -29,8 +29,6 @@ fn label(item) {
             "released" => `Plate ${ordinal(parts[2])} is released`,
             "latch-ready" => `Door ${ordinal(parts[2])} can be latched`,
             "latched" => `Door ${ordinal(parts[2])} latched open`,
-            "board-width" => `Board width is ${parts[2]}`,
-            "board-height" => `Board height is ${parts[2]}`,
             "floor" => "Walkable floor",
             "wall" => "Wall",
             "player" => "Player",

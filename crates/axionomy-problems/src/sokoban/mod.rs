@@ -17,8 +17,6 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    BoardWidth(u8),
-    BoardHeight(u8),
     Floor,
     Wall,
     Player,
@@ -228,11 +226,7 @@ fn build_board(rows: &[&str]) -> World {
             break;
         }
     }
-    let mut puzzle = basket([
-        (Asset::Active, 1),
-        (Asset::BoardWidth(width), 1),
-        (Asset::BoardHeight(height), 1),
-    ]);
+    let mut puzzle = basket([(Asset::Active, 1)]);
     for index in 0..width * height {
         if matches!(tile_at(index), 's' | 't') {
             let circuit = circuit_of(tile_at(index)).unwrap();
@@ -244,7 +238,12 @@ fn build_board(rows: &[&str]) -> World {
     if has_exit {
         puzzle.insert(Asset::AwayFromExit, Quantity::new(1));
     }
-    let mut builder = EconomyBuilder::new().account(AccountId::Success, Account::from(puzzle));
+    // The board's size is the whole warehouse's and never changes: two
+    // constants, which the search and the view read.
+    let mut builder = EconomyBuilder::new()
+        .account(AccountId::Success, Account::from(puzzle))
+        .constant(&board_width(), width)
+        .constant(&board_height(), height);
 
     for (y, row) in rows.iter().enumerate() {
         for (x, tile) in row.chars().enumerate() {
@@ -626,22 +625,27 @@ const fn cell(width: u8, x: u8, y: u8) -> u8 {
     y * width + x
 }
 
+/// How many cells wide the board is, `{board-width}`: a constant.
+fn board_width() -> Param<u8> {
+    Param::new(path!("board-width"))
+}
+
+/// How many cells high the board is, `{board-height}`: a constant.
+fn board_height() -> Param<u8> {
+    Param::new(path!("board-height"))
+}
+
+/// The board's width and height, as `world`'s constants give them.
 pub fn dimensions(world: &World) -> (u8, u8) {
-    let width = (1..=32)
-        .find(|value| {
-            !world
-                .balance(&AccountId::Success, &Asset::BoardWidth(*value))
-                .is_zero()
-        })
-        .expect("encoded board width");
-    let height = (1..=32)
-        .find(|value| {
-            !world
-                .balance(&AccountId::Success, &Asset::BoardHeight(*value))
-                .is_zero()
-        })
-        .expect("encoded board height");
-    (width, height)
+    let size = |side: Param<u8>| {
+        world
+            .constants()
+            .find(|(name, _)| *name == side.name())
+            .and_then(|(_, value)| value.number())
+            .and_then(|value| u8::try_from(value).ok())
+            .expect("a board names its size")
+    };
+    (size(board_width()), size(board_height()))
 }
 
 /// The exchange applying `rate` to `world`'s board: each role bound to the

@@ -20,10 +20,13 @@ one remain legal, as each instance's deadlock replay shows. Micro is unchanged.
 
 Every board cell is an account, `cell/{index}`, that owns either `Floor` or
 `Wall`. Walkable cells hold exactly one occupancy asset:
-`Player`, `Empty`, or a stable `Crate(id)`. Board dimensions are ordinary
-assets on the puzzle account, so neither the search nor viewer needs hidden
-geometry state. A move
-atomically exchanges player and empty tokens between adjacent floor accounts.
+`Player`, `Empty`, or a stable `Crate(id)`. The board's dimensions are the
+whole warehouse's and never change, so they are the economy's constants,
+`{board-width}` and `{board-height}`, which the search and the view read
+(`state.constant`): neither needs hidden geometry state. `Floor`, `Wall`
+and `DeadSquare` stay facts each cell holds: no law reads them, only the
+view and the model's tests. A move atomically exchanges player and empty
+tokens between adjacent floor accounts.
 A push atomically rewrites three accounts while preserving crate identity:
 
 ```text
