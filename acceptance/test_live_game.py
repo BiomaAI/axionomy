@@ -3,13 +3,14 @@
 Connect Four on the standard board, from the connect-four package's
 `connect-four/showcase` point. Two players move the ref `connect-four/live`
 forward, each from where it saw the ref: a player drops a piece when the
-game's account at the ref's point holds its turn, and both adjudicate every
-drop, so
-each adjudication is proposed twice from one point and one of the two is
-refused with where the ref went. A thinker tries every move out at the ref's
-point without ever moving the ref, and a learner follows the ref through its
-frames, waiting for each with a long poll. Only the steps the ref is moved
-over reach the learner, each named as the point its player advanced to."""
+game's account at the ref's point holds its turn, and on the other's turn
+proposes a move anyway, asking to move the ref once the other has moved it,
+so every move is proposed twice from one point and the late one is refused
+with where the ref went. A thinker tries every move out at the
+ref's point without ever moving the ref, and a learner follows the ref
+through its frames, waiting for each with a long poll. Only the steps the
+ref is moved over reach the learner, each named as the point its player
+advanced to."""
 
 import random
 import threading
@@ -28,7 +29,7 @@ START = "connect-four/showcase"
 LIVE = "connect-four/live"
 MOVES = "connect-four/moves"
 # The account holding whose turn it is: `turn/<player>` while that player is
-# to drop, `pending/<player>` while its drop waits on its adjudication.
+# to move, until the game is won or drawn.
 GAME = "game"
 # Each player's value where the game ends, in tenths: ten for a win, five
 # for a draw, none for a loss; none before it ends.
@@ -95,15 +96,13 @@ class Studio:
         }
 
     def dropping(self, point: str) -> str | None:
-        """The player to drop a piece at `point`, as the game's account
-        holds it; nobody while a drop waits on its adjudication (the line
-        claimed, the draw on a full board, or the turn passing on), or once
+        """The player to move at `point`, as the game's account holds it: to
+        drop a piece, or to declare the draw on a full board; nobody once
         the game is over."""
         game = self.balances(point)[GAME]
         turns = [player for player in SEEDS if game.get(f"turn/{player}", 0) > 0]
-        pending = [player for player in SEEDS if game.get(f"pending/{player}", 0) > 0]
-        # One player holds the turn, or one drop waits, or the game is over.
-        assert len(turns) + len(pending) <= 1, game
+        # One player holds the turn, or the game is over.
+        assert len(turns) <= 1, game
         return turns[0] if turns else None
 
     def candidates(self, point: str) -> list[Exchange]:
@@ -161,50 +160,49 @@ class Table:
         self.refused: list[Refused] = []
         # Advances asked for again once they counted, and told they had.
         self.repeated: list[Advanced] = []
-        # Both players adjudicate each drop and meet first, so both propose
-        # from the same point before either moves the ref.
+        # The players meet once a move is made and asked for again, so the
+        # other player's proposal from the same point comes after it.
         self.meet = threading.Barrier(2, timeout=GAME_SECONDS)
 
 
 def play(base_url: str, player: str, table: Table) -> None:
-    """Drops when the game's account at the ref's point holds this player's
-    turn, and adjudicates every drop; looks again from where the ref is when
-    the other player's move came first. Stops when no move is left."""
+    """Moves when the game's account at the ref's point holds this player's
+    turn, at random from its seed. On the other player's turn it proposes
+    the first move offered there all the same, and asks to move the ref to
+    it once the two have met, the other's move made: it is refused with
+    where the ref went, and looks again from there. Stops when no move is
+    left."""
     chooser = random.Random(SEEDS[player])
     with Studio(base_url) as studio:
         point = studio.live()
         while offered := studio.candidates(point):
-            dropping = studio.dropping(point)
-            if dropping not in (None, player):
-                point = studio.moved_from(point)
-                continue
-            exchange = chooser.choice(offered) if dropping else offered[0]
-            made = studio.apply(point, [exchange])
-            if dropping is None:
+            if studio.dropping(point) != player:
+                tried = studio.apply(point, [offered[0]])
                 table.meet.wait()
-            answer = studio.advance(point, made)
-            if answer.status_code == 200:
-                assert answer.json() == {"name": LIVE, "point": made}
-                advanced = Advanced(player, point, made, exchange)
-                if dropping:
-                    # The ref stays at a drop until both players meet to
-                    # adjudicate it, so asking again for the move made is
-                    # told it was made.
-                    again = studio.advance(point, made)
-                    assert again.status_code == 200, f"advance again: {again.status_code} {again.text}"
-                    assert again.json() == answer.json()
-                with table.lock:
-                    table.advanced.append(advanced)
-                    if dropping:
-                        table.repeated.append(advanced)
-                point = made
-            else:
+                answer = studio.advance(point, tried)
                 assert answer.status_code == 409, f"advance: {answer.status_code} {answer.text}"
                 moved = answer.json()
                 assert moved["name"] == LIVE
                 with table.lock:
-                    table.refused.append(Refused(player, point, made, moved["current"]))
+                    table.refused.append(Refused(player, point, tried, moved["current"]))
                 point = moved["current"]
+                continue
+            exchange = chooser.choice(offered)
+            made = studio.apply(point, [exchange])
+            answer = studio.advance(point, made)
+            assert answer.status_code == 200, f"advance: {answer.status_code} {answer.text}"
+            assert answer.json() == {"name": LIVE, "point": made}
+            # The ref stays at a move until the players meet, so asking again
+            # for the move made is told it was made.
+            again = studio.advance(point, made)
+            assert again.status_code == 200, f"advance again: {again.status_code} {again.text}"
+            assert again.json() == answer.json()
+            advanced = Advanced(player, point, made, exchange)
+            with table.lock:
+                table.advanced.append(advanced)
+                table.repeated.append(advanced)
+            table.meet.wait()
+            point = made
 
 
 def think(base_url: str) -> list[str]:
@@ -275,8 +273,7 @@ def alone(studio: Studio, start: str) -> list[Exchange]:
     played: list[Exchange] = []
     point = start
     while offered := studio.candidates(point):
-        dropping = studio.dropping(point)
-        exchange = choosers[dropping].choice(offered) if dropping else offered[0]
+        exchange = choosers[studio.dropping(point)].choice(offered)
         point = studio.apply(point, [exchange])
         played.append(exchange)
     return played
@@ -319,26 +316,23 @@ def test_two_players_a_thinker_and_a_learner_share_a_live_ref(studio: str) -> No
 
         # Every advance that did not count was refused with where the ref
         # was: where the other player's advance from the same point had
-        # moved it. Only adjudications are proposed twice, and each was
+        # moved it. Every move was proposed twice, and the late proposal
         # refused once.
         for refused in table.refused:
             first = counted[refused.expected]
             assert refused.current == first.to
             assert refused.player != first.player
-        turns = {advanced.expected: client.dropping(advanced.expected) for advanced in game}
-        adjudications = [advanced.expected for advanced in game if turns[advanced.expected] is None]
-        # Every drop was its player's: the one whose turn the game's account
-        # held where it dropped.
-        assert all(advanced.player == turns[advanced.expected] for advanced in game if turns[advanced.expected])
-        assert adjudications
-        assert sorted(refused.expected for refused in table.refused) == sorted(adjudications)
+        # Every move was its player's: the one whose turn the game's account
+        # held where it moved.
+        assert all(advanced.player == client.dropping(advanced.expected) for advanced in game)
+        assert sorted(refused.expected for refused in table.refused) == sorted(
+            advanced.expected for advanced in game
+        )
 
-        # Every drop's advance was asked for again once it counted, and told
+        # Every move's advance was asked for again once it counted, and told
         # it was made; the move was made once, so the frames below hold each
         # step once.
-        assert sorted(again.to for again in table.repeated) == sorted(
-            advanced.to for advanced in game if turns[advanced.expected] is not None
-        )
+        assert sorted(again.to for again in table.repeated) == sorted(advanced.to for advanced in game)
 
         # The learner received exactly the steps the players advanced over,
         # in order, each the step after the one before, ending where the ref

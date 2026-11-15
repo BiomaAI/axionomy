@@ -12,19 +12,19 @@ threads of their own, each over its own connection:
 - **Two players**, Red and Yellow, move the ref `connect-four/live`, which
   the test names at `connect-four/showcase`'s point: the package's own ref
   is fixed, and `live` is the application's. Each reads where the ref is,
-  asks for the moves there (`connect-four/moves`, each assessed) and reads
-  whose turn it is from the point's balances: the `game` account holds
-  `turn/<player>` while that player is to drop and `pending/<player>` while
-  its drop waits on its adjudication. On its turn it picks a drop at random
-  from its seed, applies it at the ref's point and advances the ref from
-  that point to the new one, then asks for that advance again, as a mover
-  that never heard back would, and is told it was made: the ref stays at a
-  drop until both players adjudicate it. On the other player's turn, it
-  waits with a long poll on the ref's frames for the ref to move. Both
-  adjudicate every drop (the line claimed, the draw or the turn passing on),
-  meeting first so both propose from the same point: one advance counts and
-  the other is refused with 409 and where the ref went, and its player looks
-  again from there.
+  asks for the moves there (`connect-four/moves`, the instances of the
+  game's rates that apply, each assessed) and reads whose turn it is from
+  the point's balances: the `game` account holds `turn/<player>` while that
+  player is to move, to drop a piece, or to declare the draw on a full
+  board. On its turn it picks a move at random from its seed, applies it at
+  the ref's point and advances the ref from that point to the new one, then
+  asks for that advance again, as a mover that never heard back would, and
+  is told it was made: the ref stays at a move until the other player moves.
+  On the other player's turn it proposes the first move offered there all
+  the same, applies it, waits with a long poll on the ref's frames for the
+  ref to move, and only then asks to advance the ref from that point to its
+  own: it is refused with 409 and where the ref went, and looks again from
+  there.
 - **A thinker** tries every move out at each point it finds the ref on,
   applying each there and never moving the ref, then waits for the ref to
   move.
@@ -34,10 +34,10 @@ threads of their own, each over its own connection:
 
 The test then checks that of the advances from one point at most one
 counted and they lead from the start to where the ref is; that every advance
-that did not count was refused with where the ref was, once for each
-adjudication; that every drop was its player's, the one whose turn the
-game's account held; that every drop's advance, asked for again,
-succeeded; that the learner received exactly the steps the players
+that did not count was refused with where the ref was, once for each move;
+that every move was its player's, the one whose turn the game's account
+held; that every move's advance, asked for again, succeeded; that the
+learner received exactly the steps the players
 advanced over, once each, in order, each the step after the one before,
 ending at the ref's point, and each named exactly as the point its player
 advanced to, as the history of the ref's point names it too (a point has
@@ -46,8 +46,7 @@ have moved the ref to, was delivered; that the game is won or drawn at the
 last frame and not before, with no move left; that the players alone, from
 the same start and with no ref, make the same moves; and that Studio lists
 the ref with the package. The game itself does not depend on timing:
-every run plays the same one, today Yellow's win in 40 steps, 20 of them
-adjudications.
+every run plays the same one, today Yellow's win in 26 drops.
 
 The session builds every sample package into a temporary directory with
 `axionomy package samples` (they are never committed), starts

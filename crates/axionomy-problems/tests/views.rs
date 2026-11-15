@@ -126,7 +126,7 @@ fn showcase_pressure(sample: &str) -> Size {
         "bridge" => (10, 3, 18),
         "marketplace" => (4, 14, 4),
         "logistics" => (40, 7, 50),
-        "connect-four" => (15, 50, 200),
+        "connect-four" => (15, 50, 170),
         "mission" => (6, 5, 39),
         "perishables" => (10, 5, 13),
         "work-league" => (60, 20, 900),

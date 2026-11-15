@@ -1,45 +1,31 @@
 // Connect Four: how people read the game. Labels name its cells, columns,
-// counts and moves, counting columns and rows from 1 with row 1 at the
+// lines and moves, counting columns and rows from 1 with row 1 at the
 // bottom, as the scene counts them; the scene draws the board, every piece
 // on it, and the tactics of the player to move: the columns that win at
 // once, the opponent's threats, the drops making two threats, and those
-// leaving the opponent no win, as the game's own tactics read the board.
+// leaving the opponent no win, each read from the lines of four the game
+// counts.
 
 import "connect-four" as game;
 
 fn player(name) { if name == "red" { "Red" } else { "Yellow" } }
+fn opponent(name) { if name == "red" { "yellow" } else { "red" } }
 
 // One more than the number `text` writes.
 fn ordinal(text) { parse_int(text) + 1 }
 
 fn cell(column, row) { `column ${ordinal(column)}, row ${ordinal(row)}` }
 
-// Where a count of pieces lies, from the line's path: "in row 2", "on the
-// main diagonal".
-fn along(line) {
-    switch line[0] {
-        "row" => `in row ${ordinal(line[1])}`,
-        "column" => `in column ${ordinal(line[1])}`,
-        "main-diagonal" => "on the main diagonal",
-        "anti-diagonal" => "on the anti-diagonal",
-        _ => `in line ${ordinal(line[1])}`,
-    }
-}
-
-// "a, b and c".
-fn listed(items) {
-    let text = "";
-    for index in 0..items.len() {
-        if index > 0 { text += if index + 1 == items.len() { " and " } else { ", " }; }
-        text += items[index];
-    }
-    text
-}
-
-// An optional count of a move's rate, `none` or `some/<count>`, from
-// `parts` at `at`: the count, or nothing, and where the next one starts.
-fn optional_count(parts, at) {
-    if parts[at] == "none" { [(), at + 1] } else { [parse_int(parts[at + 1]), at + 2] }
+// A line of four as people read it, from its direction, rightmost column
+// and top row.
+fn line(direction, column, row) {
+    let way = switch direction {
+        "across" => "line along a row",
+        "up" => "line up a column",
+        "rising" => "rising diagonal",
+        _ => "falling diagonal",
+    };
+    `the ${way} with rightmost column ${ordinal(column)} and top row ${ordinal(row)}`
 }
 
 fn label(item) {
@@ -61,53 +47,26 @@ fn label(item) {
             "column" => "Column played",
             "cell" => "Landing cell",
             "result" => "Result",
-            _ => if name.starts_with("column") { `Column ${ordinal(name.sub_string(6))}` }
-                else if name.starts_with("winning") { `Winning cell ${ordinal(name.sub_string(7))}` }
-                else { () },
+            "full" => `Full column ${ordinal(parts[2])}`,
+            _ => (),
         };
     }
     if category == "asset" {
         return switch name {
-            "segment-vacancies" => `Unoccupied cells in line ${ordinal(parts[2])}`,
-            "segment-pieces" => `${player(parts[2])} pieces in line ${ordinal(parts[3])}`,
-            "game-identity" => "Game identity",
-            "column-identity" => `This is column ${ordinal(parts[2])}`,
-            "cell-identity" => `This is the cell at ${cell(parts[2], parts[3])}`,
-            "result-identity" => "Result identity",
             "empty" => "Empty cell",
             "piece" => `${player(parts[2])} piece`,
-            "next-row" => `Next piece lands on row ${ordinal(parts[2])}`,
-            "column-full" => "Column full",
+            "height" => "Pieces in the column",
             "turn" => `${player(parts[2])} to move`,
-            "line-count" => `${player(parts[2])} has ${parts[parts.len() - 1]} ${along(parts.extract(3, parts.len() - 4))}`,
+            "line" => `${player(parts[2])} pieces in ${line(parts[3], parts[4], parts[5])}`,
             "winner" => `${player(parts[2])} wins`,
             "draw" => "Draw",
-            "board-size" => `Board is ${parts[2]}×${parts[3]}`,
-            "pending" => `${player(parts[2])}'s move awaits a win check`,
             _ => (),
         };
     }
     switch name {
-        // A move rate exists for each count of the mover's pieces in the
-        // lines through the landing cell; the label names the counts the
-        // move makes.
-        "move" => {
-            let made = [
-                `${ordinal(parts[5])} in the row`,
-                `${ordinal(parts[6])} in the column`,
-            ];
-            let main = optional_count(parts, 7);
-            if main[0] != () { made.push(`${main[0] + 1} on the main diagonal`); }
-            let anti = optional_count(parts, main[1]);
-            if anti[0] != () { made.push(`${anti[0] + 1} on the anti-diagonal`); }
-            `${player(parts[2])} drops into column ${ordinal(parts[3])}, lands on row ${ordinal(parts[4])}, making ${listed(made)}`
-        }
-        "standard-move" => `${player(parts[2])} drops into column ${ordinal(parts[3])}, lands on row ${ordinal(parts[4])}`,
-        "draw" | "standard-draw" => `Declare a draw after ${player(parts[2])}'s move`,
-        "claim-win" => `${player(parts[2])} claims winning line ${ordinal(parts[3])}`,
-        "continue" => `No win for ${player(parts[2])}; pass the turn to ${
-            player(if parts[2] == "red" { "yellow" } else { "red" })
-        }`,
+        "drop" => `${player(parts[2])} drops into column ${ordinal(parts[3])}, lands on row ${ordinal(parts[4])}`,
+        "win" => `${player(parts[2])} drops into column ${ordinal(parts[3])}, lands on row ${ordinal(parts[4])} and completes a line of four`,
+        "draw" => `Declare a draw at ${player(parts[2])}'s turn`,
         _ => (),
     }
 }
@@ -120,39 +79,70 @@ fn piece(state, column, row) {
     ()
 }
 
-// What the player to move, if any, may do: its winning columns, the
-// opponent's, the columns after which the opponent cannot win at once,
-// and of those the ones making two threats at once.
+// The lines of four through the cell at `column` and `row`, each named by
+// its direction, rightmost column and top row, as the game counts them.
+fn through(column, row) {
+    let found = [];
+    for k in 0..4 {
+        found.push(`across/${column + k}/${row}`);
+        found.push(`up/${column}/${row + k}`);
+        found.push(`rising/${column + k}/${row + k}`);
+        found.push(`falling/${column + k}/${row + 3 - k}`);
+    }
+    found
+}
+
+// Whether a drop by `mover` on the cell at `column` and `row` completes a
+// line of four: a line through it already holds three of its pieces, or
+// holds two and `added`, a line a drop just made, is one of them.
+fn completes(state, mover, column, row, added) {
+    for line in through(column, row) {
+        let held = game::held(state, mover, line) + if added.contains(line) { 1 } else { 0 };
+        if held >= 3 { return true; }
+    }
+    false
+}
+
+// What the player to move, if any, may do, from the heights of the columns
+// and the lines the game counts: its winning columns, the opponent's, the
+// columns after which the opponent cannot win at once, and of those the
+// ones making two threats at once.
 fn evidence(state, width, height) {
     let none = #{ player: (), winning: [], threats: [], safe: [], forks: [] };
     let mover = game::to_move(state);
     if game::outcome(state) != () || mover == () { return none; }
-    let seat = game::seat(mover);
-    let boards = game::pieces(state, width, height);
-    let mine = boards[seat];
-    let theirs = boards[1 - seat];
-    let occupied = mine | theirs;
+    let other = opponent(mover);
+    let landing = [];
+    for column in 0..width {
+        let row = state.balance(`column/${column}`, "height").to_int();
+        landing.push(if row < height { row } else { () });
+    }
+    // The columns where `who`'s drop would complete a line, once a drop on
+    // the cell at `column` and `row` has added its lines, if any.
+    let wins = |who, column, row, added| {
+        let found = [];
+        for at in 0..width {
+            let lands = if at == column { if row + 1 < height { row + 1 } else { () } } else { landing[at] };
+            if lands != () && completes(state, who, at, lands, added) { found.push(at); }
+        }
+        found
+    };
+    let winning = wins.call(mover, -1, 0, []);
+    let threats = wins.call(other, -1, 0, []);
     let safe = [];
     let forks = [];
     for column in 0..width {
-        if !game::is_open(occupied, column, height) { continue; }
-        let landed = game::landing(occupied, column);
-        let after = occupied | landed;
-        let winning = game::won(mine | landed);
-        if winning || game::winning(theirs, after, width, height).is_empty() {
+        let row = landing[column];
+        if row == () { continue; }
+        if winning.contains(column) {
             safe.push(column);
-            if !winning && game::winning(mine | landed, after, width, height).len() >= 2 {
-                forks.push(column);
-            }
+            continue;
         }
+        if !wins.call(other, column, row, []).is_empty() { continue; }
+        safe.push(column);
+        if wins.call(mover, column, row, through(column, row)).len() >= 2 { forks.push(column); }
     }
-    #{
-        player: mover,
-        winning: game::winning(mine, occupied, width, height),
-        threats: game::winning(theirs, occupied, width, height),
-        safe: safe,
-        forks: forks,
-    }
+    #{ player: mover, winning: winning, threats: threats, safe: safe, forks: forks }
 }
 
 // Columns as people count them, from 1, or `none`.
@@ -205,8 +195,7 @@ fn scene(state, frame) {
     let scene = scene::entities(scene::grid("Board and pieces", width, height, cells), pieces);
     scene.metrics = [
         metric("turn", "Next player",
-            if tactics.player != () { player(tactics.player) }
-            else if game::outcome(state) != () { "finished" } else { "adjudicating" }),
+            if tactics.player != () { player(tactics.player) } else { "finished" }),
         metric("wins", "Winning columns", columns(tactics.winning)),
         metric("opponent-wins", "Opponent threats", columns(tactics.threats)),
         metric("forks", "Double-threat moves", columns(tactics.forks)),
