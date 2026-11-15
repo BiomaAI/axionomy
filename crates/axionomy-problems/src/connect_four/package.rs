@@ -74,14 +74,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &path!("connect-four/moves"),
         &CandidateSet::Instances { under: None },
     )?;
-    // What the searches try, the same moves: listing every instance of the
-    // rates at every state they reach would cost them several times what
-    // they spend on the game, so a script proposes only the instance landing
-    // on each column's height.
-    engine.keep_candidates(
-        &path!("connect-four/drops"),
-        &CandidateSet::Script(script("drops")),
-    )?;
     let mut objectives = Vec::new();
     for player in ["red", "yellow"] {
         let objective: ObjectivePath = format!("connect-four/{player}").parse().expect("a path");
@@ -103,7 +95,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         ("stress", connect_four::initial_standard(), 32),
     ] {
         let searching = Chooser::Mcts {
-            candidates: path!("connect-four/drops"),
+            candidates: path!("connect-four/moves"),
             payoffs: script("outcome"),
             estimate: script("estimate"),
             iterations,
@@ -127,7 +119,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             (
                 "search-opponent",
                 game(Chooser::Minimax {
-                    candidates: path!("connect-four/drops"),
+                    candidates: path!("connect-four/moves"),
                     evaluate: script("evaluate"),
                     depth: LOOKAHEAD,
                 }),

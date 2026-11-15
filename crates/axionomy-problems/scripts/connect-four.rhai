@@ -53,27 +53,6 @@ fn lines(width, height) {
 // The pieces `player` holds in `line`, as the game counts them.
 fn held(state, player, line) { state.balance("game", `line/${player}/${line}`).to_int() }
 
-// What the searches try: at each column with room, the drop landing on its
-// height, which passes the turn or wins; the draw once every column is
-// full. Each is its rate's instance, as `state.exchange_of` binds it; of the
-// instances the economy has, only these may apply, and only those that do
-// are kept.
-fn drops(state) {
-    let player = to_move(state);
-    if player == () { return []; }
-    let height = board_height(state);
-    let proposals = [];
-    for column in 0..board_width(state) {
-        let row = state.balance(`column/${column}`, "height").to_int();
-        if row < height {
-            proposals.push(state.exchange_of(`drop/${player}/${column}/${row}`));
-            proposals.push(state.exchange_of(`win/${player}/${column}/${row}`));
-        }
-    }
-    if proposals.is_empty() { proposals.push(state.exchange_of(`draw/${player}`)); }
-    proposals.filter(|proposal| state.applicable(proposal))
-}
-
 // Who chooses each turn: Red while Red is to drop, and Yellow otherwise.
 fn mover(state) { if state.balance("game", "turn/red") > 0 { 0 } else { 1 } }
 
