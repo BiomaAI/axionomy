@@ -35,12 +35,20 @@ Each rate only one account may take fixes that role's account: the pool,
 the treasury, the information account, the calendar's world account, and
 the actor whose need, obligation, production or income it is, so no identity
 token pins a binding; a trader or liquidity provider is any actor. Ending an
-actor's trading is one rate over every actor, `end-trading/{actor}`, and
-each day but the last closes as one rate, `advance-day/{day}`, deriving the
-day it opens, `{next}`, whose sunlight it reads; the world holds the
-season's weather as `Sunlight(day)` and `Shortage(day)` facts. Using energy
-and settling an obligation stay one rate per actor, their amounts and the
-factory's goods differing.
+actor's trading is one rate over every actor, `end-trading/{actor}`. Each
+day but the last closes as one rate, `advance-day/{day}`, deriving the day
+it opens, `{next}`; the season's weather never changes, so it is law
+structure: a relation's row for each day gives the sunlight of the day it
+opens, `{sunlight}`, and whether the day after falls short, `{shortage}`,
+which the information account signals. Meeting a need is one rate over the
+factory and the household, `use-energy/{actor}`, and settling an obligation
+one over the generator and the factory, `settle-obligation/{actor}`, a
+relation giving each actor's amounts: the energy its need takes, the
+utility it yields and, in a season, the goods the factory makes (none for
+the household), and what each obligation costs. Micro has 8 rates as
+written, for 10 instances; Showcase and Stress 16, for 31 and 35. The
+season's length and scale stay the world's balances: they are no case of
+any law, and the policies read them.
 
 Sunlight limits daily production. Investment pays credit now and increases
 capacity two days later. Energy storage is bounded. Factory output produces

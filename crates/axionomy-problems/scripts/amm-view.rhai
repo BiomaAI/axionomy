@@ -70,8 +70,6 @@ fn label(item) {
             "pending-capacity" => "Capacity under construction",
             "construction-due" => "Construction completes at",
             "reference-price" => "Smoothed prior closing price",
-            "sunlight" => `Day ${ordinal(parts[2])} sunlight`,
-            "shortage" => `Day ${ordinal(parts[2])} falls short of sunlight`,
             "current-sunlight" => "Current sunlight",
             "liquidity-decision" => "Liquidity adjustment available",
             "need" => `${actor_label(parts[2])} need due today`,
@@ -131,7 +129,7 @@ fn unit(asset) {
         "credit" => "credits",
         "reference-price" => "credit / energy",
         "day" | "days" | "construction-due" => "days",
-        "sunlight" | "current-sunlight" => "%",
+        "current-sunlight" => "%",
         _ => (),
     }
 }

@@ -3,8 +3,8 @@
 //! construction and production limits are balances, not runner-owned state.
 
 use super::*;
+use axionomy::QuantityComparison as C;
 use axionomy::path;
-use axionomy::{Param, QuantityComparison as C};
 
 const DECISIONS: u64 = 6;
 
@@ -120,31 +120,35 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         account.deposit(&additions).unwrap();
         builder = builder.account(*id, account);
     }
-    let mut world = basket([
+    let world = basket([
         (Asset::MarketActive, 1),
         (Asset::AtDay(0), 1),
         (Asset::Days, u64::from(days)),
         (Asset::Scale, scale),
         (Asset::CurrentSunlight, weather(seed, 0)),
     ]);
-    for day in 0..days {
-        world.insert(Asset::Sunlight(day), Quantity::new(weather(seed, day)));
-        if weather(seed, day) < 100 {
-            world.insert(Asset::Shortage(day), Quantity::new(1));
-        }
-    }
     builder = builder.account(AccountId::World, Account::from(world));
 
+    // Meeting a need and settling an obligation, at the season's scale.
+    builder = builder
+        .rate_at(
+            RateIdPattern::UseEnergy(consumer().var()).into(),
+            actor_law(use_energy_rate(scale, true), Role::Consumer),
+        )
+        .rate_at(
+            RateIdPattern::SettleObligation(consumer().var()).into(),
+            actor_law(settle_obligation_rate(scale), Role::Consumer),
+        );
     for (key, rate) in source.rates() {
-        let id = key
-            .as_literal()
-            .expect("the base market's rates are written out");
+        // The base market's needs and obligations are rebuilt above.
+        let Some(id) = key.as_literal() else {
+            continue;
+        };
         let mut rate = rate.clone();
         let role = match id {
             RateId::BuyEnergy | RateId::SellEnergy => Role::Trader,
             RateId::AddLiquidity | RateId::RemoveLiquidity => Role::LiquidityProvider,
             RateId::ProduceEnergy => Role::Producer,
-            RateId::UseEnergy(_) | RateId::SettleObligation(_) => Role::Consumer,
             RateId::LearnShortage(_) => Role::Observer,
             _ => unreachable!("base market rate"),
         };
@@ -166,38 +170,6 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                         C::LessThanOrEqual,
                         q(role, Asset::StorageCapacity),
                     );
-            }
-            RateId::UseEnergy(actor) => {
-                let (energy, utility) = energy_use(*actor);
-                rate = Rate::new()
-                    .account(role, own(*actor))
-                    .consume(
-                        role,
-                        basket([(Asset::Energy, energy * scale), (Asset::Need(*actor), 1)]),
-                    )
-                    .produce(
-                        role,
-                        basket([
-                            (Asset::SpentEnergy, energy * scale),
-                            (Asset::SatisfiedNeed(*actor), 1),
-                            (Asset::Utility, utility),
-                        ]),
-                    );
-                if *actor == Actor::Factory {
-                    rate = rate
-                        .consume(role, basket([(Asset::UnmadeGoods, 100 * scale)]))
-                        .produce(role, basket([(Asset::Goods, 100 * scale)]));
-                }
-            }
-            RateId::SettleObligation(actor) => {
-                let cost = obligation_cost(*actor) * scale;
-                rate = with_treasury(Rate::new().account(role, own(*actor)))
-                    .consume(
-                        role,
-                        basket([(Asset::Credit, cost), (Asset::Obligation(*actor), 1)]),
-                    )
-                    .produce(role, basket([(Asset::SettledObligation(*actor), 1)]))
-                    .produce(Role::Treasury, basket([(Asset::Credit, cost)]));
             }
             RateId::AddLiquidity => {
                 rate = rate.condition(
@@ -241,25 +213,33 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             .produce(Role::Consumer, basket([(Asset::Done, 1)])),
     );
     // Every day but the last closes as one rate, `advance-day/{day}`, into
-    // day `{next}`, whose sunlight the world makes current and the
-    // generator's allowance takes; the information account signals whether
-    // the day after, `{ahead}`, falls short. The last day closes the market.
+    // day `{next}`. The season's weather never changes, so it is law
+    // structure: a relation's row for each day gives the sunlight of the day
+    // it opens, `{sunlight}`, which the world makes current and the
+    // generator's allowance takes, and whether the day after falls short,
+    // `{shortage}`, which the information account signals. The last day
+    // closes the market.
     let day = Param::<u8>::new(path!("day"));
-    let (next, ahead) = (
-        Param::<u8>::new(path!("next")),
-        Param::<u8>::new(path!("ahead")),
+    let next = Param::<u8>::new(path!("next"));
+    let (sunlight, shortage) = (
+        Param::<u64>::new(path!("sunlight")),
+        Param::<u64>::new(path!("shortage")),
     );
+    let short = |day: u8| day < days && weather(seed, day) < 100;
     let on = |day: &Param<u8>| -> Vec<(Pattern<Asset>, Quantity)> {
         vec![(AssetPattern::AtDay(day.var()).into(), Quantity::new(1))]
     };
-    let sunlight = || Q::balance_at(Role::World, AssetPattern::Sunlight(next.var()).into());
     let advance = close_day(
         world_law()
             .variable(day.range(0, days - 2))
+            .relation(Relation::each_giving(
+                &day,
+                [sunlight.name().clone(), shortage.name().clone()],
+                (0..days - 1).map(|day| (day, [weather(seed, day + 1), u64::from(short(day + 2))])),
+            ))
             .derive(next.name().clone(), day.quantity() + Q::constant(1))
-            .derive(ahead.name().clone(), day.quantity() + Q::constant(2))
             .consume_at(Role::World, on(&day)),
-        Some(sunlight()),
+        Some(sunlight.quantity()),
     );
     builder = builder
         .rate_at(
@@ -273,11 +253,11 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                 Role::World,
                 Asset::CurrentSunlight,
             )
-            .produce_computed(Role::World, Asset::CurrentSunlight, sunlight())
+            .produce_computed(Role::World, Asset::CurrentSunlight, sunlight.quantity())
             .produce_computed(
                 Role::Information,
                 Asset::ShortageSignal,
-                Q::balance_at(Role::World, AssetPattern::Shortage(ahead.var()).into()),
+                shortage.quantity(),
             )
             .produce_at(Role::World, on(&next))
             .produce(Role::World, basket([(Asset::Day, 1)])),

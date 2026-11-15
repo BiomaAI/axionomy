@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity,
-    QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
+    QuantityComparison, QuantityExpression as Q, Rate, Relation, Rounding, basket,
 };
 
 #[cfg(feature = "packages")]
@@ -67,10 +67,6 @@ pub enum Asset {
     PendingCapacity,
     ConstructionDue,
     ReferencePrice,
-    Sunlight(u8),
-    /// A day whose sunlight falls short: a fact of the season's weather,
-    /// which the information account signals the day before.
-    Shortage(u8),
     CurrentSunlight,
     LiquidityDecision,
     FutureNeed(Actor),
@@ -283,42 +279,15 @@ fn build(size: MarketSize) -> World {
                 .produce(Role::Producer, basket([(Asset::Energy, 1)])),
         );
 
-    for actor in [Actor::Factory, Actor::Household] {
-        let (energy, utility) = energy_use(actor);
-        builder = builder.rate(
-            RateId::UseEnergy(actor),
-            Rate::new()
-                .account(Role::Consumer, own(actor))
-                .consume(
-                    Role::Consumer,
-                    basket([(Asset::Energy, energy), (Asset::Need(actor), 1)]),
-                )
-                .produce(
-                    Role::Consumer,
-                    basket([
-                        (Asset::SpentEnergy, energy),
-                        (Asset::SatisfiedNeed(actor), 1),
-                        (Asset::Utility, utility),
-                    ]),
-                ),
+    builder = builder
+        .rate_at(
+            RateIdPattern::UseEnergy(consumer().var()).into(),
+            use_energy_rate(1, false),
+        )
+        .rate_at(
+            RateIdPattern::SettleObligation(consumer().var()).into(),
+            settle_obligation_rate(1),
         );
-    }
-    for actor in [Actor::Generator, Actor::Factory] {
-        let cost = obligation_cost(actor);
-        builder = builder.rate(
-            RateId::SettleObligation(actor),
-            with_treasury(Rate::new().account(Role::Consumer, own(actor)))
-                .consume(
-                    Role::Consumer,
-                    basket([(Asset::Credit, cost), (Asset::Obligation(actor), 1)]),
-                )
-                .produce(
-                    Role::Consumer,
-                    basket([(Asset::SettledObligation(actor), 1)]),
-                )
-                .produce(Role::Treasury, basket([(Asset::Credit, cost)])),
-        );
-    }
     builder = builder.rate(
         RateId::LearnShortage(Actor::Speculator),
         with_information(Rate::new())
@@ -339,12 +308,12 @@ fn build(size: MarketSize) -> World {
         .weight(Asset::SolarPotential, 1)
         .weight(Asset::SpentEnergy, 1);
     let mut lifecycle = LinearInvariant::new(path!("actor-goal-lifecycle"));
-    for actor in [Actor::Factory, Actor::Household] {
+    for (actor, ..) in NEEDS {
         lifecycle = lifecycle
             .weight(Asset::Need(actor), 1)
             .weight(Asset::SatisfiedNeed(actor), 1);
     }
-    for actor in [Actor::Generator, Actor::Factory] {
+    for (actor, _) in OBLIGATIONS {
         lifecycle = lifecycle
             .weight(Asset::Obligation(actor), 1)
             .weight(Asset::SettledObligation(actor), 1);
@@ -577,20 +546,105 @@ pub fn learn_shortage(actor: Actor) -> Action {
         .bind(Role::Observer, AccountId::Actor(actor))
 }
 
-fn energy_use(actor: Actor) -> (u64, u64) {
-    match actor {
-        Actor::Factory => (1_500, 150),
-        Actor::Household => (350, 100),
-        _ => (1, 1),
+/// Each actor with a need: the energy meeting it uses and the utility it
+/// yields.
+const NEEDS: [(Actor, u64, u64); 2] = [(Actor::Factory, 1_500, 150), (Actor::Household, 350, 100)];
+
+/// Each actor with an obligation, and the credit settling it costs.
+const OBLIGATIONS: [(Actor, u64); 2] = [(Actor::Generator, 4_000), (Actor::Factory, 6_000)];
+
+/// The units a season's factory makes for each need it meets.
+const GOODS: u64 = 100;
+
+/// The actor whose need or obligation a law meets, `{actor}`.
+fn consumer() -> Param<Actor> {
+    Param::new(path!("actor"))
+}
+
+/// The numbers a need's or an obligation's terms give its law.
+fn energy() -> Param<u64> {
+    Param::new(path!("energy"))
+}
+fn utility() -> Param<u64> {
+    Param::new(path!("utility"))
+}
+fn goods() -> Param<u64> {
+    Param::new(path!("goods"))
+}
+fn cost() -> Param<u64> {
+    Param::new(path!("cost"))
+}
+
+/// `amount` for each unit of the exchange, as a basket's entries are.
+fn per_unit(amount: Param<u64>) -> Q<Ontology> {
+    amount.quantity() * Q::units()
+}
+
+/// Any actor with a need meeting it, `use-energy/{actor}`, its consumer role
+/// fixed to the actor: it uses the energy its need takes, at `scale`, for
+/// the need's utility, and where the market makes `goods`, the factory turns
+/// its unmade goods into goods and the household makes none. What each
+/// need takes and gives is law structure: a relation's row for each actor.
+pub(crate) fn use_energy_rate(scale: u64, goods: bool) -> Rate<Ontology> {
+    let actor = consumer();
+    let made = |actor| match actor {
+        Actor::Factory => GOODS * scale,
+        _ => 0,
+    };
+    let rate = Rate::new()
+        .variable(actor.values(NEEDS.map(|(actor, ..)| actor)))
+        .account(Role::Consumer, AccountIdPattern::Actor(actor.var()).into())
+        .consume_at(Role::Consumer, one(AssetPattern::Need(actor.var())))
+        .consume_computed(Role::Consumer, Asset::Energy, per_unit(energy()))
+        .produce_at(
+            Role::Consumer,
+            one(AssetPattern::SatisfiedNeed(actor.var())),
+        )
+        .produce_computed(Role::Consumer, Asset::SpentEnergy, per_unit(energy()))
+        .produce_computed(Role::Consumer, Asset::Utility, per_unit(utility()));
+    if goods {
+        rate.relation(Relation::each_giving(
+            &actor,
+            [energy(), utility(), self::goods()].map(|number| number.name().clone()),
+            NEEDS.map(|(actor, energy, utility)| (actor, [energy * scale, utility, made(actor)])),
+        ))
+        .consume_computed(Role::Consumer, Asset::UnmadeGoods, per_unit(self::goods()))
+        .produce_computed(Role::Consumer, Asset::Goods, per_unit(self::goods()))
+    } else {
+        rate.relation(Relation::each_giving(
+            &actor,
+            [energy(), utility()].map(|number| number.name().clone()),
+            NEEDS.map(|(actor, energy, utility)| (actor, [energy * scale, utility])),
+        ))
     }
 }
 
-fn obligation_cost(actor: Actor) -> u64 {
-    match actor {
-        Actor::Generator => 4_000,
-        Actor::Factory => 6_000,
-        _ => 1,
-    }
+/// Any actor with an obligation settling it with the treasury,
+/// `settle-obligation/{actor}`, its consumer role fixed to the actor: it
+/// pays the treasury what its obligation costs, at `scale`, a relation's
+/// row for each actor.
+pub(crate) fn settle_obligation_rate(scale: u64) -> Rate<Ontology> {
+    let actor = consumer();
+    with_treasury(Rate::new())
+        .variable(actor.values(OBLIGATIONS.map(|(actor, _)| actor)))
+        .relation(Relation::each_giving(
+            &actor,
+            [cost().name().clone()],
+            OBLIGATIONS.map(|(actor, cost)| (actor, [cost * scale])),
+        ))
+        .account(Role::Consumer, AccountIdPattern::Actor(actor.var()).into())
+        .consume_at(Role::Consumer, one(AssetPattern::Obligation(actor.var())))
+        .consume_computed(Role::Consumer, Asset::Credit, per_unit(cost()))
+        .produce_at(
+            Role::Consumer,
+            one(AssetPattern::SettledObligation(actor.var())),
+        )
+        .produce_computed(Role::Treasury, Asset::Credit, per_unit(cost()))
+}
+
+/// One unit of the asset `asset` names.
+fn one(asset: AssetPattern) -> [(Pattern<Asset>, Quantity); 1] {
+    [(asset.into(), Quantity::new(1))]
 }
 
 /// What the tests read of the pool: its reserves, the shares it has issued,
