@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-problems"
-description = "Sample problems for Axionomy: their encodings, solvers, conformance models and packages"
+description = "Sample problems for Axionomy: their ontologies, economy builders and packages"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true

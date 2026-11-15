@@ -103,10 +103,4 @@ The unit tests check the laws by applying exchanges:
   strategies, experiments and view, whose scripts are `scripts/lending.rhai`
   and `scripts/lending-view.rhai`.
 
-[`examples/lending.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/lending.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example lending
-```
-
 The lending market is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

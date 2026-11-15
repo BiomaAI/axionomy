@@ -118,7 +118,7 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
-| `axionomy-problems` | Sample problem encodings, specialized proposers, and conformance tests; beside each model, its README and the builder of its package, all in `packages()` |
+| `axionomy-problems` | Sample ontologies, economy builders, and conformance tests; beside each model, its README and the builder of its package, all in `packages()` |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
@@ -180,7 +180,7 @@ packages, the engine; CLI, MCP, HTTP, and Studio remain outer adapters.
 ### Interfaces
 
 - One engine shared by the CLI, HTTP/SSE, MCP, Studio and browser Wasm: points, runs, refs, scripts, strategies, experiments, views and packages, with nothing registered ([plan](docs/SIMULATION.md#plan-axionomy-on-primitives)).
-- The reference problems as packages, each with explicit Micro, Showcase, and Stress instances, checked against their Rust solvers.
+- The reference problems as packages, each with explicit Micro, Showcase, and Stress instances, checked against their pinned outcomes.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server whose economies persist in a store, with content roots, trace stepping, diffs, refs, and experiments whose trials a client can step into and branch from.
 - Rust-owned OpenAPI, generated TypeScript, portable packages, and cross-interface tests.
@@ -194,8 +194,8 @@ packages, the engine; CLI, MCP, HTTP, and Studio remain outer adapters.
 - Shareable deep links to any package, ref or point, step and view.
 
 The core contains no application ontology or search algorithm. Problem assets
-and specialized solvers compile against the same public kernel API available
-to users.
+and their packages are built on the same public kernel and engine APIs
+available to users.
 
 ## Multi-objective decisions without a second truth
 
@@ -302,10 +302,8 @@ misleading, which shows why valid actions can still lead to failure.
 **How much does one participant change the outcome?** The
 [Living Market](https://biomaai.github.io/axionomy/?package=packages/amm.zip&ref=amm/micro&view=experiments)
 compares its market day with the same economy without the whale and with thin
-liquidity. Read initial-to-final price and reserves side by side. Its Rust
-example also computes each actor's exact coalition attribution, and proves
-that a trader demanding more than the quote receives nothing and leaves all
-accounts unchanged.
+liquidity. Read initial-to-final price and reserves side by side. Its view
+ranks each actor's direct contribution to the price.
 
 **What does borrowing early cost?** The
 [Lending market](https://biomaai.github.io/axionomy/?package=packages/lending.zip&ref=lending/micro&view=experiments)
@@ -607,16 +605,16 @@ indexes them with the conformance matrix and instance profiles.
 | [Sokoban](crates/axionomy-problems/src/sokoban/README.md) | Walls, stable crate identities, cell occupancy, atomic pushes, goals, dead squares | Resumable BFS, admissible A*, and replayable deadlock evidence |
 | [Exact cover](crates/axionomy-problems/src/exact_cover/README.md) | Universe, subsets, coverage, selection | BFS and Algorithm X |
 | [Workshop](crates/axionomy-problems/src/workshop/README.md) | Recipes, catalysts, material, labor, waste, process time | BFS, waste minimization, exact waste/time Pareto front |
-| [Job shop](crates/axionomy-problems/src/scheduling/README.md) | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch search, direct oracle, exact allocation Pareto front |
-| [Rescue](crates/axionomy-problems/src/rescue/README.md) | Hidden truth, seed, observation, belief, chance, sensor use | Exact scenario evaluation, seeded Monte Carlo, approximate policy front |
+| [Job shop](crates/axionomy-problems/src/scheduling/README.md) | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch-and-bound, exact allocation Pareto front |
+| [Rescue](crates/axionomy-problems/src/rescue/README.md) | Hidden truth, seed, observation, belief, chance, sensor use | Policies over one scenario and 128 sampled from the prior, approximate policy front |
 | [Bridge](crates/axionomy-problems/src/bridge/README.md) | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, auction, exact priority/credit Pareto front |
-| [Living Market AMM](crates/axionomy-problems/src/amm/README.md) | Closed energy/credit economy, exact constant-product swaps, fees, liquidity shares, real needs, obligations, information, actor price attribution | Market-day replay, no-whale and thin-liquidity counterfactuals, exact coalition Shapley attribution |
+| [Living Market AMM](crates/axionomy-problems/src/amm/README.md) | Closed energy/credit economy, exact constant-product swaps, fees, liquidity shares, real needs, obligations, information, actor price attribution | Market-day plans and seasonal policies, no-whale and thin-liquidity counterfactuals, direct price contribution |
 | [Lending market](crates/axionomy-problems/src/lending/README.md) | Pooled vault shares, posted collateral, loan-to-value and liquidation limits, kinked utilization rate, borrow index, reserves, scheduled price drop | Least-interest Dijkstra and fewest-step BFS, scripted liquidation and first-depositor attack |
-| [Marketplace](crates/axionomy-problems/src/marketplace/README.md) | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Assessment matching, replayable clearing, exact allocation Pareto front |
-| [Logistics](crates/axionomy-problems/src/logistics/README.md) | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, route MCTS, approximate policy front |
-| [Connect Four](crates/axionomy-problems/src/connect_four/README.md) | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
-| [Mission](crates/axionomy-problems/src/mission/README.md) | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, approximate policy front, RL trajectories |
-| [Perishables](crates/axionomy-problems/src/perishables/README.md) | Fungible cohort claims, unique condition facts, deadlines, refrigeration, power loss, cooling energy | Receipt-maintained index, event agenda, exact storage Pareto front, independent oracle |
+| [Marketplace](crates/axionomy-problems/src/marketplace/README.md) | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Branch-and-bound clearing, beam plans for funded markets, exact allocation Pareto front |
+| [Logistics](crates/axionomy-problems/src/logistics/README.md) | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts of direct and reliable policies, route MCTS, approximate policy front |
+| [Connect Four](crates/axionomy-problems/src/connect_four/README.md) | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS in self-play and against center-first and alpha-beta opponents |
+| [Mission](crates/axionomy-problems/src/mission/README.md) | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, seeded Monte Carlo over team policies, approximate policy front |
+| [Perishables](crates/axionomy-problems/src/perishables/README.md) | Fungible cohort claims, unique condition facts, deadlines, refrigeration, power loss, cooling energy | Outage and cold-chain policies, exact storage Pareto front |
 | [Work League](crates/axionomy-problems/src/work_league/README.md) | Autonomous workers, finite jobs, travel, shared facilities, resources, recycling, failures and repairs | Competing seeded policies; value, throughput, efficiency, waste, reliability, and Pareto standings after every step |
 
 Every accepted result is an exchange trace replayed by the same core. The
@@ -629,53 +627,6 @@ axioms generalize and to expose friction that belongs in domain-independent
 engine APIs. Rate names never authorize bindings: where identity matters, the
 rates require preserved identity or capability assets, and adversarial tests
 construct incorrect bindings directly to prove the core rejects them.
-
-Every problem has a small consumer-facing example. The example binaries contain
-no domain rules: they instantiate their concrete economy, invoke strategies,
-replay the proposed trace, assert the encoded goal, and print a summary.
-
-```console
-cargo run -p axionomy-problems --example maze
-cargo run -p axionomy-problems --example sokoban
-cargo run -p axionomy-problems --example exact_cover
-cargo run -p axionomy-problems --example workshop
-cargo run -p axionomy-problems --example scheduling
-cargo run -p axionomy-problems --example rescue
-cargo run -p axionomy-problems --example bridge
-cargo run -p axionomy-problems --example amm
-cargo run -p axionomy-problems --example marketplace
-cargo run -p axionomy-problems --example logistics
-cargo run -p axionomy-problems --example connect_four
-cargo run -p axionomy-problems --example mission
-cargo run -p axionomy-problems --example perishables
-cargo run -p axionomy-problems --example work_league
-cargo run -p axionomy-problems --example lending
-```
-
-All runnable examples use structured console logging. `INFO` presents model
-construction, strategy decisions, encoded outcomes, and verification;
-`RUST_LOG=debug` adds detailed traces, assessments, or canonical denomination
-definitions as appropriate. Each example binary installs its own subscriber.
-The reusable libraries never install a global subscriber or treat logs as
-authoritative state.
-
-A repeatable long-horizon workload is also available:
-
-```console
-cargo bench -p axionomy-problems --bench rollout_throughput
-```
-
-For example, the maze's default `INFO` view is:
-
-```text
-INFO Compare shortest-depth BFS with energy-aware A* over one encoded graph. example="Maze"
-INFO encoded economy ready accounts=2 rates=8
-INFO proposal replayed strategy="BFS" exchanges=3 expanded=5 goal_verified=true
-INFO proposal replayed strategy="A*" exchanges=6 expanded=6 energy=6 goal_verified=true
-INFO exact search retained every non-dominated route completeness=Exact outcomes=2 terminal_outcomes=2 expanded=10
-INFO non-dominated route energy=9 time=3 exchanges=3 replay_verified=true
-INFO non-dominated route energy=6 time=6 exchanges=6 replay_verified=true
-```
 
 ## Semantics in brief
 

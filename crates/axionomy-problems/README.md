@@ -1,8 +1,8 @@
 # axionomy-problems
 
 Canonical closed-problem encodings for
-[Axionomy](https://github.com/BiomaAI/axionomy), their solvers, and the
-packages they are written as.
+[Axionomy](https://github.com/BiomaAI/axionomy) and the packages they are
+written as.
 
 Problem models exercise Axionomy exclusively through its public API. They are
 reference encodings and conformance fixtures, not privileged engine semantics.
@@ -10,23 +10,20 @@ They are intentionally concrete examples, not reusable domain frameworks:
 Axionomy users create their own economies. The fixtures prove that the common
 axioms generalize, and their adversarial tests ensure accepted exchanges remain
 domain-valid even when a caller bypasses the examples' action helpers and
-rebinds roles directly. The mission additionally proves caller-owned belief
-filtering and repeated planning across information sets.
+rebinds roles directly.
 
-The applicable fixtures also expose multi-objective decisions. Maze, workshop,
-scheduling, bridge, marketplace, and perishables exhaust finite state spaces
-and return exact fronts of replay-verified traces. Logistics, rescue, and
-mission compare sampled policy statistics and therefore return explicitly
-approximate fronts. In both cases the objective values come from encoded
-outcomes; dominance is disposable comparison policy, never a parallel domain
-model.
+The applicable packages also expose multi-objective decisions. The Pareto
+strategies of maze, workshop, scheduling, bridge, marketplace, and
+perishables exhaust finite state spaces and return exact fronts of
+replay-verified traces. The experiments of logistics, rescue, and mission
+compare evaluated policies and therefore give explicitly approximate fronts.
+In both cases the objective values come from encoded outcomes; dominance is
+disposable comparison policy, never a parallel domain model.
 
 Every model's `World` has an `Ontology` naming its identifier types, such as
 `maze::Ontology` or `logistics::fleet::Ontology`, and every identifier
-serializes, so `axionomy-store` can record its runs: whatever explores a
-model records each rollout as a run and a Monte Carlo estimate as a group of
-them
-(`tests/storage.rs`).
+serializes, so `axionomy-store` can record its runs (`tests/storage.rs`
+stores every model's economies and reads them back).
 
 ## One folder per problem
 
@@ -37,11 +34,13 @@ Each problem lives in one folder of `src`, named as its module (`maze`,
   require, and the pressure it puts on the API. It is also the module's
   documentation.
 - `mod.rs` is the model, with the model's own submodules beside it
-  (`maze/dynamics.rs`): its economy builders and its solvers, policies,
-  planners and games, written in Rust.
+  (`maze/dynamics.rs`): its ontology, economy builders, goals, typed
+  exchange builders, and the constants its package reads.
 - `package.rs` writes the problem's package into an engine's store, behind
   the `packages` feature: its economies as runs under refs, its goals, its
   Rhai scripts (`scripts/`), its strategies, its experiments and its view.
+  The package's strategies are the problem's only solvers, policies and
+  games; they run through the engine.
 
 Sub-ontologies such as `logistics/fleet` follow the same layout inside their
 problem's folder. A model uses neither its package nor its view, so it remains
@@ -56,14 +55,16 @@ matrix and instance profiles, is
 
 ## The samples as packages
 
-A sample's Rust code is the oracle its package is checked against.
-`tests/packages.rs` exports each package, loads it alone into a fresh store,
-runs its experiments and requires exactly what the sample's Rust code gives:
-the traces its solvers, policies, planners and games make and their values on
-every objective, the plans it keeps beside them (a legal but losing Sokoban
-plan, an unsatisfiable cover, too short a horizon) from the economies it
-starts at, and the totals its Monte Carlo fronts average. Micro is checked in
-every test run, Showcase and Stress in a release build (`--ignored`).
+A package is checked against what it found when it was pinned, never
+against another implementation of it. `tests/outcomes` exports each package,
+loads it alone into a fresh store, runs its experiments and requires what
+`tests/outcomes/pins.rs` records: for each arm, how its trials ended, their
+steps, each objective summed over them and a digest of what they did; for
+each ref, its steps and a digest of its history. Micro is checked in every
+test run, Showcase and Stress in a release build (`--ignored`). A change
+that means to change what a package finds rewrites the pins
+(`pins_as_found`) and says why in its commit.
+
 `tests/views.rs` draws every run of every experiment with its package's view
 and checks each document: a frame for every step, each explained, scenes that
 join up, evidence in the snapshot it explains, and formats for the assets the
@@ -98,43 +99,3 @@ experiments and view as definitions, and export them with `Engine::export`
 or `axionomy package export`
 ([D-048, D-049](https://github.com/BiomaAI/axionomy/blob/main/PDD.md)).
 Any sample's `package.rs` shows each step.
-
-## Examples
-
-Each model has a matching runnable example:
-
-```console
-cargo run -p axionomy-problems --example maze
-cargo run -p axionomy-problems --example sokoban
-cargo run -p axionomy-problems --example exact_cover
-cargo run -p axionomy-problems --example workshop
-cargo run -p axionomy-problems --example scheduling
-cargo run -p axionomy-problems --example rescue
-cargo run -p axionomy-problems --example bridge
-cargo run -p axionomy-problems --example amm
-cargo run -p axionomy-problems --example marketplace
-cargo run -p axionomy-problems --example logistics
-cargo run -p axionomy-problems --example connect_four
-cargo run -p axionomy-problems --example mission
-cargo run -p axionomy-problems --example perishables
-cargo run -p axionomy-problems --example work_league
-cargo run -p axionomy-problems --example lending
-```
-
-Examples emit structured console events through `tracing`. `INFO` is the
-default and explains model construction, strategy choice, encoded outcomes,
-and replay verification. Set `RUST_LOG=debug` to include complete accepted
-exchange traces and assessments:
-
-```console
-RUST_LOG=debug cargo run -p axionomy-problems --example maze
-```
-
-Logging is initialized only by these example binaries. Problem modules,
-search, and kernel libraries never install a global subscriber.
-
-Performance probes are Cargo bench targets rather than examples:
-
-```console
-cargo bench -p axionomy-problems --bench rollout_throughput
-```

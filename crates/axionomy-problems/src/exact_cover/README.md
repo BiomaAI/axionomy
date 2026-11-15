@@ -42,8 +42,8 @@ The model's tests apply the rules directly:
 ## API pressure
 
 - Constraint satisfaction through resource-sensitive facts.
-- Specialized solver compilation from core data.
-- Solver output translated back to the shared execution language.
+- A specialized plan, Algorithm X, read from core data.
+- Its output is ordinary exchanges in the shared execution language.
 
 ## In this folder
 

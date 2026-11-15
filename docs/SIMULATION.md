@@ -371,7 +371,7 @@ on every state checked, and the scripted incident runs the same trace. Per
 call, in release, scripts take 3 to 5 times the Rust code's time (maze's
 heuristic 3.6 µs against 1.4 µs, sokoban's candidates 283 µs against 87 µs,
 an incident turn 340 µs against 65 µs), since most of a call is the host
-API's kernel work; `examples/script_speed.rs` measures it.
+API's kernel work.
 
 **P4. Goals, objectives and candidates (done).** Goals are kernel data kept
 by path (`goal/<path>`); an objective is a script measure with a direction,
@@ -683,10 +683,12 @@ sample's `study.rs` and Rust view, `support.rs` and `registry()`; the CLI's
 the `axionomy://study/…` resources and the `mcp-studies` table; the Studio
 server's `/api/problems` and `/api/studies` and the Worker's `catalog` and
 `study`; and Studio's study workspace, its `?studies` and study links, its
-static studies on Pages and its study tests. Each sample keeps its typed
-ontology, its economy builders and its Rust solvers, the oracles its
-package is checked against; the view types stay, which the engine draws
-into. A transport, the CLI and Studio know packages only.
+static studies on Pages and its study tests. Each sample kept its typed
+ontology, its economy builders and its Rust solvers; the view types stay,
+which the engine draws into. A transport, the CLI and Studio know packages
+only. The Rust solvers went after (D-053): a package is checked against its
+pinned outcomes (`crates/axionomy-problems/tests/outcomes`), and its
+strategies are the sample's only solvers, policies and games.
 
 **P10. Live refs (done).** The store's refs gain compare-and-set and an index of each
 run's branches; the engine gains `refer`, `advance`, `watch` and

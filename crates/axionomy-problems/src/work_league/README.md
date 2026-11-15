@@ -97,10 +97,4 @@ effects replay through ordinary atomic exchanges, under every invariant.
   strategies, experiments and view, whose scripts are `scripts/work-league.rhai`
   and `scripts/work-league-view.rhai`.
 
-[`examples/work_league.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/work_league.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example work_league
-```
-
 The Work League is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

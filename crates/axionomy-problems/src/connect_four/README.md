@@ -53,10 +53,4 @@ played to an encoded win or draw, and its trace replays deterministically.
   strategies, experiments and view, whose scripts are `scripts/connect-four.rhai`
   and `scripts/connect-four-view.rhai`.
 
-[`examples/connect_four.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/connect_four.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example connect_four
-```
-
 Connect Four is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

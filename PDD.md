@@ -599,10 +599,10 @@ them.
   sampling, Monte Carlo, perfect-information MCTS, information-set MCTS, and
   learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
-  specialized proposers, conformance tests, and, beside each model, the README
-  that specifies it and the builder of its package: its economies, goals,
-  Rhai scripts, strategies, experiments and view. `packages()` lists them
-  all, and its Rust solvers are the oracles the packages are checked against.
+  conformance tests, and, beside each model, the README that specifies it
+  and the builder of its package: its economies, goals, Rhai scripts,
+  strategies, experiments and view. `packages()` lists them all, and each
+  package is checked against its pinned outcomes (D-053).
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
@@ -2301,6 +2301,26 @@ board in 17 all the same. No strategy key is named by an instance.
 The store format is unchanged: it covers the store's own records and trees,
 and a definition is the bytes its owner encodes, as when strategies gained
 fields before; packages are written again from their builders.
+
+### D-053: A sample is an ontology, its builders and its package
+
+Decided after P9. A sample is its ontology, the builders of its economies
+and its package. Its Rust keeps the ontology's types, the economy builders,
+goals, the constants its package writer reads, enabled predicates
+(`bridge::timed::enabled`) and typed exchange builders. Its strategies,
+solvers, policies and games run only as the package's strategies, through
+the engine. The oracle for a sample is its package's pinned outcomes
+(`crates/axionomy-problems/tests/outcomes`), not a Rust re-implementation:
+for each arm of each experiment, how its trials ended, their steps, each
+objective summed over them and a digest of what they did, and for each ref
+its steps and a digest of its history. Until now each sample also kept Rust
+solvers, policies, planners and games, and its package was checked against
+them (D-050); the pins were what they found, so no package finds anything
+different now they are gone. A change that means to change what a package
+finds rewrites the pins and says why in its commit. A model's own tests
+still apply its rules by exchanges, and the independent oracles of exact
+cover, scheduling and perishables stay: they check the economy, not a
+strategy.
 
 ## 16. Success criteria
 

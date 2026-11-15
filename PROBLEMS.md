@@ -42,13 +42,13 @@ that module's Rust documentation.
 | --- | --- | --- |
 | [Key-door energy maze](crates/axionomy-problems/src/maze/README.md) | `maze` | Graph facts, encoded costs and heuristics, exact multi-objective search |
 | [Sokoban](crates/axionomy-problems/src/sokoban/README.md) | `sokoban` | Three-account atomic pushes, explicit emptiness, stable identity, deadlock evidence |
-| [Exact cover](crates/axionomy-problems/src/exact_cover/README.md) | `exact_cover` | Constraints as resource-sensitive facts, a specialized solver compiled from core data |
+| [Exact cover](crates/axionomy-problems/src/exact_cover/README.md) | `exact_cover` | Constraints as resource-sensitive facts, Algorithm X as a plan read from core data |
 | [Stoichiometric workshop](crates/axionomy-problems/src/workshop/README.md) | `workshop` | Identity-changing production, catalysts, declared conservation |
 | [Discrete job-shop scheduling](crates/axionomy-problems/src/scheduling/README.md) | `scheduling` | Variable multi-account reservation, precedence as tokens, encoded makespan |
 | [Stochastic rescue](crates/axionomy-problems/src/rescue/README.md) | `rescue` | Restricted observation, hidden truth versus belief, an encoded Nature |
 | [Single-lane bridge negotiation](crates/axionomy-problems/src/bridge/README.md) | `bridge` | Atomic joint resolution, escrow, capacity as a conserved asset |
 | [Multi-party marketplace settlement](crates/axionomy-problems/src/marketplace/README.md) | `marketplace` | Six-role settlement, shortfalls as matching information, disposable ranking |
-| [Stochastic delivery logistics](crates/axionomy-problems/src/logistics/README.md) | `logistics` | Long stochastic horizons, recurrent Nature, Monte Carlo and MCTS |
+| [Stochastic delivery logistics](crates/axionomy-problems/src/logistics/README.md) | `logistics` | Long stochastic horizons, recurrent Nature, MCTS |
 | [Adversarial Connect Four](crates/axionomy-problems/src/connect_four/README.md) | `connect_four` | Adversarial vector outcomes, encoded terminal truth, canonical transpositions |
 | [Partially observed team mission](crates/axionomy-problems/src/mission/README.md) | `mission` | Agent-specific observations, caller-owned beliefs, information-set search |
 | [Cohort-indexed perishables](crates/axionomy-problems/src/perishables/README.md) | `perishables` | Structural fungibility, unique condition facts, event-driven time |
@@ -67,51 +67,14 @@ that module's Rust documentation.
 | Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |  |  |
 | Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |
 | Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ |  |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies | Seeded actors/Shapley | Scripted liquidation and first-depositor attack |
-| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison | Exact coalition replay | BFS/Dijkstra, property-based round trips |
+| Scripted plan or policy |  |  | Algorithm X |  |  | Incident policies | Auction and adaptive policies |  | Route and fleet policies | Center-first opponent | Team policies | Outage and cold-chain policies | Competing seeded policies | Market-day plans and seasonal policies | Scripted liquidation and first-depositor attack |
+| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS/A* | BFS | BFS/best-first/Pareto | Best-first/branch-and-bound/Pareto | Rollout/MC | BFS/Pareto | Branch-and-bound/beam/Pareto | Rollout/MCTS | MCTS/minimax | ISMCTS/rollout/MC | Pareto | Replay-derived vector comparison | Rollout | BFS/Dijkstra, property-based round trips |
 | Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |
 | Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |  |
 | Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ |  |
 | Per-step leaderboards |  |  |  |  |  |  |  |  |  |  |  |  | ✓ | ✓ |  |
-| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |
 | Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |
 | Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-
-## Runnable examples
-
-Each model has a symmetric consumer example. These binaries contain
-orchestration and display logic only; all authoritative state, rules, goals,
-and constraints remain in that concrete problem economy.
-
-```console
-cargo run -p axionomy-problems --example maze
-cargo run -p axionomy-problems --example sokoban
-cargo run -p axionomy-problems --example exact_cover
-cargo run -p axionomy-problems --example workshop
-cargo run -p axionomy-problems --example scheduling
-cargo run -p axionomy-problems --example rescue
-cargo run -p axionomy-problems --example bridge
-cargo run -p axionomy-problems --example amm
-cargo run -p axionomy-problems --example marketplace
-cargo run -p axionomy-problems --example logistics
-cargo run -p axionomy-problems --example connect_four
-cargo run -p axionomy-problems --example mission
-cargo run -p axionomy-problems --example perishables
-cargo run -p axionomy-problems --example work_league
-cargo run -p axionomy-problems --example lending
-```
-
-The examples emit structured `tracing` events at `INFO` by default. Set
-`RUST_LOG=debug` to inspect accepted exchange traces, assessments, sampled
-outcomes, and search details. Logging is presentation logic owned by the
-example binaries; it is never part of problem state or transition validity.
-
-The separate long-horizon throughput probe is intentionally a Cargo bench
-target, not a consumer example:
-
-```console
-cargo bench -p axionomy-problems --bench rollout_throughput
-```
 
 ## Instance profiles and anti-toy pressure
 
@@ -136,10 +99,11 @@ different workload.
 Every problem is a package: its refs name each instance's economy, and its
 goals, scripts, strategies and experiments say how each is played, beside the
 view that draws its runs (`cargo run -p axionomy-cli -- package inspect
-packages/maze.zip` lists what one holds). The package tests
-(`crates/axionomy-problems/tests/packages.rs`) require every experiment to
-reproduce exactly what the problem's Rust code gives, and a problem of your
-own is a package written the same way.
+packages/maze.zip` lists what one holds). Its strategies are the problem's
+only solvers, policies and games. The outcome tests
+(`crates/axionomy-problems/tests/outcomes`) require every experiment and ref
+to find what its pins record, and a problem of your own is a package written
+the same way.
 
 The view tests (`crates/axionomy-problems/tests/views.rs`) draw every run of
 every experiment and enforce per-problem minimum pressure on the Showcase
@@ -199,9 +163,9 @@ The repository test suite additionally verifies:
   amounts a participant pays round up and amounts it receives round down, so
   no round trip creates value and conservation invariants hold. Full-width
   `MulDiv` agrees with a wide-integer reference.
-- Exhaustive fixture variation against direct domain oracles for exact cover,
-  small scheduling horizons, and generated Connect Four prefixes, plus
-  generated perishables inventories against an independent cohort oracle.
+- Exhaustive fixture variation against direct domain oracles for exact cover
+  and small scheduling horizons, plus generated perishables inventories
+  against an independent cohort oracle.
 
 Run the suite with:
 

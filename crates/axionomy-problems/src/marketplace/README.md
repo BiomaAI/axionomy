@@ -98,10 +98,4 @@ The package's experiments find these, pinned in `tests/outcomes`:
   strategies, experiments and view, whose scripts are `scripts/marketplace.rhai`
   and `scripts/marketplace-view.rhai`.
 
-[`examples/marketplace.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/marketplace.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example marketplace
-```
-
 The marketplace is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

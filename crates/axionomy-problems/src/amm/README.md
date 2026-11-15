@@ -77,10 +77,4 @@ law; and the view ranks each actor's direct contribution to the price.
   strategies, experiments and view, whose scripts are `scripts/amm.rhai`
   and `scripts/amm-view.rhai`.
 
-[`examples/amm.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/amm.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example amm
-```
-
 The Living Market is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
