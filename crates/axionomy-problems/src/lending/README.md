@@ -46,23 +46,28 @@ invariants. Identity witnesses bind the market, clock, oracle and borrower;
 the supplier's invoice and the customer's purchase orders bind the
 counterparties.
 
-The search policy borrows exactly the bill's shortfall while it is unpaid,
-repays everything owed or all available cash after, and returns collateral
+The package's moves borrow exactly the bill's shortfall while it is unpaid,
+repay everything owed or all available cash after, and return collateral
 once the loan is closed. These are candidate choices, not semantics; the
-kernel still assesses every exchange. Dijkstra search charges each closed
-period's interest to the plan; breadth-first search counts exchanges.
+kernel still assesses every exchange. Its Dijkstra search charges each
+closed period's interest to the plan; breadth-first search counts exchanges.
 
 ## Required results
 
-- Least interest borrows later and repays earlier than fewest steps, and its
-  Dijkstra cost equals the interest replayed from its trace (Micro 37 against
-  56, Showcase 342 against 872). Both plans pay the bill, retire every debt
-  share, return all collateral and conserve cash.
+The package's experiments find these, pinned in `tests/outcomes`:
+
+- Least interest borrows later and repays earlier than fewest steps, and pays
+  less (Micro 37 against 56, Showcase 342 against 872). Both pay the bill,
+  retire every debt share and return all collateral.
+- The over-borrowed scenario ends in a liquidation.
+
+The unit tests check the laws by applying exchanges:
+
 - With the loan repaid, the market's cash gain equals what the borrower paid
   beyond the bill and revenue; reserves are a strict part of it, and
   depositors' assets grow by exactly the rest.
-- The rate is the kinked curve the view computes: 7.2% a period at 90%
-  utilization, and the index grows by exactly that rate.
+- The rate is the kinked curve an independent `u128` view computes: 7.2% a
+  period at 90% utilization, and the index grows by exactly that rate.
 - Borrowing and withdrawal respect the loan-to-value limit exactly; nothing
   can be borrowed before collateral is posted.
 - The price drop happens once, at its scheduled period, and the clock cannot
@@ -92,9 +97,8 @@ period's interest to the plan; breadth-first search counts exchanges.
 
 ## In this folder
 
-- `mod.rs` is the model: the market's terms, rates and every instance, the
-  search policy, the scripted liquidation and first-depositor attack, and
-  the valuation views.
+- `mod.rs` is the model: the market's terms, rates and every instance, its
+  goal and its typed exchanges.
 - `package.rs` writes its package: its economies under refs, goals,
   strategies, experiments and view, whose scripts are `scripts/lending.rhai`
   and `scripts/lending-view.rhai`.

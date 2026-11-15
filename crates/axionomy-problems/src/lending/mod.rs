@@ -3,10 +3,9 @@
 use axionomy::ConditionPath;
 use axionomy::path;
 use axionomy::{
-    Account, ApplyError, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
-    Quantity, QuantityComparison, QuantityExpression, Rate, Rounding, Trace, basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
+    QuantityComparison, QuantityExpression, Rate, Rounding, basket,
 };
-use axionomy_search::{SearchSolution, bfs, dijkstra};
 
 #[cfg(feature = "packages")]
 pub mod package;
@@ -153,9 +152,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type LoanTrace = Trace<Ontology>;
-pub type LoanError = Box<ApplyError<Ontology>>;
-pub type Solution = SearchSolution<Ontology>;
 type Q = QuantityExpression<Ontology>;
 
 /// The market's published terms, each scaled by `WAD`.
@@ -220,8 +216,6 @@ pub struct Config {
     /// Each installment is collectable once `period` periods have closed.
     pub revenue: Vec<Payment>,
     pub keeper_cash: u64,
-    /// Search granularity, not semantics: collateral per posting step.
-    pub collateral_lot: u64,
 }
 
 impl Config {
@@ -246,7 +240,6 @@ impl Config {
                 period: 3,
             }],
             keeper_cash: 5_000,
-            collateral_lot: 20,
         }
     }
 
@@ -277,7 +270,6 @@ impl Config {
                 },
             ],
             keeper_cash: 20_000,
-            collateral_lot: 100,
         }
     }
 
@@ -312,7 +304,6 @@ impl Config {
                 },
             ],
             keeper_cash: 80_000,
-            collateral_lot: 400,
         }
     }
 }
@@ -887,240 +878,97 @@ pub fn goal(config: &Config) -> Goal<Ontology> {
     )
 }
 
-/// The borrower's moves, then the keeper, oracle and clock.
-///
-/// Amounts and phases are search policy, not semantics. The bill is paid at
-/// once, so the borrower borrows exactly its shortfall while it is unpaid;
-/// afterwards it repays everything it owes, or all the cash it has, and takes
-/// collateral back once the loan is closed. Collateral moves all at once or
-/// in lots. Every candidate is still assessed by the kernel.
-pub fn candidates(config: &Config) -> impl Fn(&World) -> Vec<Action> + '_ {
-    move |world| {
-        let borrower = |asset| balance(world, AccountId::Borrower, asset);
-        let cash = borrower(Asset::Cash);
-        let posted = borrower(Asset::PostedCollateral);
-        let debt_shares = borrower(Asset::DebtShare);
-        let bill_paid = borrower(Asset::BillPaid) > 0;
-        let mut actions = Vec::new();
-        if !bill_paid || debt_shares > 0 {
-            for units in lots(borrower(Asset::Collateral), config.collateral_lot) {
-                actions.push(post_collateral(units));
-            }
-        }
-        if !bill_paid {
-            if cash < config.bill.amount {
-                actions.push(borrow(config.bill.amount - cash));
-            }
-            actions.push(pay_bill());
-        } else if debt_shares > 0 {
-            if u128::from(cash) >= debt_view(world) {
-                actions.push(repay_shares(debt_shares));
-            } else if cash > 0 {
-                actions.push(repay(cash));
-            }
-        } else if posted > 0 {
-            actions.push(withdraw_collateral(posted));
-        }
-        actions.extend(
-            (0_u8..)
-                .zip(&config.revenue)
-                .map(|(id, _)| collect_revenue(id)),
-        );
-        actions.extend([liquidate(), reprice(), accrue()]);
-        world.applicable(actions)
-    }
-}
-
-/// All of `available`, and one lot when that is less.
-fn lots(available: u64, lot: u64) -> Vec<u64> {
-    match available {
-        0 => Vec::new(),
-        all if all > lot => vec![all, lot],
-        all => vec![all],
-    }
-}
-
-/// Fewest exchanges: blind to when cash is borrowed, so it pays for it.
-pub fn fewest_steps(config: &Config) -> Option<Solution> {
-    bfs(&world(config), &goal(config), candidates(config))
-}
-
-/// Least interest charged to the borrower.
-pub fn least_interest(config: &Config) -> Option<Solution> {
-    dijkstra(
-        &world(config),
-        &goal(config),
-        candidates(config),
-        interest_step,
-    )
-}
-
-/// Interest one exchange charges the borrower: only closing a period does.
-pub fn interest_step(before: &World, exchange: &Action, after: &World) -> u64 {
-    if *exchange.rate() == RateId::Accrue {
-        u64::try_from(debt_view(after).saturating_sub(debt_view(before)))
-            .expect("interest per period fits the cash scale")
-    } else {
-        0
-    }
-}
-
-/// Interest charged over a whole trace.
-pub fn interest_charged(initial: &World, trace: &LoanTrace) -> Result<u64, LoanError> {
-    let mut world = initial.clone();
-    let mut total = 0;
-    for exchange in trace.exchanges() {
-        let before = world.clone();
-        world.apply(exchange.clone()).map_err(Box::new)?;
-        total += interest_step(&before, exchange, &world);
-    }
-    Ok(total)
-}
-
-/// Posts all collateral and borrows as much as the pool and the loan-to-value
-/// limit allow in the first period, then lets the clock run. Interest at a
-/// high utilization or the price drop pushes the loan past its threshold, and
-/// the keeper liquidates it.
-pub fn over_borrowed(config: &Config) -> Result<(World, LoanTrace), LoanError> {
-    let mut world = world(config);
-    let mut trace = Trace::new();
-    let mut step = |world: &mut World, action: Action| -> Result<(), LoanError> {
-        world.apply(action.clone()).map_err(Box::new)?;
-        trace.push(action);
-        Ok(())
-    };
-    step(&mut world, post_collateral(config.collateral))?;
-    let room = borrow_limit_view(&world)
-        .saturating_sub(debt_view(&world))
-        .min(u128::from(market_balance(&world, Asset::Cash)));
-    let room = u64::try_from(room).expect("room is bounded by market cash");
-    if room > 0 && world.is_applicable(&borrow(room)) {
-        step(&mut world, borrow(room))?;
-    }
-    step(&mut world, pay_bill())?;
-    loop {
-        if world.is_applicable(&liquidate()) {
-            step(&mut world, liquidate())?;
-            break;
-        }
-        if world.is_applicable(&reprice()) {
-            step(&mut world, reprice())?;
-        } else if world.is_applicable(&accrue()) {
-            step(&mut world, accrue())?;
-        } else {
-            break;
-        }
-    }
-    Ok((world, trace))
-}
-
-/// An attacker deposits one atom into a fresh market and donates heavily to
-/// inflate the share price before a victim deposits, then redeems.
-pub fn first_depositor_attack(config: &Config) -> Result<(World, LoanTrace), LoanError> {
-    let mut world = genesis(config);
-    let mut trace = Trace::new();
-    let donation = config.depositor_cash - 1;
-    for action in [
-        deposit(0, 1, 1),
-        donate(0, donation),
-        deposit(1, config.depositor_cash, 1),
-        redeem(0, 1, 0),
-    ] {
-        world.apply(action.clone()).map_err(Box::new)?;
-        trace.push(action);
-    }
-    Ok((world, trace))
-}
-
-pub fn balance(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).to_u64()
-}
-
-// Disposable u128 views, independent of the kernel's expression evaluator.
-fn floor(left: u64, right: u64, denominator: u64) -> u128 {
-    u128::from(left) * u128::from(right) / u128::from(denominator)
-}
-
-fn ceil(left: u64, right: u64, denominator: u64) -> u128 {
-    (u128::from(left) * u128::from(right)).div_ceil(u128::from(denominator))
-}
-
-fn market_balance(world: &World, asset: Asset) -> u64 {
-    balance(world, AccountId::Market, asset)
-}
-
-/// Outstanding debt valued rounded down.
-pub fn debt_value_view(world: &World) -> u128 {
-    floor(
-        market_balance(world, Asset::DebtShareSupply),
-        market_balance(world, Asset::BorrowIndex),
-        WAD,
-    )
-}
-
-/// Market cash plus outstanding debt, less reserves.
-pub fn total_assets_view(world: &World) -> u128 {
-    u128::from(market_balance(world, Asset::Cash)) + debt_value_view(world)
-        - u128::from(market_balance(world, Asset::Reserves))
-}
-
-/// Cash the borrower owes now, rounded up.
-pub fn debt_view(world: &World) -> u128 {
-    ceil(
-        balance(world, AccountId::Borrower, Asset::DebtShare),
-        market_balance(world, Asset::BorrowIndex),
-        WAD,
-    )
-}
-
-/// Borrowed share of cash plus debt, scaled by `WAD`, rounded up.
-pub fn utilization_view(world: &World) -> u128 {
-    let debt = debt_value_view(world);
-    let gross = (u128::from(market_balance(world, Asset::Cash)) + debt).max(1);
-    (debt * u128::from(WAD)).div_ceil(gross)
-}
-
-/// Interest per period at the current utilization, scaled by `WAD`.
-pub fn rate_view(world: &World) -> u128 {
-    let terms = |asset| u128::from(market_balance(world, asset));
-    let wad = u128::from(WAD);
-    let utilization = utilization_view(world);
-    let kink = terms(Asset::Kink);
-    terms(Asset::BaseRate)
-        + (utilization.min(kink) * terms(Asset::SlopeBelowKink)).div_ceil(wad)
-        + ((utilization.max(kink) - kink) * terms(Asset::SlopeAboveKink)).div_ceil(wad)
-}
-
-/// A share of the posted collateral's value, rounded down.
-fn limit_view(world: &World, term: Asset) -> u128 {
-    let value = u128::from(balance(world, AccountId::Borrower, Asset::PostedCollateral))
-        * u128::from(market_balance(world, Asset::CollateralPrice));
-    value * u128::from(market_balance(world, term)) / u128::from(WAD)
-}
-
-pub fn borrow_limit_view(world: &World) -> u128 {
-    limit_view(world, Asset::LoanToValue)
-}
-
-pub fn liquidation_limit_view(world: &World) -> u128 {
-    limit_view(world, Asset::LiquidationThreshold)
-}
-
-/// Cash a depositor's shares redeem for now, rounded down.
-pub fn share_value_view(world: &World, depositor: u8) -> u128 {
-    let shares = u128::from(balance(
-        world,
-        AccountId::Depositor(depositor),
-        Asset::Share,
-    ));
-    shares * total_assets_view(world) / u128::from(market_balance(world, Asset::ShareSupply))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::AssessmentStatus;
+    use axionomy::{ApplyError, AssessmentStatus, Trace};
     use proptest::prelude::*;
+
+    // Disposable u128 views, independent of the kernel's expression
+    // evaluator: the oracles the market's laws are checked against.
+
+    fn balance(world: &World, account: AccountId, asset: Asset) -> u64 {
+        world.balance(&account, &asset).to_u64()
+    }
+
+    fn floor(left: u64, right: u64, denominator: u64) -> u128 {
+        u128::from(left) * u128::from(right) / u128::from(denominator)
+    }
+
+    fn ceil(left: u64, right: u64, denominator: u64) -> u128 {
+        (u128::from(left) * u128::from(right)).div_ceil(u128::from(denominator))
+    }
+
+    fn market_balance(world: &World, asset: Asset) -> u64 {
+        balance(world, AccountId::Market, asset)
+    }
+
+    /// Outstanding debt valued rounded down.
+    fn debt_value_view(world: &World) -> u128 {
+        floor(
+            market_balance(world, Asset::DebtShareSupply),
+            market_balance(world, Asset::BorrowIndex),
+            WAD,
+        )
+    }
+
+    /// Market cash plus outstanding debt, less reserves.
+    fn total_assets_view(world: &World) -> u128 {
+        u128::from(market_balance(world, Asset::Cash)) + debt_value_view(world)
+            - u128::from(market_balance(world, Asset::Reserves))
+    }
+
+    /// Cash the borrower owes now, rounded up.
+    fn debt_view(world: &World) -> u128 {
+        ceil(
+            balance(world, AccountId::Borrower, Asset::DebtShare),
+            market_balance(world, Asset::BorrowIndex),
+            WAD,
+        )
+    }
+
+    /// Borrowed share of cash plus debt, scaled by `WAD`, rounded up.
+    fn utilization_view(world: &World) -> u128 {
+        let debt = debt_value_view(world);
+        let gross = (u128::from(market_balance(world, Asset::Cash)) + debt).max(1);
+        (debt * u128::from(WAD)).div_ceil(gross)
+    }
+
+    /// Interest per period at the current utilization, scaled by `WAD`.
+    fn rate_view(world: &World) -> u128 {
+        let terms = |asset| u128::from(market_balance(world, asset));
+        let wad = u128::from(WAD);
+        let utilization = utilization_view(world);
+        let kink = terms(Asset::Kink);
+        terms(Asset::BaseRate)
+            + (utilization.min(kink) * terms(Asset::SlopeBelowKink)).div_ceil(wad)
+            + ((utilization.max(kink) - kink) * terms(Asset::SlopeAboveKink)).div_ceil(wad)
+    }
+
+    /// A share of the posted collateral's value, rounded down.
+    fn limit_view(world: &World, term: Asset) -> u128 {
+        let value = u128::from(balance(world, AccountId::Borrower, Asset::PostedCollateral))
+            * u128::from(market_balance(world, Asset::CollateralPrice));
+        value * u128::from(market_balance(world, term)) / u128::from(WAD)
+    }
+
+    fn borrow_limit_view(world: &World) -> u128 {
+        limit_view(world, Asset::LoanToValue)
+    }
+
+    fn liquidation_limit_view(world: &World) -> u128 {
+        limit_view(world, Asset::LiquidationThreshold)
+    }
+
+    /// Cash a depositor's shares redeem for now, rounded down.
+    fn share_value_view(world: &World, depositor: u8) -> u128 {
+        let shares = u128::from(balance(
+            world,
+            AccountId::Depositor(depositor),
+            Asset::Share,
+        ));
+        shares * total_assets_view(world) / u128::from(market_balance(world, Asset::ShareSupply))
+    }
 
     fn cash_total(world: &World) -> u128 {
         world
@@ -1129,43 +977,52 @@ mod tests {
             .sum()
     }
 
-    fn assert_replays(config: &Config, solution: &Solution) -> World {
-        let initial = world(config);
-        let replayed = initial.replayed(solution.trace()).unwrap();
-        assert!(replayed.matches(&goal(config)));
-        assert_eq!(cash_total(&replayed), cash_total(&initial));
-        replayed
-    }
-
-    #[test]
-    fn least_interest_borrows_late_and_repays_early() {
-        for config in [Config::micro(), Config::showcase()] {
-            let fewest = fewest_steps(&config).unwrap();
-            let cheapest = least_interest(&config).unwrap();
-            assert_replays(&config, &fewest);
-            let after = assert_replays(&config, &cheapest);
-            let initial = world(&config);
-            let fewest_interest = interest_charged(&initial, fewest.trace()).unwrap();
-            assert_eq!(
-                cheapest.cost(),
-                interest_charged(&initial, cheapest.trace()).unwrap()
-            );
-            assert!(cheapest.cost() < fewest_interest, "{config:?}");
-            assert!(fewest.trace().exchanges().len() <= cheapest.trace().exchanges().len());
-            assert_eq!(balance(&after, AccountId::Borrower, Asset::DebtShare), 0);
-            assert_eq!(
-                balance(&after, AccountId::Market, Asset::DebtShareSupply),
-                0
-            );
-        }
+    /// The Showcase loan repaid for the least interest: collateral posted
+    /// at once, the shortfall borrowed only when the bill falls due, each
+    /// installment repaid as it arrives, and the collateral taken back.
+    fn repaid_showcase_loan() -> Vec<Action> {
+        vec![
+            post_collateral(400),
+            accrue(),
+            accrue(),
+            borrow(7_000),
+            pay_bill(),
+            accrue(),
+            accrue(),
+            reprice(),
+            collect_revenue(0),
+            repay(4_000),
+            accrue(),
+            accrue(),
+            collect_revenue(1),
+            repay_shares(3_141),
+            withdraw_collateral(400),
+        ]
     }
 
     #[test]
     fn depositors_and_reserves_split_exactly_the_interest_paid() {
         let config = Config::showcase();
         let initial = world(&config);
-        let solution = least_interest(&config).unwrap();
-        let after = initial.replayed(solution.trace()).unwrap();
+        let mut after = initial.clone();
+        let mut interest = 0;
+        for exchange in repaid_showcase_loan() {
+            let owed = debt_view(&after);
+            let accrues = *exchange.rate() == RateId::Accrue;
+            after.apply(exchange).unwrap();
+            if accrues {
+                interest += debt_view(&after) - owed;
+            }
+        }
+        // The bill is paid, every debt share retired, the collateral free
+        // again and no cash made or lost.
+        assert!(after.matches(&goal(&config)));
+        assert_eq!(balance(&after, AccountId::Borrower, Asset::DebtShare), 0);
+        assert_eq!(
+            balance(&after, AccountId::Market, Asset::DebtShareSupply),
+            0
+        );
+        assert_eq!(cash_total(&after), cash_total(&initial));
         let market_gain = u128::from(market_balance(&after, Asset::Cash))
             - u128::from(market_balance(&initial, Asset::Cash));
         // With the loan repaid, every unit the market gained came from the
@@ -1181,7 +1038,7 @@ mod tests {
         assert_eq!(market_gain, borrower_paid);
         let reserves = u128::from(market_balance(&after, Asset::Reserves));
         assert!(reserves > 0 && reserves < market_gain);
-        assert!(u128::from(solution.cost()) <= borrower_paid);
+        assert!(interest > 0 && interest <= borrower_paid);
         // Depositors' shares grew by the interest less the reserve cut.
         let depositors_before = total_assets_view(&initial);
         assert_eq!(
@@ -1259,24 +1116,46 @@ mod tests {
 
     #[test]
     fn over_borrowing_ends_in_liquidation_with_a_bonus() {
-        for config in [Config::micro(), Config::showcase()] {
+        // All collateral posted and as much borrowed as the limit and the
+        // pool allow, then the clock runs: in Micro the price drop pushes
+        // the loan past its threshold, in Showcase the interest does.
+        for (config, loan) in [
+            (
+                Config::micro(),
+                vec![
+                    post_collateral(40),
+                    borrow(2_400),
+                    pay_bill(),
+                    accrue(),
+                    accrue(),
+                    reprice(),
+                ],
+            ),
+            (
+                Config::showcase(),
+                vec![
+                    post_collateral(400),
+                    borrow(10_000),
+                    pay_bill(),
+                    accrue(),
+                    accrue(),
+                    accrue(),
+                    accrue(),
+                ],
+            ),
+        ] {
             let initial = world(&config);
-            let (after, trace) = over_borrowed(&config).unwrap();
-            let last = trace.exchanges().last().unwrap();
-            assert_eq!(*last.rate(), RateId::Liquidate);
+            let before = initial
+                .replayed(&loan.into_iter().collect::<Trace<Ontology>>())
+                .unwrap();
+            assert!(!before.is_applicable(&accrue()));
+            let mut after = before.clone();
+            after.apply(liquidate()).unwrap();
             assert!(!after.matches(&goal(&config)));
             assert_eq!(balance(&after, AccountId::Borrower, Asset::DebtShare), 0);
             assert_eq!(cash_total(&after), cash_total(&initial));
             // The keeper paid the debt and received more collateral value
             // than it paid, up to what was posted.
-            let before = initial.replayed(&{
-                let mut prefix = Trace::new();
-                for exchange in &trace.exchanges()[..trace.exchanges().len() - 1] {
-                    prefix.push(exchange.clone());
-                }
-                prefix
-            });
-            let before = before.unwrap();
             let paid = debt_view(&before);
             let seized = u128::from(balance(&after, AccountId::Keeper, Asset::Collateral));
             let price = u128::from(market_balance(&after, Asset::CollateralPrice));
@@ -1318,7 +1197,18 @@ mod tests {
     #[test]
     fn locked_shares_defeat_a_first_depositor_inflation_attack() {
         let config = Config::showcase();
-        let (after, _) = first_depositor_attack(&config).unwrap();
+        // The attacker deposits one atom into a fresh market and donates
+        // the rest of its cash to inflate the share price before the victim
+        // deposits, then redeems.
+        let attack: Trace<Ontology> = [
+            deposit(0, 1, 1),
+            donate(0, config.depositor_cash - 1),
+            deposit(1, config.depositor_cash, 1),
+            redeem(0, 1, 0),
+        ]
+        .into_iter()
+        .collect();
+        let after = genesis(&config).replayed(&attack).unwrap();
         let victim_shares = balance(&after, AccountId::Depositor(1), Asset::Share);
         assert!(victim_shares > 0);
         let price = total_assets_view(&after)
