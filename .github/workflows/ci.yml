@@ -47,11 +47,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-targets --all-features
-      # The samples' larger instances: their packages against the samples'
-      # Rust code, and every run their views draw. Many minutes in a debug
-      # build, a few in a release build.
-      - name: Every sample package finds what is pinned at its larger instances, and every view draws them
-        run: cargo test --release -p axionomy-problems --features packages --test outcomes --test views -- --ignored
+      # The samples' larger instances: what their packages find against what
+      # was pinned, every run their views draw, and every strategy Studio
+      # offers at their refs. Many minutes in a debug build, a few in a
+      # release build.
+      - name: Every sample package finds what is pinned at its larger instances, every view draws them, and every offered strategy runs
+        run: cargo test --release -p axionomy-problems --features packages --test outcomes --test views --test sweep -- --ignored
       - run: cargo test --workspace --doc --all-features
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
       # uv comes from PyPI and uses the runner's Python, so nothing is fetched

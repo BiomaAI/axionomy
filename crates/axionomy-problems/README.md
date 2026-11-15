@@ -70,6 +70,10 @@ and checks each document: a frame for every step, each explained, scenes that
 join up, evidence in the snapshot it explains, and formats for the assets the
 view reads in units.
 
+`tests/sweep.rs` runs every strategy Studio offers at every ref of every
+package, with a small effort, and requires each to end with an outcome, never
+an engine error.
+
 ```rust
 # #[cfg(feature = "packages")] {
 use axionomy::path;
