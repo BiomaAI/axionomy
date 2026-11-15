@@ -7,6 +7,7 @@ import {
   MarkerType,
   Position,
   ReactFlow,
+  ReactFlowProvider,
   getSmoothStepPath,
   type Edge,
   type EdgeProps,
@@ -14,6 +15,8 @@ import {
   type NodeChange,
   type NodeProps,
   type ReactFlowInstance,
+  type ReactFlowState,
+  useStore,
   useUpdateNodeInternals,
 } from "@xyflow/react";
 import type { ExchangeFrame, Scene, SceneEntity, SceneSurface } from "./api";
@@ -354,8 +357,45 @@ function HandlesMeasured({ handles }: { handles: ReadonlyMap<string, string> }) 
   return null;
 }
 
-function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, topInset }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GraphSurface; onAccount?: (account: string) => void; topInset: number }) {
+/**
+ * The handles React Flow has measured, by node: one line a node, its id
+ * and its handles' ids. A string, so the picture draws again only when one
+ * is measured.
+ */
+function measuredHandles(state: ReactFlowState): string {
+  const lines: string[] = [];
+  for (const [id, node] of state.nodeLookup) {
+    const bounds = node.internals.handleBounds;
+    if (bounds) lines.push([id, ...[...(bounds.source ?? []), ...(bounds.target ?? [])].map((handle) => handle.id ?? "")].join("\u0000"));
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The lines whose handles exist: a line naming a handle its node has not
+ * been measured with yet waits until it is, rather than being handed to
+ * React Flow, which cannot draw it. A node not measured at all draws no
+ * line yet, so its lines are handed over.
+ */
+function drawable(edges: Edge[], measured: string): Edge[] {
+  const handles = new Map(measured.split("\n").filter(Boolean).map((line) => {
+    const [id, ...ids] = line.split("\u0000");
+    return [id, new Set(ids)] as const;
+  }));
+  const has = (node: string, handle?: string | null) => !handle || !handles.has(node) || handles.get(node)!.has(handle);
+  return edges.filter((edge) => has(edge.source, edge.sourceHandle) && has(edge.target, edge.targetHandle));
+}
+
+/** A graph scene, with the store its lines read the measured handles from. */
+function GraphScene(props: GraphSceneProps) {
+  return <ReactFlowProvider><GraphFlow {...props} /></ReactFlowProvider>;
+}
+
+type GraphSceneProps = { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GraphSurface; onAccount?: (account: string) => void; topInset: number };
+
+function GraphFlow({ scene, previousScene, frame, motion, surface, onAccount, topInset }: GraphSceneProps) {
   const host = useRef<HTMLDivElement>(null);
+  const measured = useStore(measuredHandles);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   // Nodes are made afresh each render, and React Flow hides a node that
   // comes without its measured size until it measures it again, which a
@@ -363,7 +403,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
   // last measured; a change in size is measured as it happens, and a change
   // in its handles by HandlesMeasured.
   const [sizes, setSizes] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
-  const measured = (changes: NodeChange[]) => {
+  const resized = (changes: NodeChange[]) => {
     const now = changes.flatMap((change) => change.type === "dimensions" && change.dimensions ? [[change.id, change.dimensions] as const] : []);
     if (now.length === 0) return;
     setSizes((current) => {
@@ -540,7 +580,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
   }, [flow, layoutKey, motion, surfaceKey, topInset]);
   return <div className={`graph-scene motion-${motion}`} data-motion={motion} ref={host} aria-label={scene.title}>
     {/* The wheel scrolls the page; the controls, a pinch, or Ctrl with the wheel zoom the picture. */}
-    <ReactFlow nodes={nodes.map((node) => sizes.has(node.id) ? { ...node, measured: sizes.get(node.id) } : node)} onNodesChange={measured} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
+    <ReactFlow nodes={nodes.map((node) => sizes.has(node.id) ? { ...node, measured: sizes.get(node.id) } : node)} onNodesChange={resized} edges={drawable([...edges, ...relationEdges], measured)} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
       <Controls showInteractive={false} fitViewOptions={{ padding }} />
       <HandlesMeasured handles={new Map(nodes.map((node) => [node.id, node.type === "structure" ? ((node.data as StructureNodeData).handles ?? []).map((handle) => handle.id).join(" ") : ""]))} />
