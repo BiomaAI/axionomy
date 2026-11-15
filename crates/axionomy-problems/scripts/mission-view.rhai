@@ -41,10 +41,6 @@ fn label(item) {
     }
     if category == "asset" {
         return switch name {
-            "agent-identity" => `Identity: ${place(parts[2])}`,
-            "nature-identity" => "Nature identity",
-            "mission-identity" => "Mission identity",
-            "success-identity" => "Objective identity",
             "at" => `At ${place(parts[2])}`,
             "energy" => "Energy left",
             "spent-energy" => "Energy spent",

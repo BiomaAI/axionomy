@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param,
+    Pattern, Quantity, QuantityExpression as Q, Rate, Relation, Rounding, Segment, Slot, basket,
 };
 
 pub mod incident;
@@ -67,11 +67,12 @@ pub enum RateId {
         seed: u8,
     },
     BeginObserve,
+    /// Nature answers an observation: the sensor at `seed` reports
+    /// `report` of a survivor at `truth`, and moves on to the seed after.
     ResolveObservation {
         truth: Location,
         seed: u8,
         report: Location,
-        next_seed: u8,
     },
     Move {
         from: Location,
@@ -215,11 +216,29 @@ const fn seed_count(size: RescueSize) -> u8 {
     }
 }
 
+/// One unit of each asset `assets` name.
+fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset, Quantity::new(1)))
+        .collect()
+}
+
+/// `rate` with the agent, its actor role fixed to the agent's account.
+fn with_actor(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.account(Role::Actor, Pattern::literal(AccountId::Agent))
+}
+
+/// `rate` with Nature, its role fixed to Nature's account.
+fn with_nature(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.account(Role::Nature, Pattern::literal(AccountId::Nature))
+}
+
 fn build(nature: Account<Asset>, size: RescueSize) -> World {
     let destinations = destinations(size);
     let seed_count = seed_count(size);
     let extended = !matches!(size, RescueSize::Micro);
-    let mut builder = EconomyBuilder::new()
+    let builder = EconomyBuilder::new()
         .account(
             AccountId::Agent,
             Account::from(basket([
@@ -231,132 +250,172 @@ fn build(nature: Account<Asset>, size: RescueSize) -> World {
         )
         .account(AccountId::Nature, nature);
 
-    for &encoded_truth in destinations {
-        for encoded_seed in 0..seed_count {
-            builder = builder.rate(
-                RateId::Instantiate {
-                    truth: encoded_truth,
-                    seed: encoded_seed,
-                },
-                Rate::new()
-                    .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
-                    .preserve(
-                        Role::Nature,
-                        basket([(Asset::ScenarioWeight(encoded_truth, encoded_seed), 1)]),
-                    )
-                    .produce(
-                        Role::Nature,
-                        basket([
-                            (Asset::Truth(encoded_truth), 1),
-                            (Asset::Seed(encoded_seed), 1),
-                        ]),
-                    ),
-            );
-
-            let report = signal(encoded_truth, encoded_seed);
-            let next_seed = (encoded_seed + 1) % seed_count;
-            builder = builder.rate(
-                RateId::ResolveObservation {
-                    truth: encoded_truth,
-                    seed: encoded_seed,
-                    report,
-                    next_seed,
-                },
-                Rate::new()
-                    .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
-                    .consume(Role::Actor, basket([(Asset::AwaitingObservation, 1)]))
-                    .produce(
-                        Role::Actor,
-                        basket([(Asset::Planning, 1), (Asset::Belief(report), 1)]),
-                    )
-                    .preserve(Role::Nature, basket([(Asset::Truth(encoded_truth), 1)]))
-                    .consume(Role::Nature, basket([(Asset::Seed(encoded_seed), 1)]))
-                    .produce(Role::Nature, basket([(Asset::Seed(next_seed), 1)]))
-                    .distinct(Role::Actor, Role::Nature),
-            );
-        }
-    }
-
-    builder = builder.rate(
-        RateId::BeginObserve,
-        Rate::new()
-            .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
-            .consume(
-                Role::Actor,
-                basket([(Asset::Planning, 1), (Asset::Sensor, 1)]),
-            )
-            .produce(
-                Role::Actor,
-                basket([(Asset::AwaitingObservation, 1), (Asset::UsedSensor, 1)]),
-            ),
+    // The rates' variables: the survivor's site, the sensor's seed, the site
+    // it reports, and the seed after it, which the law derives.
+    let truth = Param::<Location>::new(path!("truth"));
+    let seed = Param::<u8>::new(path!("seed"));
+    let report = Param::<Location>::new(path!("report"));
+    let next = Param::<u8>::new(path!("next"));
+    let to = Param::<Location>::new(path!("to"));
+    let location = Param::<Location>::new(path!("location"));
+    let after = || seed.quantity() + Q::constant(1);
+    // The sites the survivor may be at, in the order of their identifiers,
+    // as the scenarios Nature draws among are ordered.
+    let mut truths = destinations.to_vec();
+    truths.sort_by_key(OneSegment::segment);
+    // What the sensor reports of each site at each seed: the truth, but for
+    // seed 0, which points elsewhere, even where the agent has no road.
+    let readings: Vec<(Location, u8, Location)> = truths
+        .iter()
+        .flat_map(|&site| (0..seed_count).map(move |state| (site, state, signal(site, state))))
+        .collect();
+    let mut reported: Vec<Location> = readings.iter().map(|(_, _, report)| *report).collect();
+    reported.sort_by_key(OneSegment::segment);
+    reported.dedup();
+    let readings = Relation::new(
+        [
+            truth.name().clone(),
+            seed.name().clone(),
+            report.name().clone(),
+        ],
+        readings.iter().map(|(site, state, report)| {
+            [
+                site.segment(),
+                Segment::from(u64::from(*state)),
+                report.segment(),
+            ]
+        }),
     );
 
-    for &destination in destinations {
-        builder = builder
-            .rate(
-                RateId::Move {
-                    from: Location::Base,
-                    to: destination,
-                },
-                Rate::new()
-                    .consume(
-                        Role::Actor,
-                        basket([
-                            (Asset::Planning, 1),
-                            (Asset::At(Location::Base), 1),
-                            (Asset::Energy, 1),
-                        ]),
-                    )
-                    .produce(
-                        Role::Actor,
-                        basket([
-                            (Asset::Committed, 1),
-                            (Asset::At(destination), 1),
-                            (Asset::SpentEnergy, 1),
-                        ]),
-                    ),
-            )
-            .rate(
-                RateId::Rescue {
-                    location: destination,
-                },
-                Rate::new()
-                    .consume(
-                        Role::Actor,
-                        basket([(Asset::Committed, 1), (Asset::Energy, 1)]),
-                    )
-                    .preserve(Role::Actor, basket([(Asset::At(destination), 1)]))
-                    .produce(
-                        Role::Actor,
-                        basket([(Asset::Rescued, 1), (Asset::SpentEnergy, 1)]),
-                    )
-                    .preserve(Role::Nature, basket([(Asset::Truth(destination), 1)]))
-                    .distinct(Role::Actor, Role::Nature),
-            );
-        if extended {
-            builder = builder.rate(
-                RateId::Evacuate {
-                    location: destination,
-                },
-                Rate::new()
-                    .consume(
-                        Role::Actor,
-                        basket([
-                            (Asset::Rescued, 1),
-                            (Asset::At(destination), 1),
-                            (Asset::Energy, 1),
-                        ]),
-                    )
-                    .produce(
-                        Role::Actor,
-                        basket([
-                            (Asset::Evacuated, 1),
-                            (Asset::At(Location::Base), 1),
-                            (Asset::SpentEnergy, 1),
-                        ]),
-                    ),
-            );
-        }
+    let mut builder = builder
+        .rate_at(
+            RateIdPattern::Instantiate {
+                truth: truth.var(),
+                seed: seed.var(),
+            }
+            .into(),
+            with_nature(Rate::new())
+                .variable(truth.values(truths.iter().copied()))
+                .variable(seed.range(0, seed_count - 1))
+                .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
+                .preserve_at(
+                    Role::Nature,
+                    one([AssetPattern::ScenarioWeight(truth.var(), seed.var()).into()]),
+                )
+                .produce_at(Role::Nature, one([AssetPattern::Truth(truth.var()).into()]))
+                .produce_at(Role::Nature, one([AssetPattern::Seed(seed.var()).into()])),
+        )
+        .rate_at(
+            RateIdPattern::ResolveObservation {
+                truth: truth.var(),
+                seed: seed.var(),
+                report: report.var(),
+            }
+            .into(),
+            with_nature(with_actor(Rate::new()))
+                .variable(truth.values(truths.iter().copied()))
+                .variable(seed.range(0, seed_count - 1))
+                .variable(report.values(reported))
+                .relation(readings)
+                // The seed after it, the first again after the last.
+                .derive(
+                    next.name().clone(),
+                    after()
+                        - Q::divide(after(), Q::constant(seed_count.into()), Rounding::Floor)
+                            * Q::constant(seed_count.into()),
+                )
+                .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
+                .consume(Role::Actor, basket([(Asset::AwaitingObservation, 1)]))
+                .produce(Role::Actor, basket([(Asset::Planning, 1)]))
+                .produce_at(
+                    Role::Actor,
+                    one([AssetPattern::Belief(report.var()).into()]),
+                )
+                .preserve_at(Role::Nature, one([AssetPattern::Truth(truth.var()).into()]))
+                .consume_at(Role::Nature, one([AssetPattern::Seed(seed.var()).into()]))
+                .produce_at(Role::Nature, one([AssetPattern::Seed(next.var()).into()])),
+        )
+        .rate(
+            RateId::BeginObserve,
+            with_actor(Rate::new())
+                .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
+                .consume(
+                    Role::Actor,
+                    basket([(Asset::Planning, 1), (Asset::Sensor, 1)]),
+                )
+                .produce(
+                    Role::Actor,
+                    basket([(Asset::AwaitingObservation, 1), (Asset::UsedSensor, 1)]),
+                ),
+        )
+        .rate_at(
+            RateIdPattern::Move {
+                from: Slot::Is(Location::Base),
+                to: to.var(),
+            }
+            .into(),
+            with_actor(Rate::new())
+                .variable(to.values(destinations.iter().copied()))
+                .consume(
+                    Role::Actor,
+                    basket([
+                        (Asset::Planning, 1),
+                        (Asset::At(Location::Base), 1),
+                        (Asset::Energy, 1),
+                    ]),
+                )
+                .produce(
+                    Role::Actor,
+                    basket([(Asset::Committed, 1), (Asset::SpentEnergy, 1)]),
+                )
+                .produce_at(Role::Actor, one([AssetPattern::At(to.var()).into()])),
+        )
+        .rate_at(
+            RateIdPattern::Rescue {
+                location: location.var(),
+            }
+            .into(),
+            with_nature(with_actor(Rate::new()))
+                .variable(location.values(destinations.iter().copied()))
+                .consume(
+                    Role::Actor,
+                    basket([(Asset::Committed, 1), (Asset::Energy, 1)]),
+                )
+                .preserve_at(Role::Actor, one([AssetPattern::At(location.var()).into()]))
+                .produce(
+                    Role::Actor,
+                    basket([(Asset::Rescued, 1), (Asset::SpentEnergy, 1)]),
+                )
+                .preserve_at(
+                    Role::Nature,
+                    one([AssetPattern::Truth(location.var()).into()]),
+                ),
+        );
+    if extended {
+        builder = builder.rate_at(
+            RateIdPattern::Evacuate {
+                location: location.var(),
+            }
+            .into(),
+            with_actor(Rate::new())
+                .variable(location.values(destinations.iter().copied()))
+                .consume_at(
+                    Role::Actor,
+                    one([
+                        Pattern::literal(Asset::Rescued),
+                        AssetPattern::At(location.var()).into(),
+                        Pattern::literal(Asset::Energy),
+                    ]),
+                )
+                .produce(
+                    Role::Actor,
+                    basket([
+                        (Asset::Evacuated, 1),
+                        (Asset::At(Location::Base), 1),
+                        (Asset::SpentEnergy, 1),
+                    ]),
+                ),
+        );
     }
 
     let completion = if extended {
@@ -368,7 +427,7 @@ fn build(nature: Account<Asset>, size: RescueSize) -> World {
     builder
         .rate(
             RateId::Finish,
-            Rate::new()
+            with_actor(Rate::new())
                 .consume(Role::Actor, basket([(completion, 1)]))
                 .produce(Role::Actor, basket([(Asset::Solved, 1)])),
         )
@@ -446,23 +505,27 @@ fn assert_rescue_location(location: Location) {
     );
 }
 
-/// The exchange of one unit of `rate`, each of its roles bound to the
-/// account that plays it.
-pub fn action(rate: RateId) -> Action {
-    match rate {
-        RateId::Instantiate { .. } => {
-            Exchange::new(rate, Quantity::new(1)).bind(Role::Nature, AccountId::Nature)
-        }
-        RateId::ResolveObservation { .. } | RateId::Rescue { .. } => {
-            Exchange::new(rate, Quantity::new(1))
-                .bind(Role::Actor, AccountId::Agent)
-                .bind(Role::Nature, AccountId::Nature)
-        }
-        RateId::Finish => Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent),
-        RateId::BeginObserve | RateId::Move { .. } | RateId::Evacuate { .. } => {
-            Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
-        }
-    }
+/// The exchange of `rate` once, each of its roles bound to the account
+/// `world`'s rate fixes it to.
+///
+/// # Panics
+///
+/// If `rate` names no instance of `world`'s rates.
+pub fn action(world: &World, rate: RateId) -> Action {
+    let instance = world
+        .instance(&rate)
+        .unwrap_or_else(|_| panic!("the rescue has no rate {rate:?}"));
+    instance.fixed_accounts().fold(
+        Exchange::new(rate, Quantity::new(1)),
+        |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
+            )
+        },
+    )
 }
 
 #[cfg(test)]
@@ -479,7 +542,6 @@ mod tests {
             truth: Location::South,
             seed: 1,
             report: Location::South,
-            next_seed: 2,
         },
         RateId::Move {
             from: Location::Base,
@@ -491,17 +553,17 @@ mod tests {
         RateId::Finish,
     ];
 
-    fn trace(rates: impl IntoIterator<Item = RateId>) -> Trace<Ontology> {
-        rates.into_iter().map(action).collect()
+    fn trace(world: &World, rates: impl IntoIterator<Item = RateId>) -> Trace<Ontology> {
+        rates.into_iter().map(|rate| action(world, rate)).collect()
     }
 
     #[test]
     fn nature_resolves_an_observation_only_after_its_public_intent_and_replays() {
         let world = scenario(Location::South, 1);
-        assert!(!world.is_applicable(&action(SENSED_SOUTH[1])));
+        assert!(!world.is_applicable(&action(&world, SENSED_SOUTH[1])));
 
         let replay = world
-            .replayed(&trace(SENSED_SOUTH))
+            .replayed(&trace(&world, SENSED_SOUTH))
             .expect("the observed rescue replays deterministically");
         assert!(replay.matches(&goal()));
         assert_eq!(
@@ -519,14 +581,13 @@ mod tests {
         let world = scenario(Location::South, 1);
         let mut awaiting = world.clone();
         awaiting
-            .apply(action(RateId::BeginObserve))
+            .apply(action(&awaiting, RateId::BeginObserve))
             .expect("public observation intent applies");
         let rebound = Exchange::new(
             RateId::ResolveObservation {
                 truth: Location::South,
                 seed: 1,
                 report: Location::South,
-                next_seed: 2,
             },
             Quantity::new(1),
         )
@@ -546,7 +607,7 @@ mod tests {
             north.view([AccountId::Agent]).observation_key(),
             south.view([AccountId::Agent]).observation_key()
         );
-        let intent = action(RateId::BeginObserve);
+        let intent = action(&north, RateId::BeginObserve);
         assert!(north.is_applicable(&intent));
         assert!(south.is_applicable(&intent));
     }
@@ -555,6 +616,7 @@ mod tests {
     fn sampled_trace_replays_from_the_uncertain_model() {
         let model = uniform_uncertain();
         let sampled = trace(
+            &model,
             std::iter::once(RateId::Instantiate {
                 truth: Location::South,
                 seed: 1,
@@ -569,8 +631,8 @@ mod tests {
         assert!(
             replay
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
-                .all(|rate| !replay.is_applicable(&action(*rate)))
+                .flat_map(|key| replay.instances_of(key))
+                .all(|rate| !replay.is_applicable(&action(&replay, rate)))
         );
     }
 
@@ -579,10 +641,10 @@ mod tests {
         let scenarios = |world: &World| {
             world
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
+                .flat_map(|key| world.instances_of(key))
                 .filter(|rate| {
                     matches!(rate, RateId::Instantiate { .. })
-                        && world.is_applicable(&action(**rate))
+                        && world.is_applicable(&action(world, *rate))
                 })
                 .count()
         };

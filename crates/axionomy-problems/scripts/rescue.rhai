@@ -7,42 +7,21 @@
 
 fn sites() { ["north", "south", "east", "west", "harbor", "hills"] }
 
-// The exchange of `rate`, with the accounts its roles bind.
-fn action(rate) {
-    let kind = rate.split("/")[0];
-    let bindings = if kind == "instantiate" {
-        #{ nature: "nature" }
-    } else if kind == "resolve-observation" || kind == "rescue" {
-        #{ actor: "agent", nature: "nature" }
-    } else {
-        #{ actor: "agent" }
-    };
-    exchange(rate, bindings, 1)
-}
-
 // The first exchange of a rate under `prefix` that applies, in rate order.
 fn first_applicable(state, prefix) {
-    for rate in state.rates(prefix) {
-        let proposal = action(rate);
-        if state.applicable(proposal) { return proposal; }
-    }
-    ()
+    let found = state.moves(prefix);
+    if found.is_empty() { () } else { found[0] }
 }
 
 // Nature's draw from its prior: every scenario it encodes, in rate order,
 // weighted by what Nature holds of it, chosen by the event `scenario`,
 // which a run meets once, as it begins.
 fn instantiation(state, random) {
-    let scenarios = [];
+    let scenarios = state.moves("instantiate");
     let weights = [];
-    for rate in state.rates("instantiate/") {
-        let parts = rate.split("/");
-        let weight = state.balance("nature", `scenario-weight/${parts[1]}/${parts[2]}`);
-        let scenario = action(rate);
-        if weight > 0 && state.applicable(scenario) {
-            scenarios.push(scenario);
-            weights.push(weight);
-        }
+    for scenario in scenarios {
+        let parts = scenario.rate().split("/");
+        weights.push(state.balance("nature", `scenario-weight/${parts[1]}/${parts[2]}`));
     }
     if scenarios.is_empty() { return (); }
     scenarios[random.sample("scenario", weights)]
@@ -53,13 +32,13 @@ fn holds(seen, asset) { seen.balance("agent", asset) > 0 }
 // The agent's choice from what it sees, under `policy`:
 // `observe-then-follow` or `direct-north`.
 fn decide(seen, policy) {
-    if holds(seen, "evacuated") || holds(seen, "rescued") { return action("finish"); }
+    if holds(seen, "evacuated") || holds(seen, "rescued") { return seen.exchange_of("finish"); }
     for location in sites() {
-        if holds(seen, `at/${location}`) { return action(`rescue/${location}`); }
+        if holds(seen, `at/${location}`) { return seen.exchange_of(`rescue/${location}`); }
     }
     if !holds(seen, "at/base") { return (); }
     if policy == "observe-then-follow" && holds(seen, "sensor") {
-        return action("begin-observe");
+        return seen.exchange_of("begin-observe");
     }
     let destination = ();
     if policy == "direct-north" {
@@ -70,7 +49,15 @@ fn decide(seen, policy) {
         }
     }
     if destination == () { return (); }
-    action(`move/base/${destination}`)
+    // A reading may point where the agent has no road, as seed 0 does of a
+    // survivor south in Micro: the move it proposes then names no rate, and
+    // the economy refuses it.
+    let rate = `move/base/${destination}`;
+    try {
+        return seen.exchange_of(rate);
+    } catch {
+        return exchange(rate, #{}, 1);
+    }
 }
 
 // One turn: Nature draws the scenario while it is unresolved and answers the
@@ -79,10 +66,10 @@ fn decide(seen, policy) {
 fn turn(state, random, policy) {
     if state.balance("nature", "unresolved") > 0 { return instantiation(state, random); }
     if state.balance("agent", "awaiting-observation") > 0 {
-        return first_applicable(state, "resolve-observation/");
+        return first_applicable(state, "resolve-observation");
     }
     if state.balance("agent", "rescued") > 0 {
-        let evacuation = first_applicable(state, "evacuate/");
+        let evacuation = first_applicable(state, "evacuate");
         if type_of(evacuation) != "()" { return evacuation; }
     }
     decide(state.view(["agent"]), policy)

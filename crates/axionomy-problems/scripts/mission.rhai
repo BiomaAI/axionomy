@@ -14,36 +14,14 @@
 
 fn sites() { ["north", "south"] }
 
-// The exchange of `rate`, with the accounts its roles bind.
-fn action(rate) {
-    let kind = rate.split("/")[0];
-    let bindings = if kind == "instantiate" {
-        #{ nature: "nature" }
-    } else if kind == "begin-scan" {
-        #{ scout: "agent/scout", mission: "mission" }
-    } else if kind == "resolve-scan" {
-        #{ scout: "agent/scout", nature: "nature", mission: "mission" }
-    } else if kind == "encounter" || kind == "rescue" {
-        #{ scout: "agent/scout", medic: "agent/medic", nature: "nature", mission: "mission" }
-    } else if kind == "finish" {
-        #{ mission: "mission", goal: "success" }
-    } else {
-        #{ scout: "agent/scout", medic: "agent/medic", mission: "mission" }
-    };
-    exchange(rate, bindings, 1)
-}
-
 // Nature's prior: every scenario it encodes that applies, in rate order,
 // weighted by what Nature holds of it.
 fn scenarios(state) {
     let weighted = [];
-    for rate in state.rates("instantiate/") {
-        let parts = rate.split("/");
-        let scenario = action(rate);
-        if state.applicable(scenario) {
-            let weight = state.balance("nature", `scenario-weight/${parts[1]}/${parts[2]}/${parts[3]}`);
-            weighted.push([scenario, weight]);
-        }
+    for scenario in state.moves("instantiate") {
+        let parts = scenario.rate().split("/");
+        let weight = state.balance("nature", `scenario-weight/${parts[1]}/${parts[2]}/${parts[3]}`);
+        weighted.push([scenario, weight]);
     }
     weighted
 }
@@ -52,16 +30,7 @@ fn scenarios(state) {
 // report a scan awaits, which the truth and the sensor's seed fix, or the
 // hazard at the site the team reached, if the victim is there. At most one
 // applies.
-fn responses(state) {
-    let found = [];
-    for prefix in ["encounter/", "resolve-scan/"] {
-        for rate in state.rates(prefix) {
-            let response = action(rate);
-            if state.applicable(response) { found.push(response); }
-        }
-    }
-    found
-}
+fn responses(state) { state.moves("encounter") + state.moves("resolve-scan") }
 
 // Nature's draws, as `[exchange, weight]` pairs: the prior while the
 // scenario is unresolved, and otherwise its response, of weight one. The
@@ -100,25 +69,25 @@ fn holds(seen, account, asset) { seen.balance(account, asset) > 0 }
 // there directly with the sensor unused. Whether they apply is the
 // search's to find in each world.
 fn decisions(seen) {
-    if holds(seen, "mission", "needs-treatment") { return [action("treat")]; }
+    if holds(seen, "mission", "needs-treatment") { return [seen.exchange_of("treat")]; }
     if holds(seen, "mission", "area-safe") {
         let found = [];
         for site in sites() {
-            if holds(seen, "agent/scout", `at/${site}`) { found.push(action(`rescue/${site}`)); }
+            if holds(seen, "agent/scout", `at/${site}`) { found.push(seen.exchange_of(`rescue/${site}`)); }
         }
         return found;
     }
-    if holds(seen, "mission", "rescued") { return [action("finish")]; }
+    if holds(seen, "mission", "rescued") { return [seen.exchange_of("finish")]; }
     if !holds(seen, "mission", "planning") { return []; }
     let found = [];
     let sensing = holds(seen, "agent/scout", "sensor");
-    if sensing { found.push(action("begin-scan")); }
+    if sensing { found.push(seen.exchange_of("begin-scan")); }
     for site in sites() {
-        if holds(seen, "agent/scout", `intel/${site}`) { found.push(action(`share/${site}`)); }
+        if holds(seen, "agent/scout", `intel/${site}`) { found.push(seen.exchange_of(`share/${site}`)); }
         if holds(seen, "agent/scout", `shared-intel/${site}`) {
-            found.push(action(`move-together/${site}`));
+            found.push(seen.exchange_of(`move-together/${site}`));
         }
-        if sensing { found.push(action(`move-direct/${site}`)); }
+        if sensing { found.push(seen.exchange_of(`move-direct/${site}`)); }
     }
     found
 }
@@ -171,11 +140,8 @@ fn unsolved(state) { [0.0] }
 
 // The first exchange of a rate under `prefix` that applies, in rate order.
 fn first_applicable(state, prefix) {
-    for rate in state.rates(prefix) {
-        let proposal = action(rate);
-        if state.applicable(proposal) { return proposal; }
-    }
-    ()
+    let found = state.moves(prefix);
+    if found.is_empty() { () } else { found[0] }
 }
 
 // What the team does under `policy`, `north-together` or
@@ -184,25 +150,25 @@ fn first_applicable(state, prefix) {
 // where the team arrived; and otherwise both go north, or the Scout scans,
 // shares what its view shows, and the team follows the Medic's view.
 fn policy_action(state, policy) {
-    if state.balance("mission", "awaiting-scan") > 0 { return first_applicable(state, "resolve-scan/"); }
-    if state.balance("mission", "rescued") > 0 { return action("finish"); }
-    if state.balance("mission", "needs-treatment") > 0 { return action("treat"); }
+    if state.balance("mission", "awaiting-scan") > 0 { return first_applicable(state, "resolve-scan"); }
+    if state.balance("mission", "rescued") > 0 { return state.exchange_of("finish"); }
+    if state.balance("mission", "needs-treatment") > 0 { return state.exchange_of("treat"); }
     if state.balance("mission", "area-safe") > 0 {
-        for site in ["base", "north", "south"] {
-            if state.balance("agent/scout", `at/${site}`) > 0 { return action(`rescue/${site}`); }
+        for site in sites() {
+            if state.balance("agent/scout", `at/${site}`) > 0 { return state.exchange_of(`rescue/${site}`); }
         }
         return ();
     }
-    if state.balance("mission", "awaiting-encounter") > 0 { return first_applicable(state, "encounter/"); }
-    if policy == "north-together" { return action("move-direct/north"); }
+    if state.balance("mission", "awaiting-encounter") > 0 { return first_applicable(state, "encounter"); }
+    if policy == "north-together" { return state.exchange_of("move-direct/north"); }
     let scout = state.view(["agent/scout", "mission", "success"]);
-    if holds(scout, "agent/scout", "sensor") { return action("begin-scan"); }
+    if holds(scout, "agent/scout", "sensor") { return state.exchange_of("begin-scan"); }
     for site in sites() {
-        if holds(scout, "agent/scout", `intel/${site}`) { return action(`share/${site}`); }
+        if holds(scout, "agent/scout", `intel/${site}`) { return state.exchange_of(`share/${site}`); }
     }
     let medic = state.view(["agent/medic", "mission", "success"]);
     for site in sites() {
-        if holds(medic, "agent/medic", `intel/${site}`) { return action(`move-together/${site}`); }
+        if holds(medic, "agent/medic", `intel/${site}`) { return state.exchange_of(`move-together/${site}`); }
     }
     ()
 }

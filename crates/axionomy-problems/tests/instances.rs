@@ -59,8 +59,12 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
     let rescue_showcase = rescue::uniform_uncertain_showcase();
     let rescue_stress = rescue::uniform_uncertain_stress();
     assert_ne!(rescue_showcase.state_key(), rescue_stress.state_key());
-    assert_ne!(
-        rescue_showcase.rate_ids().count(),
-        rescue_stress.rate_ids().count()
-    );
+    // Their rates are written alike; Stress's answer to more scenarios.
+    let instances = |world: &rescue::World| -> usize {
+        world
+            .rate_ids()
+            .map(|key| world.instances_of(key).count())
+            .sum()
+    };
+    assert_ne!(instances(&rescue_showcase), instances(&rescue_stress));
 }

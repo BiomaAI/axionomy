@@ -58,6 +58,14 @@ requires an atomic treatment exchange using the Medic's kit before the team
 can rescue the victim. Every public mission action consumes encoded deadline
 time except the final goal-marking exchange.
 
+Micro's rates have variables: `instantiate/{truth}/{seed}/{hazard}` draws a
+scenario, `resolve-scan/{truth}/{seed}/{report}` answers a scan over a
+relation of what the sensor reports of each site at each seed, and derives
+the seed after it (`{next}`, the first again after the last), and sharing,
+moving, the encounter and the rescue serve each site. Each role is fixed to
+its account, so no identity token pins a binding. Nature draws among the
+scenarios `state.moves` offers, and answers with the response it offers.
+
 The package's planner is the Scout choosing every public action by
 information-set tree search over what it sees, each iteration in a world its
 observations since the prior leave possible; Nature answers the team. Tree

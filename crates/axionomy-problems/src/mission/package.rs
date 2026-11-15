@@ -133,12 +133,16 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     )?;
     // Micro plays one scenario of the sixteen the prior encodes: the
     // victim north, the sensor's seed 0, the route safe.
-    let scenario = mission::action(mission::RateId::Instantiate {
-        truth: mission::Location::North,
-        seed: 0,
-        hazard: mission::Hazard::Safe,
-    });
-    let start = recorded(engine, "mission/micro", mission::initial())?;
+    let model = mission::initial();
+    let scenario = mission::action(
+        &model,
+        mission::RateId::Instantiate {
+            truth: mission::Location::North,
+            seed: 0,
+            hazard: mission::Hazard::Safe,
+        },
+    );
+    let start = recorded(engine, "mission/micro", model)?;
     let played = engine.apply(start, &[written(&scenario)])?;
     engine.refer(&path!("mission/micro/scenario"), played)?;
     experiment(

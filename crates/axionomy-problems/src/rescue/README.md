@@ -51,6 +51,17 @@ Seed zero reports the wrong location; the other three seeds report correctly.
 A rescue exchange succeeds only when the agent's location and Nature's truth
 match.
 
+Micro's rates have variables: `instantiate/{truth}/{seed}` draws a scenario,
+`resolve-observation/{truth}/{seed}/{report}` answers an observation over a
+relation of what the sensor reports of each site at each seed, and derives
+the seed after it (`{next}`, the first again after the last), and
+`move/base/{to}`, `rescue/{location}` and `evacuate/{location}` go to each
+site. Each role is fixed to the agent's or Nature's account. Nature draws
+among the scenarios `state.moves` offers, and answers with the resolution
+it offers. A reading may point where the agent has no road, as seed zero
+does of a survivor south in Micro; the move it proposes names no rate, and
+is refused.
+
 ## Required results
 
 The package's experiments find these, pinned in `tests/outcomes`:

@@ -2,7 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param, Pattern,
+    Quantity, QuantityExpression as Q, Rate, Relation, Rounding, Segment, Slot, basket,
 };
 pub mod expedition;
 #[cfg(feature = "packages")]
@@ -40,10 +41,6 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    AgentIdentity(AgentId),
-    NatureIdentity,
-    MissionIdentity,
-    SuccessIdentity,
     At(Location),
     Energy,
     SpentEnergy,
@@ -88,11 +85,12 @@ pub enum RateId {
         hazard: Hazard,
     },
     BeginScan,
+    /// Nature answers a scan: the sensor at `seed` reports `report` of a
+    /// victim at `truth`, and moves on to the seed after.
     ResolveScan {
         truth: Location,
         seed: u8,
         report: Location,
-        next_seed: u8,
     },
     Share(Location),
     MoveTogether(Location),
@@ -122,21 +120,47 @@ impl axionomy::Ontology for Ontology {
 }
 pub type Action = Exchange<Ontology>;
 
+/// The sites the victim may be at, in the order of their identifiers.
+const SITES: [Location; 2] = [Location::North, Location::South];
+/// The seeds a scan's sensor cycles through.
+const SEEDS: u8 = 4;
+
+/// One unit of each asset `assets` name.
+fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset, Quantity::new(1)))
+        .collect()
+}
+
+/// `rate` with each of `roles` fixed to the account that plays it.
+fn played_by(rate: Rate<Ontology>, roles: &[Role]) -> Rate<Ontology> {
+    roles.iter().fold(rate, |rate, role| {
+        let account = match role {
+            Role::Scout => AccountId::Agent(AgentId::Scout),
+            Role::Medic => AccountId::Agent(AgentId::Medic),
+            Role::Nature => AccountId::Nature,
+            Role::Mission => AccountId::Mission,
+            Role::Goal => AccountId::Success,
+        };
+        rate.account(*role, Pattern::literal(account))
+    })
+}
+
 pub fn initial() -> World {
     let mut nature = basket([(Asset::Unresolved, 1)]);
-    for truth in [Location::North, Location::South] {
-        for seed in 0..4 {
+    for truth in SITES {
+        for seed in 0..SEEDS {
             for hazard in [Hazard::Safe, Hazard::Injury] {
                 nature.insert(Asset::ScenarioWeight(truth, seed, hazard), Quantity::new(1));
             }
         }
     }
 
-    let mut builder = EconomyBuilder::new()
+    let builder = EconomyBuilder::new()
         .account(
             AccountId::Agent(AgentId::Scout),
             Account::from(basket([
-                (Asset::AgentIdentity(AgentId::Scout), 1),
                 (Asset::At(Location::Base), 1),
                 (Asset::Energy, 2),
                 (Asset::Sensor, 1),
@@ -145,205 +169,185 @@ pub fn initial() -> World {
         .account(
             AccountId::Agent(AgentId::Medic),
             Account::from(basket([
-                (Asset::AgentIdentity(AgentId::Medic), 1),
                 (Asset::At(Location::Base), 1),
                 (Asset::Energy, 2),
                 (Asset::MedicalKit, 1),
             ])),
         )
-        .account(AccountId::Nature, {
-            nature.insert(Asset::NatureIdentity, Quantity::new(1));
-            Account::from(nature)
-        })
+        .account(AccountId::Nature, Account::from(nature))
         .account(
             AccountId::Mission,
-            Account::from(basket([
-                (Asset::MissionIdentity, 1),
-                (Asset::TimeRemaining, 10),
-                (Asset::Planning, 1),
-            ])),
+            Account::from(basket([(Asset::TimeRemaining, 10), (Asset::Planning, 1)])),
         )
-        .account(
-            AccountId::Success,
-            Account::from(basket([(Asset::SuccessIdentity, 1)])),
-        );
+        .account(AccountId::Success, Account::from(axionomy::Basket::new()));
 
-    for truth in [Location::North, Location::South] {
-        for seed in 0..4 {
-            for hazard in [Hazard::Safe, Hazard::Injury] {
-                builder = builder.rate(
-                    RateId::Instantiate {
-                        truth,
-                        seed,
-                        hazard,
-                    },
-                    Rate::new()
-                        .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
-                        .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
-                        .preserve(
-                            Role::Nature,
-                            basket([(Asset::ScenarioWeight(truth, seed, hazard), 1)]),
-                        )
-                        .produce(
-                            Role::Nature,
-                            basket([
-                                (Asset::Truth(truth), 1),
-                                (Asset::Seed(seed), 1),
-                                (Asset::Hazard(hazard), 1),
-                            ]),
-                        ),
-                );
-            }
-
-            let report = signal(truth, seed);
-            builder = builder.rate(
-                RateId::ResolveScan {
-                    truth,
-                    seed,
-                    report,
-                    next_seed: (seed + 1) % 4,
-                },
-                Rate::new()
-                    .preserve(
-                        Role::Scout,
-                        basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
-                    )
-                    .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
-                    .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
-                    .produce(Role::Scout, basket([(Asset::Intel(report), 1)]))
-                    .preserve(Role::Nature, basket([(Asset::Truth(truth), 1)]))
-                    .consume(Role::Nature, basket([(Asset::Seed(seed), 1)]))
-                    .produce(Role::Nature, basket([(Asset::Seed((seed + 1) % 4), 1)]))
-                    .consume(Role::Mission, basket([(Asset::AwaitingScan, 1)]))
-                    .produce(Role::Mission, basket([(Asset::Planning, 1)]))
-                    .distinct(Role::Scout, Role::Nature)
-                    .distinct(Role::Scout, Role::Mission)
-                    .distinct(Role::Nature, Role::Mission),
-            );
-        }
-    }
-
-    builder = builder.rate(
-        RateId::BeginScan,
-        Rate::new()
-            .preserve(
-                Role::Scout,
-                basket([
-                    (Asset::AgentIdentity(AgentId::Scout), 1),
-                    (Asset::At(Location::Base), 1),
-                ]),
-            )
-            .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
-            .consume(Role::Scout, basket([(Asset::Sensor, 1)]))
-            .produce(Role::Scout, basket([(Asset::UsedSensor, 1)]))
-            .consume(
-                Role::Mission,
-                basket([(Asset::Planning, 1), (Asset::TimeRemaining, 1)]),
-            )
-            .produce(
-                Role::Mission,
-                basket([(Asset::AwaitingScan, 1), (Asset::ElapsedTime, 1)]),
-            )
-            .distinct(Role::Scout, Role::Mission),
+    // The rates' variables: the victim's site, the sensor's seed, the
+    // site's hazard, the site a scan reports, the seed after it, which the
+    // law derives, and a site the team goes to.
+    let truth = Param::<Location>::new(path!("truth"));
+    let seed = Param::<u8>::new(path!("seed"));
+    let hazard = Param::<Hazard>::new(path!("hazard"));
+    let report = Param::<Location>::new(path!("report"));
+    let next = Param::<u8>::new(path!("next"));
+    let site = Param::<Location>::new(path!("location"));
+    // What a scan reports of each site at each seed: the truth, but for
+    // seed 0, which reports the other site.
+    let readings = Relation::new(
+        [
+            truth.name().clone(),
+            seed.name().clone(),
+            report.name().clone(),
+        ],
+        SITES.into_iter().flat_map(|place| {
+            (0..SEEDS).map(move |state| {
+                [
+                    place.segment(),
+                    Segment::from(u64::from(state)),
+                    signal(place, state).segment(),
+                ]
+            })
+        }),
     );
+    let after = || seed.quantity() + Q::constant(1);
+    let team = [Role::Scout, Role::Medic, Role::Mission];
+    let at_site = || one([AssetPattern::At(site.var()).into()]);
 
-    for location in [Location::North, Location::South] {
-        builder = builder
-            .rate(
-                RateId::Share(location),
-                Rate::new()
-                    .preserve(
-                        Role::Scout,
-                        basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
-                    )
-                    .preserve(
-                        Role::Medic,
-                        basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
-                    )
-                    .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
-                    .consume(Role::Scout, basket([(Asset::Intel(location), 1)]))
-                    .produce(Role::Scout, basket([(Asset::SharedIntel(location), 1)]))
-                    .produce(Role::Medic, basket([(Asset::Intel(location), 1)]))
-                    .preserve(Role::Mission, basket([(Asset::Planning, 1)]))
-                    .consume(Role::Mission, basket([(Asset::TimeRemaining, 1)]))
-                    .produce(Role::Mission, basket([(Asset::ElapsedTime, 1)]))
-                    .distinct(Role::Scout, Role::Medic)
-                    .distinct(Role::Scout, Role::Mission)
-                    .distinct(Role::Medic, Role::Mission),
-            )
-            .rate(
-                RateId::MoveTogether(location),
-                movement_rate(location, true),
-            )
-            .rate(RateId::MoveDirect(location), movement_rate(location, false));
-
-        for hazard in [Hazard::Safe, Hazard::Injury] {
-            let rate = Rate::new()
-                .preserve(
-                    Role::Scout,
-                    basket([
-                        (Asset::AgentIdentity(AgentId::Scout), 1),
-                        (Asset::At(location), 1),
-                    ]),
-                )
-                .preserve(
-                    Role::Medic,
-                    basket([
-                        (Asset::AgentIdentity(AgentId::Medic), 1),
-                        (Asset::At(location), 1),
-                    ]),
-                )
-                .preserve(
+    let mut builder = builder
+        .rate_at(
+            RateIdPattern::Instantiate {
+                truth: truth.var(),
+                seed: seed.var(),
+                hazard: hazard.var(),
+            }
+            .into(),
+            played_by(Rate::new(), &[Role::Nature])
+                .variable(truth.values(SITES))
+                .variable(seed.range(0, SEEDS - 1))
+                // In the order of their identifiers, as Nature's prior lists
+                // the scenarios.
+                .variable(hazard.values([Hazard::Injury, Hazard::Safe]))
+                .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
+                .preserve_at(
                     Role::Nature,
-                    basket([(Asset::NatureIdentity, 1), (Asset::Truth(location), 1)]),
+                    one([
+                        AssetPattern::ScenarioWeight(truth.var(), seed.var(), hazard.var()).into(),
+                    ]),
                 )
-                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
-                .consume(Role::Nature, basket([(Asset::Hazard(hazard), 1)]))
-                .produce(Role::Nature, basket([(Asset::HazardResolved, 1)]))
+                .produce_at(
+                    Role::Nature,
+                    one([
+                        AssetPattern::Truth(truth.var()).into(),
+                        AssetPattern::Seed(seed.var()).into(),
+                        AssetPattern::Hazard(hazard.var()).into(),
+                    ]),
+                ),
+        )
+        .rate_at(
+            RateIdPattern::ResolveScan {
+                truth: truth.var(),
+                seed: seed.var(),
+                report: report.var(),
+            }
+            .into(),
+            played_by(Rate::new(), &[Role::Scout, Role::Nature, Role::Mission])
+                .variable(truth.values(SITES))
+                .variable(seed.range(0, SEEDS - 1))
+                .variable(report.values(SITES))
+                .relation(readings)
+                // The seed after it, the first again after the last.
+                .derive(
+                    next.name().clone(),
+                    after()
+                        - Q::divide(after(), Q::constant(SEEDS.into()), Rounding::Floor)
+                            * Q::constant(SEEDS.into()),
+                )
+                .produce_at(Role::Scout, one([AssetPattern::Intel(report.var()).into()]))
+                .preserve_at(Role::Nature, one([AssetPattern::Truth(truth.var()).into()]))
+                .consume_at(Role::Nature, one([AssetPattern::Seed(seed.var()).into()]))
+                .produce_at(Role::Nature, one([AssetPattern::Seed(next.var()).into()]))
+                .consume(Role::Mission, basket([(Asset::AwaitingScan, 1)]))
+                .produce(Role::Mission, basket([(Asset::Planning, 1)])),
+        )
+        .rate(
+            RateId::BeginScan,
+            played_by(Rate::new(), &[Role::Scout, Role::Mission])
+                .preserve(Role::Scout, basket([(Asset::At(Location::Base), 1)]))
+                .consume(Role::Scout, basket([(Asset::Sensor, 1)]))
+                .produce(Role::Scout, basket([(Asset::UsedSensor, 1)]))
                 .consume(
                     Role::Mission,
-                    basket([(Asset::AwaitingEncounter, 1), (Asset::TimeRemaining, 1)]),
+                    basket([(Asset::Planning, 1), (Asset::TimeRemaining, 1)]),
                 )
-                .produce(Role::Mission, basket([(Asset::ElapsedTime, 1)]))
-                .distinct(Role::Scout, Role::Medic)
-                .distinct(Role::Scout, Role::Nature)
-                .distinct(Role::Scout, Role::Mission)
-                .distinct(Role::Medic, Role::Nature)
-                .distinct(Role::Medic, Role::Mission)
-                .distinct(Role::Nature, Role::Mission);
-            builder = builder.rate(
-                RateId::Encounter { location, hazard },
-                match hazard {
-                    Hazard::Safe => rate.produce(Role::Mission, basket([(Asset::AreaSafe, 1)])),
-                    Hazard::Injury => rate
-                        .produce(Role::Scout, basket([(Asset::Injured, 1)]))
-                        .produce(Role::Mission, basket([(Asset::NeedsTreatment, 1)])),
-                },
-            );
-        }
-
-        builder = builder.rate(
-            RateId::Rescue(location),
-            Rate::new()
-                .preserve(
+                .produce(
+                    Role::Mission,
+                    basket([(Asset::AwaitingScan, 1), (Asset::ElapsedTime, 1)]),
+                ),
+        )
+        .rate_at(
+            RateIdPattern::Share(site.var()).into(),
+            played_by(Rate::new(), &team)
+                .variable(site.values(SITES))
+                .consume_at(Role::Scout, one([AssetPattern::Intel(site.var()).into()]))
+                .produce_at(
                     Role::Scout,
-                    basket([
-                        (Asset::AgentIdentity(AgentId::Scout), 1),
-                        (Asset::At(location), 1),
-                    ]),
+                    one([AssetPattern::SharedIntel(site.var()).into()]),
                 )
-                .preserve(
-                    Role::Medic,
-                    basket([
-                        (Asset::AgentIdentity(AgentId::Medic), 1),
-                        (Asset::At(location), 1),
-                    ]),
-                )
-                .preserve(
-                    Role::Nature,
-                    basket([(Asset::NatureIdentity, 1), (Asset::Truth(location), 1)]),
-                )
-                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
+                .produce_at(Role::Medic, one([AssetPattern::Intel(site.var()).into()]))
+                .preserve(Role::Mission, basket([(Asset::Planning, 1)]))
+                .consume(Role::Mission, basket([(Asset::TimeRemaining, 1)]))
+                .produce(Role::Mission, basket([(Asset::ElapsedTime, 1)])),
+        );
+    for coordinated in [true, false] {
+        let movement = movement_rate(&site, coordinated);
+        builder = builder.rate_at(
+            if coordinated {
+                RateIdPattern::MoveTogether(site.var())
+            } else {
+                RateIdPattern::MoveDirect(site.var())
+            }
+            .into(),
+            movement,
+        );
+    }
+    // At the true site Nature resolves the hazard: safe, or an injury the
+    // Medic must treat.
+    let on_site = || {
+        played_by(
+            Rate::new(),
+            &[Role::Scout, Role::Medic, Role::Nature, Role::Mission],
+        )
+        .variable(site.values(SITES))
+        .preserve_at(Role::Scout, at_site())
+        .preserve_at(Role::Medic, at_site())
+        .preserve_at(Role::Nature, one([AssetPattern::Truth(site.var()).into()]))
+    };
+    for found in [Hazard::Safe, Hazard::Injury] {
+        let rate = on_site()
+            .consume(Role::Nature, basket([(Asset::Hazard(found), 1)]))
+            .produce(Role::Nature, basket([(Asset::HazardResolved, 1)]))
+            .consume(
+                Role::Mission,
+                basket([(Asset::AwaitingEncounter, 1), (Asset::TimeRemaining, 1)]),
+            )
+            .produce(Role::Mission, basket([(Asset::ElapsedTime, 1)]));
+        builder = builder.rate_at(
+            RateIdPattern::Encounter {
+                location: site.var(),
+                hazard: Slot::Is(found),
+            }
+            .into(),
+            match found {
+                Hazard::Safe => rate.produce(Role::Mission, basket([(Asset::AreaSafe, 1)])),
+                Hazard::Injury => rate
+                    .produce(Role::Scout, basket([(Asset::Injured, 1)]))
+                    .produce(Role::Mission, basket([(Asset::NeedsTreatment, 1)])),
+            },
+        );
+    }
+    builder
+        .rate_at(
+            RateIdPattern::Rescue(site.var()).into(),
+            on_site()
                 .consume(
                     Role::Mission,
                     basket([(Asset::AreaSafe, 1), (Asset::TimeRemaining, 1)]),
@@ -351,29 +355,11 @@ pub fn initial() -> World {
                 .produce(
                     Role::Mission,
                     basket([(Asset::Rescued, 1), (Asset::ElapsedTime, 1)]),
-                )
-                .distinct(Role::Scout, Role::Medic)
-                .distinct(Role::Scout, Role::Nature)
-                .distinct(Role::Scout, Role::Mission)
-                .distinct(Role::Medic, Role::Nature)
-                .distinct(Role::Medic, Role::Mission)
-                .distinct(Role::Nature, Role::Mission),
-        );
-    }
-
-    builder
+                ),
+        )
         .rate(
             RateId::Treat,
-            Rate::new()
-                .preserve(
-                    Role::Scout,
-                    basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
-                )
-                .preserve(
-                    Role::Medic,
-                    basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
-                )
-                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
+            played_by(Rate::new(), &team)
                 .consume(Role::Scout, basket([(Asset::Injured, 1)]))
                 .consume(Role::Medic, basket([(Asset::MedicalKit, 1)]))
                 .produce(Role::Medic, basket([(Asset::UsedMedicalKit, 1)]))
@@ -384,19 +370,13 @@ pub fn initial() -> World {
                 .produce(
                     Role::Mission,
                     basket([(Asset::AreaSafe, 1), (Asset::ElapsedTime, 1)]),
-                )
-                .distinct(Role::Scout, Role::Medic)
-                .distinct(Role::Scout, Role::Mission)
-                .distinct(Role::Medic, Role::Mission),
+                ),
         )
         .rate(
             RateId::Finish,
-            Rate::new()
-                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
-                .preserve(Role::Goal, basket([(Asset::SuccessIdentity, 1)]))
+            played_by(Rate::new(), &[Role::Mission, Role::Goal])
                 .consume(Role::Mission, basket([(Asset::Rescued, 1)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
-                .distinct(Role::Mission, Role::Goal),
+                .produce(Role::Goal, basket([(Asset::Solved, 1)])),
         )
         .invariant(
             [Location::Base, Location::North, Location::South]
@@ -436,11 +416,11 @@ pub fn initial() -> World {
                 .weight(Asset::Rescued, 1)
                 .weight(Asset::Solved, 1),
         )
-        .invariant([Location::North, Location::South].into_iter().fold(
+        .invariant(SITES.into_iter().fold(
             LinearInvariant::new(path!("one-hidden-truth")).weight(Asset::Unresolved, 1),
             |invariant, location| invariant.weight(Asset::Truth(location), 1),
         ))
-        .invariant((0..4).fold(
+        .invariant((0..SEEDS).fold(
             LinearInvariant::new(path!("one-hidden-seed")).weight(Asset::Unresolved, 1),
             |invariant, seed| invariant.weight(Asset::Seed(seed), 1),
         ))
@@ -456,45 +436,36 @@ pub fn initial() -> World {
         .expect("mission model is valid")
 }
 
-fn movement_rate(location: Location, coordinated: bool) -> Rate<Ontology> {
-    let rate = Rate::new()
-        .preserve(
-            Role::Scout,
-            basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
-        )
-        .preserve(
-            Role::Medic,
-            basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
-        )
-        .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
+/// Both teammates going from base to the site `{location}` names: on the
+/// intelligence the Scout shared, or directly, before any scan.
+fn movement_rate(site: &Param<Location>, coordinated: bool) -> Rate<Ontology> {
+    let at_site = || one([AssetPattern::At(site.var()).into()]);
+    let rate = played_by(Rate::new(), &[Role::Scout, Role::Medic, Role::Mission])
+        .variable(site.values(SITES))
         .consume(
             Role::Scout,
             basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
         )
-        .produce(
-            Role::Scout,
-            basket([(Asset::At(location), 1), (Asset::SpentEnergy, 1)]),
-        )
+        .produce_at(Role::Scout, at_site())
+        .produce(Role::Scout, basket([(Asset::SpentEnergy, 1)]))
         .consume(
             Role::Medic,
             basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
         )
-        .produce(
-            Role::Medic,
-            basket([(Asset::At(location), 1), (Asset::SpentEnergy, 1)]),
-        )
+        .produce_at(Role::Medic, at_site())
+        .produce(Role::Medic, basket([(Asset::SpentEnergy, 1)]))
         .consume(Role::Mission, basket([(Asset::Planning, 1)]))
         .consume(Role::Mission, basket([(Asset::TimeRemaining, 1)]))
         .produce(
             Role::Mission,
             basket([(Asset::AwaitingEncounter, 1), (Asset::ElapsedTime, 1)]),
-        )
-        .distinct(Role::Scout, Role::Medic)
-        .distinct(Role::Scout, Role::Mission)
-        .distinct(Role::Medic, Role::Mission);
+        );
     if coordinated {
-        rate.preserve(Role::Scout, basket([(Asset::SharedIntel(location), 1)]))
-            .preserve(Role::Medic, basket([(Asset::Intel(location), 1)]))
+        rate.preserve_at(
+            Role::Scout,
+            one([AssetPattern::SharedIntel(site.var()).into()]),
+        )
+        .preserve_at(Role::Medic, one([AssetPattern::Intel(site.var()).into()]))
     } else {
         // The unused sensor proves this direct commitment was made before a
         // scan. Once the Scout observes, coordination requires explicit share.
@@ -518,34 +489,27 @@ fn signal(truth: Location, seed: u8) -> Location {
     }
 }
 
-/// The exchange of one unit of `rate`, each of its roles bound to the
-/// account that plays it.
-pub fn action(rate: RateId) -> Action {
-    let exchange = Exchange::new(rate, Quantity::new(1));
-    match rate {
-        RateId::Instantiate { .. } => exchange.bind(Role::Nature, AccountId::Nature),
-        RateId::BeginScan => exchange
-            .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
-            .bind(Role::Mission, AccountId::Mission),
-        RateId::ResolveScan { .. } => exchange
-            .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
-            .bind(Role::Nature, AccountId::Nature)
-            .bind(Role::Mission, AccountId::Mission),
-        RateId::Share(_) | RateId::MoveTogether(_) | RateId::MoveDirect(_) | RateId::Treat => {
-            exchange
-                .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
-                .bind(Role::Medic, AccountId::Agent(AgentId::Medic))
-                .bind(Role::Mission, AccountId::Mission)
-        }
-        RateId::Encounter { .. } | RateId::Rescue(_) => exchange
-            .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
-            .bind(Role::Medic, AccountId::Agent(AgentId::Medic))
-            .bind(Role::Nature, AccountId::Nature)
-            .bind(Role::Mission, AccountId::Mission),
-        RateId::Finish => exchange
-            .bind(Role::Mission, AccountId::Mission)
-            .bind(Role::Goal, AccountId::Success),
-    }
+/// The exchange of `rate` once, each of its roles bound to the account
+/// `world`'s rate fixes it to.
+///
+/// # Panics
+///
+/// If `rate` names no instance of `world`'s rates.
+pub fn action(world: &World, rate: RateId) -> Action {
+    let instance = world
+        .instance(&rate)
+        .unwrap_or_else(|_| panic!("the mission has no rate {rate:?}"));
+    instance.fixed_accounts().fold(
+        Exchange::new(rate, Quantity::new(1)),
+        |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
+            )
+        },
+    )
 }
 
 #[cfg(test)]
@@ -565,11 +529,14 @@ mod tests {
         let instantiated = |truth| {
             let mut world = initial();
             world
-                .apply(action(RateId::Instantiate {
-                    truth,
-                    seed: 0,
-                    hazard: Hazard::Injury,
-                }))
+                .apply(action(
+                    &world,
+                    RateId::Instantiate {
+                        truth,
+                        seed: 0,
+                        hazard: Hazard::Injury,
+                    },
+                ))
                 .expect("the prior encodes the scenario");
             world
         };
@@ -581,7 +548,7 @@ mod tests {
             north.view(SCOUT_SEES).observation_key(),
             south.view(SCOUT_SEES).observation_key()
         );
-        let scan = action(RateId::BeginScan);
+        let scan = action(&north, RateId::BeginScan);
         assert!(north.is_applicable(&scan));
         assert!(south.is_applicable(&scan));
     }
@@ -600,7 +567,6 @@ mod tests {
                 truth: Location::North,
                 seed: 1,
                 report: Location::North,
-                next_seed: 2,
             },
             RateId::Share(Location::North),
             RateId::MoveTogether(Location::North),
@@ -611,21 +577,21 @@ mod tests {
             RateId::Rescue(Location::North),
             RateId::Finish,
         ];
-        let trace: Trace<Ontology> = rates.into_iter().map(action).collect();
+        let trace: Trace<Ontology> = rates.into_iter().map(|rate| action(&model, rate)).collect();
 
         // The Medic follows the Scout's intelligence only once it is shared.
         let scanned = model
             .replayed(&trace.exchanges()[..3].iter().cloned().collect())
             .expect("the scan replays");
-        assert!(!scanned.is_applicable(&action(RateId::MoveTogether(Location::North))));
+        assert!(!scanned.is_applicable(&action(&scanned, RateId::MoveTogether(Location::North))));
 
         let replayed = model.replayed(&trace).expect("mission trace must replay");
         assert!(replayed.matches(&goal()));
         assert!(
             replayed
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
-                .all(|rate| !replayed.is_applicable(&action(*rate)))
+                .flat_map(|key| replayed.instances_of(key))
+                .all(|rate| !replayed.is_applicable(&action(&replayed, rate)))
         );
     }
 
@@ -633,22 +599,24 @@ mod tests {
     fn encoded_roles_reject_resolving_a_scan_into_the_medics_account() {
         let mut world = initial();
         world
-            .apply(action(RateId::Instantiate {
-                truth: Location::North,
-                seed: 0,
-                hazard: Hazard::Injury,
-            }))
+            .apply(action(
+                &world,
+                RateId::Instantiate {
+                    truth: Location::North,
+                    seed: 0,
+                    hazard: Hazard::Injury,
+                },
+            ))
             .expect("the prior encodes the scenario");
         world
-            .apply(action(RateId::BeginScan))
+            .apply(action(&world, RateId::BeginScan))
             .expect("scout starts scan");
         let resolution = RateId::ResolveScan {
             truth: Location::North,
             seed: 0,
             report: Location::South,
-            next_seed: 1,
         };
-        assert!(world.is_applicable(&action(resolution)));
+        assert!(world.is_applicable(&action(&world, resolution)));
         let rebound = Exchange::new(resolution, Quantity::new(1))
             .bind(Role::Scout, AccountId::Agent(AgentId::Medic))
             .bind(Role::Nature, AccountId::Nature)
