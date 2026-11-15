@@ -905,9 +905,29 @@ fn states(rhai: &mut rhai::Engine) {
                         })
                     })
                     .collect();
+                // What it does to each account it binds, whether or not it
+                // applies here: what it takes, gives and needs kept.
+                let basket = |basket: &Basket<AssetPath>| -> Map {
+                    basket
+                        .iter()
+                        .map(|(asset, quantity)| (asset.as_str().into(), Dynamic::from(*quantity)))
+                        .collect()
+                };
+                let accounts: Map = assessment
+                    .accounts()
+                    .iter()
+                    .map(|account| {
+                        let mut effect = Map::new();
+                        effect.insert("consumed".into(), basket(account.consumed()).into());
+                        effect.insert("produced".into(), basket(account.produced()).into());
+                        effect.insert("preserved".into(), basket(account.preserved()).into());
+                        (account.account().as_str().into(), effect.into())
+                    })
+                    .collect();
                 let mut result = Map::new();
                 result.insert("status".into(), status.into());
                 result.insert("missing".into(), missing.into());
+                result.insert("accounts".into(), accounts.into());
                 Ok(result)
             },
         );

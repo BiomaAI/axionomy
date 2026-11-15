@@ -1311,6 +1311,11 @@ fn line() -> (Engine, Point) {
                     state.exchange_of(rate)
                 }
             }
+            // What a step back would take from the walker, though it cannot.
+            fn back(state) {
+                let assessed = state.assess(state.exchange_of("step/2/1"));
+                [assessed.status, assessed.accounts["walker"].consumed]
+            }
             // The economy's constants: the walker's account and the last cell.
             fn constants(state) { [state.constant("who"), state.constant("last")] }
             fn where(state) {
@@ -1381,4 +1386,9 @@ fn a_rate_with_variables_offers_its_instances_that_apply() {
     let constants: rhai::Array = engine.call(&path("line"), "constants", (state,)).unwrap();
     assert_eq!(constants[0].clone().cast::<String>(), "walker");
     assert_eq!(constants[1].clone().cast::<Quantity>(), Quantity::new(4));
+    let state = axionomy_engine::ScriptState::new(line_economy());
+    let back: rhai::Array = engine.call(&path("line"), "back", (state,)).unwrap();
+    assert_eq!(back[0].clone().cast::<String>(), "infeasible");
+    let taken = back[1].clone().cast::<rhai::Map>();
+    assert_eq!(taken["at/2"].clone().cast::<Quantity>(), Quantity::new(1));
 }

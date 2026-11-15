@@ -125,7 +125,9 @@ and applies, `instances(prefix)` for every instance under a prefix,
 `values(rate)` for the values an instance has, its variables',
 the values its relations give and its derived values, `constant(name)` for
 one of the economy's constants, `applicable`,
-`assess`, `distances` over a list of edges),
+`assess` (its status, what is missing, and what it consumes, produces and
+preserves at each account it binds, whether or not it applies),
+`distances` over a list of edges),
 and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;
 randomness is only a `Random` the host seeds (below); scripts have no clock;
