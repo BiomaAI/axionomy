@@ -3,10 +3,8 @@
 use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    Trace, basket,
+    basket,
 };
-use axionomy_search::{SearchSolution, bfs};
-use std::collections::BTreeSet;
 
 #[cfg(feature = "packages")]
 pub mod package;
@@ -112,7 +110,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Solution = SearchSolution<Ontology>;
 
 const MICRO_SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
 const MICRO_ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
@@ -230,55 +227,6 @@ pub fn unsatisfiable_stress() -> World {
 
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Problem, basket([(Asset::Solved, 1)]))
-}
-
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut ids: Vec<_> = world.rate_ids().copied().collect();
-    ids.sort();
-    world.applicable(ids.into_iter().map(action))
-}
-
-pub fn solve_bfs(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), candidates)
-}
-
-/// Runs Algorithm X over memberships read back from the economy's rates.
-///
-/// It is deliberately only a proposer: the resulting trace still has to pass
-/// `Economy::replay`.
-pub fn algorithm_x(world: &World) -> Option<Trace<Ontology>> {
-    if world.matches(&goal()) {
-        return Some(Trace::new());
-    }
-    let remaining: BTreeSet<_> = elements(world)
-        .into_iter()
-        .filter(|element| {
-            !world
-                .balance(&AccountId::Problem, &Asset::Uncovered(*element))
-                .is_zero()
-        })
-        .collect();
-    let covered = elements(world).len() - remaining.len();
-    let available = sets(world)
-        .into_iter()
-        .filter(|set| {
-            !world
-                .balance(&AccountId::Problem, &Asset::Available(*set))
-                .is_zero()
-        })
-        .collect();
-    let selected = cover(world, remaining, available)?;
-    let mut trace = Trace::new();
-    let mut before = covered as u8;
-    for set in selected {
-        trace.push(action(RateId::Select { set, before }));
-        before = before.checked_add(u8::try_from(members(world, set).len()).ok()?)?;
-    }
-    trace.push(action(RateId::Finish));
-
-    let mut validation = world.clone();
-    validation.replay(&trace).ok()?;
-    validation.matches(&goal()).then_some(trace)
 }
 
 fn build(elements: &[Element], available: &[SetId]) -> World {
@@ -412,112 +360,155 @@ fn declared_members(set: SetId) -> &'static [Element] {
     }
 }
 
-fn encoded_members(world: &World, set: SetId) -> BTreeSet<Element> {
-    world
-        .rate(&RateId::Select { set, before: 0 })
-        .and_then(|rate| rate.consumed(&Role::Problem))
-        .into_iter()
-        .flat_map(Basket::iter)
-        .filter_map(|(asset, _)| match asset {
-            Asset::Uncovered(element) => Some(*element),
-            _ => None,
-        })
-        .collect()
-}
-
-pub fn elements(world: &World) -> Vec<Element> {
-    STRESS_ELEMENTS
-        .into_iter()
-        .filter(|element| {
-            !world
-                .balance(&AccountId::Problem, &Asset::Uncovered(*element))
-                .is_zero()
-                || !world
-                    .balance(&AccountId::Problem, &Asset::Covered(*element))
-                    .is_zero()
-        })
-        .collect()
-}
-
-pub fn sets(world: &World) -> Vec<SetId> {
-    let mut values = BTreeSet::new();
-    for rate in world.rate_ids() {
-        if let RateId::Select { set, .. } = rate {
-            values.insert(*set);
-        }
-    }
-    values.into_iter().collect()
-}
-
-pub fn members(world: &World, set: SetId) -> Vec<Element> {
-    encoded_members(world, set).into_iter().collect()
-}
-
-fn cover(
-    world: &World,
-    remaining: BTreeSet<Element>,
-    available: BTreeSet<SetId>,
-) -> Option<Vec<SetId>> {
-    if remaining.is_empty() {
-        return Some(Vec::new());
-    }
-    let pivot = remaining
-        .iter()
-        .min_by_key(|element| {
-            available
-                .iter()
-                .filter(|set| encoded_members(world, **set).contains(element))
-                .count()
-        })
-        .copied()?;
-
-    for set in available.iter().copied() {
-        let members = encoded_members(world, set);
-        if !members.contains(&pivot) || !members.is_subset(&remaining) {
-            continue;
-        }
-        let next_remaining = remaining.difference(&members).copied().collect();
-        let next_available = available
-            .iter()
-            .copied()
-            .filter(|candidate| encoded_members(world, *candidate).is_disjoint(&members))
-            .collect();
-        if let Some(mut suffix) = cover(world, next_remaining, next_available) {
-            suffix.insert(0, set);
-            return Some(suffix);
-        }
-    }
-    None
-}
-
-fn action(rate: RateId) -> Action {
+/// The exchange selecting a set, or finishing, on the one problem account.
+pub fn action(rate: RateId) -> Action {
     Exchange::new(rate, Quantity::new(1)).bind(Role::Problem, AccountId::Problem)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
-    #[test]
-    fn algorithm_x_and_bfs_emit_core_validated_solutions() {
-        let world = initial();
-        let bfs = solve_bfs(&world).expect("an exact cover exists");
-        let algorithm_x = algorithm_x(&world).expect("Algorithm X finds a cover");
-        assert_eq!(bfs.trace().exchanges().len(), algorithm_x.exchanges().len());
+    /// The elements `world`'s problem holds, covered or not.
+    fn elements(world: &World) -> Vec<Element> {
+        STRESS_ELEMENTS
+            .into_iter()
+            .filter(|element| {
+                !world
+                    .balance(&AccountId::Problem, &Asset::Uncovered(*element))
+                    .is_zero()
+                    || !world
+                        .balance(&AccountId::Problem, &Asset::Covered(*element))
+                        .is_zero()
+            })
+            .collect()
+    }
 
-        for trace in [bfs.trace(), &algorithm_x] {
-            let mut replay = initial();
-            replay.replay(trace).expect("proposal must replay");
-            assert!(replay.matches(&goal()));
-            assert!(candidates(&replay).is_empty());
+    /// The sets `world` can select.
+    fn sets(world: &World) -> Vec<SetId> {
+        let mut values = BTreeSet::new();
+        for rate in world.rate_ids() {
+            if let RateId::Select { set, .. } = rate {
+                values.insert(*set);
+            }
         }
+        values.into_iter().collect()
+    }
+
+    /// The elements selecting `set` covers, read from what its rate consumes.
+    fn members(world: &World, set: SetId) -> BTreeSet<Element> {
+        world
+            .rate(&RateId::Select { set, before: 0 })
+            .and_then(|rate| rate.consumed(&Role::Problem))
+            .into_iter()
+            .flat_map(Basket::iter)
+            .filter_map(|(asset, _)| match asset {
+                Asset::Uncovered(element) => Some(*element),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every subset of `sets`, each in the order `sets` lists them.
+    fn subsets(sets: &[SetId]) -> impl Iterator<Item = Vec<SetId>> + '_ {
+        (0_u32..1 << sets.len()).map(move |mask| {
+            sets.iter()
+                .enumerate()
+                .filter(|(index, _)| mask & (1 << index) != 0)
+                .map(|(_, set)| *set)
+                .collect()
+        })
+    }
+
+    /// Whether `world` accepts selecting `chosen` in turn, each selection
+    /// naming the progress before it, and then finishing.
+    fn accepts(world: &World, chosen: &[SetId]) -> bool {
+        let mut world = world.clone();
+        let mut before = 0;
+        for &set in chosen {
+            if world.apply(action(RateId::Select { set, before })).is_err() {
+                return false;
+            }
+            before += declared_members(set).len() as u8;
+        }
+        world.apply(action(RateId::Finish)).is_ok() && world.matches(&goal())
+    }
+
+    /// The oracle, independent of the economy: whether `chosen`'s declared
+    /// members cover each element of `universe` exactly once.
+    fn is_exact_cover(universe: &[Element], chosen: &[SetId]) -> bool {
+        universe.iter().all(|element| {
+            chosen
+                .iter()
+                .filter(|set| declared_members(**set).contains(element))
+                .count()
+                == 1
+        })
     }
 
     #[test]
-    fn both_solvers_agree_on_infeasibility() {
+    fn a_cover_selects_disjoint_sets_then_finishes_and_is_quiescent() {
+        let world = initial();
+        let mut overlapping = world.clone();
+        overlapping
+            .apply(action(RateId::Select {
+                set: SetId::Ab,
+                before: 0,
+            }))
+            .unwrap();
+        // AC needs A uncovered, which AB consumed.
+        assert!(!overlapping.is_applicable(&action(RateId::Select {
+            set: SetId::Ac,
+            before: 2,
+        })));
+
+        let solved = world
+            .replayed(
+                &[
+                    RateId::Select {
+                        set: SetId::Ab,
+                        before: 0,
+                    },
+                    RateId::Select {
+                        set: SetId::Cd,
+                        before: 2,
+                    },
+                    RateId::Finish,
+                ]
+                .into_iter()
+                .map(action)
+                .collect(),
+            )
+            .expect("AB and CD cover the universe");
+        assert!(solved.matches(&goal()));
+        assert!(
+            solved
+                .rate_ids()
+                .all(|rate| !solved.is_applicable(&action(*rate)))
+        );
+    }
+
+    #[test]
+    fn every_available_set_combination_accepts_exactly_the_covers_a_direct_oracle_finds() {
+        for mask in 0_u8..(1 << MICRO_SETS.len()) {
+            let available = MICRO_SETS
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, set)| (mask & (1 << index) != 0).then_some(set))
+                .collect::<Vec<_>>();
+            let world = build(&MICRO_ELEMENTS, &available);
+            for chosen in subsets(&available) {
+                assert_eq!(
+                    accepts(&world, &chosen),
+                    is_exact_cover(&MICRO_ELEMENTS, &chosen),
+                    "mask {mask:04b}: {chosen:?}"
+                );
+            }
+        }
+        // Only AB and AC: no cover.
         let world = unsatisfiable();
-        assert!(solve_bfs(&world).is_none());
-        assert!(algorithm_x(&world).is_none());
+        assert!(subsets(&sets(&world)).all(|chosen| !accepts(&world, &chosen)));
     }
 
     #[test]
@@ -527,72 +518,39 @@ mod tests {
 
         assert!(elements(&stress).len() > elements(&showcase).len());
         assert!(sets(&stress).len() > sets(&showcase).len());
-
-        for trace in [
-            solve_bfs(&stress)
-                .expect("stress cover exists")
-                .trace()
-                .clone(),
-            algorithm_x(&stress).expect("Algorithm X finds the stress cover"),
-        ] {
-            let replayed = stress
-                .replayed(&trace)
-                .expect("stress proposal must replay");
-            assert!(replayed.matches(&goal()));
-        }
-
-        let unsatisfiable = unsatisfiable_stress();
-        assert!(solve_bfs(&unsatisfiable).is_none());
-        assert!(algorithm_x(&unsatisfiable).is_none());
-    }
-
-    #[test]
-    fn every_available_set_combination_matches_a_direct_domain_oracle() {
-        for mask in 0_u8..(1 << MICRO_SETS.len()) {
-            let available = MICRO_SETS
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, set)| (mask & (1 << index) != 0).then_some(set))
-                .collect::<Vec<_>>();
-            let expected = brute_force_has_exact_cover(&available);
-            let world = build(&MICRO_ELEMENTS, &available);
-
-            assert_eq!(solve_bfs(&world).is_some(), expected, "mask {mask:04b}");
-            assert_eq!(algorithm_x(&world).is_some(), expected, "mask {mask:04b}");
-        }
+        assert!(accepts(
+            &stress,
+            &[SetId::Abef, SetId::Cdgh, SetId::Ij, SetId::Kl]
+        ));
     }
 
     #[test]
     fn irregular_matrix_has_global_coupling_different_covers_and_legal_dead_ends() {
         let initial = initial_showcase();
         let available = sets(&initial);
-        let mut widths = BTreeSet::new();
-        let mut cover_sizes = BTreeSet::new();
-        for set in &available {
-            widths.insert(members(&initial, *set).len());
-        }
+        let widths: BTreeSet<_> = available
+            .iter()
+            .map(|set| members(&initial, *set).len())
+            .collect();
         assert_eq!(widths, BTreeSet::from([2, 3, 4]));
-        // An independent subset oracle checks every cover, not the solver's implementation.
-        for mask in 0_u32..(1 << available.len()) {
-            if elements(&initial).iter().all(|element| {
-                available
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, set)| {
-                        mask & (1 << index) != 0 && declared_members(**set).contains(element)
-                    })
-                    .count()
-                    == 1
-            }) {
-                cover_sizes.insert(mask.count_ones());
+        // An independent subset oracle names every cover; the economy accepts
+        // exactly those.
+        let universe = elements(&initial);
+        let mut covers = Vec::new();
+        for chosen in subsets(&available) {
+            let cover = is_exact_cover(&universe, &chosen);
+            assert_eq!(accepts(&initial, &chosen), cover, "{chosen:?}");
+            if cover {
+                covers.push(chosen);
             }
         }
+        let cover_sizes: BTreeSet<_> = covers.iter().map(Vec::len).collect();
         assert_eq!(cover_sizes, BTreeSet::from([2, 3, 4]));
         let mut connected = BTreeSet::from([Element::A]);
         loop {
             let before = connected.len();
             for set in &available {
-                let members = encoded_members(&initial, *set);
+                let members = members(&initial, *set);
                 if !members.is_disjoint(&connected) {
                     connected.extend(members);
                 }
@@ -601,18 +559,18 @@ mod tests {
                 break;
             }
         }
-        assert_eq!(connected.len(), elements(&initial).len());
-        let mut dead_ends = 0;
-        for candidate in candidates(&initial) {
-            let mut fork = initial.clone();
-            fork.apply(candidate).unwrap();
-            if let Some(continuation) = algorithm_x(&fork) {
-                let final_world = fork.replayed(&continuation).unwrap();
-                assert!(final_world.matches(&goal()));
-            } else {
-                dead_ends += 1;
-            }
-        }
+        assert_eq!(connected.len(), universe.len());
+        // A legal first selection that no cover contains blocks completion.
+        let dead_ends = available
+            .iter()
+            .filter(|set| {
+                initial.is_applicable(&action(RateId::Select {
+                    set: **set,
+                    before: 0,
+                }))
+            })
+            .filter(|set| !covers.iter().any(|cover| cover.contains(set)))
+            .count();
         assert!(
             dead_ends > 0,
             "some locally legal choices must block a cover"
@@ -622,28 +580,13 @@ mod tests {
     #[test]
     fn every_element_can_occur_even_when_no_global_cover_exists() {
         for world in [unsatisfiable_showcase(), unsatisfiable_stress()] {
+            let available = sets(&world);
             assert!(elements(&world).iter().all(|element| {
-                sets(&world)
+                available
                     .iter()
                     .any(|set| members(&world, *set).contains(element))
             }));
-            assert!(algorithm_x(&world).is_none());
-            assert!(solve_bfs(&world).is_none());
+            assert!(subsets(&available).all(|chosen| !accepts(&world, &chosen)));
         }
-    }
-
-    fn brute_force_has_exact_cover(available: &[SetId]) -> bool {
-        (0_u8..(1 << available.len())).any(|selection| {
-            MICRO_ELEMENTS.into_iter().all(|element| {
-                available
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, set)| {
-                        selection & (1 << index) != 0 && declared_members(**set).contains(&element)
-                    })
-                    .count()
-                    == 1
-            })
-        })
     }
 }
