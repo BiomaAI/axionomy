@@ -23,11 +23,6 @@ fn order_label(id) {
 
 fn asset_label(parts) {
     switch parts[1] {
-        "world-identity" => "Fleet identity",
-        "station-identity" => "Station identity",
-        "nature-identity" => "Nature identity",
-        "vehicle-identity" => `${van_label(parts[2])} identity`,
-        "order-identity" => `${order_label(parts[2])} identity`,
         "active" => "Fleet run in progress",
         "closed" => "Fleet run closed",
         "time" => "Fleet time",
@@ -46,6 +41,8 @@ fn asset_label(parts) {
         "dock-used" => "Hub staging space used",
         "at" => `At ${capital(parts[2])}`,
         "travelling" => `Travelling ${capital(parts[2])} → ${capital(parts[3])}`,
+        "road" => `Fuel by road ${capital(parts[2])} → ${capital(parts[3])}`,
+        "trunk" => `Trunk road ${capital(parts[2])} → ${capital(parts[3])}`,
         "awaiting-outcome" => "Awaiting the trip outcome",
         "ready" => "Ready",
         "departed-at" => "Departed at",
@@ -79,6 +76,7 @@ fn asset_label(parts) {
         "expired" => "Expired",
         "arrival" => "Released at",
         "deadline" => "Delivery deadline",
+        "expiry" => "Expires at",
         "destination" => `Bound for ${capital(parts[2])}`,
         "weight" => "Weight",
         "cold-cargo" => "Needs refrigeration",
@@ -161,9 +159,11 @@ fn label(item) {
 // The unit of an asset's quantities, if it has one.
 fn unit(asset) {
     switch asset {
-        "time" | "time-remaining" | "horizon" | "departed-at" | "ready-at" | "arrival" | "deadline" =>
+        "time" | "time-remaining" | "horizon" | "departed-at" | "ready-at" | "arrival" | "deadline"
+            | "expiry" =>
             "ticks",
-        "fuel" | "tank-space" | "spent-fuel" | "space" | "weight" | "dock-space" | "dock-used" =>
+        "fuel" | "tank-space" | "spent-fuel" | "space" | "weight" | "dock-space" | "dock-used"
+            | "road" =>
             "units",
         "money" | "revenue" | "price" => "credits",
         _ => (),

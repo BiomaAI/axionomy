@@ -41,41 +41,9 @@ fn express(from, to) {
 
 fn other_van(van) { if van == "cold" { "freight" } else { "cold" } }
 
-// The exchange of `rate`, with the accounts its roles bind.
-fn action(rate) {
-    let parts = rate.split("/");
-    let kind = parts[0];
-    let bindings = #{ world: "world" };
-    if kind == "close" {
-        bindings.vehicle = "vehicle/cold";
-        bindings.other = "vehicle/freight";
-    } else if kind == "release" {
-        bindings.order = `order/${parts[1]}`;
-    } else if kind in ["load", "stage", "deliver"] {
-        bindings.vehicle = `vehicle/${parts[1]}`;
-        bindings.order = `order/${parts[2]}`;
-    } else if kind == "transfer" {
-        bindings.vehicle = `vehicle/${parts[1]}`;
-        bindings.other = `vehicle/${parts[2]}`;
-        bindings.order = `order/${parts[3]}`;
-    } else if kind == "expire" {
-        bindings.order = `order/${parts[1]}`;
-        if parts[2] == "some" { bindings.vehicle = `vehicle/${parts[3]}`; }
-    } else if kind in ["depart", "arrive"] {
-        bindings.vehicle = `vehicle/${parts[1]}`;
-    } else if kind == "resolve" {
-        bindings.vehicle = `vehicle/${parts[1]}`;
-        bindings.nature = "nature";
-    } else if kind in ["refuel", "end-refuel", "repair", "end-repair", "tow", "end-tow"] {
-        bindings.vehicle = `vehicle/${parts[1]}`;
-        bindings.station = "station";
-    }
-    exchange(rate, bindings, 1)
-}
-
 // The exchange of `rate` if it applies.
 fn applying(state, rate) {
-    let proposal = action(rate);
+    let proposal = state.exchange_of(rate);
     if state.applicable(proposal) { proposal } else { () }
 }
 
@@ -112,38 +80,21 @@ fn first_road(from, to, reliable) {
     ()
 }
 
-// What happens without anyone choosing: an order arriving or expiring, a
-// trip resolved from its ticket or arriving, or a service ending.
+// What happens without anyone choosing, the first that is due: order by
+// order, its arrival or expiry; then van by van, its trip resolved from its
+// ticket or arriving, or its service ending.
 fn nature_response(state) {
-    let count = value(state, "world", "count");
-    for id in 0..count {
-        let release = applying(state, `release/${id}`);
-        if release != () { return release; }
-        for carrier in ["none/depot", "none/hub", "some/cold/depot", "some/freight/depot"] {
-            let expiry = applying(state, `expire/${id}/${carrier}`);
-            if expiry != () { return expiry; }
+    let orders = state.moves("release") + state.moves("expire");
+    for id in 0..value(state, "world", "count") {
+        for due in orders {
+            if due.account("order") == `order/${id}` { return due; }
         }
     }
+    let trips = state.moves("resolve") + state.moves("arrive") + state.moves("end-refuel")
+        + state.moves("end-tow") + state.moves("end-repair");
     for van in vans() {
-        let own = `vehicle/${van}`;
-        for road in roads() {
-            for leg in [[road[0], road[1]], [road[1], road[0]]] {
-                let trip = `${van}/${leg[0]}/${leg[1]}`;
-                if value(state, own, `travelling/${leg[0]}/${leg[1]}`) == 0 { continue; }
-                if value(state, own, "awaiting-outcome") > 0 {
-                    for outcome in ["clear", "delayed", "breakdown"] {
-                        let resolution = applying(state, `resolve/${trip}/${outcome}`);
-                        if resolution != () { return resolution; }
-                    }
-                }
-                let arrival = applying(state, `arrive/${trip}`);
-                if arrival != () { return arrival; }
-            }
-        }
-        for rate in [`end-refuel/${van}`, `end-tow/${van}`, `end-repair/${van}/true`,
-                     `end-repair/${van}/false`] {
-            let ending = applying(state, rate);
-            if ending != () { return ending; }
+        for due in trips {
+            if due.account("vehicle") == `vehicle/${van}` { return due; }
         }
     }
     ()
@@ -194,7 +145,8 @@ fn decision(state, van, policy) {
         if cold(id) { carries_cold = true; }
     }
     for id in cargo {
-        for late in [false, true] {
+        // A cold load is never delivered late: it expires.
+        for late in if cold(id) { [false] } else { [false, true] } {
             let delivery = applying(state, `deliver/${van}/${id}/${late}`);
             if delivery != () { return delivery; }
         }
@@ -298,7 +250,7 @@ fn turn(state, policy) {
         let decided = decision(state, van, policy);
         if decided != () { return decided; }
     }
-    action("tick")
+    state.exchange_of("tick")
 }
 
 // The fleet's policies, as a strategy calls a policy.

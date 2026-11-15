@@ -16,6 +16,22 @@ when an environmental response is applied later. The dispatcher never selects
 the weather result. A finite two-slot hub supports asynchronous cargo handoffs;
 direct transfers require actual co-location and free compatible capacity.
 
+The fleet's rates have variables: one law serves every van, order and road,
+`load/{van}/{order}/hub`, and laws split only where their shape differs,
+loading at the depot or the hub, delivering on time or late, each trip
+outcome, repairing a broken-down or a worn van. A trip goes along a road, a
+relation over the map's directed roads; the fuel it burns and whether it
+takes the trunk road's one lane are `Road(from, to)` and `Trunk(from, to)`
+facts of the world's map. An order's payload space, refrigerated slot,
+staging space and payment come from its own account's weight, cold-cargo
+flag and price, a delivery is made where the van stands at the order's
+destination, and an order expires at its `Expiry`. Each role is fixed to its
+account, the world, the station, Nature, the van or the order its
+identifier names, so no identity token pins a binding. Nature takes, order by
+order, a release or an expiry, then, van by van, a trip's resolution or
+arrival or a service's end (`state.moves`); a van's decision is its rate's
+exchange (`state.exchange_of`).
+
 One fuel pump, one repair bay and one tow truck remain occupied for their whole
 service duration. Fuel and repair parts are finite, maintenance clears actual
 wear, and breakdown recovery consumes time and operating funds. The package's
