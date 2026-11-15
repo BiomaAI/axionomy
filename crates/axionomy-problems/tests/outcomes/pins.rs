@@ -246,6 +246,6 @@ pub const REFS: &[super::PinnedRef] = &[
     ("mission/showcase", 0, "38d7233d24eafcff884885647e74f9910389c29c16c117404a4f4b5766e400b7"),
     ("mission/stress", 0, "4872791f690ee0a37256194f7be5ed4a1f4dac20a8a76402f7b90a1990d51659"),
     ("perishables/micro", 0, "8e5a950413f3fa8c4c65d0a5951a072486c7e2768b1e09a26b3f6360d7fb9527"),
-    ("perishables/showcase", 0, "f62b2611726f43d7cc2d63042b7f562404685933007990460a8edd8d5e3994cc"),
-    ("perishables/stress", 0, "04c55f4aab0843f197c40cdec8f6c4bee31d23a937f9a7ab6d910c3a7c402574"),
+    ("perishables/showcase", 0, "f02b63b4bbd667a66100299122146957919f81457e495d75c645529dca0628e9"),
+    ("perishables/stress", 0, "e0779c0aad25c57f9839eb4f3b8661af8f38dabf6028a5a4cfbfbca759b4eb1c"),
 ];

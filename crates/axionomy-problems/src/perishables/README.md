@@ -19,6 +19,17 @@ delivery capacity. Buyers fund fresh/preserved food at different prices.
 Every day settles each cohort's exposure before advancing the clock and
 records unfilled food obligations. Showcase spans six days with a two-day
 outage; Stress tightens storage/fuel over eight days with a three-day outage.
+The cold chain's rates have variables: one law serves every batch,
+`deliver/{batch}/true/fridge`, and every pair of batches a split takes from
+and starts, `split/{source}/{destination}/warehouse`, and laws split only
+where their shape differs: in the warehouse or cold storage, fresh or
+preserved crates, warm aging that spoils or not. A day opens as
+`open-day/{day}`, the grid supplying three units of electricity but none on
+a day the world's `Outage(day)` facts mark, so the seed changes only those
+facts, not the law. Each role is fixed to its account, the world, the buyer
+or the batch its identifier names, so no identity token pins a binding, and
+a plan binds each exchange's roles to the accounts its rate fixes.
+
 The package's four daily policies share the same seeded outage schedule; their
 front is explicitly the evaluated policy set. Micro is the storage fixture
 described below.

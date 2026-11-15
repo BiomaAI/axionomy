@@ -22,9 +22,6 @@ fn place(place) {
 
 fn asset_label(parts) {
     switch parts[1] {
-        "world-identity" => "Cold chain identity",
-        "batch-identity" => `${cohort_label(parts[2])} identity`,
-        "buyer-identity" => "Buyer identity",
         "active" => "Cohort in use",
         "dormant" => "Cohort not yet in use",
         "at" => `In ${place(parts[2])}`,

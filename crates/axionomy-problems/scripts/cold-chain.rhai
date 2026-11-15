@@ -39,12 +39,13 @@ fn batch_shadow(state, id) {
     }
 }
 
-// The shadow a plan follows: the world's stores, the buyer's money, every
-// batch, and the exchanges planned so far.
+// The shadow a plan follows: the state it starts from, the world's stores,
+// the buyer's money, every batch, and the exchanges planned so far.
 fn shadow(state) {
     let batches = [];
     for id in batch_ids() { batches.push(batch_shadow(state, id)); }
     #{
+        state: state,
         energy: state.balance("world", "energy"),
         fuel: state.balance("world", "fuel"),
         labor: state.balance("world", "labor"),
@@ -58,14 +59,15 @@ fn shadow(state) {
     }
 }
 
-// The exchange of `rate`, bound to the world and the accounts `bindings`
-// names, planned: always true.
-fn planned(rate, bindings, units) {
-    bindings.world = "world";
+// The exchange of `units` of `rate`, each of its roles bound to the account
+// the rate fixes, planned: always true.
+fn planned(rate, units) {
+    let fixed = this.state.exchange_of(rate);
+    let bindings = #{};
+    for role in this.state.roles(rate) { bindings[role] = fixed.account(role); }
     this.plan.push(exchange(rate, bindings, units));
     true
 }
-fn for_batch(id) { #{ batch: `batch/${id}` } }
 
 // Each decision on the shadow: true, the exchange planned and its effects
 // followed, where the kernel accepts it; false, and nothing planned, where
@@ -77,7 +79,7 @@ fn generated() {
     if this.energy > 3 || this.fuel < 1 { return false; }
     this.fuel = this.fuel - 1;
     this.energy = this.energy + 3;
-    this.planned("generate", #{}, 1)
+    this.planned("generate", 1)
 }
 
 // Cooling for the day, which costs two of electricity.
@@ -85,7 +87,7 @@ fn chilled() {
     if this.cooling || this.energy < 2 { return false; }
     this.cooling = true;
     this.energy = this.energy - 2;
-    this.planned("cool", #{}, 1)
+    this.planned("cool", 1)
 }
 
 // Processing `amount` fresh crates of a batch in the warehouse, a unit of
@@ -100,7 +102,7 @@ fn processed(id, amount) {
     this.batches[id].preserved = batch.preserved + amount;
     this.energy = this.energy - amount;
     this.labor = this.labor - amount;
-    this.planned(`process/${id}`, for_batch(id), amount)
+    this.planned(`process/${id}`, amount)
 }
 
 // Delivering `amount` of a batch's fresh or preserved crates where it is:
@@ -128,9 +130,7 @@ fn delivered(id, preserved, at, amount) {
     this.freight = this.freight - amount;
     this.demand = this.demand - amount;
     this.fuel = this.fuel - 1;
-    let bindings = for_batch(id);
-    bindings.buyer = "buyer";
-    this.planned(`deliver/${id}/${preserved}/${at}`, bindings, amount)
+    this.planned(`deliver/${id}/${preserved}/${at}`, amount)
 }
 
 // Discarding `amount` of a batch's spoiled crates, freeing their cold space.
@@ -144,7 +144,7 @@ fn discarded(id, at, amount) {
         this.batches[id].occupancy = batch.occupancy - amount;
         this.cold_space = this.cold_space + amount;
     }
-    this.planned(`discard/${id}/${at}`, for_batch(id), amount)
+    this.planned(`discard/${id}/${at}`, amount)
 }
 
 // Moving a whole batch from the warehouse into cold storage, a unit of
@@ -159,7 +159,7 @@ fn moved_cold(id) {
     this.batches[id].occupancy = batch.occupancy + amount;
     this.cold_space = this.cold_space - amount;
     this.labor = this.labor - 1;
-    this.planned(`move/${id}/warehouse/fridge`, for_batch(id), 1)
+    this.planned(`move/${id}/warehouse/fridge`, 1)
 }
 
 // Splitting `units` fresh crates of a batch in the warehouse into a dormant
@@ -175,8 +175,7 @@ fn split_into(source, destination, units) {
     this.batches[destination].at = "warehouse";
     this.batches[destination].fresh = child.fresh + units;
     this.batches[destination].heat = child.heat + parent.heat;
-    this.planned(`split/${source}/${destination}/warehouse`,
-        #{ source: `batch/${source}`, destination: `batch/${destination}` }, units)
+    this.planned(`split/${source}/${destination}/warehouse`, units)
 }
 
 // The policy's steps, each over every batch in order.
@@ -276,16 +275,16 @@ fn make_room() {
 // and as much of the grid's electricity as the battery takes, none during
 // an outage, or, on the last day, the chain closes.
 fn end_day(state, day, days) {
-    this.planned("end-day", #{}, 1);
+    this.planned("end-day", 1);
     for id in batch_ids() {
         let batch = this.batches[id];
         if batch.fresh == 0 {
-            this.planned(`age-empty/${id}`, for_batch(id), 1);
+            this.planned(`age-empty/${id}`, 1);
         } else if batch.at == "fridge" && this.cooling {
-            this.planned(`age-cold/${id}`, for_batch(id), 1);
+            this.planned(`age-cold/${id}`, 1);
         } else {
             let spoil = batch.heat >= 2;
-            this.planned(`age-warm/${id}/${batch.at}/${spoil}`, for_batch(id), 1);
+            this.planned(`age-warm/${id}/${batch.at}/${spoil}`, 1);
             this.batches[id].heat = batch.heat + 2;
             if spoil {
                 this.batches[id].spoiled = batch.spoiled + batch.fresh;
@@ -294,7 +293,7 @@ fn end_day(state, day, days) {
         }
     }
     if day + 1 == days {
-        this.planned("close", #{}, 1);
+        this.planned("close", 1);
         return;
     }
     let next = day + 1;
@@ -304,7 +303,7 @@ fn end_day(state, day, days) {
     this.freight = quantity(2);
     this.demand = quantity(2);
     this.cooling = false;
-    this.planned(`open-day/${next}`, #{}, 1);
+    this.planned(`open-day/${next}`, 1);
 }
 
 // A policy's plan for every day: protect-cold cools first, with backup;
