@@ -11,8 +11,9 @@ Interrupted work keeps its remaining duration, releases its crew, and resumes
 only after a finite-kit repair finishes. Stress has one crew instead of two,
 a later second job, and a longer repair. Timelines show actual occupancy,
 including interruption, with future running completion shown as a projection.
-Exact searches omit equivalent early queue reservations and process ready
-completions before dispatch. The static slot fixture below remains Micro.
+The package's exact searches omit equivalent early queue reservations and
+process ready completions before dispatch. The static slot fixture below
+remains Micro.
 
 ## Specification
 
@@ -34,14 +35,21 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 
 ## Required results
 
-- Generic best-first search finds makespan 5.
-- A separate depth-first branch strategy also finds makespan 5.
-- Its proposal replays through the core.
-- A horizon of two slots is infeasible for both algorithms.
-- Horizons zero through five agree with a direct job-shop brute-force oracle.
+The package's experiments find these, pinned in `tests/outcomes`:
+
+- Best-first search finds makespan 5.
+- A separate branch-and-bound strategy also finds makespan 5.
+- A horizon of two slots is infeasible for both.
+- Exact Pareto search, ranked by either job, finds the two completion
+  allocations `(3,5)` and `(5,3)`, making the shared machine's stakeholder
+  tradeoff explicit.
+
+The model's tests apply the rules directly:
+
+- For horizons zero through five, the economy accepts exactly the schedules a
+  direct job-shop brute-force oracle calls feasible, at the makespan it
+  computes, the least being 5.
 - Rebinding an operation to the wrong machine or time slot is rejected.
-- Exact Pareto search retains the two completion allocations `(3,5)` and
-  `(5,3)`, making the shared machine's stakeholder tradeoff explicit.
 
 ## API pressure
 
@@ -53,18 +61,12 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro slot fixture, its infeasible horizon, and
-  the searches over every instance.
+- `mod.rs` is the model: the Micro slot fixture and its infeasible horizon.
 - `execution.rs` builds the executed Showcase and Stress job shops: queues,
   setup, shared crews, the machine failure and its repair.
-- `package.rs` writes its package: its economies under refs, goals,
-  strategies, experiments and view, whose scripts are `scripts/scheduling.rhai`
-  and `scripts/scheduling-view.rhai`.
-
-[`examples/scheduling.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/scheduling.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example scheduling
-```
+- `package.rs` writes its package, the job shop's only implementation of its
+  searches: its economies under refs, goals, strategies, experiments and
+  view, whose scripts are `scripts/scheduling.rhai` and
+  `scripts/scheduling-view.rhai`.
 
 The job shop is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

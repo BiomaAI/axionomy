@@ -2,14 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
-    basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
-use axionomy_search::{
-    SearchSolution, best_first,
-    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
-};
-use std::collections::HashSet;
 
 pub mod execution;
 #[cfg(feature = "packages")]
@@ -162,31 +156,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Solution = SearchSolution<Ontology>;
-pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectiveKey {
-    JobOneCompletion,
-    JobTwoCompletion,
-}
-
-#[derive(Debug, Clone)]
-pub struct OptimizedProposal {
-    trace: Trace<Ontology>,
-    makespan: u8,
-}
-
-impl OptimizedProposal {
-    pub fn trace(&self) -> &Trace<Ontology> {
-        &self.trace
-    }
-
-    pub fn makespan(&self) -> u8 {
-        self.makespan
-    }
-}
-
 pub fn initial() -> World {
     build(5, false)
 }
@@ -210,131 +179,6 @@ pub fn impossible_showcase() -> World {
 
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
-}
-
-pub fn candidates(world: &World) -> Vec<Action> {
-    if execution::enabled(world) {
-        return execution::candidates(world);
-    }
-    let mut ids: Vec<_> = world.rate_ids().copied().collect();
-    ids.sort();
-    world.applicable(ids.into_iter().map(action))
-}
-
-pub fn solve_best_first(world: &World) -> Option<Solution> {
-    best_first(world, &goal(), candidates, encoded_makespan, |_| 0)
-}
-
-/// Exhaustively exposes the non-dominated completion allocations between jobs.
-pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    pareto::search(world, &goal(), candidates, objectives)
-}
-
-pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    ObjectiveVector::try_new([
-        Objective::minimize(
-            ObjectiveKey::JobOneCompletion,
-            completion_time(world, Job::One),
-        ),
-        Objective::minimize(
-            ObjectiveKey::JobTwoCompletion,
-            completion_time(world, Job::Two),
-        ),
-    ])
-    .expect("scheduling objective schema is static and unique")
-}
-
-pub fn completion_time(world: &World, job: Job) -> u64 {
-    if execution::enabled(world) {
-        return world
-            .balance(&AccountId::Job(job), &Asset::CompletionTime)
-            .to_u64();
-    }
-    let operations = match job {
-        Job::One => [Operation::OneC, Operation::OneB],
-        Job::Two => [Operation::TwoC, Operation::TwoB],
-    };
-    operations
-        .into_iter()
-        .find_map(|operation| {
-            (0..=16).find(|time| {
-                !world
-                    .balance(
-                        &AccountId::Job(job),
-                        &Asset::CompletedAt(operation, u8::try_from(*time).expect("bounded")),
-                    )
-                    .is_zero()
-            })
-        })
-        .unwrap_or(0)
-}
-
-/// A separate depth-first branch enumerator. It understands no scheduling
-/// internals: it forks the economy, asks for applicable exchanges, and reads
-/// the objective asset from completed states.
-pub fn branch_optimize(world: &World) -> Option<OptimizedProposal> {
-    let mut visited = HashSet::new();
-    let mut best: Option<OptimizedProposal> = None;
-    optimize_branch(world.clone(), Trace::new(), &mut visited, &mut best);
-    let proposal = best?;
-    let mut replay = world.clone();
-    replay.replay(&proposal.trace).ok()?;
-    (replay.matches(&goal()) && encoded_makespan(&replay) == u64::from(proposal.makespan))
-        .then_some(proposal)
-}
-
-pub fn encoded_makespan(world: &World) -> u64 {
-    if execution::enabled(world) {
-        return execution::now(world);
-    }
-    (0..=16)
-        .find(|makespan| {
-            !world
-                .balance(
-                    &AccountId::Success,
-                    &Asset::Makespan(u8::try_from(*makespan).expect("bounded")),
-                )
-                .is_zero()
-        })
-        .unwrap_or(0)
-}
-
-fn optimize_branch(
-    world: World,
-    trace: Trace<Ontology>,
-    visited: &mut HashSet<axionomy::StateKey<Ontology>>,
-    best: &mut Option<OptimizedProposal>,
-) {
-    if !visited.insert(world.state_key()) {
-        return;
-    }
-    if execution::enabled(&world)
-        && best
-            .as_ref()
-            .is_some_and(|known| encoded_makespan(&world) >= u64::from(known.makespan))
-    {
-        return;
-    }
-    if world.matches(&goal()) {
-        let candidate = u8::try_from(encoded_makespan(&world)).expect("encoded u8 makespan");
-        if best.as_ref().is_none_or(|known| candidate < known.makespan) {
-            *best = Some(OptimizedProposal {
-                trace,
-                makespan: candidate,
-            });
-        }
-        return;
-    }
-
-    for exchange in candidates(&world) {
-        let mut next = world.clone();
-        if next.apply(exchange.clone()).is_err() {
-            continue;
-        }
-        let mut next_trace = trace.clone();
-        next_trace.push(exchange);
-        optimize_branch(next, next_trace, visited, best);
-    }
 }
 
 fn build(horizon: u8, extended: bool) -> World {
@@ -560,6 +404,8 @@ fn successor(operation: Operation) -> Option<Operation> {
     }
 }
 
+/// The exchange applying `rate` once, bound to the schedule and to the jobs,
+/// slots and machine the rate names.
 pub fn action(rate: RateId) -> Action {
     let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Schedule, AccountId::Success);
     match rate {
@@ -615,47 +461,117 @@ pub fn action(rate: RateId) -> Action {
 mod tests {
     use super::*;
 
+    /// The makespan `world` records once it accepts scheduling each job's two
+    /// operations at `starts` (`[one_a, one_b, two_a, two_b]`), each second
+    /// operation ready when its first ends, and finishing; nothing if it
+    /// refuses any of it.
+    fn accepts(world: &World, [one_a, one_b, two_a, two_b]: [u8; 4]) -> Option<u8> {
+        let (job_one_end, job_two_end) = (one_b + 1, two_b + 1);
+        let schedule = [
+            RateId::Schedule {
+                operation: Operation::OneA,
+                ready: 0,
+                start: one_a,
+            },
+            RateId::Schedule {
+                operation: Operation::OneB,
+                ready: one_a + 2,
+                start: one_b,
+            },
+            RateId::Schedule {
+                operation: Operation::TwoA,
+                ready: 0,
+                start: two_a,
+            },
+            RateId::Schedule {
+                operation: Operation::TwoB,
+                ready: two_a + 2,
+                start: two_b,
+            },
+            RateId::Finish {
+                job_one_end,
+                job_two_end,
+                makespan: job_one_end.max(job_two_end),
+            },
+        ];
+        let end = world
+            .replayed(&schedule.into_iter().map(action).collect())
+            .ok()?;
+        (0..=16).find(|makespan| {
+            !end.balance(&AccountId::Success, &Asset::Makespan(*makespan))
+                .is_zero()
+        })
+    }
+
+    /// The oracle, independent of the economy: the makespan of starting the
+    /// operations at `starts` within `horizon`, if that schedule is feasible.
+    fn oracle(horizon: u8, [one_a, one_b, two_a, two_b]: [u8; 4]) -> Option<u8> {
+        let (one_a_end, one_b_end) = (one_a + 2, one_b + 1);
+        let (two_a_end, two_b_end) = (two_a + 2, two_b + 1);
+        let feasible = one_a_end <= horizon
+            && one_b_end <= horizon
+            && two_a_end <= horizon
+            && two_b_end <= horizon
+            && one_b >= one_a_end
+            && two_b >= two_a_end
+            && !overlaps(one_a, one_a_end, two_a, two_a_end)
+            && !overlaps(one_b, one_b_end, two_b, two_b_end);
+        feasible.then_some(one_b_end.max(two_b_end))
+    }
+
+    const fn overlaps(left_start: u8, left_end: u8, right_start: u8, right_end: u8) -> bool {
+        left_start < right_end && right_start < left_end
+    }
+
     #[test]
-    fn branch_optimizer_and_best_first_agree() {
+    fn a_five_slot_schedule_finishes_and_is_quiescent() {
         let world = initial();
-        let generic = solve_best_first(&world).expect("schedule is feasible");
-        let independent = branch_optimize(&world).expect("schedule is feasible");
-        assert_eq!(generic.cost(), 5);
-        assert_eq!(independent.makespan(), 5);
-
-        let mut replay = initial();
-        replay
-            .replay(independent.trace())
-            .expect("optimizer proposal must replay");
-        assert!(replay.matches(&goal()));
-        assert!(candidates(&replay).is_empty());
-    }
-
-    #[test]
-    fn insufficient_horizon_is_infeasible() {
-        let world = impossible();
-        assert!(solve_best_first(&world).is_none());
-        assert!(branch_optimize(&world).is_none());
-    }
-
-    #[test]
-    fn pareto_front_exposes_which_job_gets_the_earliest_completion() {
-        let initial = initial();
-        let result = pareto_front(&initial).unwrap();
-        let mut outcomes = Vec::new();
-
-        for entry in result.front().entries() {
-            let replayed = initial.replayed(entry.payload()).unwrap();
-            assert!(replayed.matches(&goal()));
-            assert_eq!(&objectives(&replayed), entry.objectives());
-            outcomes.push((
-                completion_time(&replayed, Job::One),
-                completion_time(&replayed, Job::Two),
-            ));
-        }
-
-        outcomes.sort_unstable();
-        assert_eq!(outcomes, [(3, 5), (5, 3)]);
+        let solved = world
+            .replayed(
+                &[
+                    RateId::Schedule {
+                        operation: Operation::OneA,
+                        ready: 0,
+                        start: 0,
+                    },
+                    RateId::Schedule {
+                        operation: Operation::OneB,
+                        ready: 2,
+                        start: 2,
+                    },
+                    RateId::Schedule {
+                        operation: Operation::TwoA,
+                        ready: 0,
+                        start: 2,
+                    },
+                    RateId::Schedule {
+                        operation: Operation::TwoB,
+                        ready: 4,
+                        start: 4,
+                    },
+                    RateId::Finish {
+                        job_one_end: 3,
+                        job_two_end: 5,
+                        makespan: 5,
+                    },
+                ]
+                .into_iter()
+                .map(action)
+                .collect(),
+            )
+            .expect("the schedule replays");
+        assert!(solved.matches(&goal()));
+        assert_eq!(
+            solved
+                .balance(&AccountId::Success, &Asset::Makespan(5))
+                .to_u64(),
+            1
+        );
+        assert!(
+            solved
+                .rate_ids()
+                .all(|rate| !solved.is_applicable(&action(*rate)))
+        );
     }
 
     #[test]
@@ -679,48 +595,26 @@ mod tests {
     #[test]
     fn small_horizons_match_a_direct_job_shop_oracle() {
         for horizon in 0..=5 {
-            let expected = brute_force_makespan(horizon);
+            // Horizon 2 is `impossible()`'s.
             let world = build(horizon, false);
-            let generic = solve_best_first(&world).map(|solution| solution.cost() as u8);
-            let branch = branch_optimize(&world).map(|proposal| proposal.makespan());
-
-            assert_eq!(generic, expected, "generic search at horizon {horizon}");
-            assert_eq!(branch, expected, "branch search at horizon {horizon}");
-        }
-    }
-
-    fn brute_force_makespan(horizon: u8) -> Option<u8> {
-        let starts = 0..=horizon;
-        let mut best = None;
-        for one_a in starts.clone() {
-            for one_b in starts.clone() {
-                for two_a in starts.clone() {
-                    for two_b in starts.clone() {
-                        let one_a_end = one_a.checked_add(2)?;
-                        let one_b_end = one_b.checked_add(1)?;
-                        let two_a_end = two_a.checked_add(2)?;
-                        let two_b_end = two_b.checked_add(1)?;
-                        if one_a_end > horizon
-                            || one_b_end > horizon
-                            || two_a_end > horizon
-                            || two_b_end > horizon
-                            || one_b < one_a_end
-                            || two_b < two_a_end
-                            || overlaps(one_a, one_a_end, two_a, two_a_end)
-                            || overlaps(one_b, one_b_end, two_b, two_b_end)
-                        {
-                            continue;
+            let mut least = None;
+            for one_a in 0..=horizon {
+                for one_b in 0..=horizon {
+                    for two_a in 0..=horizon {
+                        for two_b in 0..=horizon {
+                            let starts = [one_a, one_b, two_a, two_b];
+                            let expected = oracle(horizon, starts);
+                            assert_eq!(
+                                accepts(&world, starts),
+                                expected,
+                                "horizon {horizon}: {starts:?}"
+                            );
+                            least = least.into_iter().chain(expected).min();
                         }
-                        let makespan = one_b_end.max(two_b_end);
-                        best = Some(best.map_or(makespan, |known: u8| known.min(makespan)));
                     }
                 }
             }
+            assert_eq!(least, (horizon >= 5).then_some(5), "horizon {horizon}");
         }
-        best
-    }
-
-    const fn overlaps(left_start: u8, left_end: u8, right_start: u8, right_end: u8) -> bool {
-        left_start < right_end && right_start < left_end
     }
 }

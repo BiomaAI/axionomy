@@ -12,12 +12,6 @@ pub const OPERATIONS: [Operation; 6] = [
     Operation::TwoC,
 ];
 pub const MACHINES: [Machine; 3] = [Machine::One, Machine::Two, Machine::Three];
-pub fn enabled(world: &World) -> bool {
-    world.rate(&RateId::Close).is_some()
-}
-pub fn now(world: &World) -> u64 {
-    world.balance(&AccountId::Success, &Asset::Now).to_u64()
-}
 fn clock() -> Q<Ontology> {
     Q::balance(Role::Schedule, Asset::Now)
 }
@@ -453,126 +447,6 @@ pub(super) fn build(stress: bool) -> World {
         .expect("job shop execution is closed")
 }
 
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut times = vec![];
-    for job in [Job::One, Job::Two] {
-        times.push(
-            world
-                .balance(&AccountId::Job(job), &Asset::Arrival)
-                .to_u64(),
-        );
-        times.push(world.balance(&AccountId::Job(job), &Asset::Due).to_u64());
-    }
-    times.push(
-        world
-            .balance(&AccountId::Machine(Machine::Two), &Asset::Due)
-            .to_u64(),
-    );
-    if world
-        .balance(&AccountId::Success, &Asset::FaultPending)
-        .to_u64()
-        > 0
-    {
-        times.push(world.balance(&AccountId::Success, &Asset::FaultAt).to_u64());
-    }
-    let next = times.into_iter().filter(|time| *time > now(world)).min();
-    let value = |account, asset| world.balance(&account, &asset).to_u64();
-    if value(AccountId::Success, Asset::Active) == 0 {
-        return vec![];
-    }
-    let labor = value(AccountId::Success, Asset::Labor);
-    let mut ids = vec![RateId::Close];
-    let mut queued_start = None;
-    for operation in OPERATIONS {
-        let job = AccountId::Job(operation_spec(operation).0);
-        for (machine, _) in alternatives(operation) {
-            let machine_account = AccountId::Machine(machine);
-            if value(job, Asset::Ready(operation)) > 0
-                && labor > 0
-                && value(machine_account, Asset::Idle) > 0
-                && value(machine_account, Asset::Online) > 0
-            {
-                ids.push(RateId::Queue { operation, machine });
-            }
-            if value(job, Asset::Queued(operation, machine)) > 0 {
-                let configured = if value(machine_account, Asset::Configured(Job::One)) > 0 {
-                    Job::One
-                } else {
-                    Job::Two
-                };
-                let start = RateId::Start {
-                    operation,
-                    machine,
-                    configured,
-                };
-                if world.is_applicable(&action(start)) {
-                    queued_start = Some(start);
-                }
-            }
-            if value(job, Asset::Running(operation, machine)) > 0 {
-                ids.push(RateId::Complete { operation, machine });
-            }
-            if value(job, Asset::Paused(operation, machine)) > 0 {
-                ids.push(RateId::Resume { operation, machine });
-            }
-        }
-    }
-    if value(AccountId::Machine(Machine::Two), Asset::Broken) > 0 {
-        ids.push(RateId::Repair);
-    }
-    if value(AccountId::Machine(Machine::Two), Asset::Repairing) > 0 {
-        ids.push(RateId::CompleteRepair);
-    }
-    if value(AccountId::Success, Asset::FaultPending) > 0
-        && now(world) == value(AccountId::Success, Asset::FaultAt)
-    {
-        ids.push(RateId::Fault { operation: None });
-        ids.extend(
-            OPERATIONS
-                .into_iter()
-                .filter(|op| {
-                    value(
-                        AccountId::Job(operation_spec(*op).0),
-                        Asset::Running(*op, Machine::Two),
-                    ) > 0
-                })
-                .map(|op| RateId::Fault {
-                    operation: Some(op),
-                }),
-        );
-    }
-    if let Some(to) = next {
-        ids.push(RateId::Advance { to: to as u8 });
-    }
-    // Reserving a queue consumes no time or work. For centralized optimization,
-    // defer it until the operation can start, then start immediately. This
-    // removes equivalent reservation interleavings without excluding schedules.
-    if let Some(start) = queued_start {
-        ids.push(start);
-    }
-    ids.sort();
-    let applicable = world.applicable(ids.into_iter().map(action));
-    // Same-time completions commute with dispatch; process them before new work.
-    if let Some(event) = applicable.iter().find(|a| {
-        matches!(
-            a.rate(),
-            RateId::Complete { .. } | RateId::CompleteRepair | RateId::Close
-        )
-    }) {
-        return vec![event.clone()];
-    }
-    if let Some(fault) = applicable
-        .iter()
-        .find(|a| matches!(a.rate(), RateId::Fault { .. }))
-    {
-        return vec![fault.clone()];
-    }
-    if let Some(start) = queued_start {
-        return vec![action(start)];
-    }
-    applicable
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -702,17 +576,5 @@ mod tests {
                 .to_u64(),
             1
         );
-    }
-    #[test]
-    fn exact_execution_search_replays_and_single_crew_stress_changes_the_schedule() {
-        let mut elapsed = Vec::new();
-        for world in [initial_showcase(), initial_stress()] {
-            let solution = solve_best_first(&world).expect("job shop is recoverable");
-            let replay = world.replayed(solution.trace()).unwrap();
-            assert!(replay.matches(&goal()));
-            assert!(candidates(&replay).is_empty());
-            elapsed.push(now(&replay));
-        }
-        assert!(elapsed[1] > elapsed[0]);
     }
 }
