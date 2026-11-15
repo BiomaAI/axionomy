@@ -11,16 +11,9 @@ use axionomy::{
     VariablePath, path, path::Path, pattern::Piece,
 };
 
-mod fronts;
 mod label;
-mod present;
 
-pub use fronts::{evaluated_front, exact_front, exact_values, objective_axes, objective_value};
-pub use label::{Format, Label, Labeled, LabeledOntology, LeaderboardsFn, SceneFn};
-pub use present::{
-    Keyed, account_key, asset_key, asset_metric, link_account, link_balance, visual_entity,
-    visual_metric,
-};
+pub use label::Labeled;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -1759,9 +1752,10 @@ impl<O> WrittenOntology for O where
 }
 
 /// Shows an ontology's values keyed by their written paths under the
-/// ontology's name, and labeled by their `Debug` output: the asset
+/// ontology's name and labeled by the path within it: the asset
 /// `Edge(KeyRoom, Gate)` of the ontology `maze` is keyed
-/// `maze/asset/edge/key-room/gate` and labeled `Edge Key Room, Gate`. A key is
+/// `maze/asset/edge/key-room/gate` and labeled `asset/edge/key-room/gate`, as
+/// the engine labels a package's values its script does not name. A key is
 /// therefore the identifier as storage and the `paths` ontology write it. The
 /// engine keeps the exact typed values; only their presentation is derived.
 ///
@@ -1784,11 +1778,12 @@ impl<O: WrittenOntology> PathOntology<O> {
             Ok(Value::Number(number)) => number.to_string(),
             written => panic!("`{value:?}` is written as {written:?}, not as a path"),
         };
-        let key = format!("{}/{category}/{written}", OntologyPath::of::<O>());
+        let item = format!("{category}/{written}");
+        let key = format!("{}/{item}", OntologyPath::of::<O>());
         let key = key
             .parse()
             .unwrap_or_else(|error| panic!("`{value:?}` is keyed `{key}`, not a path: {error}"));
-        ViewId::new(key, words(value))
+        ViewId::new(key, item)
     }
 }
 
@@ -1831,35 +1826,6 @@ pub fn pattern_id<O: Ontology, T: axionomy::path::Segments>(
         .parse()
         .unwrap_or_else(|error| panic!("a pattern is keyed `{key}`, not a path: {error}"));
     ViewId::new(key, pattern.text())
-}
-
-/// A value's `Debug` output as words people read, for a label: brackets and
-/// underscores become spaces and a capital after a lowercase letter starts a
-/// word, so `Edge(KeyRoom, Gate)` reads `Edge Key Room, Gate`. A label only;
-/// a key is the value's path.
-pub fn words(value: &impl Debug) -> String {
-    let debug = format!("{value:?}");
-    let mut output = String::with_capacity(debug.len() + 4);
-    let mut previous_lowercase = false;
-    for character in debug.chars() {
-        if matches!(character, '(' | ')' | '{' | '}' | '[' | ']') {
-            output.push(' ');
-            previous_lowercase = false;
-        } else if character == ',' {
-            output.push_str(", ");
-            previous_lowercase = false;
-        } else if character == '_' {
-            output.push(' ');
-            previous_lowercase = false;
-        } else {
-            if character.is_ascii_uppercase() && previous_lowercase {
-                output.push(' ');
-            }
-            output.push(character);
-            previous_lowercase = character.is_ascii_lowercase() || character.is_ascii_digit();
-        }
-    }
-    output.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -2787,8 +2753,8 @@ mod tests {
             json!({"name": "cost", "value": "({to} − 1)"})
         );
         assert_eq!(
-            rate["accounts"][0]["account"]["key"],
-            "paths/account/walker"
+            rate["accounts"][0]["account"],
+            json!({"key": "paths/account/walker", "label": "account/walker"})
         );
         assert_eq!(rate["parameters"], json!(["reach"]));
         assert_eq!(rate["instances"], 2);
@@ -3013,7 +2979,7 @@ mod tests {
         let written = PathOntology::<Written>::default();
         let edge = written.asset(&Thing::Edge(Room::KeyRoom, Room::Gate));
         assert_eq!(edge.key.as_str(), "written/asset/edge/key-room/gate");
-        assert_eq!(edge.label, "Edge Key Room, Gate");
+        assert_eq!(edge.label, "asset/edge/key-room/gate");
         assert_eq!(
             written.role(&Thing::Crate(Some(7))).key.as_str(),
             "written/role/crate/some/7"

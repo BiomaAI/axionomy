@@ -651,7 +651,6 @@ name = "axionomy-view"
 version = "0.3.0"
 dependencies = [
  "axionomy",
- "axionomy-search",
  "schemars 1.2.3",
  "serde",
  "serde_json",

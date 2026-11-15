@@ -278,6 +278,16 @@ test("names open inspectors: an account pinned follows the cursor, and the rules
   await page.getByRole("button", { name: "Next exchange" }).click();
   await page.locator(".ticker-panel .exchange-rate").click();
   await expect(inspectors(page).getByRole("region", { name: /^Rate / })).toContainText("Player's cell");
+  // However far the page is scrolled, the inspectors never cover the transport.
+  for (const y of [0, 120, 260, 400, 10_000]) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await expect.poll(() => page.evaluate(() => {
+      const dock = document.querySelector(".inspector-dock")!.getBoundingClientRect();
+      const transport = document.querySelector(".playback")!.getBoundingClientRect();
+      return dock.bottom <= transport.top || dock.top >= transport.bottom || dock.right <= transport.left || dock.left >= transport.right;
+    }), `scrolled to ${y}`).toBe(true);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.keyboard.press("Escape");
   await expect(inspectors(page).getByRole("region")).toHaveCount(1);
   await pinned.getByRole("button", { name: "Close Cell 8" }).click();

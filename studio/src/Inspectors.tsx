@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconX } from "@tabler/icons-react";
 import type { ViewDocument, ViewId } from "./api";
@@ -165,13 +165,65 @@ function InspectorHeading({ subject, onClose }: { subject: Subject; onClose?: ()
   </div>;
 }
 
+/** Pixels between the dock and what it keeps clear of, and the window's edges. */
+const DOCK_GAP = 8;
+const DOCK_EDGE = 16;
+/** The sticky activity line the dock never rises over. */
+const DOCK_TOP = 34;
+
+/**
+ * Where the dock fits beside `element` without covering it: below it down
+ * to the window's edge, or above it under the activity line, whichever is
+ * taller. Nothing while `element` is off screen; the stylesheet places the
+ * dock then.
+ */
+function useClearOf(element: HTMLElement | null | undefined, active: boolean): CSSProperties | undefined {
+  const [place, setPlace] = useState<CSSProperties>();
+  useEffect(() => {
+    if (!active || !element) {
+      setPlace(undefined);
+      return;
+    }
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const { top, bottom } = element.getBoundingClientRect();
+      const height = window.innerHeight;
+      if (bottom <= 0 || top >= height) {
+        setPlace(undefined);
+        return;
+      }
+      const below = height - bottom - DOCK_GAP - DOCK_EDGE;
+      const above = top - DOCK_GAP - DOCK_TOP - DOCK_GAP;
+      setPlace(below >= above
+        ? { top: "auto", bottom: DOCK_EDGE, maxHeight: Math.max(0, below) }
+        : { top: "auto", bottom: height - top + DOCK_GAP, maxHeight: Math.max(0, above) });
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    measure();
+    const resized = new ResizeObserver(schedule);
+    resized.observe(element);
+    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      resized.disconnect();
+      window.removeEventListener("scroll", schedule, { capture: true });
+      window.removeEventListener("resize", schedule);
+    };
+  }, [element, active]);
+  return place;
+}
+
 /**
  * The inspectors pinned open, latest last, each drawn as its subject is at
  * the cursor, so each follows the step on screen. × closes one; Esc closes
- * the one it is pressed in, or the latest.
+ * the one it is pressed in, or the latest. The dock never covers `clear`
+ * (the transport).
  */
-export function InspectorDock({ pinned, inspect, onClose }: { pinned: Subject[]; inspect: (subject: Subject) => ReactNode; onClose: (subject: Subject) => void }) {
+export function InspectorDock({ pinned, inspect, onClose, clear }: { pinned: Subject[]; inspect: (subject: Subject) => ReactNode; onClose: (subject: Subject) => void; clear?: HTMLElement | null }) {
   const latest = pinned.at(-1);
+  const place = useClearOf(clear, pinned.length > 0);
   useEffect(() => {
     if (!latest) return;
     const onKey = (event: KeyboardEvent) => {
@@ -185,7 +237,7 @@ export function InspectorDock({ pinned, inspect, onClose }: { pinned: Subject[];
     return () => window.removeEventListener("keydown", onKey);
   }, [pinned, latest, onClose]);
   if (pinned.length === 0) return null;
-  return <aside className="inspector-dock" aria-label="Inspectors">
+  return <aside className="inspector-dock" aria-label="Inspectors" style={place}>
     {pinned.map((subject) => <section key={subjectKey(subject)} className="inspector" data-inspector={subjectKey(subject)} aria-label={`${KINDS[subject.kind]} ${headingLabel(subject)}`}>
       <InspectorHeading subject={subject} onClose={() => onClose(subject)} />
       <div className="inspector-body">{inspect(subject)}</div>
