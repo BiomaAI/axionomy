@@ -33,6 +33,10 @@ derived from the before/after `SpentEnergy` delta rather than copied from the
 rate identifier. A final rate consumes the maze's `Active` lifecycle asset and
 produces `Solved`, leaving no post-terminal moves applicable.
 
+Every rate fixes its roles' accounts, the Explorer acting and the district
+acted on, so the searches' moves are the economy's own: each rate's exchange
+that applies, in the rates' order. No script proposes them.
+
 ## Required results
 
 The package's experiments find these, pinned in `tests/outcomes`:

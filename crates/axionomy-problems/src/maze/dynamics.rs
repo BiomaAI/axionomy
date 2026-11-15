@@ -78,15 +78,14 @@ pub(super) fn build(source: World) -> World {
         }
         builder = builder.rate(*id, rate);
     }
-    let law = |at, time| {
-        Rate::new()
+    let in_room = |at, time| {
+        law()
             .preserve(
                 Role::Actor,
                 basket([(Asset::At(at), 1), (Asset::Active, 1)]),
             )
             .consume(Role::Actor, basket([(Asset::Time, time)]))
             .produce(Role::Actor, basket([(Asset::SpentTime, time)]))
-            .distinct(Role::Actor, Role::Environment)
     };
     for at in [Node::Library, Node::Workshop] {
         for to_vault in [false, true] {
@@ -97,7 +96,7 @@ pub(super) fn build(source: World) -> World {
             };
             builder = builder.rate(
                 RateId::DivertPower { at, to_vault },
-                law(at, 1)
+                in_room(at, 1)
                     .consume(Role::Environment, basket([(from, 1)]))
                     .produce(Role::Environment, basket([(to, 1)]))
                     .consume(Role::Actor, basket([(Asset::Energy, 1)]))
@@ -108,14 +107,14 @@ pub(super) fn build(source: World) -> World {
     for at in [Node::Start, Node::Workshop] {
         builder = builder.rate(
             RateId::TakeProtection { at },
-            law(at, 1)
+            in_room(at, 1)
                 .consume(Role::Environment, basket([(Asset::Shield, 2)]))
                 .produce(Role::Actor, basket([(Asset::Shield, 2)])),
         );
     }
     builder = builder.rate(
         RateId::Treat { at: Node::Garden },
-        law(Node::Garden, 2)
+        in_room(Node::Garden, 2)
             .condition(
                 path!("an-injury-needs-treatment"),
                 Q::balance(Role::Actor, Asset::Injury),

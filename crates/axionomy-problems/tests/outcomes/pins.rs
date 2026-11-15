@@ -183,9 +183,9 @@ pub const ARMS: &[super::PinnedArm] = &[
 ];
 
 pub const REFS: &[super::PinnedRef] = &[
-    ("maze/micro", 0, "3c9ee40710b641db88bc465d7cfd8f63b89cf4d815ebfdac47f654bc30ea78ba"),
-    ("maze/showcase", 0, "2d12506128765ec7af8fb1b275b9805a1f3d0fe669758828d50c88352788354c"),
-    ("maze/stress", 0, "f44e32b18a549f4a94ad3e2d218298d97b3f9f9efd204769c707bb0dcc05ed06"),
+    ("maze/micro", 0, "0b1b0a5132cefacc0103829ad7a8c4cbaeacc2b11414b9cf0571e445722cd185"),
+    ("maze/showcase", 0, "839d7c8338f803cb8de0b455846fb7d1a1dd80348da45f012d627dfcbfed1130"),
+    ("maze/stress", 0, "5da34b8a822f1aa1ce263d1054a1273af1470659692176843e1df51ee058ddfc"),
     ("sokoban/micro", 0, "5d7d20d2549a681ce3cd13f4516b7aaa6825fd195ed537364d77a29f8f2a1830"),
     ("sokoban/micro/deadlock", 3, "3c3c616ae7141f4a886433e8e7826be5aec700add33828224f4e849ab0231fe9"),
     ("sokoban/showcase", 0, "7df9b749b0d666ac655e42b1d1208ea51257c5c0228cb5dfb2c483a01966f41e"),

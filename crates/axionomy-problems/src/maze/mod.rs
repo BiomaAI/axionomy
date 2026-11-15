@@ -2,7 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity, Rate,
+    basket,
 };
 mod dynamics;
 #[cfg(feature = "packages")]
@@ -294,6 +295,14 @@ pub fn initial_stress() -> World {
     ))
 }
 
+/// A law of the maze: the Explorer acts on the world, each role fixed to its
+/// account.
+fn law() -> Rate<Ontology> {
+    Rate::new()
+        .account(Role::Actor, Pattern::literal(AccountId::Agent))
+        .account(Role::Environment, Pattern::literal(AccountId::World))
+}
+
 fn build(
     edges: &[(Node, Node, u64, bool)],
     energy: u64,
@@ -345,7 +354,7 @@ fn build(
         );
 
     for &(from, to, energy, needs_open_door) in edges {
-        let mut rate = Rate::new()
+        let mut rate = law()
             .preserve(Role::Actor, basket([(Asset::Active, 1)]))
             .consume(
                 Role::Actor,
@@ -363,8 +372,7 @@ fn build(
                     (Asset::SpentTime, 1),
                 ]),
             )
-            .preserve(Role::Environment, basket([(Asset::Edge(from, to), 1)]))
-            .distinct(Role::Actor, Role::Environment);
+            .preserve(Role::Environment, basket([(Asset::Edge(from, to), 1)]));
         if needs_open_door {
             rate = rate.preserve(Role::Environment, basket([(Asset::Open, 1)]));
         }
@@ -382,7 +390,7 @@ fn build(
     builder
         .rate(
             RateId::TakeKey { at: key_at },
-            Rate::new()
+            law()
                 .preserve(
                     Role::Actor,
                     basket([(Asset::At(key_at), 1), (Asset::Active, 1)]),
@@ -390,12 +398,11 @@ fn build(
                 .consume(Role::Actor, basket([(Asset::Time, 1)]))
                 .produce(Role::Actor, basket([(Asset::SpentTime, 1)]))
                 .consume(Role::Environment, basket([(Asset::Key, 1)]))
-                .produce(Role::Actor, basket([(Asset::Key, 1)]))
-                .distinct(Role::Actor, Role::Environment),
+                .produce(Role::Actor, basket([(Asset::Key, 1)])),
         )
         .rate(
             RateId::UnlockDoor { at: unlock_at },
-            Rate::new()
+            law()
                 .preserve(
                     Role::Actor,
                     basket([(Asset::At(unlock_at), 1), (Asset::Active, 1)]),
@@ -403,12 +410,11 @@ fn build(
                 .consume(Role::Actor, basket([(Asset::Key, 1), (Asset::Time, 1)]))
                 .produce(Role::Actor, basket([(Asset::SpentTime, 1)]))
                 .consume(Role::Environment, basket([(Asset::Locked, 1)]))
-                .produce(Role::Environment, basket([(Asset::Open, 1)]))
-                .distinct(Role::Actor, Role::Environment),
+                .produce(Role::Environment, basket([(Asset::Open, 1)])),
         )
         .rate(
             RateId::Finish,
-            Rate::new()
+            law()
                 .preserve(Role::Actor, basket([(Asset::At(Node::Exit), 1)]))
                 .preserve(Role::Environment, basket([(Asset::Target(Node::Exit), 1)]))
                 .consume(Role::Actor, basket([(Asset::Active, 1), (Asset::Time, 1)]))

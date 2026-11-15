@@ -45,9 +45,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         },
     )?;
     engine.keep_goal(&path!("maze/solved"), &written(&maze::goal()))?;
+    // Every rate fixes the Explorer and the world to its roles, so the moves
+    // are every rate's exchange that applies, in the rates' order.
     engine.keep_candidates(
         &path!("maze/moves"),
-        &CandidateSet::Script(call("candidates")),
+        &CandidateSet::Instances { under: None },
     )?;
     for (objective, function) in [("maze/energy", "spent_energy"), ("maze/time", "spent_time")] {
         engine.keep_objective(
