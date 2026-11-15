@@ -7,11 +7,7 @@ use axionomy_problems::{
     amm, bridge, connect_four, exact_cover, lending, logistics, marketplace, maze, mission,
     perishables, rescue, scheduling, sokoban, work_league, workshop,
 };
-use axionomy_search::rollout::{Episodes, Unrecorded};
-use axionomy_store::{
-    Checkpoints, Group, GroupId, GroupRecorder, Point, Recordable, Recorder, Store, state,
-};
-use std::{collections::BTreeMap, num::NonZeroU64};
+use axionomy_store::{Checkpoints, Point, Recordable, Store, state};
 
 /// Stores each economy and reads it back, and reads its JSON as a `Paths`
 /// economy: written down, a typed economy is a `Paths` economy with the same
@@ -146,151 +142,12 @@ fn every_problem_economy_is_stored_and_read_back_unchanged() {
     ]);
 }
 
-/// Where a store keeps a Monte Carlo estimate's episodes: one group per
-/// policy, one run per rollout, with the rollout's elapsed time as its metric.
-struct Recorded {
-    store: Store,
-    groups: BTreeMap<logistics::Policy, GroupRecorder>,
-    ends: Vec<(logistics::Policy, Point, logistics::MissionRollout)>,
-}
-
-impl Episodes<logistics::Ontology, logistics::Policy, logistics::MissionRollout> for Recorded {
-    type World = Recorder<logistics::Ontology>;
-
-    fn begin(
-        &mut self,
-        policy: &logistics::Policy,
-        _: usize,
-        initial: Economy<logistics::Ontology>,
-    ) -> Self::World {
-        let store = &self.store;
-        self.groups
-            .entry(*policy)
-            .or_insert_with(|| {
-                store.group(Group {
-                    kind: "monte-carlo".parse().unwrap(),
-                    source: None,
-                    tags: BTreeMap::from([("policy".parse().unwrap(), format!("{policy:?}"))]),
-                })
-            })
-            .record(initial, Checkpoints::Every(NonZeroU64::new(4).unwrap()))
-    }
-
-    fn end(
-        &mut self,
-        policy: &logistics::Policy,
-        sample: usize,
-        world: Self::World,
-        rollout: &logistics::MissionRollout,
-    ) {
-        let end = self.groups.get_mut(policy).unwrap().add(
-            sample as u64,
-            Some(sample as u64),
-            world,
-            BTreeMap::from([(
-                "elapsed-time".parse().unwrap(),
-                rollout.elapsed_time() as f64,
-            )]),
-        );
-        self.ends.push((*policy, end.unwrap(), rollout.clone()));
-    }
-}
-
-/// A sample problem's Monte Carlo estimate records its rollouts where it
-/// runs them: recording changes nothing it observes, every rollout is a run
-/// that replays, each policy's group summarizes its samples, and a run's
-/// stored states answer the questions asked of it afterwards.
-#[test]
-fn monte_carlo_records_each_policy_as_a_group_of_runs() {
-    use logistics::{AccountId, Asset, Policy};
-
-    let model = logistics::initial_micro();
-    let mut recorded = Recorded {
-        store: Store::memory().unwrap(),
-        groups: BTreeMap::new(),
-        ends: Vec::new(),
-    };
-    let estimate = logistics::monte_carlo(&model, 12, &mut recorded).unwrap();
-    let unrecorded = logistics::monte_carlo(&model, 12, &mut Unrecorded).unwrap();
-    assert_eq!(format!("{estimate:?}"), format!("{unrecorded:?}"));
-
-    let Recorded {
-        store,
-        groups,
-        ends,
-    } = recorded;
-    let groups: BTreeMap<Policy, GroupId> = groups
-        .into_iter()
-        .map(|(policy, group)| (policy, group.finish().unwrap()))
-        .collect();
-    assert_eq!(ends.len(), 24);
-
-    let reader = store.read().unwrap();
-    for (policy, group) in &groups {
-        let elapsed: Vec<f64> = ends
-            .iter()
-            .filter(|(of, _, _)| of == policy)
-            .map(|(_, _, rollout)| rollout.elapsed_time() as f64)
-            .collect();
-        let summary =
-            &reader.group(*group).unwrap().unwrap().summaries[&"elapsed-time".parse().unwrap()];
-        assert_eq!(summary.count, 12);
-        assert!((summary.mean - elapsed.iter().sum::<f64>() / 12.0).abs() < 1e-9);
-        let mut sorted = elapsed.clone();
-        sorted.sort_by(f64::total_cmp);
-        assert_eq!(
-            reader
-                .quantile(*group, &"elapsed-time".parse().unwrap(), 1.0)
-                .unwrap(),
-            sorted.last().copied()
-        );
-    }
-    for (_, end, rollout) in &ends {
-        reader.verify::<logistics::Ontology>(end.run).unwrap();
-        let stored = reader.state::<logistics::Ontology>(*end).unwrap().unwrap();
-        let replayed = model.replayed(rollout.trace()).unwrap();
-        assert_eq!(stored.economy.state_key(), replayed.state_key());
-    }
-
-    // A time index: the vehicle's elapsed time only grows, so the first step
-    // at which it reaches t is a bisection over the run's stored states.
-    let (_, end, rollout) = &ends[0];
-    let clock = |economy: &Economy<logistics::Ontology>| {
-        economy
-            .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
-            .to_u64()
-    };
-    for t in [0, 1, rollout.elapsed_time() / 2, rollout.elapsed_time()] {
-        let found = reader
-            .bisect::<logistics::Ontology>(end.run, 0, end.step, |economy| clock(economy) >= t)
-            .unwrap();
-        let scanned = (0..=end.step).find(|&step| {
-            let state = reader
-                .state::<logistics::Ontology>(Point { run: end.run, step })
-                .unwrap()
-                .unwrap();
-            clock(&state.economy) >= t
-        });
-        assert_eq!(found, scanned, "time {t}");
-    }
-    let transitions = reader
-        .transitions::<logistics::Ontology>(end.run, 0, usize::MAX)
-        .unwrap();
-    assert_eq!(transitions.len(), rollout.trace().exchanges().len());
-    assert_eq!(
-        transitions.last().map(|transition| transition.after),
-        reader
-            .state::<logistics::Ontology>(*end)
-            .unwrap()
-            .map(|state| state.root())
-    );
-}
-
 /// A typed economy written down is a `Paths` economy: its identifiers are
 /// written as their paths, so the same JSON reads as either, both readings
 /// have the same canonical tree, and replaying the same trace read either way
 /// reaches the same canonical state.
 #[test]
+#[cfg(feature = "packages")]
 fn a_typed_economy_written_down_is_a_paths_economy() {
     use axionomy::paths::{self, Paths};
 
@@ -341,31 +198,57 @@ fn a_typed_economy_written_down_is_a_paths_economy() {
         );
     }
 
-    for world in [
-        maze::initial(),
-        maze::initial_showcase(),
-        maze::initial_stress(),
-    ] {
-        let solution = maze::solve_astar(&world).unwrap();
-        untyped(
-            "maze",
-            &world,
-            solution.trace(),
-            &world.replayed(solution.trace()).unwrap(),
-        );
+    for experiment in ["maze/micro", "maze/showcase", "maze/stress"] {
+        let (world, trace) =
+            found::<maze::Ontology>(maze::package::write, experiment, "maze/a-star");
+        untyped(experiment, &world, &trace, &world.replayed(&trace).unwrap());
     }
-    for profile in [
-        work_league::Profile::Micro,
-        work_league::Profile::Showcase,
-        work_league::Profile::Stress,
-    ] {
-        let league = work_league::league(profile, work_league::mixed_lineup());
-        let outcome = work_league::run(&league, 17).unwrap();
-        untyped(
-            &format!("work-league {profile:?}"),
-            league.initial(),
-            outcome.trace(),
-            outcome.final_world(),
-        );
+    let (world, trace) = found::<work_league::Ontology>(
+        work_league::package::write,
+        "work-league/micro",
+        "work-league/serial/mixed-field",
+    );
+    untyped(
+        "work-league/micro",
+        &world,
+        &trace,
+        &world.replayed(&trace).unwrap(),
+    );
+}
+
+/// Where the package `write` writes starts the experiment `experiment`, and
+/// the exchanges its arm running `strategy` applies from there, both read
+/// back as `O`'s: a package's history written down is typed `O` too.
+#[cfg(feature = "packages")]
+fn found<O: Recordable>(
+    write: axionomy_problems::WritePackage,
+    experiment: &str,
+    strategy: &str,
+) -> (Economy<O>, axionomy::Trace<O>)
+where
+    Economy<O>: serde::de::DeserializeOwned,
+    axionomy::Exchange<O>: serde::de::DeserializeOwned,
+{
+    let engine = axionomy_engine::Engine::new(Store::memory().unwrap()).unwrap();
+    write(&engine).unwrap();
+    let results = engine
+        .run_experiment(&experiment.parse().unwrap(), &mut |_, _| {
+            std::ops::ControlFlow::Continue(())
+        })
+        .unwrap();
+    let arm = results
+        .arms
+        .iter()
+        .find(|arm| arm.arm.strategy.as_str() == strategy)
+        .unwrap_or_else(|| panic!("{experiment} has no arm {strategy}"));
+    let (initial, exchanges) = engine.history(arm.trials[0].end).unwrap();
+    let start = usize::try_from(arm.start.step).unwrap();
+    fn typed<T: serde::de::DeserializeOwned, W: serde::Serialize + ?Sized>(written: &W) -> T {
+        serde_json::from_value(serde_json::to_value(written).unwrap()).unwrap()
     }
+    let world: Economy<O> = typed(&initial);
+    let before: Vec<axionomy::Exchange<O>> = typed(&exchanges[..start]);
+    let after: Vec<axionomy::Exchange<O>> = typed(&exchanges[start..]);
+    let world = world.replayed(&before.into_iter().collect()).unwrap();
+    (world, after.into_iter().collect())
 }

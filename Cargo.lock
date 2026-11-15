@@ -526,14 +526,11 @@ dependencies = [
  "axionomy-search",
  "axionomy-store",
  "blake3",
- "criterion",
  "postcard",
  "proptest",
  "serde",
  "serde_json",
  "thiserror",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

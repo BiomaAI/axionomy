@@ -5,18 +5,11 @@
 //! snapshot they explain.
 #![cfg(feature = "packages")]
 
-use axionomy::{path, paths};
+use axionomy::path;
 use axionomy_engine::{Engine, rhai::Dynamic};
 use axionomy_problems::{WritePackage, maze, packages};
 use axionomy_store::{Checkpoints, Point, Store};
-use serde::{Serialize, de::DeserializeOwned};
 use std::ops::ControlFlow;
-
-/// `value` written in binary and read back as `T`: an economy or exchange
-/// written as paths read as the sample's, which D-044 makes the same bytes.
-fn written<T: DeserializeOwned>(value: &impl Serialize) -> T {
-    postcard::from_bytes(&postcard::to_allocvec(value).unwrap()).unwrap()
-}
 
 /// The point `at` drawn with the view of its run's ontology: the document
 /// carries that view's title, the model it was drawn from, a frame for
@@ -210,7 +203,6 @@ fn every_view_draws_every_larger_run() {
 fn a_run_without_a_view_is_drawn_by_its_paths() {
     let engine = Engine::new(Store::memory().unwrap()).unwrap();
     let initial = maze::initial();
-    let first: paths::Exchange = written(&maze::candidates(&initial)[0]);
     let start = engine
         .store()
         .record::<maze::Ontology>(initial, Checkpoints::Ends)
@@ -226,6 +218,7 @@ fn a_run_without_a_view_is_drawn_by_its_paths() {
     // A fork the engine applies keeps maze's ontology, so maze's view draws
     // it, its history and all.
     maze::package::write(&engine).unwrap();
+    let first = engine.candidates(start, &path!("maze/moves")).unwrap()[0].clone();
     let forked = engine.apply(start, &[first]).unwrap();
     assert_eq!(engine.ontology(forked).unwrap().as_str(), "maze");
     let document = engine.draw(forked).unwrap();
