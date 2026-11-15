@@ -209,7 +209,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_exchange_assess",
         title = "Assess an exchange",
-        description = "Explain whether an exchange would apply to an economy, without changing it: applicable with the quantities it would move, infeasible with what each account lacks, or invalid with why. Lists longer than the preview are paged through the linked assessment resource. Rates and the roles to bind are listed by the economy's `rates` resource.",
+        description = "Explain whether an exchange would apply to an economy, without changing it: applicable with the quantities it would move, infeasible with what each account lacks and then what it would move, or invalid with why. Lists longer than the preview are paged through the linked assessment resource. Rates and the roles to bind are listed by the economy's `rates` resource.",
         output_schema = schema_for_output::<AssessResponse>(),
         annotations(read_only_hint = true, open_world_hint = false)
     )]
@@ -538,7 +538,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_search",
         title = "Search for a trace",
-        description = "Start a cancellable breadth-first search, as an MCP task, for exchanges from up to 1,000 candidates that bring the named accounts to their goal balances. A solution is stored as the economy it reaches; its `exchanges` resource is the trace. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
+        description = "Start a cancellable breadth-first search, as an MCP task, for exchanges from up to 1,000 candidates, or without candidates from the moves the economy's own rates offer whole (its `moves` resource), that bring the named accounts to their goal balances. A solution is stored as the economy it reaches; its `exchanges` resource is the trace. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
         output_schema = schema_for_output::<SearchResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -1151,8 +1151,10 @@ impl AxionomyMcp {
                 ),
             ));
         }
-        if request.candidates.len() > MAX_EXCHANGES {
-            return Err(too_many_exchanges(request.candidates.len()).at("/candidates"));
+        if let Some(candidates) = &request.candidates
+            && candidates.len() > MAX_EXCHANGES
+        {
+            return Err(too_many_exchanges(candidates.len()).at("/candidates"));
         }
         let goal = goal_of(&request.goal)?;
         let source = self.economy(&request.economy_id).await?;
@@ -1705,7 +1707,9 @@ fn failed_exchange(
     let assessment = &stored.assessment;
     let error = match assessment.status() {
         AssessmentStatus::Infeasible => {
-            let missing: Vec<QuantityLine> = assessment_lines(assessment).collect();
+            let missing: Vec<QuantityLine> = assessment_lines(assessment)
+                .filter(|line| line.kind == LineKind::Missing)
+                .collect();
             ToolError::new(
                 FailureCode::Infeasible,
                 format!(
@@ -1792,14 +1796,16 @@ pub(crate) fn receipt_lines(
 }
 
 /// What explains an assessment: the projected changes of an applicable
-/// exchange, or what each account lacks for an infeasible one.
+/// exchange, or what each account lacks for an infeasible one and then what
+/// it would move.
 pub(crate) fn assessment_lines(
     assessment: &paths::Assessment,
 ) -> Box<dyn Iterator<Item = QuantityLine> + '_> {
     if let Some(deltas) = assessment.projected_deltas() {
         return Box::new(delta_lines(None, deltas));
     }
-    Box::new(assessment.shortfalls().iter().flat_map(|shortfall| {
+    // What an infeasible exchange lacks, then what it would move.
+    let missing = assessment.shortfalls().iter().flat_map(|shortfall| {
         shortfall
             .missing()
             .iter()
@@ -1810,7 +1816,25 @@ pub(crate) fn assessment_lines(
                 kind: LineKind::Missing,
                 quantity: *quantity,
             })
-    }))
+    });
+    let moved = assessment.accounts().iter().flat_map(|account| {
+        [
+            (LineKind::Consumed, account.consumed()),
+            (LineKind::Produced, account.produced()),
+            (LineKind::Preserved, account.preserved()),
+        ]
+        .into_iter()
+        .flat_map(move |(kind, basket)| {
+            basket.iter().map(move |(asset, quantity)| QuantityLine {
+                exchange_index: None,
+                account: account.account().clone(),
+                asset: asset.clone(),
+                kind,
+                quantity: *quantity,
+            })
+        })
+    });
+    Box::new(missing.chain(moved))
 }
 
 fn task_error(error: impl ToString) -> TaskExit {
@@ -1836,12 +1860,17 @@ async fn run_search(
     let engine = archive.engine().clone();
     let watching = context.clone();
     // The engine's breadth-first strategy over the goal and the candidates,
-    // kept as definitions named by their content.
+    // listed or the economy's own moves, kept as definitions named by their
+    // content.
     let ran = tokio::task::spawn_blocking(move || {
         let goal_path = content_name(&goal);
+        let candidates = candidates.map_or(
+            CandidateSet::Instances { under: None },
+            CandidateSet::Listed,
+        );
         let candidates_path = content_name(&candidates);
         engine.keep_goal(&goal_path, &goal)?;
-        engine.keep_candidates(&candidates_path, &CandidateSet::Listed(candidates))?;
+        engine.keep_candidates(&candidates_path, &candidates)?;
         let strategy = Strategy::BreadthFirst {
             candidates: candidates_path,
         };

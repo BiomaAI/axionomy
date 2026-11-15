@@ -181,13 +181,22 @@ impl CandidateSet {
     }
 }
 
-/// The exchange of every instance of the rates under `under` whose roles
-/// the rate fixes and that applies, in order.
-pub(crate) fn applying(economy: &paths::Economy, under: Option<&RatePath>) -> Vec<paths::Exchange> {
+/// The exchange of every instance of the rates written under `under`, or of
+/// every rate, whose roles the rate fixes, in order, whether it applies or
+/// not: what [`CandidateSet::Instances`] offers before any is checked.
+pub fn offered<'a>(
+    economy: &'a paths::Economy,
+    under: Option<&'a RatePath>,
+) -> impl Iterator<Item = &'a paths::Exchange> + 'a {
     economy
         .fixed_exchanges()
-        .filter(|(key, _)| under.is_none_or(|prefix| starts_with(key, prefix)))
+        .filter(move |(key, _)| under.is_none_or(|prefix| starts_with(key, prefix)))
         .flat_map(|(_, exchanges)| exchanges)
+}
+
+/// Those of [`offered`]'s exchanges that apply, in order.
+pub(crate) fn applying(economy: &paths::Economy, under: Option<&RatePath>) -> Vec<paths::Exchange> {
+    offered(economy, under)
         .filter(|exchange| economy.is_applicable(exchange))
         .cloned()
         .collect()

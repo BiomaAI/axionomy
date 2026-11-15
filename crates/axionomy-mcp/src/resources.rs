@@ -72,6 +72,10 @@ pub(crate) enum Target {
     Exchanges {
         economy_id: EconomyId,
     },
+    Moves {
+        economy_id: EconomyId,
+        under: Option<RatePath>,
+    },
     Diff {
         economy_id: EconomyId,
         other_id: EconomyId,
@@ -149,9 +153,10 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://economy/{economy_id}/invariants/{+invariant}{?cursor}", "invariant-weights", "Invariant weights", "The integer weight of each asset in one conservation law."),
         ("axionomy://economy/{economy_id}/changes{?cursor}", "changes", "Changes", "The quantities moved by the exchanges that made this economy from its parent, each with its `exchange_index`, from zero."),
         ("axionomy://economy/{economy_id}/exchanges{?cursor}", "exchanges", "Exchanges", "The exchanges that made this economy from its parent, in order; replaying them on the parent reproduces it."),
+        ("axionomy://economy/{economy_id}/moves{?under,cursor}", "moves", "Moves", "The exchanges the economy's own rates offer whole that apply to it: one unit of each instance of a rate that fixes the account of every role, in the rates' order, optionally only rates whose identifier starts with the path `under`, such as `move`. An instance with a role left to choose is not listed; assess it with axionomy_exchange_assess. axionomy_search without candidates searches over these."),
         ("axionomy://economy/{economy_id}/diff/{other_id}{?cursor}", "diff", "Diff", "What differs from this economy to another, in path order: accounts opened and closed, balances with both quantities, rates added, removed or redefined, and whether the invariants differ. Economies with equal contents have no rows."),
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against an economy: its status (`applicable`, `infeasible` or `invalid`), its issues, and how many lines explain it."),
-        ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
+        ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What an applicable exchange would move, or for an infeasible one what each account lacks, then what it would move."),
     ]
     .into_iter()
     .map(|(template, name, title, description)| {
@@ -228,6 +233,13 @@ impl Target {
             Self::Exchanges { economy_id } => {
                 (vec!["economy", economy_id.as_str(), "exchanges"], vec![])
             }
+            Self::Moves { economy_id, under } => (
+                vec!["economy", economy_id.as_str(), "moves"],
+                under
+                    .iter()
+                    .map(|under| ("under", under.as_str()))
+                    .collect(),
+            ),
             Self::Diff {
                 economy_id,
                 other_id,
@@ -344,6 +356,12 @@ impl Address {
             },
             ["economy", id, "exchanges"] => Target::Exchanges {
                 economy_id: handle(uri, id)?,
+            },
+            ["economy", id, "moves"] => Target::Moves {
+                economy_id: handle(uri, id)?,
+                under: take("under")
+                    .map(|under| joined(uri, "a rate", &[&under]))
+                    .transpose()?,
             },
             ["economy", id, "diff", other] => Target::Diff {
                 economy_id: handle(uri, id)?,

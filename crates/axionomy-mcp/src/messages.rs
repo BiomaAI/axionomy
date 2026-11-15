@@ -253,8 +253,8 @@ pub struct AssessResponse {
     /// Why an invalid exchange cannot apply.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub issues: Vec<Issue>,
-    /// Shortfalls of an infeasible exchange, or the projected changes of an
-    /// applicable one.
+    /// What an applicable exchange moves at each account it binds; for an
+    /// infeasible one, what each account lacks, then what it would move.
     pub lines: usize,
     /// The first lines; the assessment's `lines` resource pages through all.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -268,7 +268,7 @@ pub enum AssessmentStatus {
     /// It would apply; the lines are what it would move.
     Applicable,
     /// It is well formed, but accounts lack assets; the lines are what each
-    /// lacks.
+    /// lacks, then what it would move.
     Infeasible,
     /// It cannot apply to this economy; the issues say why.
     Invalid,
@@ -463,8 +463,12 @@ pub struct SearchRequest {
     pub economy_id: EconomyId,
     /// Balances each named account must reach.
     pub goal: BTreeMap<AccountPath, Amounts>,
-    /// At most 1,000 concrete exchanges, reconsidered at every state.
-    pub candidates: Vec<paths::Exchange>,
+    /// At most 1,000 concrete exchanges, reconsidered at every state; when
+    /// absent, the moves the economy's own rates offer whole (its `moves`
+    /// resource): one unit of each instance of a rate that fixes the account
+    /// of every role.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidates: Option<Vec<paths::Exchange>>,
     /// The most states the search may expand before it stops without a
     /// solution.
     pub max_expansions: NonZeroUsize,

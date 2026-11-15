@@ -64,7 +64,8 @@ impl AxionomyMcp {
             | Target::Invariants { economy_id }
             | Target::InvariantWeights { economy_id, .. }
             | Target::Changes { economy_id }
-            | Target::Exchanges { economy_id } => {
+            | Target::Exchanges { economy_id }
+            | Target::Moves { economy_id, .. } => {
                 let loaded = self.loaded(address, economy_id).await?;
                 read_economy(address, economy_id, &loaded)
             }
@@ -428,6 +429,14 @@ fn read_economy(
                 .iter()
                 .map(|receipt| receipt.exchange())
                 .enumerate(),
+            PAGE_ROWS,
+        )
+        .and_then(|page| json(&page)),
+        Target::Moves { under, .. } => page(
+            address,
+            axionomy_engine::offered(economy, under.as_ref())
+                .enumerate()
+                .filter(|(_, exchange)| economy.is_applicable(exchange)),
             PAGE_ROWS,
         )
         .and_then(|page| json(&page)),

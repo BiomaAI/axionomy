@@ -85,7 +85,9 @@ to apply:
 
 A role the rate opens binds the path of the account the exchange creates,
 which must not exist yet. `axionomy_search` runs only as an MCP task;
-every other tool works without the tasks extension.
+every other tool works without the tasks extension. Given no `candidates`,
+it searches over the economy's own moves, as its `moves` resource lists
+them.
 An application that moves through economies, such as a game, keeps a ref on
 the economy it is at; see [Refs](#refs).
 
@@ -181,8 +183,9 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/invariants/{+invariant}{?cursor}` | Asset weights |
 | `…/changes{?cursor}` | Quantities moved by the exchanges that made the economy, by `exchange_index` |
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
+| `…/moves{?under,cursor}` | The moves the economy's own rates offer whole that apply to it: one unit of each instance of a rate that fixes every role's account, in rate order, optionally only rates under a prefix such as `move` |
 | `…/diff/{other_id}{?cursor}` | What differs from this economy to another: accounts opened and closed, balances with both quantities, rates and invariants |
-| `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
+| `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it: what an applicable exchange moves, or what an infeasible one lacks and then what it would move |
 
 A list page is `{"items": [...], "nextCursor": "..."}` and follows the MCP
 pagination rules: the server chooses the page size, the cursor is opaque, the

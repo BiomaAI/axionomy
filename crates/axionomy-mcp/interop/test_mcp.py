@@ -140,7 +140,7 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
             # Deleting a ref is the one call that takes something away.
             assert bool(tool.annotations.destructive_hint) == (tool.name == "axionomy_ref_delete"), tool.name
         templates = (await client.list_resource_templates()).resource_templates
-        assert len(templates) == 14
+        assert len(templates) == 15
         assert BALANCES in {template.uri_template for template in templates}
         assert (await client.list_resources()).resources == []
 
@@ -412,6 +412,79 @@ async def test_a_rate_with_variables_is_authored_and_an_instance_applied(url: st
         )
         assert refused.is_error
         assert refused.structured_content["error"] == "invalid_request"
+
+
+# A courier delivers parcels where each one goes: a relation's row gives a
+# parcel's destination, a word, and its weight, a number, which it burns in
+# fuel; where every drive starts and the fuel a drive burns are the
+# economy's constants.
+PARCELS = {
+    "accounts": {"courier": {"at/depot": "1", "fuel": "9", "parcel/1": "1", "parcel/2": "1"}},
+    "constants": {"home": "depot", "leg": "2"},
+    "rates": {
+        "drive/{to}": {
+            "variables": [{"name": "to", "values": ["lisbon", "porto"]}],
+            "accounts": {"courier": "courier"},
+            "consume": {"courier": {"at/{home}": "1"}},
+            "produce": {"courier": {"at/{to}": "1"}},
+            "computed": [
+                {"direction": "consume", "role": "courier", "asset": "fuel", "quantity": {"kind": "variable", "name": "leg"}}
+            ],
+        },
+        "deliver/{parcel}": {
+            "variables": [{"name": "parcel", "range": ["1", "2"]}],
+            "relations": [
+                {"variables": ["parcel"], "gives": ["destination", "weight"], "rows": [["1", "lisbon", "3"], ["2", "porto", "1"]]}
+            ],
+            "accounts": {"courier": "courier"},
+            "consume": {"courier": {"parcel/{parcel}": "1"}},
+            "preserve": {"courier": {"at/{destination}": "1"}},
+            "produce": {"courier": {"delivered/{parcel}": "1"}},
+            "computed": [
+                {"direction": "consume", "role": "courier", "asset": "fuel", "quantity": {"kind": "variable", "name": "weight"}}
+            ],
+        },
+    },
+}
+
+
+async def test_rows_give_words_constants_are_law_and_an_economy_lists_its_moves(url: str) -> None:
+    def courier(rate: str) -> dict[str, Any]:
+        return {"rate": rate, "bindings": {"courier": "courier"}, "units": "1"}
+
+    async with Client(url, extensions=[Tasks()]) as client:
+        economy_id = await create(client, PARCELS)
+        economy = await page(client, f"axionomy://economy/{economy_id}")
+        assert economy["constants"] == {"home": "depot", "leg": "2"}
+
+        # The moves its own rates offer whole that apply: the courier is home,
+        # so it can only drive.
+        moves = await page(client, f"axionomy://economy/{economy_id}/moves")
+        assert [move["rate"] for move in moves["items"]] == ["drive/lisbon", "drive/porto"]
+        delivering = await page(client, f"axionomy://economy/{economy_id}/moves?under=deliver")
+        assert delivering["items"] == []
+
+        # A delivery from home lacks the parcel's destination, and would take
+        # the parcel and its weight in fuel.
+        assessed = await client.call_tool("axionomy_exchange_assess", {"economy_id": economy_id, "exchange": courier("deliver/1")})
+        assert assessed.structured_content["status"] == "infeasible"
+        lines = [(line["kind"], line["asset"], line["quantity"]) for line in assessed.structured_content["preview"]]
+        assert lines[0] == ("missing", "at/lisbon", "1")
+        assert ("consumed", "fuel", "3") in lines and ("consumed", "parcel/1", "1") in lines
+
+        # Without candidates, a search plays the economy's own moves.
+        search = {"economy_id": economy_id, "goal": {"courier": {"delivered/1": "1"}}, "max_expansions": 16}
+        result = await client.call_tool("axionomy_search", search)
+        assert result.structured_content["outcome"] == "solved"
+        trace = await page(client, f"axionomy://economy/{result.structured_content['solution']['economy_id']}/exchanges")
+        assert [item["rate"] for item in trace["items"]] == ["drive/lisbon", "deliver/1"]
+
+        # A quantity reads only numbers: a destination is a word.
+        wordy = {**PARCELS["rates"]["deliver/{parcel}"], "computed": [
+            {"direction": "consume", "role": "courier", "asset": "fuel", "quantity": {"kind": "variable", "name": "destination"}}
+        ]}
+        refused = await client.call_tool("axionomy_economy_create", {"entries": {"rates": {"deliver/{parcel}": wordy}}})
+        assert refused.is_error and refused.structured_content["error"] == "invalid_request"
 
 
 # Work done outside the economy (a robot, a model, a person) is modelled, not
