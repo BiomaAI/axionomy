@@ -16,8 +16,9 @@ traces' receipts made.
 The accounting holds over canonical economies, whose accounts hold each
 asset at most once and none at zero, as the kernel's baskets do; every
 exchange keeps an economy canonical. It is proved for the exchange as
-`Transaction.apply` defines it; `Lifecycle.apply`, which also opens accounts
-empty and closes accounts its effects leave empty, is not restated here.
+`Transaction.apply` defines it. `DivergenceLifecycle` extends the result to
+`Lifecycle.apply`, including opening empty accounts and closing accounts its
+effects leave empty, and to the public all-or-nothing replay.
 -/
 
 namespace Axionomy.DivergenceKernel

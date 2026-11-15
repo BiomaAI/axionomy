@@ -99,12 +99,23 @@ struct Case {
 struct Fixtures {
     transactions: Vec<Case>,
     executions: Vec<ExecutionCase>,
+    #[serde(rename = "lifecycleAccounting")]
+    lifecycle_accounting: Vec<AccountingCase>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ExecutionCase {
     base: Case,
     trace: Vec<ProposalCase>,
+    expected: Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountingCase {
+    left: ExecutionCase,
+    right: ExecutionCase,
+    shared: usize,
+    assets: Vec<Asset>,
     expected: Value,
 }
 
@@ -450,84 +461,191 @@ fn complete_replays_match_lean() {
     let fixtures: Fixtures = serde_json::from_str(crate::FIXTURES).unwrap();
     assert!(!fixtures.executions.is_empty());
     for (index, case) in fixtures.executions.iter().enumerate() {
-        assert_ne!(
-            case.expected.get("kind"),
-            Some(&json!("panic")),
-            "Lean replay panicked: {case:?}"
-        );
-        let (source, _) = build(&case.base);
-        let before = serde_json::to_value(&source).unwrap();
-        let mut trace = Trace::default();
-        let actions = case.trace.iter().map(build_proposal).collect::<Vec<_>>();
-        for action in &actions {
-            trace.push(action.clone());
+        check_replay(case, index);
+    }
+}
+
+fn check_replay(case: &ExecutionCase, index: usize) -> (World, Vec<Receipt<Test>>) {
+    assert_ne!(
+        case.expected.get("kind"),
+        Some(&json!("panic")),
+        "Lean replay panicked: {case:?}"
+    );
+    let (source, _) = build(&case.base);
+    let before = serde_json::to_value(&source).unwrap();
+    let mut trace = Trace::default();
+    let actions = case.trace.iter().map(build_proposal).collect::<Vec<_>>();
+    for action in &actions {
+        trace.push(action.clone());
+    }
+    assert_eq!(trace.exchanges(), actions.as_slice());
+    assert_eq!(trace.clone().into_exchanges(), actions);
+    let mut branch = source.clone();
+    let mut accepted = Vec::new();
+    assert_eq!(serde_json::to_value(&branch).unwrap(), before);
+    match branch.replay(&trace) {
+        Ok(receipts) => {
+            assert!(case.expected["error"].is_null(), "case {index}: {case:?}");
+            assert_eq!(
+                json!(receipts.iter().map(receipt).collect::<Vec<_>>()),
+                case.expected["receipts"],
+                "case {index}: {case:?}"
+            );
+            accepted = receipts;
         }
-        assert_eq!(trace.exchanges(), actions.as_slice());
-        assert_eq!(trace.clone().into_exchanges(), actions);
-        let mut branch = source.clone();
-        assert_eq!(serde_json::to_value(&branch).unwrap(), before);
-        match branch.replay(&trace) {
-            Ok(receipts) => {
-                assert!(case.expected["error"].is_null(), "case {index}: {case:?}");
-                assert_eq!(
-                    json!(receipts.iter().map(receipt).collect::<Vec<_>>()),
-                    case.expected["receipts"],
-                    "case {index}: {case:?}"
-                );
-            }
-            Err(error) => {
-                assert!(
-                    case.expected["receipts"].is_null(),
-                    "case {index}: {case:?}"
-                );
-                assert_eq!(
-                    failure(&error.error),
-                    case.expected["error"],
-                    "case {index}: {case:?}"
-                );
-                assert_eq!(
-                    json!(error.index),
-                    case.expected["index"],
-                    "case {index}: {case:?}"
-                );
-            }
+        Err(error) => {
+            assert!(
+                case.expected["receipts"].is_null(),
+                "case {index}: {case:?}"
+            );
+            assert_eq!(
+                failure(&error.error),
+                case.expected["error"],
+                "case {index}: {case:?}"
+            );
+            assert_eq!(
+                json!(error.index),
+                case.expected["index"],
+                "case {index}: {case:?}"
+            );
         }
-        // A failed replay changes nothing: `after` is then the source.
+    }
+    // A failed replay changes nothing: `after` is then the source.
+    assert_eq!(
+        snapshot(&branch),
+        case.expected["after"],
+        "case {index}: {case:?}"
+    );
+    let after = serde_json::to_value(&branch).unwrap();
+    assert_eq!(after["rates"], before["rates"]);
+    assert_eq!(after["invariants"], before["invariants"]);
+    assert_eq!(serde_json::to_value(&source).unwrap(), before);
+    match source.replayed(&trace) {
+        Ok(after) => {
+            assert!(case.expected["error"].is_null(), "case {index}: {case:?}");
+            assert_eq!(
+                snapshot(&after),
+                case.expected["after"],
+                "case {index}: {case:?}"
+            );
+        }
+        Err(error) => {
+            assert_eq!(
+                failure(&error.error),
+                case.expected["error"],
+                "case {index}: {case:?}"
+            );
+            assert_eq!(
+                json!(error.index),
+                case.expected["index"],
+                "case {index}: {case:?}"
+            );
+        }
+    }
+    assert_eq!(
+        serde_json::to_value(&source).unwrap(),
+        before,
+        "isolated replay mutated source: {case:?}"
+    );
+    (branch, accepted)
+}
+
+// These accounting fixtures use small quantities. Parsing is checked, so an
+// expanded fixture cannot silently truncate the kernel's 256-bit quantities.
+fn accounting_amount(quantity: Quantity) -> i128 {
+    quantity
+        .to_string()
+        .parse()
+        .expect("accounting fixture amount fits i128")
+}
+
+fn supply(world: &World, asset: Asset) -> i128 {
+    world
+        .accounts()
+        .map(|(_, account)| {
+            account
+                .balances()
+                .iter()
+                .filter(|(id, _)| **id == asset)
+                .map(|(_, amount)| accounting_amount(*amount))
+                .sum::<i128>()
+        })
+        .sum()
+}
+
+fn made(receipts: &[Receipt<Test>], asset: Asset) -> i128 {
+    receipts
+        .iter()
+        .flat_map(|receipt| receipt.deltas())
+        .map(|delta| {
+            let amount = |basket: &Basket<Asset>| {
+                basket
+                    .iter()
+                    .filter(|(id, _)| **id == asset)
+                    .map(|(_, quantity)| accounting_amount(*quantity))
+                    .sum::<i128>()
+            };
+            amount(delta.produced()) - amount(delta.consumed())
+        })
+        .sum()
+}
+
+#[test]
+fn lifecycle_supply_and_branch_differences_match_lean() {
+    let fixtures: Fixtures = serde_json::from_str(crate::FIXTURES).unwrap();
+    assert!(!fixtures.lifecycle_accounting.is_empty());
+    for (index, case) in fixtures.lifecycle_accounting.iter().enumerate() {
+        let (source, _) = build(&case.left.base);
+        let (left, left_receipts) = check_replay(&case.left, index);
+        let (right, right_receipts) = check_replay(&case.right, index);
+        let both_succeeded =
+            case.left.expected["error"].is_null() && case.right.expected["error"].is_null();
+        if both_succeeded {
+            assert_eq!(
+                json!(
+                    left_receipts[..case.shared]
+                        .iter()
+                        .map(receipt)
+                        .collect::<Vec<_>>()
+                ),
+                json!(
+                    right_receipts[..case.shared]
+                        .iter()
+                        .map(receipt)
+                        .collect::<Vec<_>>()
+                ),
+                "shared lifecycle receipts: {case:?}"
+            );
+        }
+        let actual = case
+            .assets
+            .iter()
+            .map(|&asset| {
+                let before = supply(&source, asset);
+                let left_total = supply(&left, asset);
+                let right_total = supply(&right, asset);
+                let left_made = made(&left_receipts, asset);
+                let right_made = made(&right_receipts, asset);
+                assert_eq!(left_total, before + left_made, "left supply: {case:?}");
+                assert_eq!(right_total, before + right_made, "right supply: {case:?}");
+                if both_succeeded {
+                    assert_eq!(
+                        left_total - right_total,
+                        made(&left_receipts[case.shared..], asset)
+                            - made(&right_receipts[case.shared..], asset),
+                        "shared steps contribute no difference: {case:?}"
+                    );
+                }
+                json!({"asset": asset, "before": before.to_string(),
+                "left": left_total.to_string(), "right": right_total.to_string(),
+                "leftMade": left_made.to_string(), "rightMade": right_made.to_string(),
+                "difference": (left_total - right_total).to_string()})
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
-            snapshot(&branch),
-            case.expected["after"],
-            "case {index}: {case:?}"
-        );
-        let after = serde_json::to_value(&branch).unwrap();
-        assert_eq!(after["rates"], before["rates"]);
-        assert_eq!(after["invariants"], before["invariants"]);
-        assert_eq!(serde_json::to_value(&source).unwrap(), before);
-        match source.replayed(&trace) {
-            Ok(after) => {
-                assert!(case.expected["error"].is_null(), "case {index}: {case:?}");
-                assert_eq!(
-                    snapshot(&after),
-                    case.expected["after"],
-                    "case {index}: {case:?}"
-                );
-            }
-            Err(error) => {
-                assert_eq!(
-                    failure(&error.error),
-                    case.expected["error"],
-                    "case {index}: {case:?}"
-                );
-                assert_eq!(
-                    json!(error.index),
-                    case.expected["index"],
-                    "case {index}: {case:?}"
-                );
-            }
-        }
-        assert_eq!(
-            serde_json::to_value(&source).unwrap(),
-            before,
-            "isolated replay mutated source: {case:?}"
+            json!(actual),
+            case.expected,
+            "lifecycle accounting: {case:?}"
         );
     }
 }

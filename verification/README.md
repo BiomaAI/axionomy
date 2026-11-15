@@ -32,11 +32,25 @@ implementation itself is tested, not proved.
 | Holdings | `Basket`, `BasketOperations`, `BasketCollection`, `Account`, `AccountMap`, `State` | Construction rejects duplicates before dropping zeros; deposits and withdrawals are exact and fail without mutation |
 | Rates and expressions | `Rates`, `Evaluation`, `RateConstruction`, `Discovery`, `ModelConstruction` | Expressions evaluate against one pre-exchange snapshot; the first error wins; metadata discovery is complete |
 | Exchanges | `Exchange`, `Effects`, `OrderedEffects`, `Transaction`, `TransactionAggregation`, `TransactionPreparation`, `TransactionSafety`, `TransactionReceipts`, `TransactionExecution`, `Validation`, `InvariantInput` | Validation precedes effects; every account is prepared before any commits; a failed exchange changes nothing; receipts describe the actual balance change |
-| Account lifecycle | `Lifecycle` | Opened accounts are new and closed accounts are left empty by the exchange's own effects; a rejected exchange changes nothing; every receipt conserves every invariant; the accounts afterwards are exactly those before plus the opened less the closed |
+| Account lifecycle | `Lifecycle`, `DivergenceLifecycle` | Opened accounts are new and empty; closing removes only empty committed accounts; actual per-asset supply changes exactly by receipt deltas; valid state is preserved; rejection changes nothing; accounts afterwards are exactly those before plus the opened less the closed |
 | Conservation | `Conservation` | Declared linear invariants are preserved exactly by accepted exchanges |
 | History | `Execution`, `Replay`, `Observations`, `Inspection` | Ordered execution and replay compose deterministically; a replay applies its whole trace or none of it and names the action that failed; read-only queries cannot mutate |
-| Divergence | `Divergence`, `DivergenceKernel` | Two traces replayed from one economy hold of each asset amounts that differ by exactly what their receipts made of it, produced less consumed; steps they share make none of the difference; the kernel's exchanges change an economy's supply of each asset by exactly what their receipts made, and keep it canonical |
+| Divergence | `Divergence`, `DivergenceKernel`, `DivergenceLifecycle` | Two successful public replays, including opening, closing and reopening accounts, differ in per-asset supply exactly by what their receipts made, produced less consumed; shared steps make none of the difference |
+
+Lifecycle accounting starts from `DivergenceLifecycle.Sound`: canonical
+baskets, distinct account identifiers, and distinct opening roles in each
+rate. These are representation invariants enforced by Rust's baskets, account
+index and rate sets. `built_sound` connects them to model construction;
+`apply_supply` preserves them and proves the supply equation for each step;
+`replay_supply` lifts both guarantees to successful public replay. Existing
+`Lifecycle.rejection_atomic` and `Execution.replay_rejection_atomic` cover
+failed steps and whole-trace rollback. No assumption asserts conservation or
+the supply equation being proved.
 
 `Conformance.lean`, `TransactionConformance.lean`,
-`BasketCollectionConformance.lean` and `InvariantInputConformance.lean` only
-generate fixtures.
+`LifecycleConformance.lean`, `BasketCollectionConformance.lean` and
+`InvariantInputConformance.lean` only generate fixtures. Lifecycle cases check
+multiple opens/closes, untouched holdings, reopening, shared history with
+different branches, positive and negative supply changes, and rollback after
+a successful lifecycle prefix. Rust compares both whole outcomes and actual
+per-asset totals and receipt changes against the Lean-generated results.

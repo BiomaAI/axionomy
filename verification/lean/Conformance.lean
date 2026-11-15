@@ -1,4 +1,5 @@
 import Lean
+import Axionomy.LifecycleConformance
 import Axionomy.Exchange
 import Axionomy.Rates
 import Axionomy.Basket
@@ -639,6 +640,7 @@ def main : IO Unit := do
     ("models", toJson models), ("metadata", toJson metadata), ("validation", toJson validation),
     ("transactions", toJson (TransactionConformance.fixtures expressionJson)),
     ("executions", toJson (TransactionConformance.executionFixtures expressionJson)),
+    ("lifecycleAccounting", toJson (LifecycleConformance.fixtures expressionJson)),
     ("basketCollections", toJson BasketCollectionConformance.fixtures),
     ("invariantInputs", toJson InvariantInputConformance.fixtures)]
   IO.println document.compress

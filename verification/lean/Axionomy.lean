@@ -14,6 +14,7 @@ import Axionomy.Inspection
 import Axionomy.InvariantInput
 import Axionomy.InvariantInputConformance
 import Axionomy.Lifecycle
+import Axionomy.LifecycleConformance
 import Axionomy.ModelConstruction
 import Axionomy.MulDiv
 import Axionomy.Observations
@@ -25,6 +26,7 @@ import Axionomy.Rates
 import Axionomy.Replay
 import Axionomy.Divergence
 import Axionomy.DivergenceKernel
+import Axionomy.DivergenceLifecycle
 import Axionomy.RoundingDiscipline
 import Axionomy.State
 import Axionomy.Transaction
