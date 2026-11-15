@@ -103,6 +103,18 @@ test("opens a package and plays it: Play finds the moves where nothing has happe
   await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible();
 });
 
+test("offers the moves of the first candidate set with any here, and those of the set picked", async ({ page }) => {
+  await openSample(page, "marketplace");
+  expect(await openRef(page, "marketplace/micro")).toBe(0);
+  // The package's first set fulfills the larger markets' contracts; Micro's
+  // orders settle through the second.
+  const candidates = fromHere(page).getByRole("combobox", { name: "Candidates" });
+  await expect(candidates).toHaveValue("marketplace/settlements");
+  await expect(fromHere(page).locator(".move-applicable").first()).toBeVisible();
+  await candidates.selectOption("marketplace/fulfillment");
+  await expect(fromHere(page).getByText("No moves", { exact: true })).toBeVisible();
+});
+
 test("applies a move at a ref of one's own, moving it, and anywhere else makes a branch", async ({ page }) => {
   await openSample(page, "maze");
   // The package's ref is fixed: at its point, applying makes a branch.

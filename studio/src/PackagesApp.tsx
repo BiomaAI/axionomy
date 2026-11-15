@@ -876,26 +876,32 @@ function FromHere({ engine, pkg, document, accounts, runs, runsKey, at, playing,
   </div>;
 }
 
-/** The moves the package's rules offer here, each checked, each one click from applied. */
+/** The moves the package's rules offer here, each checked, each one click from applied:
+ * those of the candidate set picked, or of the first that offers any here. */
 function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: PackageView; at: PointId; onApply: (exchange: Exchange, label: string) => Promise<void> }) {
-  const [set, setSet] = useState(pkg?.candidates[0]);
-  useEffect(() => setSet(pkg?.candidates[0]), [pkg?.name]);
-  const offered = useQuery({
-    queryKey: ["candidates", engine.kind, at, set],
-    queryFn: () => engine.candidates(at, set!),
-    enabled: Boolean(set),
-    staleTime: Infinity,
+  const sets = useMemo(() => pkg?.candidates ?? [], [pkg]);
+  const [picked, setPicked] = useState<string>();
+  useEffect(() => setPicked(undefined), [pkg?.name]);
+  const offers = useQueries({
+    queries: sets.map((set) => ({
+      queryKey: ["candidates", engine.kind, at, set],
+      queryFn: () => engine.candidates(at, set),
+      staleTime: Infinity,
+    })),
   });
+  const settled = offers.every((offer) => !offer.isPending);
+  const set = picked ?? (settled ? sets.find((_, index) => (offers[index].data?.candidates.length ?? 0) > 0) ?? sets[0] : undefined);
+  const offered = set === undefined ? undefined : offers[sets.indexOf(set)];
   const [open, setOpen] = useState<number>();
   const [applying, setApplying] = useState(false);
   useEffect(() => setOpen(undefined), [at]);
-  const candidates = offered.data?.candidates ?? [];
+  const candidates = offered?.data?.candidates ?? [];
   return <section className="from-section" aria-label="Moves">
     <h3><Term name="move">Moves</Term></h3>
-    {!pkg || pkg.candidates.length === 0 ? <p className="muted">No candidate sets</p> : <>
-    <label className="field"><span>Candidates</span><select name="candidates" value={set ?? ""} onChange={(event) => setSet(event.target.value)}>{pkg.candidates.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
-    {offered.isError ? <div className="assessment-issue">{described(offered.error)}</div>
-      : !offered.data ? <p className="muted">Loading…</p>
+    {sets.length === 0 ? <p className="muted">No candidate sets</p> : <>
+    <label className="field"><span>Candidates</span><select name="candidates" value={set ?? sets[0]} onChange={(event) => setPicked(event.target.value)}>{sets.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
+    {offered?.isError ? <div className="assessment-issue">{described(offered.error)}</div>
+      : !offered?.data ? <p className="muted">Loading…</p>
       : candidates.length === 0 ? <p className="muted">No moves</p>
       : <ul className="move-list">{candidates.map((candidate, index) => {
         const { exchange, assessment } = candidate.proposal;
