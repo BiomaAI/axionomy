@@ -47,15 +47,6 @@ def outsideDomain (id : Written) (law : Law Role) (arguments : Arguments) : Opti
       else some (.structural (.outsideDomain id declared.name))
     | none => some (.structural (.outsideDomain id declared.name))
 
-/-- The first relation, in the law's order, no row of which holds the
-values the identifier gives its variables. -/
-def outsideRelation (id : Written) (law : Law Role) (arguments : Arguments) : Option (Failure Role) :=
-  law.schema.relations.findSome? fun relation =>
-    match relation.names.mapM (lookup arguments) with
-    | some values => if values ∈ relation.rows then none
-      else some (.structural (.outsideRelation id relation.names))
-    | none => some (.structural (.outsideRelation id relation.names))
-
 /-- Every pair of variables the law requires to differ that have one value. -/
 def mustDiffer (id : Written) (law : Law Role) (arguments : Arguments) : List (Failure Role) :=
   law.schema.distinctVariables.filterMap fun (left, right) =>
@@ -72,13 +63,13 @@ def resolve (cmpRole : Role → Role → Ordering) (model : Model Role) (id : Wr
     match outsideDomain id law arguments with
     | some issue => .error [issue]
     | none =>
-      match outsideRelation id law arguments with
-      | some issue => .error [issue]
-      | none =>
+      match law.schema.relate arguments with
+      | .error names => .error [.structural (.outsideRelation id names)]
+      | .ok given =>
         match mustDiffer id law arguments with
         | issue :: issues => .error (issue :: issues)
         | [] =>
-          match law.schema.derive arguments with
+          match law.schema.derive (arguments ++ given) with
           | .error name => .error [.structural (.derivedFails id name)]
           | .ok values =>
             match law.schema.instantiate cmpRole values with
@@ -88,19 +79,20 @@ def resolve (cmpRole : Role → Role → Ordering) (model : Model Role) (id : Wr
 
 omit [DecidableEq Role] in
 /-- An identifier resolves only to an instance its rate allows: the rate it
-matches, with each value in its variable's domain and in a row of every
-relation, the values that must differ apart, and the derived values
-computed from them. -/
+matches, with each value in its variable's domain and keying a row of every
+relation, the values that must differ apart, and the numbers those rows give
+and the derived values computed after them. -/
 theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Role} {id : Written}
     {rule : Rule Role Written} {fixed : List (Role × Written)}
     (resolved : resolve cmpRole model id = .ok (rule, fixed)) :
-    ∃ law arguments values, find model.rates id = some (law, arguments) ∧
+    ∃ law arguments given values, find model.rates id = some (law, arguments) ∧
       (∀ declared ∈ law.schema.variables, ∃ value,
         lookup arguments declared.name = some value ∧ declared.domain.contains value = true) ∧
       (∀ relation ∈ law.schema.relations, ∃ row ∈ relation.rows,
-        relation.names.mapM (lookup arguments) = some row) ∧
+        relation.names.mapM (lookup arguments) = some (row.take relation.names.length)) ∧
       (∀ pair ∈ law.schema.distinctVariables, lookup arguments pair.1 ≠ lookup arguments pair.2) ∧
-      law.schema.derive arguments = .ok values ∧
+      law.schema.relate arguments = .ok given ∧
+      law.schema.derive (arguments ++ given) = .ok values ∧
       law.schema.instantiate cmpRole values = .ok rule ∧ fixed = law.schema.fixed values := by
   unfold resolve at resolved
   cases found : find model.rates id with
@@ -112,15 +104,15 @@ theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Ro
     | some _ => simp [domain] at resolved
     | none =>
     simp only [domain] at resolved
-    cases relation : outsideRelation id law arguments with
-    | some _ => simp [relation] at resolved
-    | none =>
-    simp only [relation] at resolved
+    cases related : law.schema.relate arguments with
+    | error _ => simp [related] at resolved
+    | ok given =>
+    simp only [related] at resolved
     cases differ : mustDiffer id law arguments with
     | cons _ _ => simp [differ] at resolved
     | nil =>
     simp only [differ] at resolved
-    cases derived : law.schema.derive arguments with
+    cases derived : law.schema.derive (arguments ++ given) with
     | error _ => simp [derived] at resolved
     | ok values =>
     simp only [derived] at resolved
@@ -130,7 +122,8 @@ theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Ro
     simp only [built, Except.ok.injEq, Prod.mk.injEq] at resolved
     obtain ⟨same, fixed_same⟩ := resolved
     subst same; subst fixed_same
-    refine ⟨law, arguments, values, rfl, ?_, ?_, ?_, derived, built, rfl⟩
+    refine ⟨law, arguments, given, values, rfl, ?_, relate_rows related, ?_, related, derived, built,
+      rfl⟩
     · intro declared member
       have kept := List.findSome?_eq_none_iff.mp domain declared member
       cases looked : lookup arguments declared.name with
@@ -141,15 +134,6 @@ theorem resolve_allowed {cmpRole : Role → Role → Ordering} {model : Model Ro
         by_cases contains : declared.domain.contains value = true
         · exact contains
         · simp [contains] at kept
-    · intro held member
-      have kept := List.findSome?_eq_none_iff.mp relation held member
-      cases mapped : held.names.mapM (lookup arguments) with
-      | none => simp [mapped] at kept
-      | some row =>
-        simp only [mapped] at kept
-        by_cases inside : row ∈ held.rows
-        · exact ⟨row, inside, rfl⟩
-        · simp [inside] at kept
     · intro pair member equal
       have kept := List.filterMap_eq_nil_iff.mp differ pair member
       simp [equal] at kept
@@ -341,10 +325,10 @@ inductive ModelIssue where
   | repeatedValue (rate : Pattern) (name : String)
   /-- An identifier matches both rates. -/
   | overlapping (rate other : Pattern)
-  /-- A row of a relation holds as many values as the relation has
-  variables. -/
+  /-- A row of a relation holds other than a value for each of its
+  variables, then a whole number a quantity can hold for each it gives. -/
   | malformedRelation (rate : Pattern) (names : List String)
-  /-- A relation's rows repeat one. -/
+  /-- Two rows of a relation are keyed by the same values. -/
   | repeatedRow (rate : Pattern) (names : List String)
   /-- A derived value reads what only an exchange has. -/
   | derivedReads (rate : Pattern) (name : String)
@@ -355,20 +339,24 @@ variables it names and declares, and their values. -/
 def Law.issues (law : Law Role) : List ModelIssue :=
   let read := Pattern.variables law.id
   let declared := law.schema.variables.map (·.name)
+  let given := law.schema.relations.flatMap (·.gives)
   let derived := law.schema.derived.map (·.name)
   let repeated := (read.zipIdx.filter fun (name, index) => name ∈ read.take index).map
     fun (name, _) => ModelIssue.repeatedVariable law.id name
-  -- A derived value is named once, and never as a variable is.
-  let rederived := (derived.zipIdx.filter fun (name, index) =>
-    name ∈ declared || name ∈ derived.take index).map
+  -- A number a relation gives and a derived value are each named once, and
+  -- never as a variable is.
+  let fresh := given ++ derived
+  let renamed := (fresh.zipIdx.filter fun (name, index) =>
+    name ∈ declared || name ∈ fresh.take index).map
     fun (name, _) => ModelIssue.repeatedVariable law.id name
-  -- The identifier, relations and distinct pairs name variables; assets,
-  -- accounts and quantities also derived values; a derived value only the
-  -- variables and the derived values before it.
+  -- The identifier, relations' keys and distinct pairs name variables;
+  -- assets, accounts and quantities also the numbers relations give and
+  -- derived values; a derived value only the variables, those numbers and
+  -- the derived values before it.
   let unknown := (read ++ law.schema.identifying).filter (· ∉ declared) ++
-    law.schema.named.filter (· ∉ declared ++ derived) ++
+    law.schema.named.filter (· ∉ declared ++ given ++ derived) ++
     (law.schema.derived.zipIdx.flatMap fun (value, index) =>
-      value.value.variables.filter (· ∉ declared ++ derived.take index))
+      value.value.variables.filter (· ∉ declared ++ given ++ derived.take index))
   let undeclared := unknown.eraseDups.map (ModelIssue.undeclaredVariable law.id)
   let unread := (declared.filter (· ∉ read)).map (ModelIssue.unreadVariable law.id)
   let natural := law.schema.naturals.eraseDups.filter fun name =>
@@ -377,10 +365,14 @@ def Law.issues (law : Law Role) : List ModelIssue :=
   let values := law.schema.variables.filter fun declared =>
     match declared.domain with | .values listed => !listed.Nodup | .range _ _ => false
   let malformed := law.schema.relations.filter fun relation =>
-    relation.rows.any (·.length != relation.names.length)
-  let rows := law.schema.relations.filter fun relation => !relation.rows.Nodup
+    relation.rows.any fun row =>
+      row.length != relation.names.length + relation.gives.length ||
+        (row.drop relation.names.length).any fun value =>
+          match value with | .number value => value > Quantity.limit | .word _ => true
+  let rows := law.schema.relations.filter fun relation =>
+    !(relation.rows.map (·.take relation.names.length)).Nodup
   let reads := law.schema.derived.filter (·.value.reads)
-  repeated ++ rederived ++ undeclared ++ unread ++ natural.map (ModelIssue.notNatural law.id) ++
+  repeated ++ renamed ++ undeclared ++ unread ++ natural.map (ModelIssue.notNatural law.id) ++
     values.map (fun declared => ModelIssue.repeatedValue law.id declared.name) ++
     malformed.map (fun relation => ModelIssue.malformedRelation law.id relation.names) ++
     rows.map (fun relation => ModelIssue.repeatedRow law.id relation.names) ++

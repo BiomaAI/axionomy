@@ -389,10 +389,13 @@ pub struct VariableView {
     pub domain: DomainView,
 }
 
-/// Rows of values some variables may take together.
+/// Rows of values some variables may take together, each followed by the
+/// whole numbers it gives the names `gives` lists.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RelationView {
     pub variables: Vec<VariablePath>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gives: Vec<VariablePath>,
     pub rows: Vec<Vec<Segment>>,
 }
 
@@ -2047,6 +2050,7 @@ where
                     .iter()
                     .map(|relation| RelationView {
                         variables: relation.variables().to_vec(),
+                        gives: relation.gives().to_vec(),
                         rows: relation.rows().to_vec(),
                     })
                     .collect(),
@@ -2492,7 +2496,7 @@ where
             (
                 AssessmentIssueKindView::OutsideRelation,
                 format!(
-                    "Rate `{}` gives {variables} values no row of its relation holds.",
+                    "Rate `{}` gives {variables} values no row of its relation is keyed by.",
                     rate.label
                 ),
                 vec![rate],

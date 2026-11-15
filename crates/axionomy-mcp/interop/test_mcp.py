@@ -404,7 +404,7 @@ async def test_a_rate_with_variables_is_authored_and_an_instance_applied(url: st
 
         no_road = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": drive("drive/east/west")})
         assert no_road.structured_content["error"] == "invalid"
-        assert "no row of its relation holds" in no_road.structured_content["message"]
+        assert "no row of its relation is keyed by" in no_road.structured_content["message"]
 
         refused = await client.call_tool(
             "axionomy_economy_create",

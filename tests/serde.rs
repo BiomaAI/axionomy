@@ -293,6 +293,7 @@ mod visits {
         let place = Param::<u8>::new(path!("place"));
         let (from, to) = (Param::<u8>::new(path!("from")), Param::new(path!("to")));
         let cost = Param::<u8>::new(path!("cost"));
+        let toll = Param::<u8>::new(path!("toll"));
         let at = Param::<Place>::new(path!("at"));
         EconomyBuilder::new()
             .account(
@@ -315,8 +316,16 @@ mod visits {
                 Rate::new()
                     .variable(from.range(1, 4))
                     .variable(to.range(1, 4))
-                    .relation(Relation::pairs(&from, &to, [(1, 2), (2, 3), (3, 4)]))
-                    .derive(cost.name().clone(), to.quantity() - from.quantity())
+                    .relation(Relation::pairs_giving(
+                        &from,
+                        &to,
+                        [toll.name().clone()],
+                        [(1, 2, [0u64]), (2, 3, [1]), (3, 4, [2])],
+                    ))
+                    .derive(
+                        cost.name().clone(),
+                        to.quantity() - from.quantity() + toll.quantity(),
+                    )
                     .consume_computed_at(
                         Role::Walker,
                         Pattern::literal(Asset::Token),

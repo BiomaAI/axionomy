@@ -92,7 +92,7 @@ describe("RateView", () => {
     rate: { key: "paths/rate/step/from/to", label: "step/{from}/{to}" },
     variables: [{ name: "from", domain: { kind: "range" as const, first: 1, last: 3 } }, { name: "kind", domain: { kind: "values" as const, values: ["walk", "run"] } }],
     distinct_variables: [["from", "kind"]],
-    relations: [{ variables: ["from", "kind"], rows: [["1", "walk"]] }],
+    relations: [{ variables: ["from", "kind"], gives: ["pace"], rows: [["1", "walk", "4"]] }],
     derived: [{ name: "cost", value: "({from} − 1)" }],
     accounts: [{ role: { key: "paths/role/walker", label: "Walker" }, account: { key: "paths/account/walker", label: "walker" } }],
     instances: 1,
@@ -102,13 +102,14 @@ describe("RateView", () => {
     parameters: ["reach"],
   };
 
-  test("shows variables, domains, relations, derived values, fixed accounts, baskets and conditions", () => {
+  test("shows variables, domains, relations and what their rows give, derived values, fixed accounts, baskets and conditions", () => {
     const { container } = render(<RateView rate={rate} />);
     expect(container).toHaveTextContent("{from}1..3");
     expect(container).toHaveTextContent("{kind}walk, run");
     expect(container).toHaveTextContent("1 instance");
     expect(container).toHaveTextContent("{from} ≠ {kind}");
-    expect(container.querySelector("table")).toHaveTextContent("{from}{kind}1walk");
+    expect(container.querySelector("table")).toHaveTextContent("{from}{kind}{pace}1walk4");
+    expect(container.querySelector("th.given")).toHaveTextContent("{pace}");
     expect(container).toHaveTextContent("{cost}({from} − 1)");
     expect(container.querySelector(".rate-role-name")).toHaveTextContent("Walker walker");
     expect(container.querySelector(".effect-gives")).toHaveTextContent("at/from");

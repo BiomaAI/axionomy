@@ -149,7 +149,8 @@ quantities name them the same way; an exchange names an instance,
 ```
 
 A variable takes a `range` of whole numbers or the `values` listed; a
-`relation` lists the rows some variables may take together;
+`relation` lists the rows some variables may take together, keyed by their
+values, each followed by the whole numbers named in its `gives`, if any;
 `distinct_variables` pairs must differ; `derived` values are whole numbers
 computed from the variables, usable as `{name}` after them; `accounts` fixes
 the account a role must be bound to. A rate whose variables are undeclared,

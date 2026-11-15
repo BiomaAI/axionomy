@@ -43,12 +43,42 @@ structure Check (Role : Type) where
   comparison : Evaluation.Comparison
   right : Term Role
 
-/-- The values some of a rate's variables may take together, one row each:
-law structure that never changes, such as which cells of a board adjoin. -/
+/-- The values some of a rate's variables may take together, one row each,
+and the whole numbers each row gives: law structure that never changes,
+such as which cells of a board adjoin and how far apart they are. A row
+holds its variables' values, then the numbers it gives, named as `gives`
+names them; its variables' values are its key. -/
 structure Relation where
   names : List String
+  gives : List String := []
   rows : List (List Segment)
   deriving DecidableEq, Repr
+
+/-- The row of `relation` whose key is the values `arguments` give its
+variables, if one is. -/
+def Relation.row (relation : Relation) (arguments : Arguments) : Option (List Segment) :=
+  match relation.names.mapM (lookup arguments) with
+  | some values => relation.rows.find? (·.take relation.names.length == values)
+  | none => none
+
+/-- The numbers a row gives, by name. -/
+def Relation.given (relation : Relation) (row : List Segment) : Arguments :=
+  relation.gives.zip (row.drop relation.names.length)
+
+/-- A row found for `arguments` is one of the relation's, keyed by the
+values they give its variables. -/
+theorem Relation.row_holds {relation : Relation} {arguments : Arguments} {row : List Segment}
+    (found : relation.row arguments = some row) :
+    row ∈ relation.rows ∧
+      relation.names.mapM (lookup arguments) = some (row.take relation.names.length) := by
+  unfold Relation.row at found
+  cases values : relation.names.mapM (lookup arguments) with
+  | none => simp [values] at found
+  | some keyed =>
+    simp only [values] at found
+    have matched := List.find?_some found
+    simp only [beq_iff_eq] at matched
+    exact ⟨List.mem_of_find?_eq_some found, by rw [matched]⟩
 
 /-- A whole number a rate computes from its variables' values, named as a
 variable is; its identifier never names it. -/
@@ -216,6 +246,46 @@ theorem derive_extends {schema : Schema Role} {arguments values : Arguments}
       simp only [evaluated] at done
       obtain ⟨added, same⟩ := ih _ result done
       exact ⟨(head.name, .number value) :: added, by simp [same]⟩
+
+/-- The numbers every relation's row for `arguments` gives, in the
+relations' order; or the variables of the first relation no row of which is
+keyed by the values `arguments` give them. -/
+def Schema.relate (schema : Schema Role) (arguments : Arguments) : Except (List String) Arguments :=
+  schema.relations.foldlM (init := []) fun given relation =>
+    match relation.row arguments with
+    | some row => .ok (given ++ relation.given row)
+    | none => .error relation.names
+
+/-- Relating values finds, for every relation, a row keyed by them. -/
+theorem relate_rows {schema : Schema Role} {arguments given : Arguments}
+    (related : schema.relate arguments = .ok given) :
+    ∀ relation ∈ schema.relations, ∃ row ∈ relation.rows,
+      relation.names.mapM (lookup arguments) = some (row.take relation.names.length) := by
+  unfold Schema.relate at related
+  suffices general : ∀ (known : Arguments) (rest : List Relation) (result : Arguments),
+      rest.foldlM (fun given relation =>
+        match relation.row arguments with
+        | some row => .ok (given ++ relation.given row)
+        | none => .error relation.names) known = (.ok result : Except (List String) Arguments) →
+      ∀ relation ∈ rest, ∃ row ∈ relation.rows,
+        relation.names.mapM (lookup arguments) = some (row.take relation.names.length) by
+    exact general [] schema.relations given related
+  intro known rest
+  induction rest generalizing known with
+  | nil =>
+    intro _ _ relation member
+    simp at member
+  | cons head tail ih =>
+    intro result done relation member
+    simp only [List.foldlM_cons, bind, Except.bind] at done
+    cases found : head.row arguments with
+    | none => simp [found] at done
+    | some row =>
+      simp only [found] at done
+      rcases List.mem_cons.mp member with same | later
+      · subst same
+        exact ⟨row, Relation.row_holds found⟩
+      · exact ih _ result done relation later
 
 /-- The accounts the rate fixes for `arguments`, role by role. -/
 def Schema.fixed (schema : Schema Role) (arguments : Arguments) : List (Role × Written) :=

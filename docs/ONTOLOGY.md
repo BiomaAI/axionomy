@@ -203,7 +203,11 @@ An exchange naming `move/hall/kitchen` applies this rate's instance: the
 rate written with `from = hall` and `to = kitchen`, exactly as a rate
 written by hand for that pair. Beside domains, a rate can:
 
-- allow some variables only the rows of a **relation** (`relation`);
+- allow some variables only the rows of a **relation** (`relation`), each
+  row keyed by their values and possibly giving whole numbers named after
+  them (`Relation::each_giving`, `Relation::pairs_giving`), such as the
+  length of the road between two places, named `{distance}` as a derived
+  value is; scripts read an instance's values with `state.values(rate)`;
 - require two variables to differ (`distinct_variables`);
 - **derive** a whole number from the variables (`derive`), such as
   `next = row + 1`, named `{next}` in assets and quantities but never in the
@@ -212,8 +216,8 @@ written by hand for that pair. Beside domains, a rate can:
   `patient/{patient}`.
 
 **Law structure is a relation; what changes is state.** Which cells adjoin,
-which seed follows which, which rooms a door joins: these never change and
-belong in a relation. A road that can close, a door that can be locked, a
+which seed follows which, which rooms a door joins, how long each road is:
+these never change and belong in a relation. A road that can close, a door that can be locked, a
 column's height: exchanges change these, so they are balances the rate
 preserves, consumes or reads in a condition.
 

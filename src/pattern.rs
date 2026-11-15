@@ -14,7 +14,7 @@ use crate::{
     path::{self, Segments, VariablePath},
 };
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
-use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::{
     borrow::Cow,
     cmp::Ordering,
@@ -275,14 +275,35 @@ impl JsonSchema for Variable {
     }
 }
 
-/// The values some of a rate's variables may take together, one row each:
-/// law structure that never changes, such as which cells of a board adjoin.
+/// The values some of a rate's variables may take together, one row each,
+/// and the whole numbers each row gives: law structure that never changes,
+/// such as which cells of a board adjoin and how far apart they are. A row
+/// holds its variables' values, its key, then the numbers it gives, named
+/// as `gives` names them; a rate names those as it names derived values.
 /// What exchanges can change belongs in the economy's accounts instead.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Relation {
     variables: Vec<VariablePath>,
+    #[serde(default)]
+    gives: Vec<VariablePath>,
     rows: Vec<Vec<Segment>>,
+}
+
+/// A relation giving nothing is written as it always was.
+impl Serialize for Relation {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let readable = serializer.is_human_readable();
+        let mut state = serializer.serialize_struct("Relation", 3)?;
+        state.serialize_field("variables", &self.variables)?;
+        if readable && self.gives.is_empty() {
+            state.skip_field("gives")?;
+        } else {
+            state.serialize_field("gives", &self.gives)?;
+        }
+        state.serialize_field("rows", &self.rows)?;
+        state.end()
+    }
 }
 
 impl Relation {
@@ -291,8 +312,19 @@ impl Relation {
         variables: impl IntoIterator<Item = VariablePath>,
         rows: impl IntoIterator<Item = impl IntoIterator<Item = Segment>>,
     ) -> Self {
+        Self::giving(variables, [], rows)
+    }
+
+    /// The rows `variables` may take together, each followed by the whole
+    /// numbers it gives the names `gives` lists.
+    pub fn giving(
+        variables: impl IntoIterator<Item = VariablePath>,
+        gives: impl IntoIterator<Item = VariablePath>,
+        rows: impl IntoIterator<Item = impl IntoIterator<Item = Segment>>,
+    ) -> Self {
         Self {
             variables: variables.into_iter().collect(),
+            gives: gives.into_iter().collect(),
             rows: rows
                 .into_iter()
                 .map(|row| row.into_iter().collect())
@@ -304,22 +336,37 @@ impl Relation {
         &self.variables
     }
 
+    /// The names of the numbers each row gives, in their columns' order.
+    pub fn gives(&self) -> &[VariablePath] {
+        &self.gives
+    }
+
     pub fn rows(&self) -> &[Vec<Segment>] {
         &self.rows
     }
 
-    /// Whether the values `arguments` give its variables are one of its rows.
-    pub fn holds(&self, arguments: &Arguments) -> bool {
-        let values: Option<Vec<&Segment>> = self
+    /// The row keyed by the values `arguments` give the relation's
+    /// variables, if one is.
+    pub fn row(&self, arguments: &Arguments) -> Option<&[Segment]> {
+        let values: Vec<&Segment> = self
             .variables
             .iter()
             .map(|name| arguments.get(name))
-            .collect();
-        values.is_some_and(|values| {
-            self.rows
-                .iter()
-                .any(|row| row.iter().eq(values.iter().copied()))
-        })
+            .collect::<Option<_>>()?;
+        self.rows
+            .iter()
+            .find(|row| {
+                row.len() >= values.len() && row[..values.len()].iter().eq(values.iter().copied())
+            })
+            .map(Vec::as_slice)
+    }
+
+    /// The numbers `row` gives, by name.
+    pub fn given<'a>(
+        &'a self,
+        row: &'a [Segment],
+    ) -> impl Iterator<Item = (&'a VariablePath, &'a Segment)> {
+        self.gives.iter().zip(row.iter().skip(self.variables.len()))
     }
 }
 
@@ -939,6 +986,43 @@ impl Relation {
             [left.name.clone(), right.name.clone()],
             rows.into_iter()
                 .map(|(left, right)| [left.segment(), right.segment()]),
+        )
+    }
+
+    /// The values `key` may take, each with the whole numbers it gives the
+    /// names `gives` lists: each road and how long it is.
+    pub fn each_giving<A: OneSegment, V: Into<Quantity>, const N: usize>(
+        key: &Param<A>,
+        gives: [VariablePath; N],
+        rows: impl IntoIterator<Item = (A, [V; N])>,
+    ) -> Self {
+        Self::giving(
+            [key.name.clone()],
+            gives,
+            rows.into_iter().map(|(key, numbers)| {
+                std::iter::once(key.segment())
+                    .chain(numbers.map(|number| Segment::from(number.into())))
+            }),
+        )
+    }
+
+    /// The pairs of values `left` and `right` may take together, each with
+    /// the whole numbers it gives the names `gives` lists: each pair of
+    /// places a road joins and how long it is.
+    pub fn pairs_giving<A: OneSegment, B: OneSegment, V: Into<Quantity>, const N: usize>(
+        left: &Param<A>,
+        right: &Param<B>,
+        gives: [VariablePath; N],
+        rows: impl IntoIterator<Item = (A, B, [V; N])>,
+    ) -> Self {
+        Self::giving(
+            [left.name.clone(), right.name.clone()],
+            gives,
+            rows.into_iter().map(|(left, right, numbers)| {
+                [left.segment(), right.segment()]
+                    .into_iter()
+                    .chain(numbers.map(|number| Segment::from(number.into())))
+            }),
         )
     }
 }

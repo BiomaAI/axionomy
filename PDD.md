@@ -1409,8 +1409,9 @@ The current foundation is intentionally bounded:
   `u64`, although kernel quantities are 256-bit.
 - A rate's variables have finite domains and stand for one segment each; a
   value is matched by equality, never unified across rates or computed by a
-  guard. Relations list their rows; derived values are whole numbers. Data
-  that exchanges change is state, never a relation (D-054).
+  guard. Relations list their rows, keyed by their variables' values, and
+  may give whole numbers per row; derived values are whole numbers. Data
+  that exchanges change is state, never a relation (D-054, D-058).
 - The kernel lists a rate's instances (`instances_of`) and the engine offers
   those whose roles the rate fixes (`CandidateSet::Instances`, D-055); an
   instance with a free role is proposed by a script, which binds it.
@@ -2413,6 +2414,22 @@ rules panel are gone; a rate table opens from the command bar. An exchange
 is written from a rate's variables and accounts, never as JSON, and checked
 before it applies. The browser sweep runs every strategy offered at every
 ref of every sample on the engine in the browser.
+
+### D-058: A relation's rows may give numbers
+
+Decided with the user after D-057. Some laws differ per case only in
+numbers: how far a road is, what a contract pays. A relation was the place
+for structure that never changes, but its rows could hold only variables'
+values, so those rates stayed one per case or kept their numbers as
+balances, state an exchange could change, against D-054's rule. A relation
+now names the whole numbers each row gives (`gives`): a row is its
+variables' values, its key, then those numbers, and resolution adds them to
+the instance's values before derived values are computed, named as derived
+values are. Two rows with one key, a given column that is not a whole
+number a quantity can hold, and a given name that repeats a variable, a
+derived value or another given name are refused when the economy is built.
+A relation giving nothing is written as before in JSON; the store's binary
+form always writes the field (format 6).
 
 ## 16. Success criteria
 

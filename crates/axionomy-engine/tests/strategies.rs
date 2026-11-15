@@ -1244,23 +1244,31 @@ fn searches_without_a_session_of_their_own_stop_as_they_expand() {
 }
 
 /// A walker on a line of four cells, a rate with variables for every step
-/// between cells that adjoin, which fixes the walker's account, and the
-/// point the economy starts at.
-fn line() -> (Engine, Point) {
+/// between cells that adjoin, each giving its effort (a step back is
+/// harder), which fixes the walker's account, and the point the economy
+/// starts at.
+fn line_economy() -> paths::Economy {
     use axionomy::{Pattern, Relation, Variable};
 
-    let engine = Engine::new(Store::memory().unwrap()).unwrap();
     let cells = || Variable::range(path("from"), 1, 4);
-    let steps = [[1, 2], [2, 3], [3, 4], [2, 1], [3, 2], [4, 3]];
-    let economy = paths::EconomyBuilder::new()
+    let steps = [
+        [1, 2, 1],
+        [2, 3, 1],
+        [3, 4, 1],
+        [2, 1, 2],
+        [3, 2, 2],
+        [4, 3, 2],
+    ];
+    paths::EconomyBuilder::new()
         .account(path("walker"), basket([(path("at/1"), 1)]).into())
         .rate_at(
             "step/{from}/{to}".parse().unwrap(),
             Rate::new()
                 .variable(cells())
                 .variable(Variable::range(path("to"), 1, 4))
-                .relation(Relation::new(
+                .relation(Relation::giving(
                     [path("from"), path("to")],
+                    [path("effort")],
                     steps.map(|row| row.map(u64::into)),
                 ))
                 .account(path("walker"), Pattern::literal(path("walker")))
@@ -1274,13 +1282,33 @@ fn line() -> (Engine, Point) {
                 ),
         )
         .build()
-        .unwrap();
+        .unwrap()
+}
+
+/// The line's engine, its scripts, goal and candidates, and the point its
+/// economy starts at.
+fn line() -> (Engine, Point) {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let economy = line_economy();
     engine
         .keep_script(
             &path("line"),
             r#"
             fn offered(state) { state.moves("step") }
-            fn onward(state, random) { state.exchange_of("step/" + where(state) + "/" + (where(state) + 1)) }
+            // Every step, applicable or not, and what each gives.
+            fn efforts(state) {
+                let efforts = [];
+                for rate in state.instances("step") { efforts.push(state.values(rate)["effort"]); }
+                efforts
+            }
+            fn onward(state, random) {
+                let rate = "step/" + where(state) + "/" + (where(state) + 1);
+                // The values an instance has: its variables' and what its relation gives.
+                let values = state.values(rate);
+                if values["from"] == where(state) && values["to"] == where(state) + 1 && values["effort"] == 1 {
+                    state.exchange_of(rate)
+                }
+            }
             fn where(state) {
                 let at = 0;
                 for asset in state.balances("walker").keys() { at = parse_int(asset.split("/")[1]); }
@@ -1339,4 +1367,10 @@ fn a_rate_with_variables_offers_its_instances_that_apply() {
     let ran = run(&engine, start, &onward, "end", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.end.step, start.step + 3);
+
+    // Every instance is listed, applicable or not, in the relation's order.
+    let state = axionomy_engine::ScriptState::new(line_economy());
+    let efforts: rhai::Array = engine.call(&path("line"), "efforts", (state,)).unwrap();
+    let efforts: Vec<Quantity> = efforts.into_iter().map(rhai::Dynamic::cast).collect();
+    assert_eq!(efforts, [1, 2, 1, 2, 1, 2].map(Quantity::new));
 }

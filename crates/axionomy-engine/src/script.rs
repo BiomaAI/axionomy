@@ -18,7 +18,7 @@
 use crate::{
     EngineError, ScriptFunction,
     cache::Cache,
-    definitions::{definition, exchange_of, instance_exchanges},
+    definitions::{definition, exchange_of, instance_exchanges, instances},
 };
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Basket, Instance, ObservationKey, PathKind, Pattern,
@@ -812,11 +812,50 @@ fn states(rhai: &mut rhai::Engine) {
             },
         )
         .register_fn(
+            "instances",
+            |state: &mut ScriptState, under: &str| -> Result<Array, Failure> {
+                let under: Option<RatePath> = if under.is_empty() {
+                    None
+                } else {
+                    Some(parsed(under)?)
+                };
+                Ok(instances(&state.economy, under.as_ref())
+                    .map(|rate| Dynamic::from(rate.to_string()))
+                    .collect())
+            },
+        )
+        .register_fn(
             "exchange_of",
             |state: &mut ScriptState, rate: &str| -> Result<paths::Exchange, Failure> {
                 let rate: RatePath = parsed(rate)?;
                 exchange_of(&state.economy, rate.clone())
                     .ok_or_else(|| Failure::from(format!("the economy has no rate `{rate}`")))
+            },
+        )
+        .register_fn(
+            "values",
+            |state: &mut ScriptState, rate: &str| -> Result<Map, Failure> {
+                let rate: RatePath = parsed(rate)?;
+                let values = state.economy.values(&rate).map_err(|errors| {
+                    Failure::from(format!(
+                        "`{rate}` names no instance: {}",
+                        errors
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    ))
+                })?;
+                Ok(values
+                    .iter()
+                    .map(|(name, value)| {
+                        let value = value.quantity().map_or_else(
+                            || Dynamic::from(value.as_str().to_owned()),
+                            Dynamic::from,
+                        );
+                        (name.as_str().into(), value)
+                    })
+                    .collect())
             },
         )
         .register_fn(

@@ -1,7 +1,7 @@
 use crate::Ontology;
 use crate::accounts::Accounts;
 use crate::path;
-use crate::pattern::{Arguments, Domain, Pattern, Variable};
+use crate::pattern::{Arguments, Domain, Pattern, Relation, Variable};
 use crate::rate::{Derived, InstanceFailure, Measure};
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, ConditionPath, Exchange,
@@ -469,21 +469,28 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 ));
             }
         }
-        // A derived value is named once, and never as a variable is.
+        // A number a relation gives and a derived value are each named
+        // once, and never as a variable is.
+        let given: Vec<&VariablePath> = rate.relations().iter().flat_map(Relation::gives).collect();
         let derived: Vec<&VariablePath> = rate.derived().iter().map(Derived::name).collect();
-        for (index, name) in derived.iter().enumerate() {
-            if declared.contains(name) || derived[..index].contains(name) {
+        let fresh: Vec<&VariablePath> = given.iter().chain(&derived).copied().collect();
+        for (index, name) in fresh.iter().enumerate() {
+            if declared.contains(name) || fresh[..index].contains(name) {
                 issues.push(issue(
                     |rate, variable| ModelIssue::RepeatedVariable { rate, variable },
                     name,
                 ));
             }
         }
-        // The identifier, relations and distinct pairs name variables;
-        // assets, accounts and quantities also derived values; a derived
-        // value only the variables and the derived values before it.
+        // The identifier, relations' keys and distinct pairs name variables;
+        // assets, accounts and quantities also the numbers relations give
+        // and derived values; a derived value only the variables, those
+        // numbers and the derived values before it.
         let known = |name: &&VariablePath, derived: &[&VariablePath]| {
             declared.contains(name) || derived.contains(name)
+        };
+        let known_after = |name: &&VariablePath, derived: &[&VariablePath]| {
+            known(name, derived) || given.contains(name)
         };
         let mut unknown: Vec<&VariablePath> = Vec::new();
         let mut note = |name| {
@@ -498,13 +505,13 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
             }
         }
         for name in rate.named_variables() {
-            if !known(&name, &derived) {
+            if !known_after(&name, &derived) {
                 note(name);
             }
         }
         for (index, value) in rate.derived().iter().enumerate() {
             for name in value.value().variables() {
-                if !known(&name, &derived[..index]) {
+                if !known_after(&name, &derived[..index]) {
                     note(name);
                 }
             }
@@ -551,24 +558,34 @@ fn rate_issues<O: Ontology>(rates: &IndexMap<Pattern<O::Rate>, Rate<O>>) -> Vec<
                 ));
             }
         }
+        // A row holds a value for each variable, then a whole number a
+        // quantity can hold for each name the relation gives.
         for relation in rate.relations() {
-            if relation
-                .rows()
-                .iter()
-                .any(|row| row.len() != relation.variables().len())
-            {
+            let width = relation.variables().len();
+            if relation.rows().iter().any(|row| {
+                row.len() != width + relation.gives().len()
+                    || row[width.min(row.len())..]
+                        .iter()
+                        .any(|value| value.quantity().is_none())
+            }) {
                 issues.push(ModelIssue::MalformedRelation {
                     rate: key.clone(),
                     variables: relation.variables().to_vec(),
                 });
             }
         }
+        // Rows are keyed by their variables' values.
         for relation in rate.relations() {
-            let rows = relation.rows();
-            if rows
+            let width = relation.variables().len();
+            let keys: Vec<&[crate::Segment]> = relation
+                .rows()
+                .iter()
+                .map(|row| &row[..width.min(row.len())])
+                .collect();
+            if keys
                 .iter()
                 .enumerate()
-                .any(|(index, row)| rows[..index].contains(row))
+                .any(|(index, key)| keys[..index].contains(key))
             {
                 issues.push(ModelIssue::RepeatedRow {
                     rate: key.clone(),
@@ -662,7 +679,7 @@ impl<'a> Values<'a> {
                 let rows = relation
                     .rows()
                     .iter()
-                    .filter(|row| row.len() == relation.variables().len())
+                    .filter(|row| row.len() == relation.variables().len() + relation.gives().len())
                     .map(|row| columns.iter().map(|&column| &row[column]).collect())
                     .collect();
                 checks[positions[length - 1]].push(Check::Related(positions, rows));
@@ -797,12 +814,13 @@ pub enum ModelIssue<O: Ontology> {
         other: Pattern<O::Rate>,
     },
     /// A row of a relation holds other than one value for each of its
-    /// variables.
+    /// variables, then a whole number a quantity can hold for each name it
+    /// gives.
     MalformedRelation {
         rate: Pattern<O::Rate>,
         variables: Vec<VariablePath>,
     },
-    /// A relation's rows repeat one.
+    /// Two rows of a relation are keyed by the same values.
     RepeatedRow {
         rate: Pattern<O::Rate>,
         variables: Vec<VariablePath>,
@@ -1031,7 +1049,7 @@ impl<O: Ontology> Economy<O> {
         let Some((rate, arguments)) = self.rates.find(id) else {
             return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
         };
-        if rate.variables().is_empty() && rate.derived().is_empty() {
+        if rate.variables().is_empty() && rate.relations().is_empty() && rate.derived().is_empty() {
             return Ok(Instance::Written(rate));
         }
         let rate = Arc::new(self.made_instance(id, rate, arguments)?);
@@ -1043,6 +1061,17 @@ impl<O: Ontology> Economy<O> {
         Ok(Instance::Made(rate))
     }
 
+    /// The values of the instance an identifier names: those it gives the
+    /// rate's variables, then the numbers the rate's relations' rows give
+    /// for them, then its derived values, in order. Refused as
+    /// [`Economy::instance`] refuses it, short of building the instance.
+    pub fn values(&self, id: &O::Rate) -> Result<Arguments, Vec<ApplyError<O>>> {
+        let Some((rate, arguments)) = self.rates.find(id) else {
+            return Err(vec![ApplyError::MissingRate { rate: id.clone() }]);
+        };
+        Self::instance_values(id, rate, arguments)
+    }
+
     /// The instance of `rate` an identifier names, for the values it gives.
     fn made_instance(
         &self,
@@ -1050,45 +1079,7 @@ impl<O: Ontology> Economy<O> {
         rate: &Rate<O>,
         arguments: Arguments,
     ) -> Result<Rate<O>, Vec<ApplyError<O>>> {
-        for variable in rate.variables() {
-            let inside = arguments
-                .get(variable.name())
-                .is_some_and(|value| variable.domain().contains(value));
-            if !inside {
-                return Err(vec![ApplyError::OutsideDomain {
-                    rate: id.clone(),
-                    variable: variable.name().clone(),
-                }]);
-            }
-        }
-        if let Some(relation) = rate
-            .relations()
-            .iter()
-            .find(|relation| !relation.holds(&arguments))
-        {
-            return Err(vec![ApplyError::OutsideRelation {
-                rate: id.clone(),
-                variables: relation.variables().to_vec(),
-            }]);
-        }
-        let alike: Vec<_> = rate
-            .distinct_variable_pairs()
-            .filter(|(left, right)| arguments.get(left) == arguments.get(right))
-            .map(|(left, right)| ApplyError::VariablesMustDiffer {
-                rate: id.clone(),
-                left: left.clone(),
-                right: right.clone(),
-            })
-            .collect();
-        if !alike.is_empty() {
-            return Err(alike);
-        }
-        let arguments = rate.derive_values(arguments).map_err(|variable| {
-            vec![ApplyError::DerivedFails {
-                rate: id.clone(),
-                variable,
-            }]
-        })?;
+        let arguments = Self::instance_values(id, rate, arguments)?;
         rate.instantiate(&arguments).map_err(|failure| {
             vec![match failure {
                 InstanceFailure::Overflow(asset) => ApplyError::RateOverflow {
@@ -1105,6 +1096,51 @@ impl<O: Ontology> Economy<O> {
                     rate: id.clone(),
                     message: format!("`{text}` names no identifier of its kind"),
                 },
+            }]
+        })
+    }
+
+    /// The values `arguments` give `rate`'s variables, checked against
+    /// their domains, the rate's relations and the pairs that must differ,
+    /// followed by the numbers the relations give and the derived values.
+    fn instance_values(
+        id: &O::Rate,
+        rate: &Rate<O>,
+        arguments: Arguments,
+    ) -> Result<Arguments, Vec<ApplyError<O>>> {
+        for variable in rate.variables() {
+            let inside = arguments
+                .get(variable.name())
+                .is_some_and(|value| variable.domain().contains(value));
+            if !inside {
+                return Err(vec![ApplyError::OutsideDomain {
+                    rate: id.clone(),
+                    variable: variable.name().clone(),
+                }]);
+            }
+        }
+        let related = rate.relate(arguments.clone()).map_err(|relation| {
+            vec![ApplyError::OutsideRelation {
+                rate: id.clone(),
+                variables: relation.variables().to_vec(),
+            }]
+        })?;
+        let alike: Vec<_> = rate
+            .distinct_variable_pairs()
+            .filter(|(left, right)| arguments.get(left) == arguments.get(right))
+            .map(|(left, right)| ApplyError::VariablesMustDiffer {
+                rate: id.clone(),
+                left: left.clone(),
+                right: right.clone(),
+            })
+            .collect();
+        if !alike.is_empty() {
+            return Err(alike);
+        }
+        rate.derive_values(related).map_err(|variable| {
+            vec![ApplyError::DerivedFails {
+                rate: id.clone(),
+                variable,
             }]
         })
     }
@@ -1872,7 +1908,7 @@ pub enum ApplyError<O: Ontology> {
         rate: O::Rate,
         variable: VariablePath,
     },
-    #[error("the rate's identifier gives its variables values no row of a relation holds")]
+    #[error("the rate's identifier gives its variables values no row of a relation is keyed by")]
     OutsideRelation {
         rate: O::Rate,
         variables: Vec<VariablePath>,

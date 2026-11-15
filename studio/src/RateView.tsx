@@ -31,7 +31,7 @@ export function RateView({ rate }: { rate: RateData }) {
     </Section>}
     {(rate.relations ?? []).map((relation, index) => <Section key={`relation:${index}`} title="Relation" aside={`${relation.rows.length} rows`}>
       <div className="table-scroll"><table className="compact-table">
-        <thead><tr>{relation.variables.map((name) => <th key={name}>{`{${name}}`}</th>)}</tr></thead>
+        <thead><tr>{relation.variables.map((name) => <th key={name}>{`{${name}}`}</th>)}{(relation.gives ?? []).map((name) => <th key={name} className="given" title="A number each row gives">{`{${name}}`}</th>)}</tr></thead>
         <tbody>{relation.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((value, column) => <td key={column}>{value}</td>)}</tr>)}</tbody>
       </table></div>
     </Section>)}

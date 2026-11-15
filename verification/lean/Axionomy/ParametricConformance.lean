@@ -88,9 +88,10 @@ them that a rate without variables never had are left out. -/
 def schemaJson (schema : Schema Role) : Json := Json.mkObj <|
   optional "variables" (schema.variables.map domainJson) ++
   optional "distinct_variables" (schema.distinctVariables.map toJson) ++
-  optional "relations" (schema.relations.map fun relation => Json.mkObj [
-    ("variables", toJson relation.names),
-    ("rows", toJson (relation.rows.map fun row => row.map segmentText))]) ++
+  optional "relations" (schema.relations.map fun relation => Json.mkObj ([
+    ("variables", toJson relation.names)] ++
+    (if relation.gives.isEmpty then [] else [("gives", toJson relation.gives)]) ++ [
+    ("rows", toJson (relation.rows.map fun row => row.map segmentText))])) ++
   optional "derived" (schema.derived.map fun derived => Json.mkObj [
     ("name", toJson derived.name), ("value", termJson derived.value)]) ++
   optional "accounts" (schema.accounts.map fun (role, account) => toJson (role, patternText account)) ++
@@ -187,8 +188,9 @@ def law (id : String) (schema : Schema Role) : Law Role := ⟨pattern id, normal
 
 def blank : Schema Role := ⟨[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []⟩
 
-def relation (names : List String) (rows : List (List String)) : Relation :=
-  ⟨names, rows.map fun row => row.map Path.segmentOf⟩
+def relation (names : List String) (rows : List (List String)) (gives : List String := []) :
+    Relation :=
+  ⟨names, gives, rows.map fun row => row.map Path.segmentOf⟩
 
 def range (name : String) (first last : Nat) : Variable := ⟨name, .range first last⟩
 def values (name : String) (listed : List String) : Variable := ⟨name, .values (listed.map Path.segmentOf)⟩
@@ -265,6 +267,23 @@ def step : Law Role := law "step/{from}/{to}" { blank with
   consume := [(0, entries [("at/{from}", 1)])]
   produce := [(0, entries [("at/{to}", 1)])] }
 
+-- Hauling between depots a road joins: which roads there are and how long
+-- each is are law structure, a relation whose rows give the distance; the
+-- fuel burnt is derived from it.
+def haul : Law Role := law "haul/{from}/{to}" { blank with
+  variables := [values "from" ["a", "b", "c"], values "to" ["a", "b", "c"]]
+  relations := [relation ["from", "to"] [["a", "b", "4"], ["b", "c", "7"]] ["distance"]]
+  derived := [⟨"fuel", .binary .mul (.var "distance") (.constant 2)⟩]
+  consume := [(0, entries [("at/{from}", 1)])]
+  produce := [(0, entries [("at/{to}", 1), ("leg/{distance}", 1)])]
+  computedConsume := [⟨0, pattern "fuel", .var "fuel"⟩] }
+
+-- A toll without variables: its one row gives the fee every crossing pays.
+def toll : Law Role := law "toll" { blank with
+  relations := [relation [] [["3"]] ["fee"]]
+  produce := [(0, entries [("paid/{fee}", 1)])]
+  computedConsume := [⟨0, pattern "kit", .var "fee"⟩] }
+
 -- Climbing from a row to the next: the next row is derived from the row,
 -- and so is the cost.
 def climb : Law Role := law "climb/{row}" { blank with
@@ -295,10 +314,11 @@ def world : List (Written × List (Written × Nat)) := [
   account "column/0" [("height", 1)],
   account "cell/0/1" [],
   account "cell/0/0" [("piece", 1)],
-  account "climber" [("row/0", 1), ("row/1", 1), ("kit", 6), ("at/a", 1)]]
+  account "climber" [("row/0", 1), ("row/1", 1), ("kit", 6), ("at/a", 1)],
+  account "hauler" [("at/a", 1), ("at/b", 1), ("fuel", 10)]]
 
 def fixtures : Array Json := Id.run do
-  let rates := [stabilize, drive, pile, brim, drop, admit, step, climb, descend, rest]
+  let rates := [stabilize, drive, pile, brim, drop, admit, step, haul, toll, climb, descend, rest]
   let mut cases := #[]
   for (label, proposal) in [
       ("instance", proposal "stabilize/1/east" [(0, "responder"), (1, "patient/1")]),
@@ -322,6 +342,11 @@ def fixtures : Array Json := Id.run do
       ("related", proposal "step/a/b" [(0, "climber")]),
       ("outside-a-relation", proposal "step/a/c" [(0, "responder")]),
       ("relation-before-differ", proposal "step/a/a" [(0, "responder")]),
+      ("given", proposal "haul/a/b" [(0, "hauler")]),
+      ("given-amount-infeasible", proposal "haul/b/c" [(0, "hauler")]),
+      ("given-outside-a-relation", proposal "haul/a/c" [(0, "hauler")]),
+      ("given-without-variables", proposal "toll" [(0, "climber")]),
+      ("given-without-variables-infeasible", proposal "toll" [(0, "responder")]),
       ("derived", proposal "climb/1" [(0, "climber")]),
       ("derived-amount-infeasible", proposal "climb/0" [(0, "climber")] 2),
       ("derived-fails", proposal "descend/0" [(0, "climber")]),
@@ -350,7 +375,7 @@ def model (label : String) (rates : List (Law Role)) : Json :=
     ("issues", toJson ((check ordered).map issueJson))]
 
 def models : Array Json := #[
-  model "clean" [stabilize, drive, pile, drop, admit, step, climb, descend, rest],
+  model "clean" [stabilize, drive, pile, drop, admit, step, haul, toll, climb, descend, rest],
   model "relation-names-an-undeclared-variable" [law "step/{from}" { blank with
     variables := [values "from" ["a"]], relations := [relation ["from", "to"] [["a", "b"]]] }],
   model "malformed-relation" [law "step/{from}/{to}" { blank with
@@ -359,6 +384,33 @@ def models : Array Json := #[
   model "repeated-row" [law "step/{from}/{to}" { blank with
     variables := [values "from" ["a"], values "to" ["b"]],
     relations := [relation ["from", "to"] [["a", "b"], ["a", "b"]]] }],
+  model "repeated-key" [law "haul/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from", "to"] [["a", "b", "4"], ["a", "b", "5"]] ["distance"]] }],
+  model "gives-a-word" [law "haul/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from", "to"] [["a", "b", "far"]] ["distance"]] }],
+  model "gives-too-much" [law "haul/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from", "to"] [["a", "b", toString (Quantity.limit + 1)]] ["distance"]] }],
+  model "gives-short" [law "haul/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from", "to"] [["a", "b"]] ["distance"]] }],
+  model "gives-a-variable" [law "haul/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from"] [["a", "4"]] ["to"]] }],
+  model "gives-twice" [law "haul/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from"] [["a", "4"]] ["distance"], relation ["to"] [["b", "5"]] ["distance"]],
+    derived := [⟨"distance", .constant 1⟩] }],
+  model "given-in-the-identifier" [law "haul/{from}/{distance}" { blank with
+    variables := [values "from" ["a"]],
+    relations := [relation ["from"] [["a", "4"]] ["distance"]] }],
+  model "given-read-by-a-derived-value" [law "haul/{from}" { blank with
+    variables := [values "from" ["a"]],
+    relations := [relation ["from"] [["a", "4"]] ["distance"]],
+    derived := [⟨"fuel", .binary .mul (.var "distance") (.constant 2)⟩],
+    computedConsume := [⟨0, pattern "fuel", .var "fuel"⟩] }],
   model "derived-reads-an-exchange" [law "climb/{row}" { blank with
     variables := [range "row" 0 1], derived := [⟨"next", .binary .add (.var "row") .units⟩] }],
   model "derived-repeats-a-variable" [law "climb/{row}" { blank with

@@ -1028,6 +1028,24 @@ impl<O: Ontology> Rate<O> {
             .collect()
     }
 
+    /// The values `arguments` give the variables with the numbers each
+    /// relation's row for them gives after them, in the relations' order; or
+    /// the first relation no row of which they key.
+    pub(crate) fn relate(&self, arguments: Arguments) -> Result<Arguments, &Relation> {
+        let mut given = Vec::new();
+        for relation in &self.relations {
+            let row = relation.row(&arguments).ok_or(relation)?;
+            given.extend(
+                relation
+                    .given(row)
+                    .map(|(name, value)| (name.clone(), value.clone())),
+            );
+        }
+        Ok(given
+            .into_iter()
+            .fold(arguments, |known, (name, value)| known.with(name, value)))
+    }
+
     /// The values `arguments` give the variables with each derived value
     /// after them, in order, each computed from the values before it; or
     /// the first derived value that is no quantity.

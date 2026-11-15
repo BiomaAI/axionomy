@@ -188,10 +188,7 @@ pub(crate) fn instance_exchanges(
     economy: &paths::Economy,
     under: Option<&RatePath>,
 ) -> Vec<paths::Exchange> {
-    economy
-        .rate_ids()
-        .filter(|key| under.is_none_or(|prefix| starts_with(key, prefix)))
-        .flat_map(|key| economy.instances_of(key))
+    instances(economy, under)
         .filter_map(|rate| {
             let exchange = exchange_of(economy, rate)?;
             let instance = economy.instance(exchange.rate()).ok()?;
@@ -201,6 +198,18 @@ pub(crate) fn instance_exchanges(
                 .then_some(exchange)
         })
         .collect()
+}
+
+/// Every instance of the rates written under `under`, or of every rate, in
+/// the rates' order and each rate's instances in theirs.
+pub(crate) fn instances<'a>(
+    economy: &'a paths::Economy,
+    under: Option<&'a RatePath>,
+) -> impl Iterator<Item = RatePath> + 'a {
+    economy
+        .rate_ids()
+        .filter(move |key| under.is_none_or(|prefix| starts_with(key, prefix)))
+        .flat_map(|key| economy.instances_of(key))
 }
 
 /// The exchange of the instance `rate` names, at one unit, each role the

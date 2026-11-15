@@ -121,7 +121,10 @@ see, through the host API (balances, accounts and rates by prefix, a rate's
 roles and what it fixes for a role to consume, produce or preserve,
 `exchange(...)`, `exchange_of(rate)` with the accounts the rate fixes bound,
 `moves(prefix)` for every instance under a prefix that fixes all its roles
-and applies, `applicable`, `assess`, `distances` over a list of edges),
+and applies, `instances(prefix)` for every instance under a prefix,
+`values(rate)` for the values an instance has, its variables',
+the numbers its relations give and its derived values, `applicable`,
+`assess`, `distances` over a list of edges),
 and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;
 randomness is only a `Random` the host seeds (below); scripts have no clock;

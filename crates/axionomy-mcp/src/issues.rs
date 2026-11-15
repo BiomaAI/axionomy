@@ -63,7 +63,7 @@ impl Issue {
             ),
             Error::OutsideRelation { rate, variables } => (
                 format!(
-                    "rate `{rate}` gives variables {} values no row of its relation holds; its relations are listed at {}",
+                    "rate `{rate}` gives variables {} values no row of its relation is keyed by; its relations are listed at {}",
                     variables
                         .iter()
                         .map(|variable| format!("`{variable}`"))
