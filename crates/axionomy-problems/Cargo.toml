@@ -23,6 +23,7 @@ serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+blake3.workspace = true
 serde_json.workspace = true
 axionomy-engine.workspace = true
 axionomy-store.workspace = true

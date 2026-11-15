@@ -50,8 +50,8 @@ jobs:
       # The samples' larger instances: their packages against the samples'
       # Rust code, and every run their views draw. Many minutes in a debug
       # build, a few in a release build.
-      - name: Every sample package reproduces its larger instances, and every view draws them
-        run: cargo test --release -p axionomy-problems --features packages --test packages --test views -- --ignored
+      - name: Every sample package reproduces its larger instances, finds what is pinned, and every view draws them
+        run: cargo test --release -p axionomy-problems --features packages --test packages --test outcomes --test views -- --ignored
       - run: cargo test --workspace --doc --all-features
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
       # uv comes from PyPI and uses the runner's Python, so nothing is fetched

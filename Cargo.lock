@@ -525,6 +525,7 @@ dependencies = [
  "axionomy-engine",
  "axionomy-search",
  "axionomy-store",
+ "blake3",
  "criterion",
  "postcard",
  "proptest",

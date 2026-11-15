@@ -122,8 +122,10 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     // Micro: the weighted model, and the scenario it plays, the
     // survivor south and the sensor's seed 1, a step on from it.
     let model = rescue::uniform_uncertain();
-    let scenario = rescue::instantiate(&model, Location::South, 1)
-        .expect("the scenario Micro plays is one Nature encodes");
+    let scenario = rescue::action(rescue::RateId::Instantiate {
+        truth: Location::South,
+        seed: 1,
+    });
     let start = recorded(engine, "rescue/micro", model)?;
     let played = engine.apply(start, &[written(&scenario)])?;
     engine.refer(&path!("rescue/micro/scenario"), played)?;

@@ -132,11 +132,14 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             ("medical", "kit_used", Minimize),
         ],
     )?;
-    // Micro plays the scenario its seed's systematic ticket draws from
-    // the prior, sample `seed` of the sixteen.
-    let model = mission::initial();
-    let scenario = mission::systematic_scenario(&model, (SEED % 16) as usize);
-    let start = recorded(engine, "mission/micro", model)?;
+    // Micro plays one scenario of the sixteen the prior encodes: the
+    // victim north, the sensor's seed 0, the route safe.
+    let scenario = mission::action(mission::RateId::Instantiate {
+        truth: mission::Location::North,
+        seed: 0,
+        hazard: mission::Hazard::Safe,
+    });
+    let start = recorded(engine, "mission/micro", mission::initial())?;
     let played = engine.apply(start, &[written(&scenario)])?;
     engine.refer(&path!("mission/micro/scenario"), played)?;
     experiment(
