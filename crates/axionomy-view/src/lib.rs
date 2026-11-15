@@ -7,8 +7,8 @@
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, ConditionPath, Economy, Exchange,
     ExchangeAssessment, Goal, InvariantPath, Ontology, OntologyPath, ParameterPath, PathKind,
-    Pattern, Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path,
-    path::Path, pattern::Piece,
+    Pattern, Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Segment, Trace,
+    VariablePath, path, path::Path, pattern::Piece,
 };
 
 mod fronts;
@@ -250,10 +250,24 @@ pub struct RoleBindingView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ExchangeView {
     pub rate: ViewId,
+    /// The rate `rate` is an instance of, as written, where it has
+    /// variables: `stabilize/{patient}` for `stabilize/1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub law: Option<ViewId>,
+    /// The values `rate` gives the law's variables, in its order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments: Vec<ArgumentView>,
     pub units: ExactQuantity,
     pub bindings: Vec<RoleBindingView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameters: Vec<ExchangeParameterView>,
+}
+
+/// The value an exchange's rate identifier gives one variable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ArgumentView {
+    pub variable: VariablePath,
+    pub value: Segment,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -371,10 +385,58 @@ pub struct RateConditionView {
     pub right: String,
 }
 
+/// The values a rate's variable may take.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DomainView {
+    Range { first: u64, last: u64 },
+    Values { values: Vec<Segment> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct VariableView {
+    pub name: VariablePath,
+    pub domain: DomainView,
+}
+
+/// Rows of values some variables may take together.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RelationView {
+    pub variables: Vec<VariablePath>,
+    pub rows: Vec<Vec<Segment>>,
+}
+
+/// A whole number a rate derives from its variables' values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DerivedView {
+    pub name: VariablePath,
+    pub value: String,
+}
+
+/// The account a rate binds a role to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct FixedAccountView {
+    pub role: ViewId,
+    pub account: ViewId,
+}
+
 /// One immutable transition rule in the closed model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RateView {
     pub rate: ViewId,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variables: Vec<VariableView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub distinct_variables: Vec<[VariablePath; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<RelationView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<DerivedView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accounts: Vec<FixedAccountView>,
+    /// How many identifiers the rate answers to, where it has variables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instances: Option<u64>,
     pub roles: Vec<RateRoleView>,
     pub distinct_roles: Vec<[ViewId; 2]>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1809,7 +1871,7 @@ where
                 message: error.to_string(),
             })?;
         let after = snapshot(index + 1, &economy, ontology);
-        let exchange = exchange_view(exchange, ontology);
+        let exchange = exchange_view(&economy, exchange, ontology);
         let receipt = receipt_view(&receipt, ontology);
         let cues = frame_cues(&exchange, &receipt);
         let frame = ExchangeFrame {
@@ -1942,8 +2004,53 @@ where
                     })
                     .collect::<Vec<_>>()
             };
+            let written = id.as_literal().is_none();
             RateView {
                 rate: ontology.rate_pattern(id),
+                variables: rate
+                    .variables()
+                    .iter()
+                    .map(|variable| VariableView {
+                        name: variable.name().clone(),
+                        domain: match variable.domain() {
+                            axionomy::Domain::Range { first, last } => DomainView::Range {
+                                first: *first,
+                                last: *last,
+                            },
+                            axionomy::Domain::Values(values) => DomainView::Values {
+                                values: values.clone(),
+                            },
+                        },
+                    })
+                    .collect(),
+                distinct_variables: rate
+                    .distinct_variable_pairs()
+                    .map(|(left, right)| [left.clone(), right.clone()])
+                    .collect(),
+                relations: rate
+                    .relations()
+                    .iter()
+                    .map(|relation| RelationView {
+                        variables: relation.variables().to_vec(),
+                        rows: relation.rows().to_vec(),
+                    })
+                    .collect(),
+                derived: rate
+                    .derived()
+                    .iter()
+                    .map(|derived| DerivedView {
+                        name: derived.name().clone(),
+                        value: expression_view(derived.value(), ontology),
+                    })
+                    .collect(),
+                accounts: rate
+                    .fixed_accounts()
+                    .map(|(role, account)| FixedAccountView {
+                        role: ontology.role(role),
+                        account: ontology.account_pattern(account),
+                    })
+                    .collect(),
+                instances: written.then(|| economy.instances_of(id).count() as u64),
                 roles,
                 distinct_roles,
                 computed_consumed: computed_amounts(rate.computed_consumed()),
@@ -2102,7 +2209,7 @@ where
         label: label.into(),
         description: description.into(),
         snapshot_index,
-        exchange: exchange_view(exchange, ontology),
+        exchange: exchange_view(economy, exchange, ontology),
         assessment: assessment_view(&economy.assess(exchange), ontology),
     }
 }
@@ -2194,12 +2301,28 @@ where
     entries
 }
 
-fn exchange_view<O: Ontology, V>(exchange: &Exchange<O>, ontology: &V) -> ExchangeView
+fn exchange_view<O: Ontology, V>(
+    economy: &Economy<O>,
+    exchange: &Exchange<O>,
+    ontology: &V,
+) -> ExchangeView
 where
     V: ViewOntology<O>,
 {
+    let named = economy
+        .named(exchange.rate())
+        .filter(|(key, _)| key.as_literal().is_none());
     ExchangeView {
         rate: ontology.rate(exchange.rate()),
+        law: named.as_ref().map(|(key, _)| ontology.rate_pattern(key)),
+        arguments: named
+            .iter()
+            .flat_map(|(_, arguments)| arguments.iter())
+            .map(|(variable, value)| ArgumentView {
+                variable: variable.clone(),
+                value: value.clone(),
+            })
+            .collect(),
         units: exchange.units().into(),
         bindings: exchange
             .bindings()
@@ -2548,6 +2671,80 @@ mod tests {
     use super::*;
     use axionomy::{Account, EconomyBuilder, Exchange, Quantity, Rate, basket};
     use serde_json::json;
+
+    /// A rate with variables is shown as written, with its variables, their
+    /// values, its relations, derived values, fixed accounts and how many
+    /// identifiers it answers to; an exchange naming an instance, with the
+    /// rate it is an instance of and the values it gives.
+    #[test]
+    fn a_rate_with_variables_is_shown_as_written_and_its_instances_by_their_values() {
+        use axionomy::{
+            Pattern, QuantityExpression, Relation, Variable,
+            paths::{self, Paths},
+        };
+        fn path<K>(text: &str) -> Path<K> {
+            text.parse().unwrap()
+        }
+        let economy = paths::EconomyBuilder::new()
+            .account(path("walker"), basket([(path("at/1"), 1)]).into())
+            .rate_at(
+                "step/{from}/{to}".parse().unwrap(),
+                Rate::new()
+                    .variable(Variable::range(path("from"), 1, 3))
+                    .variable(Variable::range(path("to"), 1, 3))
+                    .relation(Relation::new(
+                        [path("from"), path("to")],
+                        [[1, 2], [2, 3]].map(|row| row.map(u64::into)),
+                    ))
+                    .derive(
+                        path("cost"),
+                        QuantityExpression::variable(path("to")) - QuantityExpression::constant(1),
+                    )
+                    .account(path("walker"), Pattern::literal(path("walker")))
+                    .consume_at(
+                        path("walker"),
+                        [("at/{from}".parse().unwrap(), Quantity::new(1))],
+                    )
+                    .produce_at(
+                        path("walker"),
+                        [("at/{to}".parse().unwrap(), Quantity::new(1))],
+                    ),
+            )
+            .build()
+            .unwrap();
+        let ontology = PathOntology::<Paths>::default();
+        let model = derive_model(&economy, &paths::Goal::new(), &ontology);
+        let rate = serde_json::to_value(&model.rates[0]).unwrap();
+        assert_eq!(rate["rate"]["label"], "step/{from}/{to}");
+        assert_eq!(rate["rate"]["key"], "paths/rate/step/from/to");
+        assert_eq!(
+            rate["variables"][0],
+            json!({"name": "from", "domain": {"kind": "range", "first": 1, "last": 3}})
+        );
+        assert_eq!(
+            rate["relations"][0]["rows"],
+            json!([["1", "2"], ["2", "3"]])
+        );
+        assert_eq!(
+            rate["derived"][0],
+            json!({"name": "cost", "value": "({to} − 1)"})
+        );
+        assert_eq!(
+            rate["accounts"][0]["account"]["key"],
+            "paths/account/walker"
+        );
+        assert_eq!(rate["instances"], 2);
+
+        let exchange = paths::Exchange::new(path("step/1/2"), Quantity::new(1))
+            .bind(path("walker"), path("walker"));
+        let proposal = derive_proposal(path("step"), "step", "", 0, &economy, &exchange, &ontology);
+        let exchange = serde_json::to_value(&proposal.exchange).unwrap();
+        assert_eq!(exchange["law"]["label"], "step/{from}/{to}");
+        assert_eq!(
+            exchange["arguments"],
+            json!([{"variable": "from", "value": "1"}, {"variable": "to", "value": "2"}])
+        );
+    }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum AccountId {
