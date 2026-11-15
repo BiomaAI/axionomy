@@ -12,9 +12,9 @@ doors, remote latch panels, and an exit beyond the doors. The player must stage
 a crate to cross, latch the door, recover the crate, complete the goals, and
 reach the exit. Walking onto a plate does not activate it. All mechanism and
 exit state changes are balances in the same atomic move/push exchanges. Stress
-composes two circuits across three chambers. Search excludes statically proven
-dead squares using reverse-push reachability with every door optimistically open;
-those losing pushes remain legal for counterexample replays. Micro is unchanged.
+composes two circuits across three chambers. A floor cell no reverse push
+reaches, every door optimistically open, holds a `DeadSquare` fact; pushes onto
+one remain legal, as each instance's deadlock replay shows. Micro is unchanged.
 
 ## Specification
 
@@ -40,16 +40,22 @@ decision quality directly inspectable.
 
 ## Required results
 
-- Resumable BFS and A* both traverse only core-applicable exchanges.
+The package's experiments and refs find these, pinned in `tests/outcomes`:
+
+- Breadth-first search and A* both traverse only core-applicable exchanges
+  and solve every warehouse.
 - A* uses an admissible crate-to-goal lower bound and reports expanded,
   generated, frontier, and visited state counts without inventing a percentage.
+- Each instance's `deadlock` ref replays a legal plan that ends with a crate
+  on a structurally identified non-goal dead square.
+
+The model's tests apply the rules directly:
+
 - Every floor retains exactly one occupancy token and every crate identity is
   conserved across the full replay.
 - Rebinding a legal move rate to nonadjacent cells is rejected.
 - Completion binds all crates to distinct goals, consumes the active puzzle
   lifecycle, and is quiescent.
-- The losing alternative replays a legal push and ends with a crate on a
-  structurally identified non-goal dead square.
 
 ## API pressure
 
@@ -61,16 +67,10 @@ decision quality directly inspectable.
 
 ## In this folder
 
-- `mod.rs` is the model: every warehouse, its moves, pushes and mechanisms,
-  and the searches over them.
-- `package.rs` writes its package: its economies under refs, goals,
-  strategies, experiments and view, whose scripts are `scripts/sokoban.rhai`
-  and `scripts/sokoban-view.rhai`.
-
-[`examples/sokoban.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/sokoban.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example sokoban
-```
+- `mod.rs` is the model: every warehouse, its moves, pushes and mechanisms.
+- `package.rs` writes its package, the warehouse's only implementation of
+  its searches: its economies under refs, goals, strategies, experiments and
+  view, whose scripts are `scripts/sokoban.rhai` and
+  `scripts/sokoban-view.rhai`.
 
 Sokoban is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

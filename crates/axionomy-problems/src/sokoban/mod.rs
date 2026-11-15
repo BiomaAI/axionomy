@@ -3,9 +3,8 @@
 use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
+    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
-use axionomy_search::{SearchSolution, astar, bfs};
 
 #[cfg(feature = "packages")]
 pub mod package;
@@ -87,7 +86,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Solution = SearchSolution<Ontology>;
 
 const MICRO: &[&str] = &["#######", "#@ $. #", "#######"];
 const SHOWCASE: &[&str] = &[
@@ -133,161 +131,7 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
 
-pub fn candidates(world: &World) -> Vec<Action> {
-    let Some(player) = player_cell(world) else {
-        return Vec::new();
-    };
-    let (width, height) = dimensions(world);
-    let crates = crate_cells(world);
-    let mut proposals = Vec::with_capacity(5);
-    for adjacent in neighbors(player, width, height) {
-        if !world
-            .balance(&AccountId::Cell(adjacent), &Asset::Empty)
-            .is_zero()
-        {
-            proposals.push(exchange(
-                world,
-                RateId::Move {
-                    from: player,
-                    to: adjacent,
-                },
-            ));
-            continue;
-        }
-        let Some((crate_id, _)) = crates.iter().find(|(_, cell)| *cell == adjacent) else {
-            continue;
-        };
-        let player_x = i16::from(player % width);
-        let player_y = i16::from(player / width);
-        let adjacent_x = i16::from(adjacent % width);
-        let adjacent_y = i16::from(adjacent / width);
-        let to_x = adjacent_x + (adjacent_x - player_x);
-        let to_y = adjacent_y + (adjacent_y - player_y);
-        if to_x < 0 || to_y < 0 || to_x >= i16::from(width) || to_y >= i16::from(height) {
-            continue;
-        }
-        let to = cell(width, to_x as u8, to_y as u8);
-        if !world.balance(&AccountId::Cell(to), &Asset::Empty).is_zero() {
-            proposals.push(exchange(
-                world,
-                RateId::Push {
-                    behind: player,
-                    crate_at: adjacent,
-                    to,
-                    crate_id: *crate_id,
-                },
-            ));
-        }
-    }
-    if !crates.is_empty()
-        && crates.iter().all(|(_, cell)| {
-            !world
-                .balance(&AccountId::Cell(*cell), &Asset::GoalCell)
-                .is_zero()
-        })
-    {
-        proposals.push(exchange(world, RateId::Finish));
-    }
-    for circuit in 0..2 {
-        if !world
-            .balance(&AccountId::Cell(player), &Asset::Panel(circuit))
-            .is_zero()
-        {
-            proposals.push(exchange(
-                world,
-                RateId::Latch {
-                    circuit,
-                    at: player,
-                },
-            ));
-        }
-    }
-    world.applicable(proposals)
-}
-
-/// Search may omit provably losing pushes; the economy still permits them.
-pub fn search_candidates(world: &World) -> Vec<Action> {
-    candidates(world)
-        .into_iter()
-        .filter(|action| match action.rate() {
-            RateId::Push { to, .. } => !is_dead_square(world, *to),
-            _ => true,
-        })
-        .collect()
-}
-
-pub fn solve(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), search_candidates)
-}
-
-pub fn solve_astar(world: &World) -> Option<Solution> {
-    astar(
-        world,
-        &goal(),
-        search_candidates,
-        |_, _, _| 1,
-        crate_goal_distance,
-    )
-}
-
-/// Finds a legal replay from this exact source board that strands a crate on a
-/// non-goal corner. The returned trace is decision-quality counterevidence,
-/// not an invalid-proposal fixture.
-pub fn losing_trace(world: &World) -> Option<Trace<Ontology>> {
-    let (width, height) = dimensions(world);
-    let targets: Vec<_> = (0..width * height)
-        .filter(|cell| is_dead_square(world, *cell))
-        .collect();
-    for (crate_id, _) in crate_cells(world) {
-        for target in &targets {
-            let target_goal = Goal::new().require(
-                AccountId::Cell(*target),
-                basket([(Asset::Crate(crate_id), 1)]),
-            );
-            let solution = astar(
-                world,
-                &target_goal,
-                candidates,
-                |_, _, _| 1,
-                |state| {
-                    crate_cells(state)
-                        .into_iter()
-                        .find_map(|(id, cell)| (id == crate_id).then_some(cell))
-                        .map_or(0, |cell| manhattan(cell, *target, width))
-                },
-            );
-            if let Some(solution) = solution {
-                return Some(solution.trace().clone());
-            }
-        }
-    }
-    None
-}
-
-/// An admissible lower bound that ignores walls, player repositioning, and
-/// crate interference. It remains caller-owned search policy, not a rule.
-pub fn crate_goal_distance(world: &World) -> u64 {
-    let (width, _) = dimensions(world);
-    crate_cells(world)
-        .into_iter()
-        .map(|(_, crate_cell)| {
-            goal_cells(world)
-                .into_iter()
-                .map(|goal_cell| manhattan(crate_cell, goal_cell, width))
-                .min()
-                .unwrap_or(0)
-        })
-        .sum()
-}
-
-pub fn player_cell(world: &World) -> Option<u8> {
-    floor_cells(world).find(|cell| {
-        !world
-            .balance(&AccountId::Cell(*cell), &Asset::Player)
-            .is_zero()
-    })
-}
-
+/// Each crate and the cell it rests on.
 pub fn crate_cells(world: &World) -> Vec<(u8, u8)> {
     let crate_ids = crate_ids(world);
     floor_cells(world)
@@ -300,18 +144,6 @@ pub fn crate_cells(world: &World) -> Vec<(u8, u8)> {
             })
         })
         .collect()
-}
-
-pub fn is_wall(world: &World, cell: u8) -> bool {
-    !world
-        .balance(&AccountId::Cell(cell), &Asset::Wall)
-        .is_zero()
-}
-
-pub fn is_dead_square(world: &World, index: u8) -> bool {
-    !world
-        .balance(&AccountId::Cell(index), &Asset::DeadSquare)
-        .is_zero()
 }
 
 fn build_board(rows: &[&str]) -> World {
@@ -643,16 +475,6 @@ fn crate_ids(world: &World) -> Vec<u8> {
         .collect()
 }
 
-fn goal_cells(world: &World) -> Vec<u8> {
-    floor_cells(world)
-        .filter(|cell| {
-            !world
-                .balance(&AccountId::Cell(*cell), &Asset::GoalCell)
-                .is_zero()
-        })
-        .collect()
-}
-
 fn floor_cells(world: &World) -> impl Iterator<Item = u8> + '_ {
     let (width, height) = dimensions(world);
     (0..width * height).filter(|cell| {
@@ -711,12 +533,6 @@ fn push_lines(width: u8, height: u8) -> Vec<(u8, u8, u8)> {
 
 const fn cell(width: u8, x: u8, y: u8) -> u8 {
     y * width + x
-}
-
-fn manhattan(left: u8, right: u8, width: u8) -> u64 {
-    let (left_x, left_y) = (left % width, left / width);
-    let (right_x, right_y) = (right % width, right / width);
-    u64::from(left_x.abs_diff(right_x)) + u64::from(left_y.abs_diff(right_y))
 }
 
 pub fn dimensions(world: &World) -> (u8, u8) {
@@ -780,19 +596,144 @@ pub fn exchange(world: &World, rate: RateId) -> Action {
 mod tests {
     use super::*;
 
+    const fn step(from: u8, to: u8) -> RateId {
+        RateId::Move { from, to }
+    }
+
+    const fn push(behind: u8, crate_at: u8, to: u8, crate_id: u8) -> RateId {
+        RateId::Push {
+            behind,
+            crate_at,
+            to,
+            crate_id,
+        }
+    }
+
+    const fn latch(circuit: u8, at: u8) -> RateId {
+        RateId::Latch { circuit, at }
+    }
+
+    const MICRO_SOLUTION: [RateId; 3] = [step(8, 9), push(9, 10, 11, 0), RateId::Finish];
+
+    /// Stages crate 0 on the plate, latches the door from the far chamber,
+    /// delivers crate 1, retrieves crate 0 and leaves by the exit.
+    const SHOWCASE_SOLUTION: [RateId; 23] = [
+        push(38, 29, 20, 0),
+        step(29, 30),
+        step(30, 31),
+        step(31, 32),
+        step(32, 41),
+        step(41, 42),
+        latch(0, 42),
+        push(42, 33, 24, 1),
+        push(33, 24, 15, 1),
+        step(24, 33),
+        step(33, 32),
+        step(32, 31),
+        step(31, 30),
+        step(30, 29),
+        push(29, 20, 11, 0),
+        step(20, 21),
+        step(21, 30),
+        step(30, 31),
+        step(31, 32),
+        step(32, 33),
+        step(33, 42),
+        step(42, 51),
+        RateId::Finish,
+    ];
+
+    /// Both circuits' doors latched, then three crates delivered in turn.
+    const STRESS_SOLUTION: [RateId; 40] = [
+        push(54, 41, 28, 0),
+        step(41, 42),
+        step(42, 43),
+        step(43, 44),
+        step(44, 57),
+        step(57, 58),
+        latch(0, 58),
+        push(58, 45, 32, 1),
+        step(45, 46),
+        step(46, 47),
+        step(47, 48),
+        step(48, 61),
+        step(61, 62),
+        latch(1, 62),
+        push(62, 49, 36, 2),
+        push(49, 36, 23, 2),
+        step(36, 35),
+        step(35, 48),
+        step(48, 47),
+        step(47, 46),
+        step(46, 45),
+        push(45, 32, 19, 1),
+        step(32, 45),
+        step(45, 44),
+        step(44, 43),
+        step(43, 42),
+        step(42, 41),
+        push(41, 28, 15, 0),
+        step(28, 41),
+        step(41, 42),
+        step(42, 43),
+        step(43, 44),
+        step(44, 45),
+        step(45, 46),
+        step(46, 47),
+        step(47, 48),
+        step(48, 61),
+        step(61, 62),
+        step(62, 75),
+        RateId::Finish,
+    ];
+
+    /// `world` after `plan`, each exchange bound to the board as it stands.
+    fn played(world: &World, plan: &[RateId]) -> World {
+        let mut world = world.clone();
+        for rate in plan {
+            world
+                .apply(exchange(&world, *rate))
+                .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
+        }
+        world
+    }
+
+    fn player_cell(world: &World) -> Option<u8> {
+        floor_cells(world).find(|cell| {
+            !world
+                .balance(&AccountId::Cell(*cell), &Asset::Player)
+                .is_zero()
+        })
+    }
+
+    fn is_wall(world: &World, cell: u8) -> bool {
+        !world
+            .balance(&AccountId::Cell(cell), &Asset::Wall)
+            .is_zero()
+    }
+
+    fn is_dead_square(world: &World, cell: u8) -> bool {
+        !world
+            .balance(&AccountId::Cell(cell), &Asset::DeadSquare)
+            .is_zero()
+    }
+
     #[test]
     fn solves_by_atomic_three_account_pushes() {
-        let solution = solve(&initial()).expect("puzzle is solvable");
-        let mut replay = initial();
-        replay.replay(solution.trace()).expect("trace must replay");
-        assert!(replay.matches(&goal()));
-        assert!(
-            solution
-                .trace()
-                .exchanges()
-                .iter()
-                .any(|exchange| matches!(exchange.rate(), RateId::Push { .. }))
-        );
+        let stepped = played(&initial(), &MICRO_SOLUTION[..1]);
+        let pushed = played(&stepped, &MICRO_SOLUTION[1..2]);
+        // One push rewrites all three cells: player, crate and the empty beyond.
+        for (cell, before, after) in [
+            (9, Asset::Player, Asset::Empty),
+            (10, Asset::Crate(0), Asset::Player),
+            (11, Asset::Empty, Asset::Crate(0)),
+        ] {
+            let cell = AccountId::Cell(cell);
+            assert_eq!(stepped.balance(&cell, &before).to_u64(), 1, "{cell:?}");
+            assert!(pushed.balance(&cell, &before).is_zero(), "{cell:?}");
+            assert_eq!(pushed.balance(&cell, &after).to_u64(), 1, "{cell:?}");
+        }
+        assert!(played(&pushed, &MICRO_SOLUTION[2..]).matches(&goal()));
     }
 
     #[test]
@@ -800,15 +741,21 @@ mod tests {
         let world = initial_showcase();
         assert_eq!(crate_cells(&world).len(), 2);
         assert!((0..63).any(|cell| is_wall(&world, cell)));
-        let solution = solve_astar(&world).expect("showcase must be solvable");
-        assert!(solution.trace().exchanges().len() > 10);
+        assert!(played(&world, &SHOWCASE_SOLUTION).matches(&goal()));
     }
 
     #[test]
     fn legal_bad_push_has_replayable_deadlock_evidence() {
         let setup = initial_showcase();
-        let trace = losing_trace(&setup).expect("showcase has a reachable bad corner");
-        let final_world = setup.replayed(&trace).expect("losing trace must replay");
+        let final_world = played(
+            &setup,
+            &[
+                push(38, 29, 20, 0),
+                step(29, 30),
+                step(30, 21),
+                push(21, 20, 19, 0),
+            ],
+        );
         assert!(
             crate_cells(&final_world)
                 .iter()
@@ -829,11 +776,12 @@ mod tests {
 
     #[test]
     fn solved_puzzle_is_quiescent() {
-        let solution = solve(&initial()).expect("puzzle is solvable");
-        let solved = initial()
-            .replayed(solution.trace())
-            .expect("solution must replay");
-        assert!(candidates(&solved).is_empty());
+        let solved = played(&initial(), &MICRO_SOLUTION);
+        assert!(
+            solved
+                .rate_ids()
+                .all(|rate| !solved.is_applicable(&exchange(&solved, *rate)))
+        );
     }
 
     #[test]
@@ -846,19 +794,10 @@ mod tests {
                 .count(),
             1
         );
-        let solution = solve_astar(&world).expect("showcase must be solvable");
-        let (finish, moves) = solution
-            .trace()
-            .exchanges()
-            .split_last()
-            .expect("a solution finishes");
-        assert_eq!(finish.rate(), &RateId::Finish);
-        let mut before = world;
-        for exchange in moves {
-            before.apply(exchange.clone()).unwrap();
-        }
-        assert_eq!(finish, &exchange(&before, RateId::Finish));
-        assert!(before.is_applicable(finish));
+        let (finish, moves) = SHOWCASE_SOLUTION.split_last().expect("a solution finishes");
+        assert_eq!(finish, &RateId::Finish);
+        let before = played(&world, moves);
+        assert!(before.is_applicable(&exchange(&before, RateId::Finish)));
 
         // Each goal role must be bound to the cell holding its own crate.
         let placements = crate_cells(&before);
@@ -968,10 +907,8 @@ mod tests {
     }
 
     #[test]
-    fn two_circuits_compose_and_every_solved_trace_latches_both() {
-        let world = initial_stress();
-        let solution = solve_astar(&world).expect("two circuits are solvable");
-        let final_world = world.replayed(solution.trace()).unwrap();
+    fn two_circuits_compose_and_the_solved_stress_warehouse_latches_both() {
+        let final_world = played(&initial_stress(), &STRESS_SOLUTION);
         assert!(final_world.matches(&goal()));
         for circuit in 0..2 {
             assert_eq!(
