@@ -1411,10 +1411,16 @@ The current foundation is intentionally bounded:
   value is matched by equality, never unified across rates or computed by a
   guard. Relations list their rows, keyed by their variables' values, and
   may give whole numbers per row; derived values are whole numbers. Data
-  that exchanges change is state, never a relation (D-054, D-058).
+  that exchanges change is state, never a relation (D-054, D-058). A row
+  gives numbers only, so a case that differs by a name (where a contract's
+  work is done, which item an order sells) keeps that name as a variable
+  of the rate's identifier, pinned by a relation.
 - The kernel lists a rate's instances (`instances_of`) and the engine offers
   those whose roles the rate fixes (`CandidateSet::Instances`, D-055); an
-  instance with a free role is proposed by a script, which binds it.
+  instance with a free role is proposed by a script, which binds it. The
+  engine checks every instance at every state, so where a state's moves are
+  few among many instances (sokoban's pushes, the job shop's dispatch) a
+  script that proposes only those stays several times faster.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
 - Stable insertion-ordered maps make iteration, diagnostics, and ordinary
@@ -1495,16 +1501,22 @@ the same, so what every package finds is the same (D-053's pins), apart
 from the arms whose exchanges are now named by shorter identifiers or chosen
 among instances in their order. Rates as written, Stress instance (or the
 largest), before → after: Connect Four 226 → 4 (Micro 1,282 → 4), Work
-League 1,954 → 23, the fleet 290 → 25, sokoban 259 → 4, the incident 203 →
-23, the expedition 226 → 73, the cold chain 161 → 22, scheduling 104 → 45,
-bridge 100 → 18, the marketplace 86 → 50, the AMM season 35 → 18, rescue
-Micro 22 → 6, mission Micro 39 → 11, logistics Micro 51 → 23, lending 15 →
-13. Maze, exact cover and workshop keep their rates and fix their accounts;
-their moves are their instances (D-055). The scripts lost their binding
-tables and their loops over rate identifiers: Connect Four's went from 449 to
-150 lines, its bitboards, tactics and negamax replaced by the engine's
-minimax. What stays one rate per value is what differs in shape or in
-numbers no relation can hold, kept as facts in the economy instead.
+League 1,954 → 23, the fleet 290 → 21, sokoban 259 → 4, the incident 203 →
+22, the expedition 226 → 40, the cold chain 161 → 15, scheduling 104 → 45,
+bridge 100 → 18, the marketplace 86 → 6 (92 instances, a dispatch for each
+carrier), the AMM season 35 → 16, rescue Micro 22 → 6, mission Micro 39 →
+11, logistics Micro 51 → 17, perishables Micro 13 → 11, lending 15 → 13.
+Since D-058 the numbers that differ per case are their relations' rows, not
+balances: distances, crossing and processing times, order and contract
+terms, each day's weather, supply and pulse, Nature's odds; the assets that
+held them are gone. Maze, exact cover and workshop keep their rates and
+fix their accounts; their moves are their instances (D-055). The scripts
+lost their binding tables and their loops over rate identifiers: Connect
+Four's went from 449 to 150 lines, its bitboards, tactics and negamax
+replaced by the engine's minimax. What stays one rate per value is what differs in shape or in
+numbers no relation can hold, kept as facts in the economy instead: what
+Nature hides until it is observed (a relation is law every reader sees),
+and a world's single constants (a season's length, a market's terms).
 
 ### 13.5 Objectives can remain assets while algorithms remain generic
 
