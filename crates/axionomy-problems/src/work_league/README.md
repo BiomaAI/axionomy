@@ -22,15 +22,18 @@ their shape differs: each mode's begin, a finish's outcome, each facility's
 service, and an expiry by what the contract was doing, `expire/{job}/none/none`,
 `expire/{job}/some/{agent}/none` or `expire/{job}/some/{agent}/some/{mode}`.
 A contract's terms never change, so they are law structure: a relation's
-row for each contract gives what it pays, `{reward}`, and the energy, time
-and material its work takes, `{energy}`, `{time}` and `{material}`, from
-which each mode's law computes its costs, and in a season when it opens
-and its deadline, `{release}` and `{deadline}`. Where its work is done is a
-place, not a number, so a begin names it, `begin/{agent}/{job}/{place}/
-{mode}`, and a relation keyed by `{job}` and `{place}` admits only the
-contract's own place. Nature's weight of each outcome of an attempt at a
-contract in a mode is a relation's too, `{weight}`, and an outcome happens
-only with some weight, so Nature holds no account. A wave's fourth contract
+row for each contract gives where its work is done, `{place}`, a word a
+begin writes into `at/{place}`, what it pays, `{reward}`, and the energy,
+time and material its work takes, `{energy}`, `{time}` and `{material}`,
+from which each mode's law computes its costs, and in a season when it
+opens and its deadline, `{release}` and `{deadline}`. A begin names only
+the worker, the contract and the mode, `begin/{agent}/{job}/{mode}`, and
+the scripts read a contract's place from its terms (`state.values`). A
+season's length is one for the whole world and never changes, so it is a
+constant, `{season-length}`, which the tick and every activity read.
+Nature's weight of each outcome of an attempt at a contract in a mode is a
+relation's too, `{weight}`, and an outcome happens only with some weight,
+so Nature holds no account. A wave's fourth contract
 depends on its first, a value the claim derives from `{job}`. Every role is fixed to the account its identifier
 names, so no identity token pins a binding. Micro has 11 rates as written,
 for 246 instances; Showcase and Stress 23, for 1,030 and 1,954.
@@ -107,8 +110,9 @@ effects replay through ordinary atomic exchanges, under every invariant.
   leaderboard on both a server and static GitHub Pages.
 - Rates with variables over workers, contracts and modes, with an `Option`
   in their identifiers, a relation for the roads and a derived dependency,
-  their per-contract numbers given by relations rather than written into
-  thousands of concrete rates.
+  their per-contract places and numbers given by relations rather than
+  written into thousands of concrete rates, and the season's length a
+  constant rather than a balance.
 
 ## In this folder
 

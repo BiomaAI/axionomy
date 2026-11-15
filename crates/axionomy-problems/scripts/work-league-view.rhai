@@ -27,7 +27,6 @@ fn asset_label(parts) {
         "season-active" => "Season active",
         "season-ended" => "Season ended",
         "tick" => "World time",
-        "horizon" => "Season horizon",
         "contracts-open" => "Unresolved contracts",
         "contracts-closed" => "Resolved contracts",
         "activities" => "Activities in progress",
@@ -117,7 +116,7 @@ fn rate_label(parts) {
         "end-season" => "Close the resolved work season",
         "claim" => `${capital(parts[2])} claims job ${parts[3]}`,
         "move" => `${capital(parts[2])} moves from ${capital(parts[3])} to ${capital(parts[4])}`,
-        "begin" => `${capital(parts[2])} begins job ${parts[3]} at ${capital(parts[4])} in ${parts[5]} mode`,
+        "begin" => `${capital(parts[2])} begins job ${parts[3]} in ${parts[4]} mode`,
         "resolve" => `${capital(parts[2])}'s ${parts[4]} work on job ${parts[3]} ${
             if parts[5] == "success" { "succeeds" } else { "fails" }
         }`,
@@ -154,7 +153,7 @@ fn label(item) {
 // The unit of an asset's quantities, if it has one.
 fn unit(asset) {
     switch asset.split("/")[0] {
-        "tick" | "horizon" | "ready-at" | "lease-until" | "time-remaining" | "elapsed-time" => "ticks",
+        "tick" | "ready-at" | "lease-until" | "time-remaining" | "elapsed-time" => "ticks",
         "credit" | "value" => "credits",
         "energy" | "spent-energy" | "charging-energy" | "charge-supply" | "material"
             | "material-spent" | "reclaiming-material" | "embodied-material" | "recycling-loss"
@@ -262,7 +261,7 @@ fn contract(state, number, continuous, tick) {
         ["neutral", `${spec.value} credits · risk ${spec.risk}`]
     };
     let drawn = entity(
-        `league/job/${number}`, `Job ${number}`, "task", spec.location, "attachment",
+        `league/job/${number}`, `Job ${number}`, "task", league::place_of(state, number), "attachment",
         shown[0], shown[1], account,
     );
     drawn.metrics = [

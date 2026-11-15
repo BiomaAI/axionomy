@@ -60,6 +60,11 @@ fn turn() -> Rate<Ontology> {
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, q(role, asset))
 }
+/// How many ticks a season lasts, `{season-length}`: one for the whole
+/// world, which never changes, so a constant its laws read.
+fn season_length() -> Param<u64> {
+    Param::new(path!("season-length"))
+}
 fn occupy(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
     rate.consume(Role::Agent, basket([(Asset::Idle, 1)]))
         .produce(Role::Agent, basket([(Asset::Busy, 1)]))
@@ -69,7 +74,7 @@ fn occupy(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
             path!("activity-fits-the-season"),
             now() + duration,
             C::LessThanOrEqual,
-            q(Role::World, Asset::Horizon),
+            season_length().quantity(),
         )
 }
 fn finish_activity(rate: Rate<Ontology>) -> Rate<Ontology> {
@@ -119,13 +124,12 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     let jobs = (1..=profile.job_count())
         .map(|i| job_spec(JobId(i as u8)))
         .collect::<Vec<_>>();
-    let horizon = if profile == Profile::Stress { 78 } else { 48 };
+    let length = if profile == Profile::Stress { 78 } else { 48 };
     let mut world_assets = basket([
         (Asset::SeasonActive, 1),
-        (Asset::Horizon, horizon),
         (Asset::ContractsOpen, jobs.len() as u64),
     ]);
-    let mut builder = EconomyBuilder::new();
+    let mut builder = EconomyBuilder::new().constant(&season_length(), length);
     for (index, agent) in AGENTS.into_iter().enumerate() {
         world_assets.insert(Asset::Permit(agent), Quantity::new(1));
         builder = builder.account(
@@ -139,7 +143,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                 (Asset::Energy, 14),
                 (Asset::Material, 11),
                 (Asset::Credit, 5),
-                (Asset::TimeRemaining, horizon),
+                (Asset::TimeRemaining, length),
             ])),
         );
     }
@@ -274,7 +278,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             clear(prerequisite(job(turn())), Role::Job, Asset::LeaseUntil),
             cost.time.clone(),
         );
-        let begin = at_the_contract(begin, &jobs)
+        let begin = at_the_contract(begin)
             .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
             .preserve_at(Role::Agent, one([claimed()]))
             .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())
@@ -326,7 +330,6 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             RateIdPattern::Begin {
                 agent: agent().var(),
                 job: contract(),
-                place: place().var(),
                 mode: Slot::Is(mode),
             }
             .into(),
@@ -557,7 +560,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             path!("season-has-time-remaining"),
             now() + Q::constant(1),
             C::LessThanOrEqual,
-            q(Role::World, Asset::Horizon),
+            season_length().quantity(),
         )
         .produce(Role::World, basket([(Asset::Tick, 1)]));
     for agent in AGENTS {
@@ -846,7 +849,6 @@ mod tests {
                 RateId::Begin {
                     agent,
                     job: id,
-                    place: job_spec(id).location,
                     mode: WorkMode::Rush,
                 },
             );
@@ -1123,7 +1125,6 @@ mod tests {
             RateId::Begin {
                 agent,
                 job: JobId(1),
-                place: Location::North,
                 mode: WorkMode::Rush,
             },
         );
@@ -1196,7 +1197,6 @@ mod tests {
             RateId::Begin {
                 agent,
                 job: JobId(1),
-                place: Location::North,
                 mode: WorkMode::Rush,
             },
         );

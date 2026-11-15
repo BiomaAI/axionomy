@@ -89,7 +89,6 @@ pub enum Asset {
     SeasonActive,
     SeasonEnded,
     Tick,
-    Horizon,
     ContractsOpen,
     ContractsClosed,
     Activities,
@@ -196,12 +195,11 @@ pub enum RateId {
         from: Location,
         to: Location,
     },
-    /// A worker beginning a contract's work, where the contract's work is
-    /// done, in a mode.
+    /// A worker beginning a contract's work in a mode, where the contract's
+    /// terms say its work is done.
     Begin {
         agent: AgentId,
         job: JobId,
-        place: Location,
         mode: WorkMode,
     },
     Resolve {
@@ -371,8 +369,7 @@ fn on_contract(rate: Rate<Ontology>, jobs: &[JobSpec]) -> Rate<Ontology> {
         .relation(terms(jobs))
 }
 
-/// The place a rate's identifier names, `{place}`: where a contract's work
-/// is done.
+/// Where a contract's work is done, `{place}`, which its terms give.
 fn place() -> Param<Location> {
     Param::new(path!("place"))
 }
@@ -394,30 +391,34 @@ fn work_material() -> Param<u64> {
 }
 
 /// Each of `jobs`' terms: law structure that never changes, a row for each
-/// contract.
+/// contract giving where its work is done, a place, and its numbers.
 fn terms(jobs: &[JobSpec]) -> Relation {
-    Relation::each_giving(
-        &job(),
-        [reward(), work_energy(), work_time(), work_material()].map(|number| number.name().clone()),
+    Relation::giving(
+        [job().name().clone()],
+        [
+            place().name().clone(),
+            reward().name().clone(),
+            work_energy().name().clone(),
+            work_time().name().clone(),
+            work_material().name().clone(),
+        ],
         jobs.iter().map(|spec| {
-            (
-                spec.id.0,
-                [spec.value, spec.energy, spec.time, spec.material],
-            )
+            [
+                spec.id.0.segment(),
+                spec.location.segment(),
+                spec.value.into(),
+                spec.energy.into(),
+                spec.time.into(),
+                spec.material.into(),
+            ]
         }),
     )
 }
 
-/// The worker stands where the contract's work is done, `{place}`, which a
-/// relation's row for each of `jobs` says.
-fn at_the_contract(rate: Rate<Ontology>, jobs: &[JobSpec]) -> Rate<Ontology> {
-    rate.variable(place().every())
-        .relation(Relation::pairs(
-            &job(),
-            &place(),
-            jobs.iter().map(|spec| (spec.id.0, spec.location)),
-        ))
-        .preserve_at(Role::Agent, one([AssetPattern::At(place().var()).into()]))
+/// The worker stands where the contract's work is done, `{place}`, which
+/// its terms give.
+fn at_the_contract(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.preserve_at(Role::Agent, one([AssetPattern::At(place().var()).into()]))
 }
 
 /// Nature's weight of an attempt's outcome, `{weight}`, out of ten: the
@@ -630,11 +631,10 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             RateIdPattern::Begin {
                 agent: agent().var(),
                 job: contract(),
-                place: place().var(),
                 mode: Slot::Is(mode),
             }
             .into(),
-            at_the_contract(on_contract(worker(Rate::new()), &jobs), &jobs)
+            at_the_contract(on_contract(worker(Rate::new()), &jobs))
                 .preserve(Role::Agent, basket([(Asset::Operational, 1)]))
                 .preserve_at(Role::Agent, one([claimed()]))
                 .consume_computed(Role::Agent, Asset::Energy, cost.energy.clone())
@@ -946,12 +946,7 @@ mod tests {
         ] {
             world.apply(action(&world, rate)).unwrap();
         }
-        let begin = |job, mode| RateId::Begin {
-            agent,
-            job,
-            place: job_spec(job).location,
-            mode,
-        };
+        let begin = |job, mode| RateId::Begin { agent, job, mode };
         assert!(!world.is_applicable(&action(&world, begin(north.id, WorkMode::Lean))));
         let held = |world: &World, asset| world.balance(&AccountId::Agent(agent), &asset).to_u64();
         let energy = held(&world, Asset::Energy);
