@@ -20,21 +20,6 @@ fn outcomes() { ["clear", "delayed", "breakdown"] }
 // What a refuel buys, and the fuel below which the vehicle refuels.
 fn refuel_amount() { 4 }
 
-// The exchange of `rate`, with the accounts its roles bind.
-fn action(rate) {
-    let parts = rate.split("/");
-    let kind = parts[0];
-    let bindings = #{ vehicle: "vehicle" };
-    if kind == "load" || kind == "deliver" {
-        bindings.order = `order/${parts[1]}`;
-    } else if kind == "refuel" {
-        bindings["fuel-station"] = "fuel-station";
-    } else if kind != "depart" {
-        bindings.nature = "nature";
-    }
-    exchange(rate, bindings, 1)
-}
-
 // The route the vehicle is on, if it is travelling.
 fn active_route(state) {
     for route in routes() {
@@ -67,7 +52,7 @@ fn weather(state) {
     if route == () || state.balance("nature", "weather-ready") == 0 { return []; }
     let weighted = [];
     for outcome in outcomes() {
-        let resolution = action(`resolve/${route}/${outcome}`);
+        let resolution = state.exchange_of(`resolve/${route}/${outcome}`);
         if state.applicable(resolution) {
             weighted.push([resolution, state.balance("nature", `outcome-weight/${route}/${outcome}`)]);
         }
@@ -95,11 +80,11 @@ fn decide(state, policy) {
     if route != () {
         if state.balance("nature", "weather-ready") > 0 { return (); }
         if state.balance("nature", `outcome/${route}/breakdown`) > 0 {
-            return action(`repair/${route}`);
+            return state.exchange_of(`repair/${route}`);
         }
         for outcome in ["clear", "delayed"] {
             if state.balance("nature", `outcome/${route}/${outcome}`) > 0 {
-                return action(`arrive/${route}/${outcome}`);
+                return state.exchange_of(`arrive/${route}/${outcome}`);
             }
         }
         return ();
@@ -108,20 +93,20 @@ fn decide(state, policy) {
     let at = location(state);
     if at == "depot" {
         if carrying != () {
-            return action(if policy == "direct" { "depart/direct-out" } else { "depart/safe-out-first" });
+            return state.exchange_of(if policy == "direct" { "depart/direct-out" } else { "depart/safe-out-first" });
         }
-        if state.balance("vehicle", "fuel") < refuel_amount() { return action("refuel"); }
+        if state.balance("vehicle", "fuel") < refuel_amount() { return state.exchange_of("refuel"); }
         for order in orders() {
-            if state.balance(`order/${order}`, "waiting") > 0 { return action(`load/${order}`); }
+            if state.balance(`order/${order}`, "waiting") > 0 { return state.exchange_of(`load/${order}`); }
         }
         return ();
     }
     if at == "customer" {
-        if carrying != () { return action(`deliver/${carrying}`); }
-        return action(if policy == "direct" { "depart/direct-back" } else { "depart/safe-back-first" });
+        if carrying != () { return state.exchange_of(`deliver/${carrying}`); }
+        return state.exchange_of(if policy == "direct" { "depart/direct-back" } else { "depart/safe-back-first" });
     }
     if at == "junction" {
-        return action(if carrying != () { "depart/safe-out-second" } else { "depart/safe-back-second" });
+        return state.exchange_of(if carrying != () { "depart/safe-out-second" } else { "depart/safe-back-second" });
     }
     ()
 }
@@ -184,7 +169,7 @@ fn moves(state) {
     }
     let applicable = [];
     for rate in rates {
-        let proposal = action(rate);
+        let proposal = state.exchange_of(rate);
         if state.applicable(proposal) { applicable.push(proposal); }
     }
     applicable

@@ -61,6 +61,14 @@ route-specific fuel and time; breakdown consumes time through a repair
 exchange and returns the route to Nature for another resolution. Loading,
 delivery, refueling, travel, repair, and order completion are all rates.
 
+Loading and delivering are one rate each over the orders, `load/{order}`,
+resolving a leg's weather one over the routes and outcomes,
+`resolve/{route}/{outcome}`, and repairing one over the routes. A route's
+departure and arrivals stay its own rates: where it starts and ends, and
+the fuel and time a leg takes, belong to the route, not to values an
+identifier gives. Each role is fixed to its account, so the policies and
+the planner propose each move as its rate's exchange (`state.exchange_of`).
+
 Nature draws each resolution by its event, `weather/<route>/<elapsed time>`:
 the weather of that leg, met at the time the vehicle has elapsed when the
 leg begins or, after a repair, which takes time, when it resumes. A run

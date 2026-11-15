@@ -2,7 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
+    Rate, Slot, basket,
 };
 pub mod fleet;
 #[cfg(feature = "packages")]
@@ -136,6 +137,24 @@ pub fn initial_micro() -> World {
     build(&[OrderId::A])
 }
 
+/// One unit of each asset `assets` name.
+fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset, Quantity::new(1)))
+        .collect()
+}
+
+/// `rate` with the vehicle, its role fixed to the vehicle's account.
+fn with_vehicle(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.account(Role::Vehicle, Pattern::literal(AccountId::Vehicle))
+}
+
+/// `rate` with the vehicle and Nature, each role fixed to its account.
+fn with_nature(rate: Rate<Ontology>) -> Rate<Ontology> {
+    with_vehicle(rate).account(Role::Nature, Pattern::literal(AccountId::Nature))
+}
+
 fn build(pending: &[OrderId]) -> World {
     let mut builder = EconomyBuilder::new()
         .account(
@@ -154,77 +173,112 @@ fn build(pending: &[OrderId]) -> World {
             AccountId::FuelStation,
             Account::from(basket([(Asset::Fuel, 12)])),
         );
-
     for order in ORDERS {
         let order_state = if pending.contains(&order) {
             basket([(Asset::Waiting, 1), (Asset::Package(order), 1)])
         } else {
             basket([(Asset::Delivered, 1), (Asset::Package(order), 1)])
         };
-        builder = builder
-            .account(AccountId::Order(order), Account::from(order_state))
-            .rate(
-                RateId::Load(order),
-                Rate::new()
-                    .preserve(Role::Vehicle, basket([(Asset::At(Location::Depot), 1)]))
-                    .consume(Role::Vehicle, basket([(Asset::CargoSpace, 1)]))
-                    .produce(
-                        Role::Vehicle,
-                        basket([(Asset::CargoOccupied, 1), (Asset::Package(order), 1)]),
-                    )
-                    .consume(
-                        Role::Order,
-                        basket([(Asset::Waiting, 1), (Asset::Package(order), 1)]),
-                    )
-                    .produce(Role::Order, basket([(Asset::InTransit, 1)]))
-                    .distinct(Role::Vehicle, Role::Order),
-            )
-            .rate(
-                RateId::Deliver(order),
-                Rate::new()
-                    .preserve(Role::Vehicle, basket([(Asset::At(Location::Customer), 1)]))
-                    .consume(
-                        Role::Vehicle,
-                        basket([(Asset::CargoOccupied, 1), (Asset::Package(order), 1)]),
-                    )
-                    .produce(Role::Vehicle, basket([(Asset::CargoSpace, 1)]))
-                    .consume(Role::Order, basket([(Asset::InTransit, 1)]))
-                    .produce(
-                        Role::Order,
-                        basket([(Asset::Delivered, 1), (Asset::Package(order), 1)]),
-                    )
-                    .distinct(Role::Vehicle, Role::Order),
-            );
+        builder = builder.account(AccountId::Order(order), Account::from(order_state));
     }
 
+    // The rates' variables: an order, a route and the weather on it.
+    let order = Param::<OrderId>::new(path!("order"));
+    let route = Param::<Route>::new(path!("route"));
+    let outcome = Param::<TravelOutcome>::new(path!("outcome"));
+    let package = || AssetPattern::Package(order.var()).into();
+    let traveling = || AssetPattern::Traveling(route.var()).into();
+    // `rate` for each order, `{order}`, its role fixed to that order.
+    let each_order = |rate: Rate<Ontology>| {
+        with_vehicle(rate)
+            .variable(order.every())
+            .account(Role::Order, AccountIdPattern::Order(order.var()).into())
+    };
+    builder = builder
+        .rate_at(
+            RateIdPattern::Load(order.var()).into(),
+            each_order(Rate::new())
+                .preserve(Role::Vehicle, basket([(Asset::At(Location::Depot), 1)]))
+                .consume(Role::Vehicle, basket([(Asset::CargoSpace, 1)]))
+                .produce_at(
+                    Role::Vehicle,
+                    one([Pattern::literal(Asset::CargoOccupied), package()]),
+                )
+                .consume_at(
+                    Role::Order,
+                    one([Pattern::literal(Asset::Waiting), package()]),
+                )
+                .produce(Role::Order, basket([(Asset::InTransit, 1)])),
+        )
+        .rate_at(
+            RateIdPattern::Deliver(order.var()).into(),
+            each_order(Rate::new())
+                .preserve(Role::Vehicle, basket([(Asset::At(Location::Customer), 1)]))
+                .consume_at(
+                    Role::Vehicle,
+                    one([Pattern::literal(Asset::CargoOccupied), package()]),
+                )
+                .produce(Role::Vehicle, basket([(Asset::CargoSpace, 1)]))
+                .consume(Role::Order, basket([(Asset::InTransit, 1)]))
+                .produce_at(
+                    Role::Order,
+                    one([Pattern::literal(Asset::Delivered), package()]),
+                ),
+        )
+        // Nature draws a leg's weather from the weights it holds.
+        .rate_at(
+            RateIdPattern::Resolve(route.var(), outcome.var()).into(),
+            with_nature(Rate::new())
+                .variable(route.every())
+                .variable(outcome.every())
+                .preserve_at(Role::Vehicle, one([traveling()]))
+                .consume(Role::Nature, basket([(Asset::WeatherReady, 1)]))
+                .preserve_at(
+                    Role::Nature,
+                    one([AssetPattern::OutcomeWeight(route.var(), outcome.var()).into()]),
+                )
+                .produce_at(
+                    Role::Nature,
+                    one([AssetPattern::Outcome(route.var(), outcome.var()).into()]),
+                ),
+        )
+        // A breakdown is repaired where it happened, and the weather drawn
+        // again.
+        .rate_at(
+            RateIdPattern::Repair(route.var()).into(),
+            with_nature(Rate::new())
+                .variable(route.every())
+                .preserve_at(
+                    Role::Vehicle,
+                    one([traveling(), Pattern::literal(Asset::RepairTool)]),
+                )
+                .consume(Role::Vehicle, basket([(Asset::TimeRemaining, REPAIR_TIME)]))
+                .produce(Role::Vehicle, basket([(Asset::ElapsedTime, REPAIR_TIME)]))
+                .consume_at(
+                    Role::Nature,
+                    one([
+                        AssetPattern::Outcome(route.var(), Slot::Is(TravelOutcome::Breakdown))
+                            .into(),
+                    ]),
+                )
+                .produce(Role::Nature, basket([(Asset::WeatherReady, 1)])),
+        );
+
+    // A route's departure and arrivals are its own: where it starts and
+    // ends, and the fuel and time a leg takes, are the route's, not values
+    // an identifier gives.
     for route in ROUTES {
         builder = builder.rate(
             RateId::Depart(route),
-            Rate::new()
+            with_vehicle(Rate::new())
                 .consume(Role::Vehicle, basket([(Asset::At(route_source(route)), 1)]))
                 .produce(Role::Vehicle, basket([(Asset::Traveling(route), 1)])),
         );
-
-        for outcome in OUTCOMES {
-            builder = builder.rate(
-                RateId::Resolve(route, outcome),
-                Rate::new()
-                    .preserve(Role::Vehicle, basket([(Asset::Traveling(route), 1)]))
-                    .consume(Role::Nature, basket([(Asset::WeatherReady, 1)]))
-                    .preserve(
-                        Role::Nature,
-                        basket([(Asset::OutcomeWeight(route, outcome), 1)]),
-                    )
-                    .produce(Role::Nature, basket([(Asset::Outcome(route, outcome), 1)]))
-                    .distinct(Role::Vehicle, Role::Nature),
-            );
-        }
-
         for outcome in [TravelOutcome::Clear, TravelOutcome::Delayed] {
             let (fuel, time) = travel_cost(route, outcome);
             builder = builder.rate(
                 RateId::Arrive(route, outcome),
-                Rate::new()
+                with_nature(Rate::new())
                     .consume(
                         Role::Vehicle,
                         basket([
@@ -242,39 +296,21 @@ fn build(pending: &[OrderId]) -> World {
                         ]),
                     )
                     .consume(Role::Nature, basket([(Asset::Outcome(route, outcome), 1)]))
-                    .produce(Role::Nature, basket([(Asset::WeatherReady, 1)]))
-                    .distinct(Role::Vehicle, Role::Nature),
+                    .produce(Role::Nature, basket([(Asset::WeatherReady, 1)])),
             );
         }
-
-        builder = builder.rate(
-            RateId::Repair(route),
-            Rate::new()
-                .preserve(
-                    Role::Vehicle,
-                    basket([(Asset::Traveling(route), 1), (Asset::RepairTool, 1)]),
-                )
-                .consume(Role::Vehicle, basket([(Asset::TimeRemaining, REPAIR_TIME)]))
-                .produce(Role::Vehicle, basket([(Asset::ElapsedTime, REPAIR_TIME)]))
-                .consume(
-                    Role::Nature,
-                    basket([(Asset::Outcome(route, TravelOutcome::Breakdown), 1)]),
-                )
-                .produce(Role::Nature, basket([(Asset::WeatherReady, 1)]))
-                .distinct(Role::Vehicle, Role::Nature),
-        );
     }
 
     builder
         .rate(
             RateId::Refuel,
-            Rate::new()
+            with_vehicle(Rate::new())
+                .account(Role::FuelStation, Pattern::literal(AccountId::FuelStation))
                 .preserve(Role::Vehicle, basket([(Asset::At(Location::Depot), 1)]))
                 .consume(Role::Vehicle, basket([(Asset::Money, REFUEL_AMOUNT)]))
                 .produce(Role::Vehicle, basket([(Asset::Fuel, REFUEL_AMOUNT)]))
                 .consume(Role::FuelStation, basket([(Asset::Fuel, REFUEL_AMOUNT)]))
-                .produce(Role::FuelStation, basket([(Asset::Money, REFUEL_AMOUNT)]))
-                .distinct(Role::Vehicle, Role::FuelStation),
+                .produce(Role::FuelStation, basket([(Asset::Money, REFUEL_AMOUNT)])),
         )
         .invariant(
             [Location::Depot, Location::Junction, Location::Customer]
@@ -335,22 +371,27 @@ fn nature_assets() -> axionomy::Basket<Asset> {
     assets
 }
 
-/// The exchange of one unit of `rate`, each of its roles bound to the
-/// account that plays it.
-pub fn action(rate: RateId) -> Action {
-    let exchange = Exchange::new(rate, Quantity::new(1));
-    match rate {
-        RateId::Load(order) | RateId::Deliver(order) => exchange
-            .bind(Role::Vehicle, AccountId::Vehicle)
-            .bind(Role::Order, AccountId::Order(order)),
-        RateId::Depart(_) => exchange.bind(Role::Vehicle, AccountId::Vehicle),
-        RateId::Resolve(_, _) | RateId::Arrive(_, _) | RateId::Repair(_) => exchange
-            .bind(Role::Vehicle, AccountId::Vehicle)
-            .bind(Role::Nature, AccountId::Nature),
-        RateId::Refuel => exchange
-            .bind(Role::Vehicle, AccountId::Vehicle)
-            .bind(Role::FuelStation, AccountId::FuelStation),
-    }
+/// The exchange of `rate` once, each of its roles bound to the account
+/// `world`'s rate fixes it to.
+///
+/// # Panics
+///
+/// If `rate` names no instance of `world`'s rates.
+pub fn action(world: &World, rate: RateId) -> Action {
+    let instance = world
+        .instance(&rate)
+        .unwrap_or_else(|_| panic!("logistics has no rate {rate:?}"));
+    instance.fixed_accounts().fold(
+        Exchange::new(rate, Quantity::new(1)),
+        |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
+            )
+        },
+    )
 }
 
 const fn route_source(route: Route) -> Location {
@@ -410,12 +451,21 @@ mod tests {
 
         // A broken-down vehicle arrives only after its repair and the
         // weather Nature draws again.
-        let broken: Trace<Ontology> = rates[..3].iter().copied().map(action).collect();
+        let broken: Trace<Ontology> = rates[..3]
+            .iter()
+            .map(|rate| action(&model, *rate))
+            .collect();
         let broken = model.replayed(&broken).expect("the breakdown replays");
-        assert!(!broken.is_applicable(&action(RateId::Arrive(first, TravelOutcome::Clear))));
-        assert!(!broken.is_applicable(&action(RateId::Resolve(first, TravelOutcome::Clear))));
+        assert!(!broken.is_applicable(&action(
+            &broken,
+            RateId::Arrive(first, TravelOutcome::Clear)
+        )));
+        assert!(!broken.is_applicable(&action(
+            &broken,
+            RateId::Resolve(first, TravelOutcome::Clear)
+        )));
 
-        let trace: Trace<Ontology> = rates.into_iter().map(action).collect();
+        let trace: Trace<Ontology> = rates.into_iter().map(|rate| action(&model, rate)).collect();
         let replayed = model.replayed(&trace).expect("the delivery replays");
         assert!(replayed.matches(&goal()));
         assert_eq!(
@@ -429,10 +479,10 @@ mod tests {
         let mut world = initial();
         let before = world.state_key();
         let error = world
-            .apply(action(RateId::Arrive(
-                Route::DirectOut,
-                TravelOutcome::Clear,
-            )))
+            .apply(action(
+                &world,
+                RateId::Arrive(Route::DirectOut, TravelOutcome::Clear),
+            ))
             .expect_err("vehicle has not departed or resolved Nature");
         assert!(matches!(error, axionomy::ApplyError::Infeasible { .. }));
         assert_eq!(world.state_key(), before);
