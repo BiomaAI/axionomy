@@ -16,7 +16,7 @@ export type Said = { tone: "done" | "caution" | "error"; message: string };
  * ref followed, a history played back. Then what the last thing done came
  * to, until the next one, and where the store is kept.
  */
-export function ActivityStrip({ activities, said, store }: { activities: Activity[]; said: Said[]; store: string }) {
+export function ActivityStrip({ activities, said, store, onReplaceStore }: { activities: Activity[]; said: Said[]; store: string; onReplaceStore?: () => void }) {
   const words = said.map((each) => each.message).join(" ");
   const tone = said.find((each) => each.tone === "error")?.tone ?? said.find((each) => each.tone === "caution")?.tone ?? "done";
   return <section className="activity-strip" aria-label="Activity">
@@ -26,6 +26,6 @@ export function ActivityStrip({ activities, said, store }: { activities: Activit
       {activity.stop && <button type="button" onClick={activity.stop.onStop}>{activity.stop.label}</button>}
     </span>)}
     {words && <span className={`activity-said tone-${tone}`} role={tone === "error" ? "alert" : "status"} title={words}>{words}</span>}
-    <span className="activity-store">{store}</span>
+    <span className="activity-store">{store}{onReplaceStore && <button type="button" onClick={onReplaceStore} title="Replace the saved store with an empty one; what it held is lost">Replace it</button>}</span>
   </section>;
 }

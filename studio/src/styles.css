@@ -64,7 +64,8 @@ button.danger { color: var(--debit); }
 .activity-store { flex: 0 0 auto; margin-left: auto; color: var(--muted); }
 .activity-entry { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; color: var(--text); }
 .activity-entry strong { font-weight: 600; }
-.activity-entry button { min-height: 24px; padding: 0 9px; font-size: 10px; }
+.activity-entry button, .activity-store button { min-height: 24px; padding: 0 9px; font-size: 10px; }
+.activity-store button { margin-left: 8px; }
 .activity-pulse { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--accent); animation: activity-pulse 1.2s ease-in-out infinite; }
 @keyframes activity-pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .activity-pulse { animation: none; } }

@@ -643,7 +643,7 @@ export function PackagesApp() {
       <Brand />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
-    <ActivityStrip activities={activities} said={said} store={storeWords} />
+    <ActivityStrip activities={activities} said={said} store={storeWords} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
 
     <section className="command-bar" aria-label="Package controls">
       <label className="field package-field"><span><Term name="package">Package</Term></span><select name="package" value={packageName ?? ""} disabled={!engine || Boolean(busy)} onChange={(event) => {

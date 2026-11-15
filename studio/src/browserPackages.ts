@@ -39,6 +39,7 @@ import {
 /** What the Worker is asked, each the operation of the same name. */
 export type StoreRequest =
   | { kind: "open" }
+  | { kind: "replace_store" }
   | { kind: "load_url"; url: string }
   | { kind: "load_bytes"; bytes: ArrayBuffer }
   | { kind: "packages" }
@@ -96,6 +97,14 @@ export class BrowserPackages implements PackageEngine {
 
   store(): Promise<StoreKept> {
     return this.open();
+  }
+
+  /**
+   * Empties the saved store this version cannot open; the page reloads to
+   * open the empty one.
+   */
+  async replaceStore(): Promise<void> {
+    await this.request({ kind: "replace_store" });
   }
 
   /**

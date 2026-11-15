@@ -222,3 +222,33 @@ test("cancelling a run terminates its Worker mid-run, and the next one opens the
   expect(again.kept).toBe(first.dropped);
   expect(again.steps).toBeGreaterThanOrEqual(2);
 });
+
+test("a saved store this version cannot open is left alone until it is replaced", async ({ page }) => {
+  await page.goto(BLANK);
+  const client = "/src/browserPackages.ts";
+  // Something that is no store where the store is kept.
+  await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const file = await root.getFileHandle("axionomy.redb", { create: true });
+    const writable = await file.createWritable();
+    await writable.write(new TextEncoder().encode("not a store of this version"));
+    await writable.close();
+  });
+  const unread = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    const opened = await packages.open();
+    await packages.replaceStore();
+    return opened;
+  }, client);
+  expect(unread.persistent).toBe(false);
+  expect(unread.replaceable).toBe(true);
+  expect(unread.reason).toContain("the saved store cannot be opened");
+
+  await page.reload();
+  const replaced = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    return new BrowserPackages().open();
+  }, client);
+  expect(replaced).toEqual({ persistent: true });
+});

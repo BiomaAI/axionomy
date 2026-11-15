@@ -81,7 +81,12 @@ export function loadedPackages(from: LoadedFrom): string[] {
 export type Running<T> = { result: Promise<T>; cancel(): void };
 
 /** Where the engine keeps its store. */
-export type StoreKept = { persistent: boolean; reason?: string };
+/**
+ * Where the store is kept. `replaceable` where a saved store is there but
+ * this version cannot open it: it can be replaced with an empty one, losing
+ * what it held.
+ */
+export type StoreKept = { persistent: boolean; reason?: string; replaceable?: boolean };
 
 export interface PackageEngine {
   readonly kind: "native" | "browser";

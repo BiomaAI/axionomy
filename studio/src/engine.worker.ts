@@ -72,6 +72,9 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
   switch (request.kind) {
     case "open":
       return where;
+    case "replace_store":
+      if (!where.replaceable) throw new Error("the saved store opened; nothing to replace");
+      return replaceStore();
     case "load_url":
       return loadUrl(engine, request.url);
     case "load_bytes": {
@@ -139,8 +142,8 @@ function refused(cause: unknown): { status: number; body: unknown } {
 /**
  * The Worker's store: on the origin private file system, where it stays
  * across reloads, or in memory, saying why, when that is unavailable, another
- * tab holds it, or it holds a store this version cannot open (which is left
- * as it is).
+ * tab holds it, or it holds a store this version cannot open, which is left
+ * as it is until the visitor replaces it.
  */
 async function openStore(): Promise<{ engine: Engine; opened: StoreKept }> {
   await initialize();
@@ -150,7 +153,21 @@ async function openStore(): Promise<{ engine: Engine; opened: StoreKept }> {
     const engine = Engine.open(handle);
     return { engine, opened: { persistent: engine.persistent } };
   } catch (cause) {
-    return { engine: Engine.open(undefined), opened: { persistent: false, reason: `the saved store cannot be opened: ${described(cause)}` } };
+    // Let go of the file, so the visitor can replace it.
+    try { handle.close(); } catch { /* Already closed with the engine that failed. */ }
+    return { engine: Engine.open(undefined), opened: { persistent: false, reason: `the saved store cannot be opened: ${described(cause)}`, replaceable: true } };
+  }
+}
+
+/** Empties the saved store, which this version could not open. */
+async function replaceStore(): Promise<void> {
+  const { handle, reason } = await accessHandle();
+  if (!handle) throw new Error(reason ?? "the saved store cannot be reached");
+  try {
+    handle.truncate(0);
+    handle.flush();
+  } finally {
+    handle.close();
   }
 }
 
