@@ -354,7 +354,8 @@ impl Engine {
         let economy = &self.reach(at)?.state.economy;
         let set: CandidateSet = self.defined(set)?;
         match set.offer(economy) {
-            Offer::Exchanges(exchanges) => Ok(economy.applicable(exchanges)),
+            Offer::Listed(exchanges) => Ok(economy.applicable(exchanges)),
+            Offer::Applying(exchanges) => Ok(exchanges),
             Offer::Script(call) => self.propose(call, economy),
         }
     }

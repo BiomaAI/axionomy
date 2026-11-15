@@ -18,7 +18,7 @@
 use crate::{
     EngineError, ScriptFunction,
     cache::Cache,
-    definitions::{definition, exchange_of, instance_exchanges, instances},
+    definitions::{applying, definition, instances},
 };
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Basket, Instance, ObservationKey, PathKind, Pattern,
@@ -804,8 +804,7 @@ fn states(rhai: &mut rhai::Engine) {
                     Some(parsed(under)?)
                 };
                 let economy = state.whole("which moves apply")?;
-                Ok(economy
-                    .applicable(instance_exchanges(economy, under.as_ref()))
+                Ok(applying(economy, under.as_ref())
                     .into_iter()
                     .map(Dynamic::from)
                     .collect())
@@ -828,7 +827,9 @@ fn states(rhai: &mut rhai::Engine) {
             "exchange_of",
             |state: &mut ScriptState, rate: &str| -> Result<paths::Exchange, Failure> {
                 let rate: RatePath = parsed(rate)?;
-                exchange_of(&state.economy, rate.clone())
+                state
+                    .economy
+                    .exchange_of(&rate)
                     .ok_or_else(|| Failure::from(format!("the economy has no rate `{rate}`")))
             },
         )

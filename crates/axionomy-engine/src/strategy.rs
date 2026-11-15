@@ -715,7 +715,8 @@ impl Engine {
             return Vec::new();
         }
         let proposed = match set.offer(economy) {
-            Offer::Exchanges(exchanges) => Ok(exchanges),
+            Offer::Applying(exchanges) => return exchanges,
+            Offer::Listed(exchanges) => Ok(exchanges),
             Offer::Script(call) => self.propose(call, economy),
         };
         match proposed {
@@ -926,7 +927,7 @@ impl Engine {
             return Vec::new();
         }
         let proposed = match set.offer(seen.view.economy()) {
-            Offer::Exchanges(exchanges) => Ok(exchanges),
+            Offer::Listed(exchanges) | Offer::Applying(exchanges) => Ok(exchanges),
             Offer::Script(call) => self
                 .call(&call.script, call.function.as_str(), (seen.view.clone(),))
                 .and_then(crate::exchanges_of),

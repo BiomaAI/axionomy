@@ -3,7 +3,7 @@
 //! any point or on any economy (D-050).
 
 use crate::script::ScriptPath;
-use axionomy::{PathKind, Pattern, Quantity, RatePath, path::Path, paths, pattern::Piece};
+use axionomy::{PathKind, Pattern, RatePath, path::Path, paths, pattern::Piece};
 use axionomy_search::pareto::ObjectiveDirection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -161,11 +161,12 @@ pub enum CandidateSet {
     Instances { under: Option<RatePath> },
 }
 
-/// What a candidate set offers an economy before any exchange is checked
-/// against it.
+/// What a candidate set offers an economy.
 pub(crate) enum Offer<'a> {
-    /// These exchanges: those listed, or those its instances make.
-    Exchanges(Vec<paths::Exchange>),
+    /// These exchanges, listed: those of them that apply are offered.
+    Listed(Vec<paths::Exchange>),
+    /// These exchanges, each found to apply.
+    Applying(Vec<paths::Exchange>),
     /// What this script function proposes for the state.
     Script(&'a ScriptCall),
 }
@@ -174,29 +175,21 @@ impl CandidateSet {
     pub(crate) fn offer(&self, economy: &paths::Economy) -> Offer<'_> {
         match self {
             Self::Script(call) => Offer::Script(call),
-            Self::Listed(exchanges) => Offer::Exchanges(exchanges.clone()),
-            Self::Instances { under } => {
-                Offer::Exchanges(instance_exchanges(economy, under.as_ref()))
-            }
+            Self::Listed(exchanges) => Offer::Listed(exchanges.clone()),
+            Self::Instances { under } => Offer::Applying(applying(economy, under.as_ref())),
         }
     }
 }
 
 /// The exchange of every instance of the rates under `under` whose roles
-/// the rate fixes, in order.
-pub(crate) fn instance_exchanges(
-    economy: &paths::Economy,
-    under: Option<&RatePath>,
-) -> Vec<paths::Exchange> {
-    instances(economy, under)
-        .filter_map(|rate| {
-            let exchange = exchange_of(economy, rate)?;
-            let instance = economy.instance(exchange.rate()).ok()?;
-            instance
-                .roles()
-                .all(|role| exchange.bindings().contains_key(role))
-                .then_some(exchange)
-        })
+/// the rate fixes and that applies, in order.
+pub(crate) fn applying(economy: &paths::Economy, under: Option<&RatePath>) -> Vec<paths::Exchange> {
+    economy
+        .fixed_exchanges()
+        .filter(|(key, _)| under.is_none_or(|prefix| starts_with(key, prefix)))
+        .flat_map(|(_, exchanges)| exchanges)
+        .filter(|exchange| economy.is_applicable(exchange))
+        .cloned()
         .collect()
 }
 
@@ -210,20 +203,6 @@ pub(crate) fn instances<'a>(
         .rate_ids()
         .filter(move |key| under.is_none_or(|prefix| starts_with(key, prefix)))
         .flat_map(|key| economy.instances_of(key))
-}
-
-/// The exchange of the instance `rate` names, at one unit, each role the
-/// rate fixes bound to its account; none where `rate` names no instance.
-pub(crate) fn exchange_of(economy: &paths::Economy, rate: RatePath) -> Option<paths::Exchange> {
-    let instance = economy.instance(&rate).ok()?;
-    let bindings: Vec<_> = instance
-        .fixed_accounts()
-        .filter_map(|(role, account)| Some((role.clone(), account.as_literal()?.clone())))
-        .collect();
-    Some(bindings.into_iter().fold(
-        paths::Exchange::new(rate, Quantity::new(1)),
-        |exchange, (role, account)| exchange.bind(role, account),
-    ))
 }
 
 /// Whether the identifier `key` is written starting with the segments of

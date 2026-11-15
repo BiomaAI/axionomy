@@ -15,7 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, PoisonError, RwLock};
+use std::sync::{Arc, OnceLock, PoisonError, RwLock};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -84,6 +84,9 @@ struct Rates<O: Ontology> {
     /// The instances of rates with variables made so far. An instance
     /// depends only on the rates, so every fork shares them.
     made: RwLock<HashMap<O::Rate, Arc<Rate<O>>>>,
+    /// Each rate's instances whose roles it fixes, as exchanges, once
+    /// listed: [`Economy::fixed_exchanges`].
+    fixed: OnceLock<Vec<Vec<Exchange<O>>>>,
 }
 
 /// The rate an exchange names: a rate as written, or an instance of one with
@@ -136,6 +139,7 @@ impl<O: Ontology> Rates<O> {
             written,
             literal,
             made: RwLock::default(),
+            fixed: OnceLock::new(),
         }
     }
 
@@ -1163,6 +1167,46 @@ impl<O: Ontology> Economy<O> {
         })
     }
 
+    /// The exchange applying the instance `id` names once, each role its
+    /// rate fixes bound to that account; none where `id` names no instance.
+    pub fn exchange_of(&self, id: &O::Rate) -> Option<Exchange<O>> {
+        let instance = self.instance(id).ok()?;
+        Some(
+            instance
+                .fixed_accounts()
+                .filter_map(|(role, account)| Some((role.clone(), account.as_literal()?.clone())))
+                .fold(
+                    Exchange::new(id.clone(), Quantity::new(1)),
+                    |exchange, (role, account)| exchange.bind(role, account),
+                ),
+        )
+    }
+
+    /// Each rate, in order, with the exchanges of its instances that fix
+    /// the account of every role, in the instances' order: every exchange
+    /// the rates offer whole, which needs no one to choose an account
+    /// ([`Economy::exchange_of`]). Listed once per rate book and shared by
+    /// every economy that has it.
+    pub fn fixed_exchanges(&self) -> impl Iterator<Item = (&Pattern<O::Rate>, &[Exchange<O>])> {
+        let fixed = self.rates.fixed.get_or_init(|| {
+            self.rate_ids()
+                .map(|key| {
+                    self.instances_of(key)
+                        .filter_map(|id| {
+                            let exchange = self.exchange_of(&id)?;
+                            let instance = self.instance(&id).ok()?;
+                            instance
+                                .roles()
+                                .all(|role| exchange.bindings().contains_key(role))
+                                .then_some(exchange)
+                        })
+                        .collect()
+                })
+                .collect()
+        });
+        self.rate_ids().zip(fixed.iter().map(Vec::as_slice))
+    }
+
     /// The instance an identifier names: the rate keyed by it, or the
     /// instance of the rate with variables whose identifier it matches, for
     /// the values it gives them. Refused where no rate matches, a value lies
@@ -1405,7 +1449,39 @@ impl<O: Ontology> Economy<O> {
     /// Returns whether one exchange is applicable to the current snapshot.
     #[must_use]
     pub fn is_applicable(&self, proposal: &Exchange<O>) -> bool {
-        self.assess(proposal).is_applicable()
+        self.holds_what_it_takes(proposal) && self.assess(proposal).is_applicable()
+    }
+
+    /// Whether each account `proposal` binds holds what the instance it
+    /// names takes from it, its units of each entry it consumes, and what
+    /// it keeps there, each entry it preserves: what an exchange must find
+    /// before anything else about it matters. An exchange for which this
+    /// fails never applies; one for which it holds may still not, and
+    /// [`Economy::assess`] says why. Cheap: no assessment is built.
+    fn holds_what_it_takes(&self, proposal: &Exchange<O>) -> bool {
+        let Ok(rate) = self.instance(proposal.rate()) else {
+            return true;
+        };
+        let units = proposal.units();
+        proposal.bindings().iter().all(|(role, account)| {
+            let holds = |asset: &Pattern<O::Asset>, needed: Option<Quantity>| match (
+                asset.as_literal(),
+                needed,
+            ) {
+                (Some(asset), Some(needed)) => self.balance(account, asset) >= needed,
+                (None, _) => true,
+                (_, None) => false,
+            };
+            rate.consumed(role)
+                .into_iter()
+                .flat_map(Basket::iter)
+                .all(|(asset, quantity)| holds(asset, quantity.checked_mul(units)))
+                && rate
+                    .preserved(role)
+                    .into_iter()
+                    .flat_map(Basket::iter)
+                    .all(|(asset, quantity)| holds(asset, Some(*quantity)))
+        })
     }
 
     /// Retains only candidates applicable to the current snapshot.

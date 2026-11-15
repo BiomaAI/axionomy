@@ -125,10 +125,18 @@ fn rates_with_variables_apply_their_instances_as_lean_applies_them() {
         let world = economy(case);
         let exchange = proposal(&case.proposal);
         let before = serde_json::to_value(&world).unwrap();
+        let assessed = world.assess(&exchange);
         assert_eq!(
-            assessment(&world.assess(&exchange)),
+            assessment(&assessed),
             case.expected["assessment"],
             "{}: assessment",
+            case.label
+        );
+        // The check made before an assessment never refuses one that applies.
+        assert_eq!(
+            world.is_applicable(&exchange),
+            assessed.is_applicable(),
+            "{}: applicable",
             case.label
         );
         let mut branch = world.clone();
