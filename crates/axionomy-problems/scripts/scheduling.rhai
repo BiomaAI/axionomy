@@ -6,17 +6,15 @@
 // The operations, in order.
 fn operations() { ["one-a", "one-b", "one-c", "two-a", "two-b", "two-c"] }
 
-// An operation's job, the machine a planned schedule runs it on, and how many
-// slots it takes there.
-fn spec(operation) {
-    switch operation {
-        "one-a" => #{ job: "one", machine: "one", duration: 2 },
-        "one-b" => #{ job: "one", machine: "two", duration: 1 },
-        "one-c" => #{ job: "one", machine: "three", duration: 1 },
-        "two-a" => #{ job: "two", machine: "one", duration: 2 },
-        "two-b" => #{ job: "two", machine: "two", duration: 1 },
-        "two-c" => #{ job: "two", machine: "three", duration: 1 },
-    }
+// Whether the shop executes its schedule, rather than planning slots: only an
+// executed shop closes.
+fn executing(state) { !state.rates("close").is_empty() }
+
+// What may happen next. A planned shop tries every reservation or finish
+// that applies, in the rates' order; an executed one decides as `dispatch`
+// does.
+fn candidates(state) {
+    if executing(state) { dispatch(state) } else { state.moves("") }
 }
 
 // The machines an executed operation may run on, in the order the shop
@@ -29,54 +27,6 @@ fn alternatives(operation) {
     }
 }
 
-// Whether the shop executes its schedule, rather than planning slots: only an
-// executed shop closes.
-fn executing(state) { !state.rates("close").is_empty() }
-
-// The exchange of `rate`, bound to the schedule and to the jobs, slots and
-// machine the rate names.
-fn action(rate) {
-    let parts = rate.split("/");
-    let bindings = #{ schedule: "success" };
-    switch parts[0] {
-        "schedule" => {
-            let operation = spec(parts[1]);
-            let start = parse_int(parts[3]);
-            bindings["primary-job"] = `job/${operation.job}`;
-            bindings.slot0 = `slot/${operation.machine}/${start}`;
-            if operation.duration == 2 {
-                bindings.slot1 = `slot/${operation.machine}/${start + 1}`;
-            }
-        }
-        "finish" | "close" => {
-            bindings["primary-job"] = "job/one";
-            bindings["secondary-job"] = "job/two";
-        }
-        "queue" | "cancel-queue" | "start" | "complete" | "resume" => {
-            bindings["primary-job"] = `job/${spec(parts[1]).job}`;
-            bindings.machine = `machine/${parts[2]}`;
-        }
-        "fault" => {
-            bindings.machine = "machine/two";
-            if parts[1] == "some" {
-                bindings["primary-job"] = `job/${spec(parts[2]).job}`;
-            }
-        }
-        "repair" | "complete-repair" => {
-            bindings.machine = "machine/two";
-        }
-    }
-    exchange(rate, bindings, 1)
-}
-
-// What may happen next. A planned shop tries every rate that applies, in
-// order; an executed one decides as `dispatch` does.
-fn candidates(state) {
-    if executing(state) { return dispatch(state); }
-    let rates = state.rates("");
-    rates.map(|rate| action(rate)).filter(|proposal| state.applicable(proposal))
-}
-
 // An executed shop's next events, each kind in the economy's order of rates.
 // A completion, a finished repair or closing the day comes first, alone,
 // since it commutes with dispatching; then a disruption that is due.
@@ -84,7 +34,8 @@ fn candidates(state) {
 // until it can start, and then starts at once: of the queued operations that
 // can start, the last in operation and alternative order is the only choice.
 // Otherwise advancing the clock to the next arrival, completion, repair or
-// disruption, queueing, repairing and resuming, whichever apply.
+// disruption within the workday, queueing, repairing and resuming,
+// whichever apply.
 fn dispatch(state) {
     let schedule = state.balances("success");
     if !("active" in schedule) { return []; }
@@ -133,10 +84,10 @@ fn dispatch(state) {
                     let operation = parts[1];
                     let machine = parts[2];
                     let configured = if "configured/one" in machines[machine] { "one" } else { "two" };
-                    let start = `start/${operation}/${machine}/${configured}`;
+                    let start = state.exchange_of(`start/${operation}/${machine}/${configured}`);
                     let rank = operations().index_of(operation) * 2
                         + alternatives(operation).index_of(machine);
-                    if rank > queued_rank && state.applicable(action(start)) {
+                    if rank > queued_rank && state.applicable(start) {
                         queued_start = start;
                         queued_rank = rank;
                     }
@@ -155,22 +106,24 @@ fn dispatch(state) {
     let first = ["close"] + completions.keys();
     if "repairing" in machines.two { first.push("complete-repair"); }
     for rate in first {
-        let proposal = action(rate);
+        let proposal = state.exchange_of(rate);
         if state.applicable(proposal) { return [proposal]; }
     }
     if fault_pending && now == state.balance("success", "fault-at") {
         for rate in ["fault/none"] + faults.keys() {
-            let proposal = action(rate);
+            let proposal = state.exchange_of(rate);
             if state.applicable(proposal) { return [proposal]; }
         }
     }
-    if queued_start != () { return [action(queued_start)]; }
+    if queued_start != () { return [queued_start]; }
     let rest = [];
-    if upcoming != () { rest.push(`advance/${upcoming.to_int()}`); }
+    if upcoming != () && upcoming <= now + state.balance("success", "time-remaining") {
+        rest.push(`advance/${upcoming.to_int()}`);
+    }
     rest += queues.keys();
     if "broken" in machines.two { rest.push("repair"); }
     rest += resumptions.keys();
-    rest.map(|rate| action(rate)).filter(|proposal| state.applicable(proposal))
+    rest.map(|rate| state.exchange_of(rate)).filter(|proposal| state.applicable(proposal))
 }
 
 // When the schedule finishes: the clock of an executed shop, the makespan a

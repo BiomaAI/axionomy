@@ -1,7 +1,10 @@
 //! Executed job shop with queues, setup, shared labor and recoverable disruption.
+//! Each operation's laws serve both machines it may run on, `{machine}`, and
+//! the clock advances to any tick, `{to}`; every role is fixed to the account
+//! its identifier names.
 use super::*;
 use axionomy::path;
-use axionomy::{QuantityComparison as C, QuantityExpression as Q};
+use axionomy::{OptionPattern, QuantityComparison as C};
 
 pub const OPERATIONS: [Operation; 6] = [
     Operation::OneA,
@@ -16,7 +19,7 @@ fn clock() -> Q<Ontology> {
     Q::balance(Role::Schedule, Asset::Now)
 }
 fn law() -> Rate<Ontology> {
-    Rate::new()
+    planned()
         .preserve(Role::Schedule, basket([(Asset::Active, 1)]))
         .condition(
             path!("one-scheduling-event"),
@@ -25,22 +28,37 @@ fn law() -> Rate<Ontology> {
             Q::constant(1),
         )
 }
-fn machine_law(machine: Machine) -> Rate<Ontology> {
-    law()
-        .preserve(
-            Role::Machine,
-            basket([(Asset::MachineIdentity(machine), 1)]),
-        )
-        .distinct(Role::Machine, Role::Schedule)
+/// The machine a rate's identifier names, `{machine}`.
+fn machine() -> Param<Machine> {
+    Param::new(path!("machine"))
 }
-fn operation_law(operation: Operation, machine: Machine) -> Rate<Ontology> {
-    machine_law(machine)
-        .preserve(
-            Role::PrimaryJob,
-            basket([(Asset::JobIdentity(operation_spec(operation).0), 1)]),
+/// A law at `machine`, the machine role fixed to it.
+fn machine_law(machine: Machine) -> Rate<Ontology> {
+    law().account(Role::Machine, Pattern::literal(AccountId::Machine(machine)))
+}
+/// `rate` for `operation`, its job role fixed to the operation's job.
+fn of_operation(rate: Rate<Ontology>, operation: Operation) -> Rate<Ontology> {
+    rate.account(
+        Role::PrimaryJob,
+        Pattern::literal(AccountId::Job(operation_spec(operation).0)),
+    )
+}
+/// `operation`'s law on either machine it may run on, `{machine}`, the
+/// preferred first, the machine role fixed to it.
+fn operation_law(operation: Operation) -> Rate<Ontology> {
+    of_operation(law(), operation)
+        .variable(machine().values(alternatives(operation).map(|(machine, _)| machine)))
+        .account(
+            Role::Machine,
+            AccountIdPattern::Machine(machine().var()).into(),
         )
-        .distinct(Role::PrimaryJob, Role::Machine)
-        .distinct(Role::PrimaryJob, Role::Schedule)
+}
+/// `operation` at the stage `stage` writes, on the machine `{machine}`.
+fn on_machine(
+    stage: fn(Slot<Operation>, Slot<Machine>) -> AssetPattern,
+    operation: Operation,
+) -> Vec<(Pattern<Asset>, Quantity)> {
+    one([stage(Slot::Is(operation), machine().var()).into()])
 }
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
@@ -74,121 +92,132 @@ pub(super) fn build(stress: bool) -> World {
         builder = builder.account(
             AccountId::Job(job),
             Account::from(basket([
-                (Asset::JobIdentity(job), 1),
                 (Asset::Ready(ready), 1),
                 (Asset::Arrival, arrival),
             ])),
         );
     }
     for machine in MACHINES {
-        builder = builder.account(
-            AccountId::Machine(machine),
-            Account::from(basket([
-                (Asset::MachineIdentity(machine), 1),
-                (Asset::Idle, 1),
-                (Asset::Online, 1),
-                (Asset::QueueFree, 1),
-                (
-                    Asset::Configured(if machine == Machine::Two {
-                        Job::Two
-                    } else {
-                        Job::One
-                    }),
-                    1,
-                ),
-            ])),
-        );
+        let mut held = basket([
+            (Asset::Idle, 1),
+            (Asset::Online, 1),
+            (Asset::QueueFree, 1),
+            (
+                Asset::Configured(if machine == Machine::Two {
+                    Job::Two
+                } else {
+                    Job::One
+                }),
+                1,
+            ),
+        ]);
+        // How long the machine takes for each operation it may run.
+        for operation in OPERATIONS {
+            for (runs, duration) in alternatives(operation) {
+                if runs == machine {
+                    held.insert(Asset::ProcessingTime(operation), Quantity::new(duration));
+                }
+            }
+        }
+        builder = builder.account(AccountId::Machine(machine), Account::from(held));
     }
     for operation in OPERATIONS {
         let job = operation_spec(operation).0;
-        for (machine, duration) in alternatives(operation) {
-            builder = builder.rate(
-                RateId::Queue { operation, machine },
-                operation_law(operation, machine)
-                    .condition(
-                        path!("job-has-arrived"),
-                        clock(),
-                        C::GreaterThanOrEqual,
-                        Q::balance(Role::PrimaryJob, Asset::Arrival),
-                    )
-                    .consume(Role::PrimaryJob, basket([(Asset::Ready(operation), 1)]))
-                    .produce(
-                        Role::PrimaryJob,
-                        basket([(Asset::Queued(operation, machine), 1)]),
-                    )
-                    .consume(Role::Machine, basket([(Asset::QueueFree, 1)]))
-                    .produce(Role::Machine, basket([(Asset::QueueTicket(operation), 1)])),
-            );
-            builder = builder.rate(
-                RateId::CancelQueue { operation, machine },
-                operation_law(operation, machine)
-                    .consume(
-                        Role::PrimaryJob,
-                        basket([(Asset::Queued(operation, machine), 1)]),
-                    )
-                    .produce(Role::PrimaryJob, basket([(Asset::Ready(operation), 1)]))
-                    .consume(Role::Machine, basket([(Asset::QueueTicket(operation), 1)]))
-                    .produce(Role::Machine, basket([(Asset::QueueFree, 1)])),
-            );
-            for configured in [Job::One, Job::Two] {
-                let elapsed = duration + u64::from(configured != job);
-                builder = builder.rate(
-                    RateId::Start {
-                        operation,
-                        machine,
-                        configured,
-                    },
-                    operation_law(operation, machine)
-                        .preserve(Role::Machine, basket([(Asset::Online, 1)]))
-                        .consume(
-                            Role::PrimaryJob,
-                            basket([(Asset::Queued(operation, machine), 1)]),
-                        )
-                        .produce(
-                            Role::PrimaryJob,
-                            basket([(Asset::Running(operation, machine), 1)]),
-                        )
-                        .produce_computed(
-                            Role::PrimaryJob,
-                            Asset::Due,
-                            clock() + Q::constant(elapsed),
-                        )
-                        .consume(
-                            Role::Machine,
-                            basket([
-                                (Asset::Idle, 1),
-                                (Asset::QueueTicket(operation), 1),
-                                (Asset::Configured(configured), 1),
-                            ]),
-                        )
-                        .produce(
-                            Role::Machine,
-                            basket([
-                                (Asset::Busy, 1),
-                                (Asset::QueueFree, 1),
-                                (Asset::Configured(job), 1),
-                            ]),
-                        )
-                        .consume(
-                            Role::Schedule,
-                            basket([(Asset::Labor, 1), (Asset::NotStarted(operation), 1)]),
-                        )
-                        .produce(
-                            Role::Schedule,
-                            basket([
-                                (Asset::BusyLabor, 1),
-                                (Asset::Started(operation), 1),
-                                (Asset::ExecutedOn(operation, machine), 1),
-                            ]),
-                        )
-                        .produce_computed(Role::Schedule, Asset::StartTime(operation), clock()),
-                );
+        builder = builder.rate_at(
+            RateIdPattern::Queue {
+                operation: Slot::Is(operation),
+                machine: machine().var(),
             }
-            let mut complete = clear(
-                operation_law(operation, machine),
-                Role::PrimaryJob,
-                Asset::Due,
-            )
+            .into(),
+            operation_law(operation)
+                .condition(
+                    path!("job-has-arrived"),
+                    clock(),
+                    C::GreaterThanOrEqual,
+                    Q::balance(Role::PrimaryJob, Asset::Arrival),
+                )
+                .consume(Role::PrimaryJob, basket([(Asset::Ready(operation), 1)]))
+                .produce_at(
+                    Role::PrimaryJob,
+                    on_machine(AssetPattern::Queued, operation),
+                )
+                .consume(Role::Machine, basket([(Asset::QueueFree, 1)]))
+                .produce(Role::Machine, basket([(Asset::QueueTicket(operation), 1)])),
+        );
+        builder = builder.rate_at(
+            RateIdPattern::CancelQueue {
+                operation: Slot::Is(operation),
+                machine: machine().var(),
+            }
+            .into(),
+            operation_law(operation)
+                .consume_at(
+                    Role::PrimaryJob,
+                    on_machine(AssetPattern::Queued, operation),
+                )
+                .produce(Role::PrimaryJob, basket([(Asset::Ready(operation), 1)]))
+                .consume(Role::Machine, basket([(Asset::QueueTicket(operation), 1)]))
+                .produce(Role::Machine, basket([(Asset::QueueFree, 1)])),
+        );
+        // A machine set up for the other job takes a tick more, to switch.
+        for configured in [Job::One, Job::Two] {
+            let setup = u64::from(configured != job);
+            builder = builder.rate_at(
+                RateIdPattern::Start {
+                    operation: Slot::Is(operation),
+                    machine: machine().var(),
+                    configured: Slot::Is(configured),
+                }
+                .into(),
+                operation_law(operation)
+                    .preserve(Role::Machine, basket([(Asset::Online, 1)]))
+                    .consume_at(
+                        Role::PrimaryJob,
+                        on_machine(AssetPattern::Queued, operation),
+                    )
+                    .produce_at(
+                        Role::PrimaryJob,
+                        on_machine(AssetPattern::Running, operation),
+                    )
+                    .produce_computed(
+                        Role::PrimaryJob,
+                        Asset::Due,
+                        clock()
+                            + Q::balance(Role::Machine, Asset::ProcessingTime(operation))
+                            + Q::constant(setup),
+                    )
+                    .consume(
+                        Role::Machine,
+                        basket([
+                            (Asset::Idle, 1),
+                            (Asset::QueueTicket(operation), 1),
+                            (Asset::Configured(configured), 1),
+                        ]),
+                    )
+                    .produce(
+                        Role::Machine,
+                        basket([
+                            (Asset::Busy, 1),
+                            (Asset::QueueFree, 1),
+                            (Asset::Configured(job), 1),
+                        ]),
+                    )
+                    .consume(
+                        Role::Schedule,
+                        basket([(Asset::Labor, 1), (Asset::NotStarted(operation), 1)]),
+                    )
+                    .produce(
+                        Role::Schedule,
+                        basket([(Asset::BusyLabor, 1), (Asset::Started(operation), 1)]),
+                    )
+                    .produce_at(
+                        Role::Schedule,
+                        on_machine(AssetPattern::ExecutedOn, operation),
+                    )
+                    .produce_computed(Role::Schedule, Asset::StartTime(operation), clock()),
+            );
+        }
+        let complete = clear(operation_law(operation), Role::PrimaryJob, Asset::Due)
             .preserve(Role::Machine, basket([(Asset::Online, 1)]))
             .condition(
                 path!("execution-has-finished"),
@@ -196,51 +225,60 @@ pub(super) fn build(stress: bool) -> World {
                 C::GreaterThanOrEqual,
                 Q::balance(Role::PrimaryJob, Asset::Due),
             )
-            .consume(
+            .consume_at(
                 Role::PrimaryJob,
-                basket([(Asset::Running(operation, machine), 1)]),
+                on_machine(AssetPattern::Running, operation),
             )
             .consume(Role::Machine, basket([(Asset::Busy, 1)]))
             .produce(Role::Machine, basket([(Asset::Idle, 1)]))
             .consume(Role::Schedule, basket([(Asset::BusyLabor, 1)]))
             .produce(Role::Schedule, basket([(Asset::Labor, 1)]))
             .produce_computed(Role::Schedule, Asset::EndTime(operation), clock());
-            if let Some(next) = successor(operation) {
-                complete = complete.produce(Role::PrimaryJob, basket([(Asset::Ready(next), 1)]));
-            } else {
-                complete = complete
-                    .produce(Role::PrimaryJob, basket([(Asset::Done, 1)]))
-                    .produce_computed(Role::PrimaryJob, Asset::CompletionTime, clock());
+        let complete = match successor(operation) {
+            Some(next) => complete.produce(Role::PrimaryJob, basket([(Asset::Ready(next), 1)])),
+            None => complete
+                .produce(Role::PrimaryJob, basket([(Asset::Done, 1)]))
+                .produce_computed(Role::PrimaryJob, Asset::CompletionTime, clock()),
+        };
+        builder = builder.rate_at(
+            RateIdPattern::Complete {
+                operation: Slot::Is(operation),
+                machine: machine().var(),
             }
-            builder = builder.rate(RateId::Complete { operation, machine }, complete);
-            builder = builder.rate(
-                RateId::Resume { operation, machine },
-                clear(
-                    operation_law(operation, machine),
-                    Role::PrimaryJob,
-                    Asset::WorkRemaining,
-                )
-                .preserve(
-                    Role::Machine,
-                    basket([(Asset::Online, 1), (Asset::Busy, 1)]),
-                )
-                .consume(
-                    Role::PrimaryJob,
-                    basket([(Asset::Paused(operation, machine), 1)]),
-                )
-                .produce(
-                    Role::PrimaryJob,
-                    basket([(Asset::Running(operation, machine), 1)]),
-                )
-                .produce_computed(
-                    Role::PrimaryJob,
-                    Asset::Due,
-                    clock() + Q::balance(Role::PrimaryJob, Asset::WorkRemaining),
-                )
-                .consume(Role::Schedule, basket([(Asset::Labor, 1)]))
-                .produce(Role::Schedule, basket([(Asset::BusyLabor, 1)])),
-            );
-        }
+            .into(),
+            complete,
+        );
+        builder = builder.rate_at(
+            RateIdPattern::Resume {
+                operation: Slot::Is(operation),
+                machine: machine().var(),
+            }
+            .into(),
+            clear(
+                operation_law(operation),
+                Role::PrimaryJob,
+                Asset::WorkRemaining,
+            )
+            .preserve(
+                Role::Machine,
+                basket([(Asset::Online, 1), (Asset::Busy, 1)]),
+            )
+            .consume_at(
+                Role::PrimaryJob,
+                on_machine(AssetPattern::Paused, operation),
+            )
+            .produce_at(
+                Role::PrimaryJob,
+                on_machine(AssetPattern::Running, operation),
+            )
+            .produce_computed(
+                Role::PrimaryJob,
+                Asset::Due,
+                clock() + Q::balance(Role::PrimaryJob, Asset::WorkRemaining),
+            )
+            .consume(Role::Schedule, basket([(Asset::Labor, 1)]))
+            .produce(Role::Schedule, basket([(Asset::BusyLabor, 1)])),
+        );
     }
     let fault = || {
         machine_law(Machine::Two)
@@ -255,8 +293,11 @@ pub(super) fn build(stress: bool) -> World {
             .consume(Role::Machine, basket([(Asset::Online, 1)]))
             .produce(Role::Machine, basket([(Asset::Broken, 1)]))
     };
-    builder = builder.rate(
-        RateId::Fault { operation: None },
+    builder = builder.rate_at(
+        RateIdPattern::Fault {
+            operation: Slot::Of(OptionPattern::None),
+        }
+        .into(),
         fault().preserve(Role::Machine, basket([(Asset::Idle, 1)])),
     );
     for operation in OPERATIONS {
@@ -268,37 +309,35 @@ pub(super) fn build(stress: bool) -> World {
                 RateId::Fault {
                     operation: Some(operation),
                 },
-                clear(fault(), Role::PrimaryJob, Asset::Due)
-                    .preserve(
-                        Role::PrimaryJob,
-                        basket([(Asset::JobIdentity(operation_spec(operation).0), 1)]),
-                    )
-                    .condition(
-                        path!("unfinished-work-remains"),
-                        Q::balance(Role::PrimaryJob, Asset::Due),
-                        C::GreaterThanOrEqual,
-                        clock() + Q::constant(1),
-                    )
-                    .consume(
-                        Role::PrimaryJob,
-                        basket([(Asset::Running(operation, Machine::Two), 1)]),
-                    )
-                    .produce(
-                        Role::PrimaryJob,
-                        basket([(Asset::Paused(operation, Machine::Two), 1)]),
-                    )
-                    .produce_computed(
-                        Role::PrimaryJob,
-                        Asset::WorkRemaining,
-                        Q::balance(Role::PrimaryJob, Asset::Due) - clock(),
-                    )
-                    .consume(Role::Schedule, basket([(Asset::BusyLabor, 1)]))
-                    .produce(
-                        Role::Schedule,
-                        basket([(Asset::Labor, 1), (Asset::Interrupted(operation), 1)]),
-                    )
-                    .distinct(Role::PrimaryJob, Role::Machine)
-                    .distinct(Role::PrimaryJob, Role::Schedule),
+                clear(
+                    of_operation(fault(), operation),
+                    Role::PrimaryJob,
+                    Asset::Due,
+                )
+                .condition(
+                    path!("unfinished-work-remains"),
+                    Q::balance(Role::PrimaryJob, Asset::Due),
+                    C::GreaterThanOrEqual,
+                    clock() + Q::constant(1),
+                )
+                .consume(
+                    Role::PrimaryJob,
+                    basket([(Asset::Running(operation, Machine::Two), 1)]),
+                )
+                .produce(
+                    Role::PrimaryJob,
+                    basket([(Asset::Paused(operation, Machine::Two), 1)]),
+                )
+                .produce_computed(
+                    Role::PrimaryJob,
+                    Asset::WorkRemaining,
+                    Q::balance(Role::PrimaryJob, Asset::Due) - clock(),
+                )
+                .consume(Role::Schedule, basket([(Asset::BusyLabor, 1)]))
+                .produce(
+                    Role::Schedule,
+                    basket([(Asset::Labor, 1), (Asset::Interrupted(operation), 1)]),
+                ),
             );
         }
     }
@@ -335,51 +374,43 @@ pub(super) fn build(stress: bool) -> World {
             .consume(Role::Schedule, basket([(Asset::BusyLabor, 1)]))
             .produce(Role::Schedule, basket([(Asset::Labor, 1)])),
     );
-    for to in 1..=horizon as u8 {
-        builder = builder.rate(
-            RateId::Advance { to },
-            law()
-                .condition(
-                    path!("clock-moves-forward"),
-                    clock() + Q::constant(1),
-                    C::LessThanOrEqual,
-                    Q::constant(u64::from(to)),
-                )
-                .condition(
-                    path!("cannot-skip-a-scheduled-disruption"),
-                    Q::constant(u64::from(to)),
-                    C::LessThanOrEqual,
-                    Q::balance(Role::Schedule, Asset::FaultAt)
-                        + Q::balance(Role::Schedule, Asset::FaultOccurred) * Q::constant(horizon),
-                )
-                .consume_computed(
-                    Role::Schedule,
-                    Asset::TimeRemaining,
-                    Q::constant(u64::from(to)) - clock(),
-                )
-                .produce_computed(
-                    Role::Schedule,
-                    Asset::Now,
-                    Q::constant(u64::from(to)) - clock(),
-                ),
-        );
-    }
+    let to = Param::<u8>::new(path!("to"));
+    builder = builder.rate_at(
+        RateIdPattern::Advance { to: to.var() }.into(),
+        law()
+            .variable(to.range(1, horizon as u8))
+            .condition(
+                path!("clock-moves-forward"),
+                clock() + Q::constant(1),
+                C::LessThanOrEqual,
+                to.quantity(),
+            )
+            .condition(
+                path!("cannot-skip-a-scheduled-disruption"),
+                to.quantity(),
+                C::LessThanOrEqual,
+                Q::balance(Role::Schedule, Asset::FaultAt)
+                    + Q::balance(Role::Schedule, Asset::FaultOccurred) * Q::constant(horizon),
+            )
+            .consume_computed(
+                Role::Schedule,
+                Asset::TimeRemaining,
+                to.quantity() - clock(),
+            )
+            .produce_computed(Role::Schedule, Asset::Now, to.quantity() - clock()),
+    );
     builder = builder.rate(
         RateId::Close,
-        Rate::new()
-            .preserve(
-                Role::PrimaryJob,
-                basket([(Asset::JobIdentity(Job::One), 1), (Asset::Done, 1)]),
-            )
-            .preserve(
+        planned()
+            .account(Role::PrimaryJob, Pattern::literal(AccountId::Job(Job::One)))
+            .account(
                 Role::SecondaryJob,
-                basket([(Asset::JobIdentity(Job::Two), 1), (Asset::Done, 1)]),
+                Pattern::literal(AccountId::Job(Job::Two)),
             )
+            .preserve(Role::PrimaryJob, basket([(Asset::Done, 1)]))
+            .preserve(Role::SecondaryJob, basket([(Asset::Done, 1)]))
             .consume(Role::Schedule, basket([(Asset::Active, 1)]))
-            .produce(Role::Schedule, basket([(Asset::Solved, 1)]))
-            .distinct(Role::PrimaryJob, Role::SecondaryJob)
-            .distinct(Role::PrimaryJob, Role::Schedule)
-            .distinct(Role::SecondaryJob, Role::Schedule),
+            .produce(Role::Schedule, basket([(Asset::Solved, 1)])),
     );
     let mut jobs = LinearInvariant::new(path!("job-phase-accounting")).weight(Asset::Done, 1);
     let mut queues =
@@ -451,15 +482,18 @@ pub(super) fn build(stress: bool) -> World {
 mod tests {
     use super::*;
     fn apply(world: &mut World, rate: RateId) {
-        world.apply(action(rate)).unwrap();
+        world.apply(action(world, rate)).unwrap();
     }
     #[test]
     fn reservations_are_not_execution_and_shared_labor_limits_overlap() {
         let mut world = initial_showcase();
-        assert!(!world.is_applicable(&action(RateId::Queue {
-            operation: Operation::TwoA,
-            machine: Machine::Two
-        })));
+        assert!(!world.is_applicable(&action(
+            &world,
+            RateId::Queue {
+                operation: Operation::TwoA,
+                machine: Machine::Two
+            }
+        )));
         apply(
             &mut world,
             RateId::Queue {
@@ -480,10 +514,13 @@ mod tests {
                 configured: Job::One,
             },
         );
-        assert!(!world.is_applicable(&action(RateId::Complete {
-            operation: Operation::OneA,
-            machine: Machine::One
-        })));
+        assert!(!world.is_applicable(&action(
+            &world,
+            RateId::Complete {
+                operation: Operation::OneA,
+                machine: Machine::One
+            }
+        )));
         apply(&mut world, RateId::Advance { to: 1 });
         apply(
             &mut world,
@@ -527,7 +564,7 @@ mod tests {
                 configured: Job::Two,
             },
         );
-        assert!(!world.is_applicable(&action(RateId::Advance { to: 4 })));
+        assert!(!world.is_applicable(&action(&world, RateId::Advance { to: 4 })));
         apply(&mut world, RateId::Advance { to: 3 });
         apply(
             &mut world,
@@ -541,12 +578,15 @@ mod tests {
                 .to_u64(),
             1
         );
-        assert!(!world.is_applicable(&action(RateId::Resume {
-            operation: Operation::TwoA,
-            machine: Machine::Two
-        })));
+        assert!(!world.is_applicable(&action(
+            &world,
+            RateId::Resume {
+                operation: Operation::TwoA,
+                machine: Machine::Two
+            }
+        )));
         apply(&mut world, RateId::Repair);
-        assert!(!world.is_applicable(&action(RateId::CompleteRepair)));
+        assert!(!world.is_applicable(&action(&world, RateId::CompleteRepair)));
         apply(&mut world, RateId::Advance { to: 5 });
         apply(&mut world, RateId::CompleteRepair);
         apply(

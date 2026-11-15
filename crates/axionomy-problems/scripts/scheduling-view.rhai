@@ -40,8 +40,6 @@ fn machine_name(machine) {
 
 fn asset_label(name, parts) {
     switch name {
-        "job-identity" => `This is ${job_name(parts[2])}`,
-        "slot-identity" => `This is ${machine_name(parts[2])} at slot ${parts[3]}`,
         "ready-at" => `${operation_name(parts[2])} ready at slot ${parts[3]}`,
         "completed-at" => `${operation_name(parts[2])} completed at slot ${parts[3]}`,
         "available" => "Machine slot available",
@@ -49,7 +47,7 @@ fn asset_label(name, parts) {
         "makespan" => `Overall finish at slot ${parts[2]}`,
         "active" => "Schedule in progress",
         "solved" => "Schedule complete",
-        "machine-identity" => `This is ${machine_name(parts[2])}`,
+        "processing-time" => `Runs ${operation_name(parts[2])} in`,
         "ready" => `${operation_name(parts[2])} ready for routing`,
         "queued" => `${operation_name(parts[2])} queued on ${machine_name(parts[3])}`,
         "running" => `${operation_name(parts[2])} running on ${machine_name(parts[3])}`,
@@ -143,6 +141,7 @@ fn label(item) {
 fn format(asset) {
     switch asset.split("/")[0] {
         "arrival" | "due" | "work-remaining" | "completion-time" | "now" | "time-remaining"
+            | "processing-time"
             | "fault-at" | "repair-duration" | "start-time" | "end-time" => #{ scale: 0, unit: "ticks" },
         _ => (),
     }

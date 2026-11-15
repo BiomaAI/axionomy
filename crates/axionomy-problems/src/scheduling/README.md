@@ -15,6 +15,14 @@ The package's exact searches omit equivalent early queue reservations and
 process ready completions before dispatch. The static slot fixture below
 remains Micro.
 
+Each operation's laws serve both machines it may run on,
+`queue/one-a/{machine}`, and each machine holds how long it takes for each
+operation as a `ProcessingTime(operation)` fact, from which a start computes
+when the work is due; a start splits only by whether the machine must switch
+its setup. The clock advances by one law to any tick, `advance/{to}`. Every
+role is fixed to the account its identifier names. Showcase has 45 rates as
+written, for 96 instances, and Stress 45, for 104.
+
 ## Specification
 
 Two jobs each have two ordered operations:
@@ -24,14 +32,19 @@ Job 1: M1 for 2 slots → M2 for 1 slot
 Job 2: M1 for 2 slots → M2 for 1 slot
 ```
 
-Every `(machine,time)` pair is an account preserving
-`SlotIdentity(machine,time)` and initially holding `Available`.
-Scheduling consumes a job's `ReadyAt` token and every required slot's
-availability, then produces `Reserved(operation)` and the successor readiness
-or final completion token.
+Every `(machine,time)` pair is an account initially holding `Available`.
+Reserving an operation, `schedule/<operation>/{ready}/{start}`, consumes its
+job's `ReadyAt(operation, ready)` token and the availability of its
+machine's slots from `{start}`, each slot role fixed to the slot it names,
+then produces `Reserved(operation)` and the successor's readiness or the
+final completion token at the end it derives, `{end}`: the start plus the
+operation's duration, a constant of its law. A relation keeps every start no
+earlier than its ready time.
 
-Finish preserves both completion tokens and produces `Makespan(n)` and
-`Solved`.
+Finish, `finish/{job-one-end}/{job-two-end}/{makespan}`, preserves both
+completion tokens and produces `Makespan(makespan)` and `Solved`; a relation
+holds the makespan to the later end. Micro has 5 rates as written, for 56
+instances.
 
 ## Required results
 
@@ -49,14 +62,16 @@ The model's tests apply the rules directly:
 - For horizons zero through five, the economy accepts exactly the schedules a
   direct job-shop brute-force oracle calls feasible, at the makespan it
   computes, the least being 5.
-- Rebinding an operation to the wrong machine or time slot is rejected.
+- Rebinding an operation to the wrong machine or time slot is rejected, and
+  no reservation starts before its operation is ready.
 
 ## API pressure
 
 - Atomic reservation of variable numbers of accounts.
 - Precedence represented as tokens, not solver-only constraints.
 - Optimization objective encoded in final state.
-- Concrete-rate explosion across ready/start times.
+- Rates with variables across ready and start times, with a derived end and
+  relations for what never changes.
 - Stakeholder completion allocation without a privileged scalar compromise.
 
 ## In this folder

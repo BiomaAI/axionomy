@@ -2,7 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
+    QuantityExpression as Q, Rate, Relation, Segment, Slot, basket,
 };
 
 pub mod execution;
@@ -42,8 +43,6 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
-    JobIdentity(Job),
-    SlotIdentity(Machine, u8),
     ReadyAt(Operation, u8),
     CompletedAt(Operation, u8),
     Available,
@@ -51,7 +50,9 @@ pub enum Asset {
     Makespan(u8),
     Active,
     Solved,
-    MachineIdentity(Machine),
+    /// How many ticks a machine takes to run an operation: a fact of the
+    /// machine.
+    ProcessingTime(Operation),
     Ready(Operation),
     Queued(Operation, Machine),
     Running(Operation, Machine),
@@ -207,17 +208,11 @@ fn build(horizon: u8, extended: bool) -> World {
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Job(Job::One),
-            Account::from(basket([
-                (Asset::JobIdentity(Job::One), 1),
-                (Asset::ReadyAt(Operation::OneA, 0), 1),
-            ])),
+            Account::from(basket([(Asset::ReadyAt(Operation::OneA, 0), 1)])),
         )
         .account(
             AccountId::Job(Job::Two),
-            Account::from(basket([
-                (Asset::JobIdentity(Job::Two), 1),
-                (Asset::ReadyAt(Operation::TwoA, 0), 1),
-            ])),
+            Account::from(basket([(Asset::ReadyAt(Operation::TwoA, 0), 1)])),
         )
         .account(
             AccountId::Success,
@@ -232,81 +227,93 @@ fn build(horizon: u8, extended: bool) -> World {
         for time in 0..horizon {
             builder = builder.account(
                 AccountId::Slot(machine, time),
-                Account::from(basket([
-                    (Asset::SlotIdentity(machine, time), 1),
-                    (Asset::Available, 1),
-                ])),
+                Account::from(basket([(Asset::Available, 1)])),
             );
         }
     }
 
+    // Each operation is reserved ready at `{ready}` and started at
+    // `{start}`, no earlier, its last slot within the horizon.
     for &operation in operations {
         let (_, _, duration, predecessor_duration) = operation_spec(operation);
-        if duration > horizon {
+        let Some(latest) = horizon.checked_sub(duration) else {
             continue;
-        }
+        };
         let ready_times: Vec<u8> = if predecessor_duration == 0 {
             vec![0]
         } else {
-            (predecessor_duration..=horizon).collect()
+            (predecessor_duration..=latest).collect()
         };
-        for ready in ready_times {
-            if ready > horizon - duration {
-                continue;
-            }
-            for start in ready..=horizon - duration {
-                builder = builder.rate(
-                    RateId::Schedule {
-                        operation,
-                        ready,
-                        start,
-                    },
-                    schedule_rate(
-                        operation,
-                        ready,
-                        start,
-                        operation == final_operations.0 || operation == final_operations.1,
-                    ),
-                );
-            }
+        if ready_times.is_empty() {
+            continue;
         }
+        builder = builder.rate_at(
+            RateIdPattern::Schedule {
+                operation: Slot::Is(operation),
+                ready: ready().var(),
+                start: start().var(),
+            }
+            .into(),
+            schedule_rate(
+                operation,
+                &ready_times,
+                latest,
+                operation == final_operations.0 || operation == final_operations.1,
+            ),
+        );
     }
 
-    for one_end in 0..=horizon {
-        for two_end in 0..=horizon {
-            let makespan = one_end.max(two_end);
-            builder = builder.rate(
-                RateId::Finish {
-                    job_one_end: one_end,
-                    job_two_end: two_end,
-                    makespan,
-                },
-                Rate::new()
-                    .preserve(
-                        Role::PrimaryJob,
-                        basket([
-                            (Asset::JobIdentity(Job::One), 1),
-                            (Asset::CompletedAt(final_operations.0, one_end), 1),
-                        ]),
-                    )
-                    .preserve(
-                        Role::SecondaryJob,
-                        basket([
-                            (Asset::JobIdentity(Job::Two), 1),
-                            (Asset::CompletedAt(final_operations.1, two_end), 1),
-                        ]),
-                    )
-                    .consume(Role::Schedule, basket([(Asset::Active, 1)]))
-                    .produce(
-                        Role::Schedule,
-                        basket([(Asset::Makespan(makespan), 1), (Asset::Solved, 1)]),
-                    )
-                    .distinct(Role::PrimaryJob, Role::SecondaryJob)
-                    .distinct(Role::PrimaryJob, Role::Schedule)
-                    .distinct(Role::SecondaryJob, Role::Schedule),
-            );
+    // Finishing reads when each job completed; the makespan is the later.
+    let (one_end, two_end, makespan) = (
+        Param::<u8>::new(path!("job-one-end")),
+        Param::<u8>::new(path!("job-two-end")),
+        Param::<u8>::new(path!("makespan")),
+    );
+    let ends = (0..=horizon).flat_map(|one| {
+        (0..=horizon)
+            .map(move |two| [one, two, one.max(two)].map(|end| Segment::from(u64::from(end))))
+    });
+    builder = builder.rate_at(
+        RateIdPattern::Finish {
+            job_one_end: one_end.var(),
+            job_two_end: two_end.var(),
+            makespan: makespan.var(),
         }
-    }
+        .into(),
+        planned()
+            .variable(one_end.range(0, horizon))
+            .variable(two_end.range(0, horizon))
+            .variable(makespan.range(0, horizon))
+            .relation(Relation::new(
+                [one_end.name(), two_end.name(), makespan.name()].map(Clone::clone),
+                ends,
+            ))
+            .account(Role::PrimaryJob, Pattern::literal(AccountId::Job(Job::One)))
+            .account(
+                Role::SecondaryJob,
+                Pattern::literal(AccountId::Job(Job::Two)),
+            )
+            .preserve_at(
+                Role::PrimaryJob,
+                one([
+                    AssetPattern::CompletedAt(Slot::Is(final_operations.0), one_end.var()).into(),
+                ]),
+            )
+            .preserve_at(
+                Role::SecondaryJob,
+                one([
+                    AssetPattern::CompletedAt(Slot::Is(final_operations.1), two_end.var()).into(),
+                ]),
+            )
+            .consume(Role::Schedule, basket([(Asset::Active, 1)]))
+            .produce_at(
+                Role::Schedule,
+                one([
+                    AssetPattern::Makespan(makespan.var()).into(),
+                    Pattern::literal(Asset::Solved),
+                ]),
+            ),
+    );
 
     let job_state = operations.iter().copied().fold(
         LinearInvariant::new(path!("two-job-state-tokens")),
@@ -335,50 +342,74 @@ fn build(horizon: u8, extended: bool) -> World {
         .expect("scheduling model is valid")
 }
 
+/// The time a reservation's operation is ready at, `{ready}`.
+fn ready() -> Param<u8> {
+    Param::new(path!("ready"))
+}
+
+/// The slot a reservation starts at, `{start}`.
+fn start() -> Param<u8> {
+    Param::new(path!("start"))
+}
+
+/// One unit of each asset `assets` names.
+fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
+    assets
+        .into_iter()
+        .map(|asset| (asset, Quantity::new(1)))
+        .collect()
+}
+
+/// An event of a planned schedule, its schedule role fixed to the schedule.
+fn planned() -> Rate<Ontology> {
+    Rate::new().account(Role::Schedule, Pattern::literal(AccountId::Success))
+}
+
+/// Reserving `operation`, ready at one of `ready_times`, from `{start}` no
+/// earlier and no later than `latest`: it takes its machine's slots for its
+/// duration, a constant of the law, and the operation it unlocks, or its
+/// completion, is ready at the end it derives, `{end}`.
 fn schedule_rate(
     operation: Operation,
-    ready: u8,
-    start: u8,
+    ready_times: &[u8],
+    latest: u8,
     final_operation: bool,
 ) -> Rate<Ontology> {
     let (job, machine, duration, _) = operation_spec(operation);
-    let end = start + duration;
-    let mut rate = Rate::new()
-        .preserve(Role::Schedule, basket([(Asset::Active, 1)]))
-        .preserve(Role::PrimaryJob, basket([(Asset::JobIdentity(job), 1)]))
-        .preserve(
-            Role::Slot0,
-            basket([(Asset::SlotIdentity(machine, start), 1)]),
+    let end = Param::<u8>::new(path!("end"));
+    let slot = |time: Slot<u8>| AccountIdPattern::Slot(Slot::Is(machine), time).into();
+    let starts = ready_times
+        .iter()
+        .flat_map(|&ready| (ready..=latest).map(move |start| (ready, start)));
+    let mut rate = planned()
+        .variable(ready().values(ready_times.iter().copied()))
+        .variable(start().range(ready_times[0], latest))
+        .relation(Relation::pairs(&ready(), &start(), starts))
+        .derive(
+            end.name().clone(),
+            start().quantity() + Q::constant(u64::from(duration)),
         )
-        .consume(
+        .account(Role::PrimaryJob, Pattern::literal(AccountId::Job(job)))
+        .account(Role::Slot0, slot(start().var()))
+        .preserve(Role::Schedule, basket([(Asset::Active, 1)]))
+        .consume_at(
             Role::PrimaryJob,
-            basket([(Asset::ReadyAt(operation, ready), 1)]),
+            one([AssetPattern::ReadyAt(Slot::Is(operation), ready().var()).into()]),
         )
         .consume(Role::Slot0, basket([(Asset::Available, 1)]))
-        .produce(Role::Slot0, basket([(Asset::Reserved(operation), 1)]))
-        .distinct(Role::Schedule, Role::PrimaryJob)
-        .distinct(Role::Schedule, Role::Slot0)
-        .distinct(Role::PrimaryJob, Role::Slot0);
-    if !final_operation {
-        let next = successor(operation).expect("non-final operation has a successor");
-        rate = rate.produce(Role::PrimaryJob, basket([(Asset::ReadyAt(next, end), 1)]));
-    } else {
-        rate = rate.produce(
-            Role::PrimaryJob,
-            basket([(Asset::CompletedAt(operation, end), 1)]),
-        );
-    }
+        .produce(Role::Slot0, basket([(Asset::Reserved(operation), 1)]));
+    let unlocked = match successor(operation) {
+        Some(next) if !final_operation => AssetPattern::ReadyAt(Slot::Is(next), end.var()),
+        _ => AssetPattern::CompletedAt(Slot::Is(operation), end.var()),
+    };
+    rate = rate.produce_at(Role::PrimaryJob, one([unlocked.into()]));
     if duration == 2 {
+        let second = Param::<u8>::new(path!("second"));
         rate = rate
-            .preserve(
-                Role::Slot1,
-                basket([(Asset::SlotIdentity(machine, start + 1), 1)]),
-            )
+            .derive(second.name().clone(), start().quantity() + Q::constant(1))
+            .account(Role::Slot1, slot(second.var()))
             .consume(Role::Slot1, basket([(Asset::Available, 1)]))
-            .produce(Role::Slot1, basket([(Asset::Reserved(operation), 1)]))
-            .distinct(Role::Schedule, Role::Slot1)
-            .distinct(Role::PrimaryJob, Role::Slot1)
-            .distinct(Role::Slot0, Role::Slot1);
+            .produce(Role::Slot1, basket([(Asset::Reserved(operation), 1)]));
     }
     rate
 }
@@ -404,57 +435,24 @@ fn successor(operation: Operation) -> Option<Operation> {
     }
 }
 
-/// The exchange applying `rate` once, bound to the schedule and to the jobs,
-/// slots and machine the rate names.
-pub fn action(rate: RateId) -> Action {
-    let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Schedule, AccountId::Success);
-    match rate {
-        RateId::Schedule {
-            operation, start, ..
-        } => {
-            let (job, machine, duration, _) = operation_spec(operation);
-            let mut exchange = exchange
-                .bind(Role::PrimaryJob, AccountId::Job(job))
-                .bind(Role::Slot0, AccountId::Slot(machine, start));
-            if duration == 2 {
-                exchange = exchange.bind(Role::Slot1, AccountId::Slot(machine, start + 1));
-            }
-            exchange
-        }
-        RateId::Finish { .. } => exchange
-            .bind(Role::PrimaryJob, AccountId::Job(Job::One))
-            .bind(Role::SecondaryJob, AccountId::Job(Job::Two)),
-        RateId::Queue { operation, machine }
-        | RateId::CancelQueue { operation, machine }
-        | RateId::Start {
-            operation, machine, ..
-        }
-        | RateId::Complete { operation, machine }
-        | RateId::Resume { operation, machine } => exchange
-            .bind(
-                Role::PrimaryJob,
-                AccountId::Job(operation_spec(operation).0),
+/// The exchange of one unit of `rate`, each role bound to the account
+/// `world`'s rate fixes it to; bound to nothing where `rate` names no
+/// instance of `world`'s rates, so that `world` refuses it.
+pub fn action(world: &World, rate: RateId) -> Action {
+    let exchange = Exchange::new(rate, Quantity::new(1));
+    let Ok(instance) = world.instance(&rate) else {
+        return exchange;
+    };
+    instance
+        .fixed_accounts()
+        .fold(exchange, |exchange, (role, account)| {
+            exchange.bind(
+                *role,
+                *account
+                    .as_literal()
+                    .expect("an instance's accounts are written out"),
             )
-            .bind(Role::Machine, AccountId::Machine(machine)),
-        RateId::Fault { operation } => {
-            let exchange = exchange.bind(Role::Machine, AccountId::Machine(Machine::Two));
-            if let Some(operation) = operation {
-                exchange.bind(
-                    Role::PrimaryJob,
-                    AccountId::Job(operation_spec(operation).0),
-                )
-            } else {
-                exchange
-            }
-        }
-        RateId::Repair | RateId::CompleteRepair => {
-            exchange.bind(Role::Machine, AccountId::Machine(Machine::Two))
-        }
-        RateId::Advance { .. } => exchange,
-        RateId::Close => exchange
-            .bind(Role::PrimaryJob, AccountId::Job(Job::One))
-            .bind(Role::SecondaryJob, AccountId::Job(Job::Two)),
-    }
+        })
 }
 
 #[cfg(test)]
@@ -495,7 +493,12 @@ mod tests {
             },
         ];
         let end = world
-            .replayed(&schedule.into_iter().map(action).collect())
+            .replayed(
+                &schedule
+                    .into_iter()
+                    .map(|rate| action(world, rate))
+                    .collect(),
+            )
             .ok()?;
         (0..=16).find(|makespan| {
             !end.balance(&AccountId::Success, &Asset::Makespan(*makespan))
@@ -556,7 +559,7 @@ mod tests {
                     },
                 ]
                 .into_iter()
-                .map(action)
+                .map(|rate| action(&world, rate))
                 .collect(),
             )
             .expect("the schedule replays");
@@ -570,27 +573,59 @@ mod tests {
         assert!(
             solved
                 .rate_ids()
-                .filter_map(|rate| rate.as_literal())
-                .all(|rate| !solved.is_applicable(&action(*rate)))
+                .flat_map(|key| solved.instances_of(key))
+                .all(|rate| !solved.is_applicable(&action(&solved, rate)))
         );
     }
 
     #[test]
     fn operation_cannot_reserve_another_machine_or_time() {
         let world = initial();
-        let wrong_machine = Exchange::new(
+        let reservation = action(
+            &world,
             RateId::Schedule {
                 operation: Operation::OneA,
                 ready: 0,
                 start: 0,
             },
-            Quantity::new(1),
-        )
-        .bind(Role::PrimaryJob, AccountId::Job(Job::One))
-        .bind(Role::Slot0, AccountId::Slot(Machine::Two, 0))
-        .bind(Role::Slot1, AccountId::Slot(Machine::Two, 1));
+        );
+        assert!(world.is_applicable(&reservation));
+        for (role, slot) in [
+            (Role::Slot0, AccountId::Slot(Machine::Two, 0)),
+            (Role::Slot1, AccountId::Slot(Machine::Two, 1)),
+            (Role::Slot0, AccountId::Slot(Machine::One, 2)),
+        ] {
+            assert!(!world.is_applicable(&reservation.clone().bind(role, slot)));
+        }
+    }
 
-        assert!(!world.is_applicable(&wrong_machine));
+    #[test]
+    fn an_operation_ends_its_duration_after_it_starts() {
+        let world = initial();
+        let started = world
+            .replayed(
+                &[RateId::Schedule {
+                    operation: Operation::OneA,
+                    ready: 0,
+                    start: 1,
+                }]
+                .into_iter()
+                .map(|rate| action(&world, rate))
+                .collect(),
+            )
+            .unwrap();
+        let job = |asset| started.balance(&AccountId::Job(Job::One), &asset).to_u64();
+        assert_eq!(job(Asset::ReadyAt(Operation::OneB, 3)), 1);
+        // No operation starts before it is ready.
+        assert!(
+            world
+                .instance(&RateId::Schedule {
+                    operation: Operation::OneB,
+                    ready: 3,
+                    start: 2,
+                })
+                .is_err()
+        );
     }
 
     #[test]
