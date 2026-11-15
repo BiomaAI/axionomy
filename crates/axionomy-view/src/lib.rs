@@ -444,6 +444,10 @@ pub struct RateView {
     pub computed_preserved: Vec<ComputedRateAmountView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<RateConditionView>,
+    /// The parameters its computed amounts and conditions read, which an
+    /// exchange of it gives values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameters: Vec<ParameterPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -2067,6 +2071,7 @@ where
                         right: expression_view(condition.right(), ontology),
                     })
                     .collect(),
+                parameters: rate.parameter_names().into_iter().cloned().collect(),
             }
         })
         .collect::<Vec<_>>();
@@ -2670,9 +2675,9 @@ mod tests {
     use serde_json::json;
 
     /// A rate with variables is shown as written, with its variables, their
-    /// values, its relations, derived values, fixed accounts and how many
-    /// identifiers it answers to; an exchange naming an instance, with the
-    /// rate it is an instance of and the values it gives.
+    /// values, its relations, derived values, fixed accounts, the parameters
+    /// it reads and how many identifiers it answers to; an exchange naming an
+    /// instance, with the rate it is an instance of and the values it gives.
     #[test]
     fn a_rate_with_variables_is_shown_as_written_and_its_instances_by_their_values() {
         use axionomy::{
@@ -2698,6 +2703,12 @@ mod tests {
                         QuantityExpression::variable(path("to")) - QuantityExpression::constant(1),
                     )
                     .account(path("walker"), Pattern::literal(path("walker")))
+                    .condition(
+                        path("within-reach"),
+                        QuantityExpression::variable(path("to")),
+                        QuantityComparison::LessThanOrEqual,
+                        QuantityExpression::parameter(path("reach")),
+                    )
                     .consume_at(
                         path("walker"),
                         [("at/{from}".parse().unwrap(), Quantity::new(1))],
@@ -2730,6 +2741,7 @@ mod tests {
             rate["accounts"][0]["account"]["key"],
             "paths/account/walker"
         );
+        assert_eq!(rate["parameters"], json!(["reach"]));
         assert_eq!(rate["instances"], 2);
 
         let exchange = paths::Exchange::new(path("step/1/2"), Quantity::new(1))
