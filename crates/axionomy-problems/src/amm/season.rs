@@ -552,9 +552,6 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         .expect("seasonal market is coherent")
 }
 
-pub fn period(world: &World) -> u64 {
-    world.balance(&AccountId::World, &Asset::Day).to_u64()
-}
 pub fn market_goal(world: &World) -> Goal<Ontology> {
     if world.account(&AccountId::World).is_some() {
         Goal::new().require(AccountId::World, basket([(Asset::MarketEnded, 1)]))
@@ -562,269 +559,57 @@ pub fn market_goal(world: &World) -> Goal<Ontology> {
         goal()
     }
 }
-fn balance(world: &World, actor: Actor, asset: Asset) -> u64 {
-    world.balance(&AccountId::Actor(actor), &asset).to_u64()
-}
-fn basic(rate: RateId, role: Role, actor: Actor) -> Action {
-    Exchange::new(rate, Quantity::new(1)).bind(role, AccountId::Actor(actor))
-}
-fn event(day: u8, last: bool) -> Action {
-    let mut action = Exchange::new(
-        if last {
-            RateId::CloseMarket
-        } else {
-            RateId::AdvanceDay(day)
-        },
-        Quantity::new(1),
-    )
-    .bind(Role::World, AccountId::World)
-    .bind(Role::Pool, AccountId::Pool);
-    for actor in ACTORS {
-        action = action.bind(Role::Participant(actor), AccountId::Actor(actor));
-    }
-    if !last {
-        action = action.bind(Role::Information, AccountId::Information);
-    }
-    action
-}
-fn commission() -> Action {
-    basic(
-        RateId::CommissionProduction,
-        Role::Producer,
-        Actor::Generator,
-    )
-    .bind(Role::World, AccountId::World)
-}
-fn invest() -> Action {
-    basic(RateId::InvestProduction, Role::Producer, Actor::Generator)
-        .bind(Role::World, AccountId::World)
-        .bind(Role::Treasury, AccountId::Treasury)
-}
-fn fund(actor: Actor, shares: u64) -> Action {
-    Exchange::new(RateId::FundLiquidity, Quantity::new(shares))
-        .bind(Role::Pool, AccountId::Pool)
-        .bind(Role::LiquidityProvider, AccountId::Actor(actor))
-}
-fn buy_to(world: &World, actor: Actor, target: u64, budget: u64) -> Option<Action> {
-    let missing = target.saturating_sub(balance(world, actor, Asset::Energy));
-    if missing == 0 || budget == 0 || quote_output(world, Asset::Credit, budget)? < missing {
-        return None;
-    }
-    let (mut low, mut high) = (1, budget);
-    while low < high {
-        let middle = low + (high - low) / 2;
-        if quote_output(world, Asset::Credit, middle)? >= missing {
-            high = middle;
-        } else {
-            low = middle + 1;
-        }
-    }
-    let action = buy_energy(actor, low, missing);
-    world.is_applicable(&action).then_some(action)
-}
-fn sell(world: &World, actor: Actor, units: u64) -> Option<Action> {
-    let amount = units.min(balance(world, actor, Asset::Energy));
-    if amount == 0 {
-        return None;
-    }
-    let action = sell_energy(actor, amount, quote_output(world, Asset::Energy, amount)?);
-    world.is_applicable(&action).then_some(action)
-}
-
-/// Every proposal responds to the latest reserves, inventory, entitlements,
-/// capacity, credit and encoded closing-price memory. It installs no outcome.
-pub fn seasonal_decision(world: &World, actor: Actor) -> Option<Action> {
-    if balance(world, actor, Asset::Trading) == 0 || balance(world, actor, Asset::Decisions) == 0 {
-        return None;
-    }
-    let scale = world.balance(&AccountId::World, &Asset::Scale).to_u64();
-    let price = pool_state(world).price_milli;
-    let reference = balance(world, actor, Asset::ReferencePrice);
-    let energy = balance(world, actor, Asset::Energy);
-    let cash = balance(world, actor, Asset::Credit);
-    let remaining = balance(world, actor, Asset::Decisions);
-    let applicable = |action: Action| world.is_applicable(&action).then_some(action);
-    if matches!(actor, Actor::Factory | Actor::Generator)
-        && balance(world, actor, Asset::Obligation(actor)) > 0
-        && (remaining <= 2
-            || (actor == Actor::Factory && balance(world, actor, Asset::Need(actor)) == 0))
-        && let Some(action) = applicable(settle_obligation(actor))
-    {
-        return Some(action);
-    }
-    match actor {
-        Actor::Founder => None,
-        Actor::Generator => {
-            if price > 12_500
-                && cash > 10_000 * scale
-                && let Some(action) = applicable(invest())
-            {
-                return Some(action);
-            }
-            if (energy > 800 * scale
-                || (energy > 0 && (price > 9_000 || cash < obligation_cost(actor) * scale)))
-                && let Some(action) = sell(world, actor, 1_000 * scale)
-            {
-                return Some(action);
-            }
-            let allowance = balance(world, actor, Asset::ProductionAllowance);
-            let amount = allowance
-                .min(balance(world, actor, Asset::SolarPotential))
-                .min(balance(world, actor, Asset::StorageCapacity).saturating_sub(energy));
-            if amount > 0 && price >= 7_000 {
-                applicable(produce_energy(actor, amount))
-            } else {
-                applicable(settle_obligation(actor))
-            }
-        }
-        Actor::Factory => {
-            let deliver = basic(RateId::DeliverGoods, Role::Producer, actor)
-                .bind(Role::Treasury, AccountId::Treasury);
-            if let Some(action) = applicable(deliver) {
-                return Some(action);
-            }
-            if balance(world, actor, Asset::Need(actor)) > 0 {
-                if let Some(action) = applicable(use_energy(actor)) {
-                    return Some(action);
-                }
-                // Production can be declined when input prices exceed the
-                // procurement revenue; defaults and missed output remain visible.
-                if price <= 19_000 {
-                    return buy_to(
-                        world,
-                        actor,
-                        1_500 * scale,
-                        cash.saturating_sub(2_000 * scale),
-                    );
-                }
-            }
-            applicable(settle_obligation(actor))
-        }
-        Actor::Household => {
-            let income = basic(RateId::CollectIncome, Role::Consumer, actor)
-                .bind(Role::Treasury, AccountId::Treasury);
-            if let Some(action) = applicable(income) {
-                return Some(action);
-            }
-            if balance(world, actor, Asset::Need(actor)) > 0 {
-                if let Some(action) = applicable(use_energy(actor)) {
-                    return Some(action);
-                }
-                return buy_to(world, actor, 350 * scale, cash);
-            }
-            if price < 8_000 {
-                buy_to(world, actor, 700 * scale, cash / 2)
-            } else {
-                None
-            }
-        }
-        Actor::Speculator => {
-            if let Some(action) = applicable(learn_shortage(actor)) {
-                return Some(action);
-            }
-            if energy > 0 && price > reference * 11 / 10 {
-                return sell(world, actor, 500 * scale);
-            }
-            if balance(world, actor, Asset::Informed(actor)) > 0 && price < reference * 11 / 10 {
-                buy_to(
-                    world,
-                    actor,
-                    (energy + 500 * scale).min(2_500 * scale),
-                    cash / 3,
-                )
-            } else if price < reference * 9 / 10 {
-                buy_to(world, actor, 1_000 * scale, cash / 3)
-            } else {
-                None
-            }
-        }
-        Actor::Arbitrageur => {
-            if price > reference * 11 / 10 {
-                sell(world, actor, 500 * scale)
-            } else if price < reference * 9 / 10 {
-                buy_to(world, actor, 2_000 * scale, cash / 3)
-            } else {
-                None
-            }
-        }
-        Actor::Whale => {
-            if period(world) % 3 == 2 && price > reference {
-                return sell(world, actor, 1_000 * scale);
-            }
-            if period(world) % 3 != 2 && price < 18_000 {
-                buy_to(
-                    world,
-                    actor,
-                    (energy + 500 * scale).min(5_000 * scale),
-                    cash / 4,
-                )
-            } else {
-                None
-            }
-        }
-        Actor::AdaptiveLp => {
-            let shares = balance(world, actor, Asset::LpShare);
-            if shares > 0 && (price > reference * 12 / 10 || price < reference * 8 / 10) {
-                return applicable(remove_liquidity(actor, shares.div_ceil(2)));
-            }
-            if price >= reference * 8 / 10 && price <= reference * 12 / 10 {
-                let shares = (pool_state(world).issued_lp_shares / 20).max(1);
-                applicable(fund(actor, shares))
-            } else {
-                None
-            }
-        }
-    }
-}
-
-pub(super) fn run(
-    initial: &World,
-    scenario: Scenario,
-    included: &BTreeSet<Actor>,
-) -> Trace<Ontology> {
-    let mut world = initial.clone();
-    let mut trace = Trace::new();
-    if scenario == Scenario::ThinLiquidity {
-        let shares = pool_state(&world).issued_lp_shares / 2;
-        push(
-            &mut world,
-            &mut trace,
-            remove_liquidity(Actor::Founder, shares),
-        );
-    }
-    let days = world.balance(&AccountId::World, &Asset::Days).to_u64() as u8;
-    for day in 0..days {
-        let due = commission();
-        if world.is_applicable(&due) {
-            push(&mut world, &mut trace, due);
-        }
-        for round in 0..=DECISIONS {
-            let first = (usize::from(day) + round as usize) % ACTORS.len();
-            for offset in 0..ACTORS.len() {
-                let actor = ACTORS[(first + offset) % ACTORS.len()];
-                if balance(&world, actor, Asset::Trading) == 0 {
-                    continue;
-                }
-                let participating = included.contains(&actor)
-                    && !(scenario == Scenario::NoWhale && actor == Actor::Whale);
-                let next = participating
-                    .then(|| seasonal_decision(&world, actor))
-                    .flatten();
-                let action =
-                    next.unwrap_or_else(|| basic(RateId::EndTrading(actor), Role::Consumer, actor));
-                push(&mut world, &mut trace, action);
-            }
-        }
-        push(&mut world, &mut trace, event(day, day + 1 == days));
-    }
-    assert!(world.matches(&market_goal(&world)));
-    trace
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn period(world: &World) -> u64 {
+        world.balance(&AccountId::World, &Asset::Day).to_u64()
+    }
+    fn balance(world: &World, actor: Actor, asset: Asset) -> u64 {
+        world.balance(&AccountId::Actor(actor), &asset).to_u64()
+    }
+    fn basic(rate: RateId, role: Role, actor: Actor) -> Action {
+        Exchange::new(rate, Quantity::new(1)).bind(role, AccountId::Actor(actor))
+    }
+    fn event(day: u8, last: bool) -> Action {
+        let mut action = Exchange::new(
+            if last {
+                RateId::CloseMarket
+            } else {
+                RateId::AdvanceDay(day)
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::World, AccountId::World)
+        .bind(Role::Pool, AccountId::Pool);
+        for actor in ACTORS {
+            action = action.bind(Role::Participant(actor), AccountId::Actor(actor));
+        }
+        if !last {
+            action = action.bind(Role::Information, AccountId::Information);
+        }
+        action
+    }
+    fn commission() -> Action {
+        basic(
+            RateId::CommissionProduction,
+            Role::Producer,
+            Actor::Generator,
+        )
+        .bind(Role::World, AccountId::World)
+    }
+    fn invest() -> Action {
+        basic(RateId::InvestProduction, Role::Producer, Actor::Generator)
+            .bind(Role::World, AccountId::World)
+            .bind(Role::Treasury, AccountId::Treasury)
+    }
+    fn fund(actor: Actor, shares: u64) -> Action {
+        Exchange::new(RateId::FundLiquidity, Quantity::new(shares))
+            .bind(Role::Pool, AccountId::Pool)
+            .bind(Role::LiquidityProvider, AccountId::Actor(actor))
+    }
     fn end_day(world: &mut World) {
         for actor in ACTORS {
             if balance(world, actor, Asset::Trading) > 0 {
@@ -962,78 +747,5 @@ mod tests {
         );
         rejects_without_change(&mut world, fund(Actor::AdaptiveLp, 50));
         rejects_without_change(&mut world, remove_liquidity(Actor::AdaptiveLp, 50));
-    }
-
-    #[test]
-    fn repeated_markets_preserve_every_need_and_produce_adaptive_investment_and_liquidity_paths() {
-        let mut investments = 0;
-        let mut commissions = 0;
-        let mut withdrawals = 0;
-        let mut deposits = 0;
-        let mut goods_sold = 0;
-        let mut missed = 0;
-        for seed in [0, 7, 17, 29] {
-            for initial in [
-                initial_showcase_with_seed(seed),
-                initial_stress_with_seed(seed),
-            ] {
-                let days = initial.balance(&AccountId::World, &Asset::Days).to_u64();
-                for scenario in [
-                    Scenario::MarketDay,
-                    Scenario::NoWhale,
-                    Scenario::ThinLiquidity,
-                ] {
-                    let trace = super::super::trace(&initial, scenario);
-                    let final_world = initial.replayed(&trace).unwrap();
-                    assert!(final_world.matches(&market_goal(&initial)));
-                    for actor in [Actor::Factory, Actor::Household] {
-                        assert_eq!(
-                            balance(&final_world, actor, Asset::SatisfiedNeed(actor))
-                                + balance(&final_world, actor, Asset::MissedNeed(actor)),
-                            days
-                        );
-                        assert_eq!(balance(&final_world, actor, Asset::FutureNeed(actor)), 0);
-                        missed += balance(&final_world, actor, Asset::MissedNeed(actor));
-                    }
-                    for actor in [Actor::Factory, Actor::Generator] {
-                        assert_eq!(
-                            balance(&final_world, actor, Asset::SettledObligation(actor))
-                                + balance(&final_world, actor, Asset::DefaultedObligation(actor)),
-                            days
-                        );
-                    }
-                    for action in trace.exchanges() {
-                        match action.rate() {
-                            RateId::InvestProduction => investments += 1,
-                            RateId::CommissionProduction => commissions += 1,
-                            RateId::FundLiquidity => deposits += 1,
-                            RateId::RemoveLiquidity
-                                if action.bindings().get(&Role::LiquidityProvider)
-                                    == Some(&AccountId::Actor(Actor::AdaptiveLp)) =>
-                            {
-                                withdrawals += 1
-                            }
-                            RateId::DeliverGoods => goods_sold += 1,
-                            _ => {}
-                        }
-                    }
-                    let contributions = direct_price_contributions(&initial, &trace);
-                    assert_eq!(
-                        contributions.values().sum::<i128>(),
-                        i128::from(pool_state(&final_world).price_milli)
-                            - i128::from(pool_state(&initial).price_milli)
-                    );
-                }
-            }
-        }
-        assert!(
-            investments > 0
-                && commissions > 0
-                && withdrawals > 0
-                && deposits > 0
-                && goods_sold > 0
-                && missed > 0,
-            "investment={investments}, commission={commissions}, withdrawal={withdrawals}, deposit={deposits}, goods={goods_sold}, missed={missed}"
-        );
     }
 }

@@ -9,8 +9,8 @@
 //! its economy holds does not say which errand comes next, so its strategies
 //! are plans, `amm/day/<document>`, that follow the reserves by the pool's
 //! own law and end where the actors' goals are met. Showcase and Stress are
-//! seasons, their sunlight seeded as the Rust seasons seed it, played turn by turn
-//! by `amm/<document>` until the market closes. Its view carries each
+//! seasons, their sunlight seeded by `SEED`, played turn by turn by
+//! `amm/<document>` until the market closes. Its view carries each
 //! actor's direct contribution to the price over the trace, and ranks them.
 
 use crate::{
@@ -29,8 +29,7 @@ use axionomy_store::Checkpoints;
 const SCRIPT: &str = include_str!("../../scripts/amm.rhai");
 const VIEW: &str = include_str!("../../scripts/amm-view.rhai");
 
-/// The seed the sample's Rust seasons run with, which seeds a season's
-/// sunlight.
+/// The seed a season's sunlight is drawn with, and its experiments run with.
 const SEED: u64 = 17;
 
 /// The most turns a season takes: thin liquidity's opening withdrawal, and

@@ -3,15 +3,14 @@
 use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression as Q, Rate, Rounding, Trace, basket,
+    QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
 };
-use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "packages")]
 pub mod package;
 mod season;
 
-pub use season::{market_goal, period, seasonal_decision};
+pub use season::market_goal;
 
 pub const FEE_DENOMINATOR: u64 = 1_000;
 pub const FEE_NUMERATOR: u64 = 997;
@@ -31,19 +30,6 @@ pub enum Actor {
 
 pub const ACTORS: [Actor; 8] = [
     Actor::Founder,
-    Actor::Generator,
-    Actor::Factory,
-    Actor::Household,
-    Actor::Speculator,
-    Actor::AdaptiveLp,
-    Actor::Arbitrageur,
-    Actor::Whale,
-];
-
-/// Actors whose decisions can change the Market Day price. The founding LP's
-/// initial reserve ratio is the counterfactual baseline rather than a later
-/// intervention, so it is deliberately excluded from Shapley allocation.
-pub const PRICE_ACTORS: [Actor; 7] = [
     Actor::Generator,
     Actor::Factory,
     Actor::Household,
@@ -149,13 +135,6 @@ pub enum RateId {
     LearnShortage(Actor),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scenario {
-    MarketDay,
-    NoWhale,
-    ThinLiquidity,
-}
-
 pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `amm` where economies are
@@ -171,24 +150,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PoolState {
-    pub energy: u64,
-    pub credit: u64,
-    pub issued_lp_shares: u64,
-    /// Credit per energy, scaled by 1,000 for exact display and comparison.
-    pub price_milli: u64,
-    pub product: u128,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShapleyContribution {
-    pub actor: Actor,
-    /// Signed contribution in price-milli units, before division.
-    pub numerator: i128,
-    pub denominator: u64,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MarketSize {
@@ -610,7 +571,21 @@ fn obligation_cost(actor: Actor) -> u64 {
     }
 }
 
-pub fn pool_state(world: &World) -> PoolState {
+/// What the tests read of the pool: its reserves, the shares it has issued,
+/// its price and its constant product.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PoolState {
+    energy: u64,
+    credit: u64,
+    issued_lp_shares: u64,
+    /// Credit per energy, scaled by 1,000.
+    price_milli: u64,
+    product: u128,
+}
+
+#[cfg(test)]
+fn pool_state(world: &World) -> PoolState {
     let energy = world.balance(&AccountId::Pool, &Asset::Energy).to_u64();
     let credit = world.balance(&AccountId::Pool, &Asset::Credit).to_u64();
     let unissued = world
@@ -628,242 +603,54 @@ pub fn pool_state(world: &World) -> PoolState {
     }
 }
 
-pub fn quote_output(world: &World, input: Asset, input_amount: u64) -> Option<u64> {
-    let output = match input {
-        Asset::Credit => Asset::Energy,
-        Asset::Energy => Asset::Credit,
-        _ => return None,
-    };
-    let reserve_in = u128::from(world.balance(&AccountId::Pool, &input).to_u64());
-    let reserve_out = u128::from(world.balance(&AccountId::Pool, &output).to_u64());
-    let after_fee = u128::from(input_amount) * u128::from(FEE_NUMERATOR);
-    let denominator = reserve_in * u128::from(FEE_DENOMINATOR) + after_fee;
-    if denominator == 0 {
-        return None;
-    }
-    u64::try_from(reserve_out * after_fee / denominator).ok()
-}
-
-fn guarded_buy(world: &World, actor: Actor, input: u64) -> Action {
-    let output = quote_output(world, Asset::Credit, input).unwrap_or_default();
-    buy_energy(actor, input, output.saturating_mul(98) / 100)
-}
-
-fn guarded_buy_at_least(
-    world: &World,
-    actor: Actor,
-    preferred_input: u64,
-    required_output: u64,
-) -> Action {
-    let mut input = preferred_input;
-    while quote_output(world, Asset::Credit, input).unwrap_or_default() < required_output {
-        input = input
-            .checked_add(100)
-            .expect("canonical market input remains bounded");
-    }
-    let output = quote_output(world, Asset::Credit, input).unwrap_or_default();
-    buy_energy(actor, input, output.saturating_mul(98) / 100)
-}
-
-fn guarded_sell(world: &World, actor: Actor, input: u64) -> Action {
-    let output = quote_output(world, Asset::Energy, input).unwrap_or_default();
-    sell_energy(actor, input, output.saturating_mul(98) / 100)
-}
-
-fn push(world: &mut World, trace: &mut Trace<Ontology>, action: Action) {
-    world
-        .apply(action.clone())
-        .expect("canonical Living Market action is applicable");
-    trace.push(action);
-}
-
-pub fn trace(initial: &World, scenario: Scenario) -> Trace<Ontology> {
-    let mut included = ACTORS.into_iter().collect::<BTreeSet<_>>();
-    if matches!(scenario, Scenario::NoWhale) {
-        included.remove(&Actor::Whale);
-    }
-    trace_with_actors(initial, scenario, &included)
-}
-
-/// Replays the same deterministic Market Day policies for an arbitrary actor
-/// coalition. Missing actors make no proposals; every remaining action is
-/// re-quoted against the counterfactual reserve state before Axionomy applies
-/// it. This is the causal primitive used by exact Shapley attribution.
-pub fn market_day_with_actors(initial: &World, included: &BTreeSet<Actor>) -> Trace<Ontology> {
-    trace_with_actors(initial, Scenario::MarketDay, included)
-}
-
-fn trace_with_actors(
-    initial: &World,
-    scenario: Scenario,
-    included: &BTreeSet<Actor>,
-) -> Trace<Ontology> {
-    if initial.account(&AccountId::World).is_some() {
-        return season::run(initial, scenario, included);
-    }
-    let mut world = initial.clone();
-    let mut trace = Trace::new();
-    let stress = pool_state(initial).energy >= 40_000;
-    let scale = if stress { 4 } else { 1 };
-
-    if matches!(scenario, Scenario::ThinLiquidity) {
-        let shares = pool_state(&world).issued_lp_shares / 2;
-        push(
-            &mut world,
-            &mut trace,
-            remove_liquidity(Actor::Founder, shares),
-        );
-    } else if included.contains(&Actor::AdaptiveLp) {
-        let state = pool_state(&world);
-        let energy = state.energy / 10;
-        let credit = state.credit / 10;
-        push(
-            &mut world,
-            &mut trace,
-            add_liquidity(Actor::AdaptiveLp, energy, credit, energy),
-        );
-    }
-
-    if included.contains(&Actor::Generator) {
-        push(
-            &mut world,
-            &mut trace,
-            produce_energy(Actor::Generator, 1_500 * scale),
-        );
-        let action = guarded_sell(&world, Actor::Generator, 2_500 * scale);
-        push(&mut world, &mut trace, action);
-    }
-
-    if included.contains(&Actor::Factory) {
-        let action = guarded_buy_at_least(&world, Actor::Factory, 26_000 * scale, 1_500);
-        push(&mut world, &mut trace, action);
-        push(&mut world, &mut trace, use_energy(Actor::Factory));
-        push(&mut world, &mut trace, settle_obligation(Actor::Factory));
-    }
-
-    if included.contains(&Actor::Household) {
-        let action = guarded_buy_at_least(&world, Actor::Household, 5_000 * scale, 350);
-        push(&mut world, &mut trace, action);
-        push(&mut world, &mut trace, use_energy(Actor::Household));
-    }
-
-    if included.contains(&Actor::Speculator) {
-        push(&mut world, &mut trace, learn_shortage(Actor::Speculator));
-        let action = guarded_buy(&world, Actor::Speculator, 16_000 * scale);
-        push(&mut world, &mut trace, action);
-    }
-
-    if included.contains(&Actor::Whale) && !matches!(scenario, Scenario::NoWhale) {
-        let action = guarded_buy(&world, Actor::Whale, 45_000 * scale);
-        push(&mut world, &mut trace, action);
-    }
-
-    if included.contains(&Actor::Generator) {
-        push(
-            &mut world,
-            &mut trace,
-            produce_energy(Actor::Generator, 1_800 * scale),
-        );
-        let action = guarded_sell(&world, Actor::Generator, 1_800 * scale);
-        push(&mut world, &mut trace, action);
-    }
-    if included.contains(&Actor::Arbitrageur) {
-        let action = guarded_sell(&world, Actor::Arbitrageur, 1_200 * scale);
-        push(&mut world, &mut trace, action);
-    }
-    if included.contains(&Actor::Generator) {
-        push(&mut world, &mut trace, settle_obligation(Actor::Generator));
-    }
-    trace
-}
-
-pub fn shapley_price_contributions(initial: &World) -> Vec<ShapleyContribution> {
-    let actor_count = PRICE_ACTORS.len();
-    let coalition_count = 1_usize << actor_count;
-    let mut values = vec![0_i128; coalition_count];
-    for (mask, value) in values.iter_mut().enumerate() {
-        let included = PRICE_ACTORS
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, actor)| ((mask & (1 << index)) != 0).then_some(actor))
-            .collect::<BTreeSet<_>>();
-        let trace = market_day_with_actors(initial, &included);
-        let final_world = initial
-            .replayed(&trace)
-            .expect("every actor coalition is replayable");
-        *value = i128::from(pool_state(&final_world).price_milli);
-    }
-
-    let factorials = (0..=actor_count)
-        .scan(1_u64, |factorial, value| {
-            if value > 0 {
-                *factorial *= value as u64;
-            }
-            Some(*factorial)
-        })
-        .collect::<Vec<_>>();
-    let denominator = factorials[actor_count];
-    PRICE_ACTORS
-        .into_iter()
-        .enumerate()
-        .map(|(actor_index, actor)| {
-            let mut numerator = 0_i128;
-            for mask in 0..coalition_count {
-                if mask & (1 << actor_index) != 0 {
-                    continue;
-                }
-                let size = mask.count_ones() as usize;
-                let weight = factorials[size] * factorials[actor_count - size - 1];
-                let marginal = values[mask | (1 << actor_index)] - values[mask];
-                numerator += i128::from(weight) * marginal;
-            }
-            ShapleyContribution {
-                actor,
-                numerator,
-                denominator,
-            }
-        })
-        .collect()
-}
-
-pub fn direct_price_contributions(
-    initial: &World,
-    trace: &Trace<Ontology>,
-) -> BTreeMap<Actor, i128> {
-    let mut world = initial.clone();
-    let mut contributions = BTreeMap::new();
-    for exchange in trace.exchanges() {
-        let before = i128::from(pool_state(&world).price_milli);
-        world
-            .apply(exchange.clone())
-            .expect("trace was already valid");
-        let after = i128::from(pool_state(&world).price_milli);
-        if let Some(actor) = price_actor(exchange) {
-            *contributions.entry(actor).or_default() += after - before;
-        }
-    }
-    contributions
-}
-
-/// Includes integer-rounding price effects of liquidity operations as well as swaps.
-pub fn price_actor(exchange: &Action) -> Option<Actor> {
-    let role = match exchange.rate() {
-        RateId::BuyEnergy | RateId::SellEnergy => Role::Trader,
-        RateId::AddLiquidity | RateId::RemoveLiquidity | RateId::FundLiquidity => {
-            Role::LiquidityProvider
-        }
-        _ => return None,
-    };
-    match exchange.bindings().get(&role) {
-        Some(AccountId::Actor(actor)) => Some(*actor),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    /// The swap's output computed apart from the kernel, in `u128`: the
+    /// oracle the pool's rate law is checked against.
+    fn quote_output(world: &World, input: Asset, input_amount: u64) -> Option<u64> {
+        let output = match input {
+            Asset::Credit => Asset::Energy,
+            Asset::Energy => Asset::Credit,
+            _ => return None,
+        };
+        let reserve_in = u128::from(world.balance(&AccountId::Pool, &input).to_u64());
+        let reserve_out = u128::from(world.balance(&AccountId::Pool, &output).to_u64());
+        let after_fee = u128::from(input_amount) * u128::from(FEE_NUMERATOR);
+        let denominator = reserve_in * u128::from(FEE_DENOMINATOR) + after_fee;
+        if denominator == 0 {
+            return None;
+        }
+        u64::try_from(reserve_out * after_fee / denominator).ok()
+    }
+
+    /// A Micro market day: the adaptive provider deepens the pool, the
+    /// generator produces and sells, the factory and household buy what
+    /// their needs take and use it, the speculator learns of the shortage
+    /// and buys, the whale buys, then the generator and arbitrageur sell
+    /// into the scarcity and the generator settles. Each swap's minimum is
+    /// 98% of its quote against the reserves the exchanges before it leave.
+    fn market_day() -> Vec<Action> {
+        vec![
+            add_liquidity(Actor::AdaptiveLp, 400, 4_000, 400),
+            produce_energy(Actor::Generator, 1_500),
+            sell_energy(Actor::Generator, 2_500, 15_592),
+            buy_energy(Actor::Factory, 26_000, 3_244),
+            use_energy(Actor::Factory),
+            settle_obligation(Actor::Factory),
+            buy_energy(Actor::Household, 5_900, 344),
+            use_energy(Actor::Household),
+            learn_shortage(Actor::Speculator),
+            buy_energy(Actor::Speculator, 16_000, 665),
+            buy_energy(Actor::Whale, 45_000, 930),
+            produce_energy(Actor::Generator, 1_800),
+            sell_energy(Actor::Generator, 1_800, 62_517),
+            sell_energy(Actor::Arbitrageur, 1_200, 14_560),
+            settle_obligation(Actor::Generator),
+        ]
+    }
 
     #[test]
     fn swaps_follow_the_independent_constant_product_quote() {
@@ -896,13 +683,12 @@ mod tests {
     }
 
     #[test]
-    fn market_day_is_closed_replayable_and_reaches_real_actor_goals() {
+    fn a_market_day_is_closed_replayable_and_reaches_real_actor_goals() {
         let initial = initial();
-        let trace = trace(&initial, Scenario::MarketDay);
+        let trace: axionomy::Trace<Ontology> = market_day().into_iter().collect();
         let final_world = initial.replayed(&trace).unwrap();
 
         assert!(final_world.matches(&goal()));
-        assert!(trace.exchanges().len() >= 14);
         assert!(
             final_world
                 .balance(&AccountId::Actor(Actor::Factory), &Asset::Utility)
@@ -912,67 +698,14 @@ mod tests {
     }
 
     #[test]
-    fn removing_the_whale_changes_the_discovered_price() {
-        let initial = initial_showcase();
-        let full = initial
-            .replayed(&trace(&initial, Scenario::MarketDay))
-            .unwrap();
-        let no_whale = initial
-            .replayed(&trace(&initial, Scenario::NoWhale))
-            .unwrap();
-
-        assert_ne!(
-            pool_state(&full).price_milli,
-            pool_state(&no_whale).price_milli
-        );
-        assert!(pool_state(&full).price_milli > pool_state(&no_whale).price_milli);
-    }
-
-    #[test]
-    fn direct_actor_contributions_sum_to_swap_price_movement() {
-        let initial = initial_showcase();
-        let trace = trace(&initial, Scenario::MarketDay);
-        let contributions = direct_price_contributions(&initial, &trace);
-        let total: i128 = contributions.values().sum();
-        let final_world = initial.replayed(&trace).unwrap();
-        let actual = i128::from(pool_state(&final_world).price_milli)
-            - i128::from(pool_state(&initial).price_milli);
-
-        assert_eq!(total, actual);
-        assert!(contributions.len() >= 6);
-    }
-
-    #[test]
-    fn exact_shapley_contributions_allocate_the_full_counterfactual_price_change() {
-        let initial = initial_showcase();
-        let contributions = shapley_price_contributions(&initial);
-        let denominator = i128::from(contributions[0].denominator);
-        let allocated: i128 = contributions.iter().map(|entry| entry.numerator).sum();
-        let empty = initial
-            .replayed(&market_day_with_actors(&initial, &BTreeSet::new()))
-            .unwrap();
-        let full = initial
-            .replayed(&market_day_with_actors(
-                &initial,
-                &PRICE_ACTORS.into_iter().collect(),
-            ))
-            .unwrap();
-        let difference =
-            i128::from(pool_state(&full).price_milli) - i128::from(pool_state(&empty).price_milli);
-
-        assert_eq!(allocated, difference * denominator);
-        assert_eq!(contributions.len(), PRICE_ACTORS.len());
-    }
-
-    #[test]
     fn every_market_day_swap_preserves_or_grows_constant_product() {
-        let mut world = initial_showcase();
-        let trace = trace(&world, Scenario::MarketDay);
-        for exchange in trace.exchanges() {
+        let mut world = initial();
+        for exchange in market_day() {
             let before = pool_state(&world);
-            world.apply(exchange.clone()).unwrap();
+            let swap = matches!(exchange.rate(), RateId::BuyEnergy | RateId::SellEnergy);
+            world.apply(exchange).unwrap();
             let after = pool_state(&world);
-            if matches!(exchange.rate(), RateId::BuyEnergy | RateId::SellEnergy) {
+            if swap {
                 assert!(after.product >= before.product);
             }
         }

@@ -24,11 +24,12 @@ minimum output, applies both reserve and trader deltas atomically, and emits a
 replayable receipt. Proportional liquidity deposits preserve price while
 changing depth. Withdrawals burn shares against exact pre-state ownership.
 
-Showcase and Stress use `season.rs`. Actors repeatedly choose from live
-reserves, stock, remaining credit, current needs, and encoded closing-price
-memory. Each has six economic decisions per day and may finish trading early.
-Days advance only after every participant has finished. Unmet needs and unpaid
-obligations are recorded before future entitlements become current.
+Showcase and Stress are seasons (`season.rs`). Actors repeatedly choose from
+live reserves, stock, remaining credit, current needs, and encoded
+closing-price memory. Each has six economic decisions per day and may finish
+trading early. Days advance only after every participant has finished. Unmet
+needs and unpaid obligations are recorded before future entitlements become
+current.
 
 Sunlight limits daily production. Investment pays credit now and increases
 capacity two days later. Energy storage is bounded. Factory output produces
@@ -36,27 +37,24 @@ sellable goods and procurement pays from finite Treasury credit; household
 income also has a finite counterparty. Liquidity providers may adjust once per
 day, including deposits computed at the current ratio with at most one atom of
 rounding per reserve. Direct attribution includes these rounding effects.
-Counterfactuals and coalition replays retain the same seeded sunlight and
-entitlements while the remaining actors respond to changed market conditions.
+Counterfactuals retain the same seeded sunlight and entitlements while the
+remaining actors respond to changed market conditions.
 
 ## Required results
 
+The unit tests check the laws by applying exchanges:
+
 - Independent `u128` quotes agree with kernel-computed swap receipts.
-- Asset, energy lifecycle, credit, liquidity-share, actor-goal, and information
-  invariants hold across every replay.
 - Constant product never decreases during a swap and round trips cannot create
-  credit.
-- Quotes are monotone in input and remain strictly below the output reserve.
-- Micro Market Day reaches the original actor goals. Showcase runs eight
-  periods and Stress twelve; every recurring need and obligation ends satisfied
-  or explicitly missed. Closing a season does not imply universal success.
-- The no-whale and thin-liquidity counterfactuals produce different discovered
-  prices without changing the AMM law.
-- Direct per-actor price changes sum exactly to total reserve-price movement.
-- Exact Shapley allocation replays all 128 coalitions of the seven active price
-  actors and sums exactly to the full counterfactual price difference.
-- Studio price history, reserve curve, actors, rule expressions, rejected
-  slippage probes, and leaderboards derive only from replay evidence.
+  credit; quotes are monotone in input and stay below the output reserve.
+- Proportional deposits keep the price; seasonal entitlements, storage,
+  production, investment and liquidity limits hold at their boundaries.
+
+The package's experiments find the rest, pinned in `tests/outcomes`: Micro's
+market day reaches the actors' goals; Showcase and Stress close their seasons
+with every need and obligation satisfied or explicitly missed; the no-whale
+and thin-liquidity counterfactuals discover different prices under the same
+law; and the view ranks each actor's direct contribution to the price.
 
 ## API pressure
 
@@ -64,15 +62,15 @@ entitlements while the remaining actors respond to changed market conditions.
 - Exact named exchange parameters and authoritative inequality conditions.
 - Nonlinear effects while retaining assets, accounts, rates, and exchanges as
   the only semantic primitives.
-- Causal attribution through isolated replay forks rather than external
-  analytics state.
+- Causal attribution from replay evidence rather than external analytics
+  state.
 - A picture on Studio's neutral reserves surface, every caption written by
   the problem, that remains a projection of Rust-owned truth.
 
 ## In this folder
 
 - `mod.rs` is the model: the pool and its swap and liquidity laws, the
-  actors, the Micro Market Day, counterfactuals and price attribution.
+  actors, their accounts and goals, and the Micro Market Day's economy.
 - `season.rs` builds the Showcase and Stress seasons: repeated production,
   consumption and investment over the same exact AMM.
 - `package.rs` writes its package: its economies under refs, goals,
