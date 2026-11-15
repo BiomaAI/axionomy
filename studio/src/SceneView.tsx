@@ -278,6 +278,7 @@ function StructureNode({ data }: NodeProps) {
   const title = [view.label, ...visibleStates.map((item) => item.status), metrics].filter(Boolean).join(" · ");
   return <div title={title || undefined} className={`rich-node structure-content ${entity ? `tone-${entity.tone}` : ""}`}>
     {view.handles?.map((handle) => <Handle key={handle.id} id={handle.id} type={handle.type} position={HANDLE_POSITION[handle.side]} style={handleStyle(handle.side, handle.offset)} className="graph-node-handle" isConnectable={false} />)}
+    {RELATION_SIDES.map((side) => <Handle key={side} id={relationSource(side)} type="source" position={HANDLE_POSITION[side]} className="relation-handle relation-source" isConnectable={false} />)}
     <div className={effectClass(view.effect)}>
       <div className="rich-node-content">
         {entity && <SceneIcon glyph={entity.glyph} size={21} />}
@@ -296,7 +297,7 @@ function OccupantNode({ data }: NodeProps) {
   const inventory = view.attachments.map(({ entity }) => `${entity.id.label}${entity.status ? ` (${entity.status})` : ""}`).join(" · ");
   const title = [view.entity.id.label, metrics, inventory].filter(Boolean).join(" · ");
   return <div title={title || undefined} className={`rich-node tone-${view.entity.tone}`}>
-    {view.entity.anchor.kind === "graph_node" && RELATION_SIDES.map((side) => <Handle key={side} id={`relation-target:${side}`} type="target" position={HANDLE_POSITION[side]} className="relation-handle" isConnectable={false} />)}
+    {RELATION_SIDES.map((side) => <Handle key={side} id={relationTarget(side)} type="target" position={HANDLE_POSITION[side]} className={`relation-handle${view.entity.anchor.kind === "graph_node" ? "" : " relation-unused"}`} isConnectable={false} />)}
     <div className={`rich-node-lifecycle ${view.entering ? "is-entering" : ""} ${view.exiting ? "is-exiting" : ""}`}>
       <div className={effectClass(view.effect)}>
         <div className={`rich-node-content occupant-content ${view.moving ? "is-moving" : ""}`}>
@@ -313,7 +314,7 @@ function OccupantNode({ data }: NodeProps) {
 function AttachmentNode({ data }: NodeProps) {
   const view = data as AttachmentNodeData;
   return <div className="attachment-collection">
-    {RELATION_SIDES.map((side) => <Handle key={side} id={`relation-target:${side}`} type="target" position={HANDLE_POSITION[side]} className="relation-handle" isConnectable={false} />)}
+    {RELATION_SIDES.map((side) => <Handle key={side} id={relationTarget(side)} type="target" position={HANDLE_POSITION[side]} className="relation-handle" isConnectable={false} />)}
     <header><span>{view.label}</span><b>{view.entities.length}</b></header>
     <div className="attachment-rows">
       {view.entities.slice(0, 4).map((entity) => <button type="button" key={entity.id.key} className={`${effectClass(view.effects[entity.id.key] ?? "none")} tone-${entity.tone}`} disabled={!entity.account} onClick={(event) => { event.stopPropagation(); if (entity.account) view.onAccount?.(entity.account); }}>
@@ -327,7 +328,15 @@ function AttachmentNode({ data }: NodeProps) {
 }
 
 const nodeTypes = { structure: StructureNode, occupant: OccupantNode, attachments: AttachmentNode };
+/**
+ * The sides a relation line leaves a place from and meets what it holds
+ * at. Every place and everything docked to one has a relation handle on
+ * each side from the first time it is drawn, so a relation line never
+ * names a handle React Flow has not measured yet.
+ */
 const RELATION_SIDES: HandleSide[] = ["top", "right", "bottom", "left"];
+const relationSource = (side: HandleSide) => `relation-source:${side}`;
+const relationTarget = (side: HandleSide) => `relation-target:${side}`;
 
 /**
  * React Flow keeps where a node's handles are with the node's measured size,
@@ -409,7 +418,6 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
     }),
   ];
   const relationEdges: Edge[] = [];
-  const relationHandles = new Map<string, GraphHandle[]>();
   const nodes: Node[] = [];
 
   const attachments = groupBy(scene.entities.filter((entity) => entity.role === "attachment" && entity.anchor.kind !== "entity"), (entity) => anchorKey(entity.anchor));
@@ -425,7 +433,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
     const effects = Object.fromEntries(entities.map((entity) => [entity.id.key, composedEntityEffect(entity, previousById.get(entity.id.key), frame)]));
     const effect = strongestEffect(Object.values(effects));
     nodes.push({ id: nodeId, type: "attachments", position: point, data: { kind: "attachments", label, entities, effects, focusAccount: entities.find((entity) => entity.account)?.account ?? undefined, onAccount } satisfies AttachmentNodeData, draggable: false, selectable: true, className: `attachment-group motion-${motion} effect-${effect}` });
-    if (anchor.kind === "graph_node") addRelation(anchor.node, nodeId, point, "attachment", relationHandles, relationEdges, positions);
+    if (anchor.kind === "graph_node") addRelation(anchor.node, nodeId, point, "attachment", relationEdges, positions);
   }
 
   // Preserve the outgoing attachment's docking footprint for one transition.
@@ -466,7 +474,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
     const removedAttachmentEffects = (previousEntityAttachments.get(view.entity.id.key) ?? []).filter((entity) => !attached.some((candidate) => candidate.entity.id.key === entity.id.key)).map((entity) => sceneEntityEffect(entity, frame));
     const effect = strongestEffect([composedEntityEffect(view.entity, previousById.get(view.entity.id.key), frame), ...attached.map((candidate) => candidate.effect), ...removedAttachmentEffects]);
     nodes.push({ id: nodeId, type: "occupant", position: point, data: { kind: "occupant", entity: view.entity, attachments: attached, effect, entering: view.entering, exiting: view.exiting, moving: view.moving, focusAccount: view.entity.account ?? undefined } satisfies OccupantNodeData, draggable: false, selectable: true, className: `occupant-overlay motion-${motion} effect-${effect}` });
-    if (view.entity.anchor.kind === "graph_node") addRelation(view.entity.anchor.node, nodeId, point, "occupant", relationHandles, relationEdges, positions);
+    if (view.entity.anchor.kind === "graph_node") addRelation(view.entity.anchor.node, nodeId, point, "occupant", relationEdges, positions);
   }
 
   for (const node of surface.nodes) {
@@ -478,7 +486,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, t
       id: node.id.key,
       type: "structure",
       position: { x: node.x ?? 0, y: node.y ?? 0 },
-      data: { kind: "structure", label: node.id.label, entity: structure, states, effect, handles: [...(handles.get(node.id.key) ?? []), ...(relationHandles.get(node.id.key) ?? [])], focusAccount: states.find((entity) => entity.account)?.account ?? structure?.account ?? undefined } satisfies StructureNodeData,
+      data: { kind: "structure", label: node.id.label, entity: structure, states, effect, handles: handles.get(node.id.key) ?? [], focusAccount: states.find((entity) => entity.account)?.account ?? structure?.account ?? undefined } satisfies StructureNodeData,
       className: ["structure-node", `motion-${motion}`, `effect-${effect}`, ...node.classes].join(" "),
       draggable: false,
     });
@@ -762,15 +770,14 @@ function semanticOccupantPosition(entity: SceneEntity, slot: number, surface: Gr
   return candidates.find((candidate) => !occupied.some((rect) => rectanglesOverlap({ ...candidate, width: OCCUPANT_WIDTH, height: OCCUPANT_HEIGHT }, rect, 8))) ?? candidates[0];
 }
 
-function addRelation(source: string, target: string, targetPosition: GraphPoint, role: "occupant" | "attachment", relationHandles: Map<string, GraphHandle[]>, edges: Edge[], positions: Map<string, GraphPoint>): void {
+function addRelation(source: string, target: string, targetPosition: GraphPoint, role: "occupant" | "attachment", edges: Edge[], positions: Map<string, GraphPoint>): void {
   const sourcePoint = positions.get(source);
   if (!sourcePoint) return;
   const targetCenter = role === "occupant" ? { x: targetPosition.x + OCCUPANT_WIDTH / 2, y: targetPosition.y + OCCUPANT_HEIGHT / 2 } : { x: targetPosition.x + ATTACHMENT_WIDTH / 2, y: targetPosition.y + 20 };
   const sourceCenter = { x: sourcePoint.x + GRAPH_NODE_WIDTH / 2, y: sourcePoint.y + GRAPH_NODE_HEIGHT / 2 };
   const sides = graphEdgeSides(sourceCenter, targetCenter);
   const id = `relation:${source}:${target}`;
-  relationHandles.set(source, [...(relationHandles.get(source) ?? []), { id: `source:${id}`, type: "source", side: sides.source, offset: .5 }]);
-  edges.push({ id, source, target, sourceHandle: `source:${id}`, targetHandle: `relation-target:${sides.target}`, type: "straight", className: `relation-edge ${role}-relation`, selectable: false });
+  edges.push({ id, source, target, sourceHandle: relationSource(sides.source), targetHandle: relationTarget(sides.target), type: "straight", className: `relation-edge ${role}-relation`, selectable: false });
 }
 
 function strongestEffect(effects: EntityEffect[]): EntityEffect {
