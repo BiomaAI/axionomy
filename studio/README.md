@@ -54,8 +54,8 @@ by an engine, native or in the browser, that Studio asks the same way.
   anywhere else what is done makes a branch. *Play* is the transport's
   word, for walking a history; *Run* computes one.
   - **Moves**: the package's candidate sets, and the moves the one picked
-    offers here, each with its rate's path, checked (applies, or what it
-    lacks), each with **Apply**; a move opens its full check when clicked.
+    offers here, each shown as its exchange and checked (applies, or what
+    it lacks), each with **Apply**; **Details** opens its full check.
   - **Strategy**: the strategies that run on this history, with their goal,
     seed, budget and turns in the open, and **Run**; its branch opens at the
     step it started from and plays. They are the strategies of the arms
@@ -69,31 +69,48 @@ by an engine, native or in the browser, that Studio asks the same way.
   - **Experiments**: every experiment of the package, with its start ref,
     goal, arms (and any arm's own start), trials and effort, each **Run**
     from wherever you are: every arm's trials, each a new branch of the tree
-    as it is recorded, listed with how each ended, in how many steps, and
-    its objective values, with **Watch** to open and play it. The activity
-    line says when it ran, and run again, whether the same seeds gave the
-    same results. A start ref opens on a click.
+    as it is recorded, in a table of arms and trials with how each ended,
+    in how many steps, and its objective values, with **Watch** to open and
+    play it. The activity line says when it ran, and run again, whether the
+    same seeds gave the same results. A start ref opens from its inspector.
   - **Ref**: the refs naming this point, and **Create** for one of yours
     (`<package>/mine` unless you name it otherwise); at a ref of yours,
     **Follow it** delivers each step it is moved over, by this page or any
     other proposer, and **Delete it** deletes it, its history staying in the
     tree.
-  - **Exchange**: one written by hand, **Check**ed before it can be
-    applied.
+  - **Exchange**: one written from a rate of the model, with no JSON: the
+    rate picked, its variables filled from their domains (each offering
+    only what its relations and the values before it allow), which writes
+    the rate's identifier from its pattern, `step/{from}/{to}` as
+    `step/1/2`; the accounts the rate fixes filled in and its free roles
+    chosen from the accounts; its units and parameters set. It is
+    **Check**ed before it can be applied.
+- **Every identifier is one link**: an account, asset, rate, ref, step,
+  strategy, experiment or objective is shown by its label, its path in its
+  card. A hover previews the card; a click pins its inspector, several at
+  once, each closed by × or Esc. A pinned inspector follows the cursor: an
+  account shows its balances at the step on screen against the step
+  before. The views they open are the same everywhere (`AccountView`,
+  `ExchangeView`, `RateView`, `ExperimentView`, `StrategyView`, `RefView`,
+  `ResultsTable`), and like `HistoryTree` they take data and know nothing
+  of the engine or the package.
 - **Words explain themselves**: Studio's own words (package, history,
   branch, ref, fixed, move, strategy, goal, experiment, arm, trial, seed,
-  budget, turns, follow) are dotted where they are met, and say what they
-  mean on hover or focus.
+  budget, turns, follow, gives, keeps, gets) are dotted where they are
+  met, and say what they mean on hover or focus.
 
 Natively the store is the server's, so whatever another client does to a
 ref there shows here; in the browser it is the Worker's, on the origin
 private file system where it stays across reloads, so a sample loaded again
 after Pages publishes a new version is that version, not a mix of both.
 
-**State** shows accounts and assets; **Rules** shows rates, roles, goals,
-and invariants; **Proof** explains the selected exchange: what was checked
-before it applied and its exact effects. Panels say what they show, not how
-to use them: what a word means is on its dotted underline.
+**This step** shows the exchange the step applied: its rate as written with
+the values it gives the rate's variables, the accounts its roles bind and
+its units; its step pins what each account gave, kept and got, and the
+check made before it applied. **State** lists the accounts, each with how
+many of its balances the step changed. **Rules** opens the model's rates as
+written, one row each, with its goal and invariants. Panels say what they
+show, not how to use them: what a word means is on its dotted underline.
 
 Graph, grid, matrix, timeline, and reserves pictures help people read a result, but they
 never become a second simulation model. Geometry, semantic entities, paths,
@@ -119,11 +136,11 @@ the same object between anchors, emphasize receipt-derived effects, and settle
 it onto goals. Studio always uses the full replay choreography so movement and
 state changes remain visually explicit.
 
-Playback uses one generic cockpit for every package: the scene, current-step
-narration, and authoritative account ledger remain visible together on wide
-screens and stack without page overflow on narrow screens. Balances that never
-change in the history on screen may be folded for density, but remain
-explicitly labeled as unchanged assets and are always inspectable. The viewer
+Playback uses one generic cockpit for every package: the scene, the step's
+exchange, and the authoritative accounts remain visible together on wide
+screens and stack without page overflow on narrow screens. In an account's
+ledger, balances that never change in the history on screen may be folded
+for density, but remain counted as unchanged and are always inspectable. The viewer
 does not reinterpret them as configuration or remove them from the
 source-of-truth ledger. The mouse wheel scrolls the page over the picture; its
 +/− controls, a pinch, or Ctrl with the wheel zoom it. Space plays or
@@ -209,10 +226,11 @@ server startup timeout. CI uses the same sequence.
 `tests/packages.spec.ts` runs in both suites, against the native server and
 the Worker alike: it loads a sample package and scrubs a ref's history,
 applies a candidate at a ref's point (the ref moves) and at an earlier step
-(a branch), refuses to apply a written exchange before it is assessed
-applicable, continues from a ref's point with a strategy and moves the ref
-to where it ended, follows a ref while the page moves it, runs an experiment
-and compares its trials, and opens a `?package=` link and reloads it. The
+(a branch), writes an exchange from a rate and applies it only once it is
+assessed applicable, continues from a ref's point with a strategy and moves
+the ref to where it ended, follows a ref while the page moves it, runs an
+experiment and compares its trials, pins inspectors that follow the cursor
+and opens the rules, and opens a `?package=` link and reloads it. The
 native server's store outlives a test, so each test that moves a ref has
 one of its own and counts from where it is. Natively, the suite also
 follows a ref that another proposer moves over the HTTP API.

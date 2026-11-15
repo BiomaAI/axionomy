@@ -1,21 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconMaximize } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconMaximize } from "@tabler/icons-react";
 import { ActivityStrip, type Activity, type Said } from "./Activity";
+import type { AccountData, ModelData, ViewDocument } from "./api";
 import { BrowserPackages } from "./browserPackages";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
+import { ExchangeEditor } from "./ExchangeEditor";
+import { ExchangeView, Holding } from "./ExchangeView";
 import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
-import { Accounts, Assessment, ModelExplorer, PanelHeading, StepTicker, Transition, useSnapshot } from "./Inspectors";
+import { IdLink, InspectionProvider, InspectorDock, PanelHeading, subjectKey, useSnapshot, type Subject } from "./Inspectors";
+import { inspector } from "./inspect";
+import { StateList } from "./Ledger";
+import { ExperimentView, endedWords } from "./PackageViews";
 import {
   EngineRefusal,
   loadedPackages,
   nativePackages,
   samplePackages,
-  type Candidate,
   type Exchange,
   type ExperimentProgress,
-  type ExperimentView,
+  type ExperimentView as ExperimentData,
   type HistoriesView,
   type LoadedFrom,
   type PackageEngine,
@@ -29,6 +34,7 @@ import {
 import { branchesOf, lastPart, parsePoint, type BranchInfo, type Note } from "./packageTree";
 import { Brand, PlaybackControls, changingBalances } from "./Playback";
 import { QuantityFormats } from "./Quantity";
+import { RateTable } from "./RateView";
 import { SceneView, type ReplayMotionMode } from "./SceneView";
 import { Term } from "./Term";
 
@@ -215,11 +221,19 @@ export function PackagesApp() {
   const [experimenting, setExperimenting] = useState<ReadonlyMap<string, ExperimentRun>>(new Map());
   /** What each experiment's last play came to, by path. */
   const experimentsStopped = useRef(new Set<string>());
+  /** The account last picked in the picture. */
   const [focusedAccount, setFocusedAccount] = useState<string>();
   /** The history the one on screen is set against: picked (a point), closed (null), or the one it left (undefined). */
   const [compareWith, setCompareWith] = useState<PointId | null>();
   const worldPanel = useRef<HTMLDivElement>(null);
-  const proofPanel = useRef<HTMLDivElement>(null);
+  /** The inspectors pinned open, latest last. */
+  const [pinned, setPinned] = useState<Subject[]>([]);
+  const pin = useCallback((subject: Subject) => setPinned((current) => [...current.filter((each) => subjectKey(each) !== subjectKey(subject)), subject]), []);
+  const unpin = useCallback((subject: Subject) => setPinned((current) => current.filter((each) => subjectKey(each) !== subjectKey(subject))), []);
+  useEffect(() => setPinned([]), [packageName]);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rulesPanel = useRef<HTMLElement>(null);
+  useEffect(() => { if (rulesOpen) rulesPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [rulesOpen]);
 
   const drawn = useQuery({
     queryKey: ["draw", kind, opened?.point],
@@ -481,7 +495,7 @@ export function PackagesApp() {
   });
 
   /** Plays every arm of `experiment`; each trial it plays is a new branch. */
-  const playExperiment = async (experiment: ExperimentView) => {
+  const playExperiment = async (experiment: ExperimentData) => {
     const path = experiment.experiment;
     if (!engine || experimenting.has(path)) return;
     const before = results.find((result) => result.experiment === path);
@@ -580,8 +594,18 @@ export function PackagesApp() {
     return point !== undefined && screenRoot !== undefined && rootOf(parsePoint(point).run) === screenRoot;
   };
   const runs = playable(pkg, document?.source.key, inTree);
+  const stepWords = position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label ?? "Exchange";
+  const model = document?.model ?? undefined;
+  const inspect = inspector({ document, position, snapshot, previous, changing, pkg, results, onOpenRef: (name) => void openRef(name), onWatch: watch });
+  /** An account the picture picked: marked in the state list, and its inspector pinned. */
+  const pickAccount = (key: string) => {
+    setFocusedAccount(key);
+    pin({ kind: "account", id: snapshot?.accounts.find((account) => account.account.key === key)?.account ?? { key, label: key } });
+  };
 
-  return <div className="app-shell packages-workspace">
+  return <InspectionProvider value={{ inspect, pin }}>
+  <QuantityFormats.Provider value={document?.formats ?? {}}>
+  <div className="app-shell packages-workspace">
     <header className="topbar">
       <Brand />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
@@ -606,6 +630,7 @@ export function PackagesApp() {
         void load(file.name, () => engine.loadFile(file));
       }} /></label>
       <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
+      <button type="button" aria-expanded={rulesOpen} onClick={() => setRulesOpen(!rulesOpen)} disabled={!model}>Rules</button>
     </section>
 
 
@@ -621,44 +646,57 @@ export function PackagesApp() {
         </section>
         {!opened ? <div className="empty-state">No refs</div>
           : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
-          : snapshot && <QuantityFormats.Provider value={document.formats ?? {}}>
-            <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} frame={frame} />
+          : snapshot && <>
+            <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />
             <section className="stage point-stage">
               <div className="panel world-panel" ref={worldPanel}>
                 <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
-                <SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={setFocusedAccount} />
+                <SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} />
               </div>
               <div className="panel action-panel">
                 <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
-                <FromHere engine={engine} pkg={pkg} runs={runs} runsKey={`${pkg?.name}:${screenRoot}:${document?.source.key}`} onOpenRef={(name) => void openRef(name)} at={playing ? undefined : screenPoint} playing={playing} opened={opened} onRefPoint={onRefPoint} position={position}
+                <FromHere engine={engine} pkg={pkg} document={document} accounts={snapshot.accounts} runs={runs} runsKey={`${pkg?.name}:${screenRoot}:${document?.source.key}`} at={playing ? undefined : screenPoint} playing={playing} opened={opened} onRefPoint={onRefPoint} position={position}
                   onApply={act} finding={Boolean(finding)} onLetPlay={letPlay} results={results} onWatch={watch} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives}
                   experimenting={experimenting} onPlayExperiment={(experiment) => void playExperiment(experiment)} onStopExperiment={stopExperiment} />
               </div>
               <div className="truth-rail">
                 <div className="panel ticker-panel">
-                  <PanelHeading kicker="This step" title={position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label ?? "Exchange"} aside={`${position} / ${steps}`} />
-                  <StepTicker frame={frame} steps={steps} onProof={() => proofPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+                  <PanelHeading kicker="This step" title={stepWords} aside={position === 0 ? `0 / ${steps}` : <IdLink subject={{ kind: "step", step: position }} label={`${position} / ${steps}`} />} />
+                  <div className="step-now">{frame ? <ExchangeView exchange={frame.exchange} assessment={frame.assessment} recorded /> : <div className="empty-state">{steps === 0 ? "No steps" : "Initial state"}</div>}</div>
                 </div>
                 <div className="panel accounts-panel">
-                  <PanelHeading kicker="State" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : counted(snapshot.accounts.length, "account")} />
-                  <Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} changingBalanceKeys={changing} />
+                  <PanelHeading kicker="State" title="Accounts" aside={counted(snapshot.accounts.length, "account")} />
+                  <StateList accounts={snapshot.accounts} before={position > 0 ? previous?.accounts : undefined} focus={focusedAccount} />
                 </div>
               </div>
             </section>
+            {rulesOpen && model && <section className="panel rules-panel" aria-label="Rules" ref={rulesPanel}>
+              <PanelHeading kicker="Rules" title={document.title} aside={counted(model.rates.length, "rate")} action={<button type="button" onClick={() => setRulesOpen(false)}>Close</button>} />
+              <div className="rules-body">
+                <RateTable rates={model.rates} />
+                {(model.goal.length > 0 || model.invariants.length > 0) && <div className="rules-side">
+                  {model.goal.length > 0 && <section className="view-section"><h4><Term name="goal">Goal</Term></h4>{model.goal.map((goal) => <div className="effect" key={goal.account.key}><IdLink subject={{ kind: "account", id: goal.account }} /><div className="holdings">{goal.required.map((required) => <Holding key={required.asset.key} value={required} />)}</div></div>)}</section>}
+                  {model.invariants.length > 0 && <section className="view-section"><h4>Invariants</h4><dl className="facts">{model.invariants.map((invariant) => <InvariantRow key={invariant.name} invariant={invariant} />)}</dl></section>}
+                </div>}
+              </div>
+            </section>}
             {against && against !== opened.point && !stale && <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
               leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => setCompareWith(null)} />}
-            <section className="definition-grid proof-grid">
-              <div className="panel transition-panel" ref={proofPanel}><PanelHeading kicker="Proof" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} steps={steps} /></div>
-              <div className="panel model-panel"><PanelHeading kicker="Rules" title="Rates, roles, goals & invariants" aside={counted(document.model?.rates.length ?? 0, "rate")} /><ModelExplorer document={document} /></div>
-            </section>
-          </QuantityFormats.Provider>}
+          </>}
       </main>}
+    <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
+  </div>
+  </QuantityFormats.Provider>
+  </InspectionProvider>;
+}
 
-  </div>;
+/** A conservation law: its name, and the weighted sum of assets it keeps. */
+function InvariantRow({ invariant }: { invariant: ModelData["invariants"][number] }) {
+  return <><dt>{invariant.name}</dt><dd>{invariant.terms.map((term, index) => <span key={term.asset.key}>{index > 0 && " + "}{term.weight !== 1 && `${term.weight}·`}<IdLink subject={{ kind: "asset", id: term.asset }} /></span>)}</dd></>;
 }
 
 /** An experiment playing: what it is, how to stop it, and how far it is. */
-type ExperimentRun = { cancel(): void; experiment: ExperimentView; progress?: ExperimentProgress };
+type ExperimentRun = { cancel(): void; experiment: ExperimentData; progress?: ExperimentProgress };
 
 /** `map` with `key` set to `value`, or without `key` when there is none. */
 function changed<V>(map: ReadonlyMap<string, V>, key: string, value?: V): ReadonlyMap<string, V> {
@@ -691,17 +729,12 @@ function BranchCard({ branch, step, info, branches, onCompare }: { branch: TreeB
     <strong>{branch.title}</strong>
     <span>Step {step}{step === branch.last ? ", its last" : ` of ${branch.last}`}</span>
     {branch.parent && <span>A <Term name="branch">branch</Term> from step {branch.parent.step} of {parent?.title ?? "another history"}</span>}
-    {info?.refs.map((ref) => <span key={ref.name}><Term name="ref">{ref.name}</Term> names step {ref.step}{ref.fixed ? <>, <Term name="fixed">fixed</Term></> : ""}</span>)}
-    {trial && <span><Term name="trial">Trial</Term> {trial.index + 1} of <Term name="experiment">{trial.experiment}</Term>, {lastPart(trial.strategy)}: {endedWords(trial.trial.ended)}{trial.objectives.length > 0 && ` · ${trial.objectives.map((objective, index) => `${lastPart(objective.objective)} ${trial.trial.values[index]}`).join(" · ")}`}</span>}
+    {info?.refs.map((ref) => <span key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} /> names step {ref.step}{ref.fixed ? <>, <Term name="fixed">fixed</Term></> : ""}</span>)}
+    {trial && <span><Term name="trial">Trial</Term> {trial.index + 1} of <IdLink subject={{ kind: "experiment", path: trial.experiment }} />, <IdLink subject={{ kind: "strategy", path: trial.strategy }} label={lastPart(trial.strategy)} />: {endedWords(trial.trial.ended)}</span>}
+    {trial && trial.objectives.length > 0 && <span className="branch-values">{trial.objectives.map((objective, index) => <span key={objective.objective}><IdLink subject={{ kind: "objective", path: objective.objective }} label={lastPart(objective.objective)} /> {trial.trial.values[index]}</span>)}</span>}
     {info?.note && !trial && <span>Made in this tab: {info.note.words}</span>}
     {onCompare && <button type="button" onClick={onCompare}>Compare with the history on screen</button>}
   </div>;
-}
-
-/** An exchange's roles and accounts, in the view's words. */
-function bindingWords(candidate: Candidate): string {
-  const exchange = candidate.proposal.exchange;
-  return [...exchange.bindings.map((binding) => `${binding.role.label}: ${binding.account.label}`), `×${exchange.units}`].join(" · ");
 }
 
 /** A whole number below 2^64, written in decimal. */
@@ -759,26 +792,17 @@ function outcomeWords(outcome: RanView["outcome"]): string {
   }
 }
 
-function endedWords(ended: ResultsView["arms"][number]["trials"][number]["ended"]): string {
-  switch (ended.kind) {
-    case "reached": return "reached the goal";
-    case "stopped": return "stopped short of the goal";
-    case "horizon": return "played every turn";
-    case "refused": return `refused on turn ${ended.turn}`;
-    case "exhausted": return "explored everything";
-    case "spent": return "spent its budget";
-    case "interrupted": return "stopped before it ended";
-  }
-}
-
 /** Everything one can do from the point on screen, each a click from done. */
-function FromHere({ engine, pkg, runs, runsKey, onOpenRef, at, playing, opened, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives, experimenting, onPlayExperiment, onStopExperiment }: {
+function FromHere({ engine, pkg, document, accounts, runs, runsKey, at, playing, opened, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives, experimenting, onPlayExperiment, onStopExperiment }: {
   engine: PackageEngine;
   pkg?: PackageView;
+  /** The history on screen. */
+  document: ViewDocument;
+  /** The accounts at the step on screen. */
+  accounts: AccountData[];
   /** What runs on the history on screen, and what changes when another history's tree is opened. */
   runs: Playable;
   runsKey: string;
-  onOpenRef: (name: string) => void;
   at?: PointId;
   playing: boolean;
   opened: Opened;
@@ -794,9 +818,10 @@ function FromHere({ engine, pkg, runs, runsKey, onOpenRef, at, playing, opened, 
   follow: Following;
   objectives: string[];
   experimenting: ReadonlyMap<string, ExperimentRun>;
-  onPlayExperiment: (experiment: ExperimentView) => void;
+  onPlayExperiment: (experiment: ExperimentData) => void;
   onStopExperiment: (path: string) => void;
 }) {
+  const ids = useMemo(() => accounts.map((account) => account.account), [accounts]);
   if (!at) return <div className="from-here"><p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p></div>;
   return <div className="from-here">
     <Moves engine={engine} pkg={pkg} at={at} onApply={onApply} />
@@ -804,11 +829,17 @@ function FromHere({ engine, pkg, runs, runsKey, onOpenRef, at, playing, opened, 
     <section className="from-section" aria-label="Experiments">
       <h3><Term name="experiment">Experiments</Term></h3>
       {(pkg?.experiments.length ?? 0) === 0 ? <p className="muted">No experiments</p>
-        : pkg?.experiments.map((experiment) => <ExperimentRow key={experiment.experiment} experiment={experiment} recorded={results.find((result) => result.experiment === experiment.experiment)} onWatch={onWatch} onOpenRef={onOpenRef}
-          running={experimenting.has(experiment.experiment)} onPlay={() => onPlayExperiment(experiment)} onStop={() => onStopExperiment(experiment.experiment)} />)}
+        : pkg?.experiments.map((experiment) => {
+          const running = experimenting.has(experiment.experiment);
+          const recorded = results.find((result) => result.experiment === experiment.experiment);
+          return <ExperimentView key={experiment.experiment} experiment={experiment} results={recorded} onWatch={onWatch}
+            actions={running ? <button type="button" className="danger" onClick={() => onStopExperiment(experiment.experiment)}>Stop</button>
+              : <button type="button" className="primary" onClick={() => onPlayExperiment(experiment)}>{recorded ? "Run again" : "Run"}</button>} />;
+        })}
     </section>
-    <RefHere pkg={pkg} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
-    <HandWritten engine={engine} at={at} onApply={onApply} />
+    <RefHere pkg={pkg} document={document} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
+    <ExchangeEditor rates={document.model?.rates ?? []} accounts={ids} ontology={document.source.key} point={at}
+      onCheck={(exchange) => engine.assess(at, exchange)} onApply={onApply} />
   </div>;
 }
 
@@ -834,15 +865,16 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
       : !offered.data ? <p className="muted">Loading…</p>
       : candidates.length === 0 ? <p className="muted">No moves</p>
       : <ul className="move-list">{candidates.map((candidate, index) => {
-        const applies = candidate.proposal.assessment.status === "applicable";
-        return <li key={index} className={`move move-${candidate.proposal.assessment.status}`}>
-          <button type="button" className="move-name" aria-expanded={open === index} onClick={() => setOpen(open === index ? undefined : index)} title={bindingWords(candidate)}>
-            <strong>{candidate.proposal.label}</strong>
-            <code>{candidate.exchange.rate}</code>
-            <small>{applies ? "applies" : candidate.proposal.assessment.status.replaceAll("_", " ")}</small>
-          </button>
-          <button type="button" className="primary" disabled={!applies || applying} onClick={async () => { setApplying(true); try { await onApply(candidate.exchange, candidate.proposal.label); } finally { setApplying(false); } }}>Apply</button>
-          {open === index && <div className="move-detail"><span className="muted">{bindingWords(candidate)}</span><Assessment assessment={candidate.proposal.assessment} /></div>}
+        const { exchange, assessment } = candidate.proposal;
+        const applies = assessment.status === "applicable";
+        const shown = open === index;
+        return <li key={index} className={`move move-${assessment.status}`}>
+          <ExchangeView exchange={exchange} assessment={assessment} />
+          <div className="move-actions">
+            <button type="button" className="move-details" aria-expanded={shown} aria-label="Details" title="Details" onClick={() => setOpen(shown ? undefined : index)}>{shown ? <IconChevronDown size={15} aria-hidden="true" /> : <IconChevronRight size={15} aria-hidden="true" />}</button>
+            <button type="button" className="primary" disabled={!applies || applying} onClick={async () => { setApplying(true); try { await onApply(candidate.exchange, candidate.proposal.label); } finally { setApplying(false); } }}>Apply</button>
+          </div>
+          {shown && <div className="move-detail"><ExchangeView form="full" exchange={exchange} assessment={assessment} /></div>}
         </li>;
       })}</ul>}
     </>}
@@ -873,38 +905,8 @@ function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; find
   </section>;
 }
 
-/** An experiment of the package: what it compares from where, run from anywhere, and each trial it ran to watch. */
-function ExperimentRow({ experiment, recorded, onWatch, onOpenRef, running, onPlay, onStop }: {
-  experiment: ExperimentView;
-  recorded?: ResultsView;
-  onWatch: (trial: { end: PointId; start: PointId }) => void;
-  onOpenRef: (name: string) => void;
-  running: boolean;
-  onPlay: () => void;
-  onStop: () => void;
-}) {
-  return <div className="experiment-here">
-    <div className="experiment-line">
-      <strong>{experiment.experiment}</strong>
-      {running ? <button type="button" className="danger" onClick={onStop}>Stop</button>
-        : <button type="button" className="primary" onClick={onPlay}>{recorded ? "Run again" : "Run"}</button>}
-    </div>
-    <dl className="experiment-facts">
-      <dt><Term name="ref">start</Term></dt><dd><button type="button" className="link" onClick={() => onOpenRef(experiment.start)}>{experiment.start}</button></dd>
-      <dt><Term name="goal">goal</Term></dt><dd>{experiment.goal}</dd>
-      <dt><Term name="arm">arms</Term></dt><dd>{experiment.arms.map((arm) => <span key={`${arm.strategy}:${arm.start ?? ""}`}>{arm.strategy}{arm.start && <> from <button type="button" className="link" onClick={() => onOpenRef(arm.start!)}>{arm.start}</button></>}</span>)}</dd>
-      <dt><Term name="trial">trials</Term></dt><dd>{experiment.trials}</dd>
-      <dt>effort</dt><dd><span><Term name="seed">seed</Term> {experiment.seed}</span><span><Term name="budget">budget</Term> {experiment.budget}</span><span><Term name="turns">turns</Term> {experiment.turns}</span></dd>
-    </dl>
-    {recorded && <ul className="trial-list">{recorded.arms.flatMap((arm) => arm.trials.map((trial, index) => <li key={`${arm.arm.strategy}:${index}`}>
-      <span><strong>{lastPart(arm.arm.strategy)}</strong>{arm.trials.length > 1 ? ` · trial ${index + 1}` : ""} <span className="muted">{endedWords(trial.ended)}, {counted(stepOf(trial.end) - stepOf(arm.start), "step")}{recorded.objectives.length > 0 && ` · ${recorded.objectives.map((objective, column) => `${lastPart(objective.objective)} ${trial.values[column]}`).join(" · ")}`}</span></span>
-      <button type="button" disabled={trial.end === arm.start} onClick={() => onWatch({ end: trial.end, start: arm.start })}>Watch</button>
-    </li>))}</ul>}
-  </div>;
-}
-
 /** The refs naming the point on screen, a new one, or following and deleting the ref of one's own on it. */
-function RefHere({ pkg, at, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; at: PointId; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
+function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; document: ViewDocument; at: PointId; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
   // The first of `<package>/mine`, `<package>/mine-2`, … that no ref of the package has.
   const suggested = useMemo(() => {
     const taken = new Set(pkg?.refs.map((ref) => ref.name));
@@ -916,7 +918,7 @@ function RefHere({ pkg, at, opened, onRefPoint, onKeep, onDelete, follow, object
   const [name, setName] = useState(suggested);
   useEffect(() => setName(suggested), [suggested, opened.point]);
   const here = pkg?.refs.filter((ref) => ref.point === at) ?? [];
-  const named = here.length > 0 && <ul className="refs-here">{here.map((ref) => <li key={ref.name}><code>{ref.name}</code>{ref.shipped_by ? <> <Term name="fixed">fixed</Term></> : ""}</li>)}</ul>;
+  const named = here.length > 0 && <ul className="refs-here">{here.map((ref) => <li key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} />{ref.shipped_by ? <> <Term name="fixed">fixed</Term></> : ""}</li>)}</ul>;
   if (onRefPoint && opened.ref) {
     const { following, setFollowing, delivered, problem } = follow;
     return <section className="from-section" aria-label="Ref">
@@ -927,10 +929,16 @@ function RefHere({ pkg, at, opened, onRefPoint, onKeep, onDelete, follow, object
         <button type="button" onClick={onDelete}>Delete it</button>
       </div>
       {problem && <div className="assessment-issue" role="alert">{problem}</div>}
-      {delivered.length > 0 && <ol className="delivered-frames" aria-label="Delivered steps">{delivered.map((frame) => <li key={frame.point}>
-        <strong>step {stepOf(frame.point)}</strong><span>{frame.exchange.rate} ×{frame.exchange.units}</span>
-        {frame.values.length > 0 && <small>{frame.values.map((value, index) => `${lastPart(objectives[index] ?? "")} ${value}`).join(" · ")}</small>}
-      </li>)}</ol>}
+      {delivered.length > 0 && <ol className="delivered-frames" aria-label="Delivered steps">{delivered.map((frame) => {
+        const step = stepOf(frame.point);
+        // The step as the history on screen draws it, once it is drawn there.
+        const drawnFrame = document.frames[step - 1];
+        return <li key={frame.point}>
+          <IdLink subject={{ kind: "step", step }} />
+          {drawnFrame ? <ExchangeView exchange={drawnFrame.exchange} /> : <code>{frame.exchange.rate} ×{frame.exchange.units}</code>}
+          {frame.values.length > 0 && <small>{frame.values.map((value, index) => <span key={index}><IdLink subject={{ kind: "objective", path: objectives[index] ?? "" }} label={lastPart(objectives[index] ?? "")} /> {value}</span>)}</small>}
+        </li>;
+      })}</ol>}
     </section>;
   }
   return <section className="from-section" aria-label="Ref">
@@ -940,31 +948,6 @@ function RefHere({ pkg, at, opened, onRefPoint, onKeep, onDelete, follow, object
       <input name="ref-name" aria-label="Ref name" value={name} onChange={(event) => setName(event.target.value)} />
       <button type="submit" disabled={!name.trim()}>Create</button>
     </form>
-  </section>;
-}
-
-/** An exchange written by hand, checked before it is applied. */
-function HandWritten({ engine, at, onApply }: { engine: PackageEngine; at: PointId; onApply: (exchange: Exchange, label: string) => Promise<void> }) {
-  const [written, setWritten] = useState("");
-  const [assessed, setAssessed] = useState<{ text: string; candidate: Candidate }>();
-  const [problem, setProblem] = useState<string>();
-  useEffect(() => { setAssessed(undefined); setProblem(undefined); }, [at]);
-  const check = async () => {
-    setProblem(undefined);
-    let exchange: Exchange;
-    try { exchange = JSON.parse(written) as Exchange; } catch (cause) { setProblem(`Not an exchange: ${described(cause)}`); return; }
-    try { setAssessed({ text: written, candidate: await engine.assess(at, exchange) }); } catch (cause) { setProblem(described(cause)); }
-  };
-  const ready = assessed && assessed.text === written && assessed.candidate.proposal.assessment.status === "applicable";
-  return <section className="from-section exchange-editor" aria-label="Exchange">
-    <h3><Term name="exchange">Exchange</Term></h3>
-    <textarea name="exchange" aria-label="Exchange" spellCheck={false} rows={4} value={written} placeholder={'{"rate": "…", "bindings": {"role": "account"}, "units": "1"}'} onChange={(event) => { setWritten(event.target.value); setAssessed(undefined); }} />
-    <div className="let-play">
-      <button type="button" onClick={() => void check()} disabled={!written.trim()}>Check</button>
-      <button type="button" className="primary" disabled={!ready} onClick={() => assessed && void onApply(assessed.candidate.exchange, assessed.candidate.proposal.label)}>Apply</button>
-    </div>
-    {problem && <div className="assessment-issue" role="alert">{problem}</div>}
-    {assessed && assessed.text === written && <Assessment assessment={assessed.candidate.proposal.assessment} />}
   </section>;
 }
 

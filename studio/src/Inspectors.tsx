@@ -1,194 +1,194 @@
-import { useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import type { ExchangeFrame, ViewDocument, ViewSnapshot } from "./api";
-import { Amount, QuantityFormats, useQuantity } from "./Quantity";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { IconX } from "@tabler/icons-react";
+import type { ViewDocument, ViewId } from "./api";
+import type { components } from "./generated/api";
 
-/** A name written as a path, such as `time-accounting`, read as words. */
-function words(path: string): string {
-  return path.replaceAll("-", " ").replaceAll("/", " · ");
-}
+type Schemas = components["schemas"];
 
 export function PanelHeading({ kicker, title, aside, action }: { kicker: ReactNode; title: ReactNode; aside?: ReactNode; action?: ReactNode }) {
   return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div><div className="panel-heading-side">{aside && <small>{aside}</small>}{action}</div></div>;
 }
 
-type QuantityValue = { asset: { key: string; label: string }; quantity: string };
-type BalanceRow = { balance: QuantityValue; prior?: string; changed: boolean; added: boolean; live: boolean };
-
-// changingBalanceKeys contains `${account}|${asset}` pairs that change somewhere
-// in the trace. It controls disclosure only; unchanged assets remain equally
-// authoritative and must not be reclassified as configuration by the viewer.
-export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { snapshot: ViewSnapshot; previous?: ViewSnapshot; focus?: string; changingBalanceKeys?: Set<string> | null }) {
-  useEffect(() => {
-    if (!focus) return;
-    document.getElementById(`account-${encodeURIComponent(focus)}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [focus, snapshot.index]);
-  const cards = useMemo(() => {
-    const mapped = snapshot.accounts.map((account) => {
-      const prevAccount = previous?.accounts.find((candidate) => candidate.account.key === account.account.key);
-      const rows: BalanceRow[] = account.balances.map((balance) => {
-        const prior = prevAccount?.balances.find((candidate) => candidate.asset.key === balance.asset.key)?.quantity;
-        return {
-          balance,
-          prior,
-          changed: prior !== undefined && prior !== balance.quantity,
-          added: prior === undefined && snapshot.index > 0,
-          live: !changingBalanceKeys || changingBalanceKeys.has(`${account.account.key}|${balance.asset.key}`),
-        };
-      });
-      const ghosts = (prevAccount?.balances ?? []).filter((prev) => !account.balances.some((candidate) => candidate.asset.key === prev.asset.key));
-      return { account: account.account, rows, ghosts };
-    });
-    if (!changingBalanceKeys) return mapped;
-    const weight = (card: (typeof mapped)[number]) => (card.rows.some((row) => row.live) || card.ghosts.length > 0 ? 0 : 1);
-    return [...mapped].sort((a, b) => weight(a) - weight(b));
-  }, [snapshot, previous, changingBalanceKeys]);
-  const row = (entry: BalanceRow) => <div className={`balance ${entry.changed || entry.added ? "changed" : ""}`} key={entry.balance.asset.key}>
-    <span title={entry.balance.asset.key}>{entry.balance.asset.label}</span>
-    <strong><Amount asset={entry.balance.asset.key} atoms={entry.balance.quantity} /></strong>
-    {entry.changed && entry.prior !== undefined && <small><Amount asset={entry.balance.asset.key} atoms={entry.prior} /> →</small>}
-    {entry.added && <small>new</small>}
-  </div>;
-  return <div className="accounts-list">
-    {cards.map(({ account, rows, ghosts }) => {
-      const live = rows.filter((entry) => entry.live);
-      const unchanged = rows.filter((entry) => !entry.live);
-      const unchangedOnly = live.length === 0 && ghosts.length === 0 && unchanged.length > 0;
-      return <article id={`account-${encodeURIComponent(account.key)}`} className={`account-card ${focus === account.key ? "focused" : ""} ${unchangedOnly ? "unchanged-only" : ""}`} key={account.key}>
-        <h3><span className="account-icon">{account.label.slice(0, 1)}</span>{account.label}</h3>
-        <div className="balances">
-          {live.map(row)}
-          {ghosts.map((ghost) => <div className="balance ghost" key={`ghost:${ghost.asset.key}`}>
-            <span title={ghost.asset.key}>{ghost.asset.label}</span>
-            <strong><Amount asset={ghost.asset.key} atoms="0" /></strong>
-            <small><Amount asset={ghost.asset.key} atoms={ghost.quantity} /> →</small>
-          </div>)}
-          {unchanged.length > 0 && <details className="unchanged-assets">
-            <summary>{unchanged.length} unchanged {unchanged.length === 1 ? "asset" : "assets"} in this replay</summary>
-            {unchanged.map(row)}
-          </details>}
-          {rows.length === 0 && ghosts.length === 0 && <div className="muted">No balances</div>}
-        </div>
-      </article>;
-    })}
-  </div>;
-}
-
-export function StepTicker({ frame, steps, onProof }: { frame?: ExchangeFrame; steps: number; onProof?: () => void }) {
-  if (steps === 0) return <div className="empty-state">No steps</div>;
-  if (!frame) return <div className="empty-state">Initial state</div>;
-  return <div className="step-ticker">
-    <div className="ticker-feed" key={frame.index}>
-      {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`} style={{ "--cue-i": index } as CSSProperties}>
-        <strong>{cue.label}</strong>
-        {cue.details.map((detail, detailIndex) => <span key={`${detail}:${detailIndex}`}>{detail}</span>)}
-      </article>)}
-    </div>
-    <div className="ticker-foot">
-      <span>{frame.exchange.rate.label} · {frame.exchange.units} {String(frame.exchange.units) === "1" ? "unit" : "units"}</span>
-      {onProof && <button type="button" onClick={onProof}>Full proof ↓</button>}
-    </div>
-  </div>;
-}
-
-export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: number }) {
-  if (steps === 0) return <div className="empty-state">No steps</div>;
-  if (!frame) return <div className="empty-state">Initial state</div>;
-  return <div className="transition">
-    <div className="frame-cues" aria-label="Transition cues">
-      {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`}><strong>{cue.label}</strong>{cue.details.map((detail) => <span key={detail}>{detail}</span>)}</article>)}
-    </div>
-    <div className="binding-row">
-      {frame.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
-      <span><small>Units</small>{frame.exchange.units}</span>
-      {frame.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{words(parameter.name)}</small>{parameter.value}</span>)}
-    </div>
-    <Assessment assessment={frame.assessment} recorded />
-    <div className="proof-line">Projected deltas {JSON.stringify(frame.assessment.projected_deltas) === JSON.stringify(frame.receipt.deltas) ? "match" : "do not match"} the receipt</div>
-    {frame.receipt.deltas.map((delta) => <div className="delta" key={delta.account.key}>
-      <h3>{delta.account.label}</h3>
-      <DeltaGroup label="Consumed" kind="consumed" values={delta.consumed} />
-      <DeltaGroup label="Produced" kind="produced" values={delta.produced} />
-      <DeltaGroup label="Preserved" kind="preserved" values={delta.preserved} />
-    </div>)}
-  </div>;
-}
-
-/**
- * What the kernel found when it checked an exchange: before it is applied,
- * a prediction; for a step already taken, what was checked before it applied.
- */
-export function Assessment({ assessment, recorded = false }: { assessment: ExchangeFrame["assessment"]; recorded?: boolean }) {
-  const quantity = useQuantity();
-  return <div className={`assessment assessment-${assessment.status}`}>
-    <strong>{assessment.status}</strong>
-    {assessment.shortfalls.map((shortfall) => <div key={shortfall.account.key}>
-      {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${quantity(missing.asset.key, missing.quantity)} ${missing.asset.label}`).join(", ")}
-    </div>)}
-    {assessment.issues.map((issue, index) => <div className="assessment-issue" key={`${issue.kind}:${index}`}><span>{issue.message}</span><small>{issue.kind.replaceAll("_", " ")}</small></div>)}
-    {assessment.status === "applicable" && <div>{recorded
-      ? `Checked before it applied: ${assessment.projected_deltas.length} ${assessment.projected_deltas.length === 1 ? "account" : "accounts"} to change`
-      : `${assessment.projected_deltas.length} ${assessment.projected_deltas.length === 1 ? "account" : "accounts"} would change — predicted, nothing changed yet`}</div>}
-  </div>;
-}
-
-function DeltaGroup({ label, kind, values }: { label: string; kind: string; values: QuantityValue[] }) {
-  if (values.length === 0) return null;
-  return <div className={`delta-group ${kind}`}><span>{label}</span><div>{values.map((value) => <BasketQuantity key={value.asset.key} value={value} />)}</div></div>;
-}
-
-/**
- * An asset and how much of it. A bare count reads as a multiple ("Key ×1");
- * a quantity with a unit already says what it counts ("Time left 1 ticks").
- */
-function BasketQuantity({ value }: { value: QuantityValue }) {
-  const format = useContext(QuantityFormats)[value.asset.key];
-  return <b>{value.asset.label} <em>{format?.unit ? "" : "×"}<Amount asset={value.asset.key} atoms={value.quantity} /></em></b>;
-}
-
-export function ModelExplorer({ document }: { document: ViewDocument }) {
-  const model = document.model;
-  const [selectedRate, setSelectedRate] = useState(model?.rates[0]?.rate.key);
-  const [filter, setFilter] = useState("");
-  useEffect(() => { setSelectedRate(model?.rates[0]?.rate.key); setFilter(""); }, [document.id, model]);
-  const rate = model?.rates.find((candidate) => candidate.rate.key === selectedRate) ?? model?.rates[0];
-  if (!model) return <div className="empty-state">No rules</div>;
-  const matchingRates = model.rates.filter((candidate) => `${candidate.rate.label} ${candidate.rate.key}`.toLowerCase().includes(filter.toLowerCase()));
-  const visibleRates = matchingRates.slice(0, 200);
-  if (rate && !visibleRates.some((candidate) => candidate.rate.key === rate.rate.key)) visibleRates.unshift(rate);
-  return <div className="model-explorer">
-    <section className="rate-browser">
-      <div className="rate-controls"><label><span>Filter {model.rates.length} rates</span><input name="rate-filter" type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Rate, action, route, operation…" /></label><label><span>Rate</span><select name="rate" value={rate?.rate.key ?? ""} onChange={(event) => setSelectedRate(event.target.value)}>{visibleRates.map((candidate) => <option key={candidate.rate.key} value={candidate.rate.key}>{candidate.rate.label}</option>)}</select></label></div>
-      {matchingRates.length > visibleRates.length && <p className="muted">First 200 of {matchingRates.length}</p>}
-      {rate && <div className="rate-contract">
-        {rate.roles.map((role) => <article key={role.role.key}><h3>{role.role.label}</h3><RateBasket label="Consume" values={role.consumed} /><RateBasket label="Produce" values={role.produced} /><RateBasket label="Preserve" values={role.preserved} /></article>)}
-        {rate.computed_consumed?.map((amount, index) => <ComputedRateAmount key={`consume:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed consume" amount={amount} />)}
-        {rate.computed_produced?.map((amount, index) => <ComputedRateAmount key={`produce:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed produce" amount={amount} />)}
-        {rate.computed_preserved?.map((amount, index) => <ComputedRateAmount key={`preserve:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed preserve" amount={amount} />)}
-        {rate.conditions?.map((condition) => <article className="rate-condition" key={condition.name}><h3>{words(condition.name)}</h3><code>{condition.left} {condition.comparison} {condition.right}</code></article>)}
-        {rate.distinct_roles.length > 0 && <p>Distinct accounts: {rate.distinct_roles.map((pair) => pair.map((role) => role.label).join(" ≠ ")).join(", ")}</p>}
-      </div>}
-    </section>
-    <section className="model-rules">
-      {model.goal.length > 0 && <h3>Goal</h3>}
-      {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <BasketQuantity key={required.asset.key} value={required} />)}</div>)}
-      <h3>Conservation laws</h3>
-      {model.invariants.map((invariant) => <details key={invariant.name}><summary>{words(invariant.name)}</summary><p>{invariant.terms.map((term) => `${term.weight}·${term.asset.label}`).join(" + ")}</p></details>)}
-    </section>
-  </div>;
-}
-
-function RateBasket({ label, values }: { label: string; values: QuantityValue[] }) {
-  if (values.length === 0) return null;
-  return <div className="rate-basket"><span>{label}</span><div>{values.map((value) => <BasketQuantity key={value.asset.key} value={value} />)}</div></div>;
-}
-
-function ComputedRateAmount({ label, amount }: { label: string; amount: { role: { key: string; label: string }; asset: { key: string; label: string }; quantity: string } }) {
-  return <article className="computed-rate-amount"><h3>{amount.role.label}</h3><div className="rate-basket"><span>{label}</span><b>{amount.asset.label}</b><code>{amount.quantity}</code></div></article>;
-}
-
+/** The state at `position` of a document's history: its initial state, or the state after that step. */
 export function useSnapshot(document: ViewDocument | undefined, position: number) {
   return useMemo(() => {
     if (!document) return undefined;
     return position === 0 ? document.initial : document.frames[position - 1]?.after;
   }, [document, position]);
+}
+
+/**
+ * Something Studio names: a value of the ontology (an account, an asset, a
+ * rate) by its view's id, a package's ref, strategy, experiment or
+ * objective by its path, or a step of the history on screen.
+ */
+export type Subject =
+  | { kind: "account"; id: ViewId }
+  | { kind: "asset"; id: ViewId }
+  | { kind: "rate"; id: ViewId }
+  | { kind: "ref"; path: Schemas["RefPath"] }
+  | { kind: "strategy"; path: Schemas["StrategyPath"] }
+  | { kind: "experiment"; path: Schemas["ExperimentPath"] }
+  | { kind: "objective"; path: Schemas["ObjectivePath"] }
+  | { kind: "step"; step: number };
+
+export type SubjectKind = Subject["kind"];
+
+const KINDS: Record<SubjectKind, string> = {
+  account: "Account",
+  asset: "Asset",
+  rate: "Rate",
+  ref: "Ref",
+  strategy: "Strategy",
+  experiment: "Experiment",
+  objective: "Objective",
+  step: "Step",
+};
+
+/** One subject's key: the same thing, wherever it is named, has the same key. */
+export function subjectKey(subject: Subject): string {
+  switch (subject.kind) {
+    case "account": case "asset": case "rate": return `${subject.kind}:${subject.id.key}`;
+    case "step": return `step:${subject.step}`;
+    default: return `${subject.kind}:${subject.path}`;
+  }
+}
+
+/** The path a subject is named by. */
+export function subjectPath(subject: Subject): string {
+  switch (subject.kind) {
+    case "account": case "asset": case "rate": return subject.id.key;
+    case "step": return String(subject.step);
+    default: return subject.path;
+  }
+}
+
+/** What a subject is called: its view's label, its path, or its step. */
+export function subjectLabel(subject: Subject): string {
+  switch (subject.kind) {
+    case "account": case "asset": case "rate": return subject.id.label;
+    case "step": return `step ${subject.step}`;
+    default: return subject.path;
+  }
+}
+
+/**
+ * How the page inspects what it names. `inspect` draws a subject as it is
+ * at the cursor, the step on screen; `pin` keeps its inspector open.
+ * Without it, an {@link IdLink} is its label and nothing more.
+ */
+export type Inspection = {
+  inspect: (subject: Subject) => ReactNode;
+  pin: (subject: Subject) => void;
+};
+
+const Inspecting = createContext<Inspection | undefined>(undefined);
+/** Inside a card: a link pins, it does not open another card. */
+const InCard = createContext(false);
+
+export function InspectionProvider({ value, children }: { value: Inspection; children: ReactNode }) {
+  return <Inspecting.Provider value={value}>{children}</Inspecting.Provider>;
+}
+
+/** How long a pointer rests on a link before its card opens, and lingers after it leaves. */
+const OPEN_AFTER = 250;
+const CLOSE_AFTER = 160;
+
+/**
+ * An identifier, everywhere Studio names one: its label, with its path in
+ * reach. A hover shows its card as it is at the cursor; a click pins its
+ * inspector, which follows the cursor.
+ */
+export function IdLink({ subject, label, className }: { subject: Subject; label?: ReactNode; className?: string }) {
+  const inspection = useContext(Inspecting);
+  const inCard = useContext(InCard);
+  const text = label ?? subjectLabel(subject);
+  const path = subjectPath(subject);
+  const classes = ["id-link", `id-${subject.kind}`, className].filter(Boolean).join(" ");
+  const anchor = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<{ left: number; top?: number; bottom?: number }>();
+  const timer = useRef<number | undefined>(undefined);
+  const cardId = useId();
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (!at) return;
+    const gone = () => setAt(undefined);
+    window.addEventListener("scroll", gone, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", gone, { capture: true });
+  }, [at]);
+  if (!inspection) return <span className={`${classes} static`} title={path}>{text}</span>;
+  const open = () => {
+    window.clearTimeout(timer.current);
+    if (inCard) return;
+    timer.current = window.setTimeout(() => {
+      const box = anchor.current?.getBoundingClientRect();
+      if (!box) return;
+      const left = Math.max(8, Math.min(box.left, window.innerWidth - CARD_WIDTH - 8));
+      // Below the link where there is room, else above it.
+      setAt(box.bottom + 320 < window.innerHeight ? { left, top: box.bottom + 6 } : { left, bottom: window.innerHeight - box.top + 6 });
+    }, OPEN_AFTER);
+  };
+  const close = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setAt(undefined), CLOSE_AFTER);
+  };
+  return <>
+    <button ref={anchor} type="button" className={classes} data-path={path} aria-describedby={at ? cardId : undefined}
+      onClick={(event) => { event.stopPropagation(); window.clearTimeout(timer.current); setAt(undefined); inspection.pin(subject); }}
+      onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close}>{text}</button>
+    {at && createPortal(<div id={cardId} role="tooltip" className="id-card" style={{ left: at.left, top: at.top, bottom: at.bottom, width: CARD_WIDTH }}
+      onMouseEnter={() => window.clearTimeout(timer.current)} onMouseLeave={close}>
+      <InCard.Provider value={true}>
+        <InspectorHeading subject={subject} />
+        <div className="inspector-body">{inspection.inspect(subject)}</div>
+      </InCard.Provider>
+    </div>, document.body)}
+  </>;
+}
+
+const CARD_WIDTH = 340;
+
+/** What an inspector is headed by: its kind's word, then its label, or a step's number. */
+function headingLabel(subject: Subject): string {
+  return subject.kind === "step" ? String(subject.step) : subjectLabel(subject);
+}
+
+function InspectorHeading({ subject, onClose }: { subject: Subject; onClose?: () => void }) {
+  return <div className="inspector-heading">
+    <div>
+      <span>{KINDS[subject.kind]}</span>
+      <strong>{headingLabel(subject)}</strong>
+      {subject.kind !== "step" && subjectPath(subject) !== subjectLabel(subject) && <code>{subjectPath(subject)}</code>}
+    </div>
+    {onClose && <button type="button" className="inspector-close" aria-label={`Close ${subjectLabel(subject)}`} onClick={onClose}><IconX size={14} stroke={2} aria-hidden="true" /></button>}
+  </div>;
+}
+
+/**
+ * The inspectors pinned open, latest last, each drawn as its subject is at
+ * the cursor, so each follows the step on screen. × closes one; Esc closes
+ * the one it is pressed in, or the latest.
+ */
+export function InspectorDock({ pinned, inspect, onClose }: { pinned: Subject[]; inspect: (subject: Subject) => ReactNode; onClose: (subject: Subject) => void }) {
+  const latest = pinned.at(-1);
+  useEffect(() => {
+    if (!latest) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const inside = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-inspector]") : null;
+      const closing = pinned.find((subject) => subjectKey(subject) === inside?.dataset.inspector) ?? latest;
+      event.preventDefault();
+      onClose(closing);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pinned, latest, onClose]);
+  if (pinned.length === 0) return null;
+  return <aside className="inspector-dock" aria-label="Inspectors">
+    {pinned.map((subject) => <section key={subjectKey(subject)} className="inspector" data-inspector={subjectKey(subject)} aria-label={`${KINDS[subject.kind]} ${headingLabel(subject)}`}>
+      <InspectorHeading subject={subject} onClose={() => onClose(subject)} />
+      <div className="inspector-body">{inspect(subject)}</div>
+    </section>)}
+  </aside>;
 }
