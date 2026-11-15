@@ -43,7 +43,7 @@ fn whereabouts(seen, account) {
 // patient, a loss before a decline; then a discovery; then a report.
 fn nature(state) {
     let declines = state.moves("lose") + state.moves("deteriorate");
-    for id in 0..value(state, "world", "patient-count") {
+    for id in 0..state.constant("patient-count").to_int() {
         let patient = `patient/${id}`;
         for due in declines {
             if due.account("patient") == patient { return due; }
@@ -56,7 +56,7 @@ fn nature(state) {
 // The accounts the responder may see.
 fn visible(state) {
     let visible = ["responder", "world"];
-    let count = value(state, "world", "patient-count");
+    let count = state.constant("patient-count").to_int();
     for id in 0..count {
         if locations().some(|location| value(state, "world", `known/${id}/${location}`) > 0) {
             visible.push(`patient/${id}`);
@@ -76,7 +76,7 @@ fn drive(seen, from, to, urgent, rapid) {
 // The responder's choice from what it sees, under `policy`: `triage`,
 // `rapid-north` or `stabilize-first`.
 fn decide(seen, policy) {
-    let count = value(seen, "world", "patient-count");
+    let count = seen.constant("patient-count").to_int();
     if value(seen, "world", "resolved") == count { return seen.exchange_of("close"); }
     let from = whereabouts(seen, "responder");
     if from == () { return (); }

@@ -34,9 +34,7 @@ pub enum Asset {
     Active,
     Closed,
     Time,
-    Horizon,
     TimeRemaining,
-    PatientCount,
     Resolved,
     SavedCount,
     DeathCount,
@@ -178,6 +176,15 @@ fn event() -> Rate<Ontology> {
 fn law() -> Rate<Ontology> {
     event().preserve(Role::World, basket([(Asset::Active, 1)]))
 }
+/// The tick the incident ends at, `{horizon}`: one for the whole incident,
+/// a constant.
+fn incident_horizon() -> Param<u64> {
+    Param::new(path!("horizon"))
+}
+/// How many patients the incident has, `{patient-count}`: a constant.
+fn patient_count() -> Param<u64> {
+    Param::new(path!("patient-count"))
+}
 /// The responder at work, ready while the incident is active.
 fn busy() -> Rate<Ontology> {
     law().preserve(Role::Responder, basket([(Asset::Ready, 1)]))
@@ -296,9 +303,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .collect();
     let world = basket([
         (Asset::Active, 1),
-        (Asset::Horizon, horizon),
         (Asset::TimeRemaining, horizon),
-        (Asset::PatientCount, count as u64),
         (Asset::Fuel, 4),
         (Asset::Energy, 6),
         (Asset::MedicalKit, 1),
@@ -332,7 +337,9 @@ pub fn initial(stress: bool, seed: u64) -> World {
     let mut builder = EconomyBuilder::new()
         .account(AccountId::World, Account::from(world))
         .account(AccountId::Responder, Account::from(responder))
-        .account(AccountId::Nature, Account::from(nature));
+        .account(AccountId::Nature, Account::from(nature))
+        .constant(&incident_horizon(), horizon)
+        .constant(&patient_count(), count as u64);
     for id in 0..count as u8 {
         let first_decline = [4, 6, 8, 5][id as usize] + (seed.rotate_right(id as u32 * 3) % 3);
         builder = builder.account(
@@ -545,7 +552,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         path!("incident-horizon-reached"),
                         clock(),
                         C::GreaterThanOrEqual,
-                        q(Role::World, Asset::Horizon),
+                        incident_horizon().quantity(),
                     )
                     .condition(
                         path!("patient-still-alive"),
@@ -720,7 +727,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 path!("all-patients-accounted-for"),
                 q(Role::World, Asset::Resolved),
                 C::Equal,
-                q(Role::World, Asset::PatientCount),
+                patient_count().quantity(),
             )
             .consume(Role::World, basket([(Asset::Active, 1)]))
             .produce(Role::World, basket([(Asset::Closed, 1)])),

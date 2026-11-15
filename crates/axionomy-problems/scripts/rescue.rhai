@@ -14,14 +14,13 @@ fn first_applicable(state, prefix) {
 }
 
 // Nature's draw from its prior: every scenario it encodes, in rate order,
-// weighted by what Nature holds of it, chosen by the event `scenario`,
+// weighted as the draw's relation gives it, chosen by the event `scenario`,
 // which a run meets once, as it begins.
 fn instantiation(state, random) {
     let scenarios = state.moves("instantiate");
     let weights = [];
     for scenario in scenarios {
-        let parts = scenario.rate().split("/");
-        weights.push(state.balance("nature", `scenario-weight/${parts[1]}/${parts[2]}`));
+        weights.push(state.values(scenario.rate()).weight);
     }
     if scenarios.is_empty() { return (); }
     scenarios[random.sample("scenario", weights)]

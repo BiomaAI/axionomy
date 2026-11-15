@@ -69,8 +69,8 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
 
     let rescue_showcase = rescue::uniform_uncertain_showcase();
     let rescue_stress = rescue::uniform_uncertain_stress();
-    assert_ne!(rescue_showcase.state_key(), rescue_stress.state_key());
-    // Their rates are written alike; Stress's answer to more scenarios.
+    // They start alike and their rates are written alike; Stress's answer
+    // to more scenarios, its prior's rows.
     let instances = |world: &rescue::World| -> usize {
         world
             .rate_ids()

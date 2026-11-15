@@ -43,9 +43,7 @@ fn label(item) {
             "active" => "Incident in progress",
             "closed" => "Incident closed",
             "time" => "Incident time",
-            "horizon" => "Incident horizon",
             "time-remaining" => "Time remaining",
-            "patient-count" => "Patients in the incident",
             "resolved" => "Outcomes recorded",
             "saved-count" => "Patients evacuated",
             "death-count" => "Patients who died",
@@ -125,7 +123,7 @@ fn label(item) {
 // The unit quantities of `asset` are read in, or nothing for a count.
 fn unit(asset) {
     switch asset {
-        "time" | "horizon" | "time-remaining" | "next-decline" | "deadline" => "ticks",
+        "time" | "time-remaining" | "next-decline" | "deadline" => "ticks",
         "fuel" | "spent-fuel" | "energy" | "spent-energy" => "units",
         _ => (),
     }
@@ -194,7 +192,7 @@ fn scene(state, frame) {
         asset_metric("medicine", "Medical kits", "medical-kit", state.balance("responder", "medical-kit")),
     ];
     let entities = [crew];
-    for id in 0..incident::value(state, "world", "patient-count") {
+    for id in 0..state.constant("patient-count").to_int() {
         let site = ();
         for location in incident::locations() {
             if incident::value(state, "world", `known/${id}/${location}`) > 0 { site = location; break; }

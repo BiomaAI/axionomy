@@ -29,7 +29,6 @@ fn label(item) {
             "sensor" => "Sensor available",
             "used-sensor" => "Sensor used",
             "unresolved" => "Location not yet drawn",
-            "scenario-weight" => `Weight for ${place(parts[2])}, sensor state ${parts[3]}`,
             "truth" => `Survivor is at ${place(parts[2])}`,
             "seed" => `Sensor state ${parts[2]}`,
             "belief" => `Reading points to ${place(parts[2])}`,

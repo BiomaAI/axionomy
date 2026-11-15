@@ -20,7 +20,10 @@ world's map is its relation over every two places, giving how many roads
 apart they are, and another gives each pace's ticks and fuel per road, from
 which it derives the drive's `{time}` and `{fuel}`. The policies read the
 same map (`state.values`), and the view finds the sites and roads among the
-rates' instances (`state.instances`). Each role is fixed to its account,
+rates' instances (`state.instances`). The incident's horizon and how many
+patients it has are the whole incident's and never change: constants,
+`{horizon}` and `{patient-count}`, which the laws and the policies read by
+name (`state.constant`). Each role is fixed to its account,
 the world, the crew, Nature or the patient its identifier names, so no
 identity token pins a binding. Nature takes, patient by patient, the first
 loss or decline that applies, then a discovery or a report
@@ -37,10 +40,10 @@ treatment and the one seat hold. The Micro specification follows.
 ## Specification
 
 The agent begins at base with energy and one sensor. An unresolved Nature
-account owns `Unresolved` and a user-provided
-`ScenarioWeight(truth,seed)` prior. A sampling exchange preserves the selected
-weight, consumes `Unresolved`, and produces private `Truth(North|South)` and
-`Seed(0..3)` assets. The policy first proposes a truth-independent public
+account owns `Unresolved`; a user-provided prior weighs each scenario
+`(truth, seed)`, law that never changes, so the rows of the sampling rate's
+relation. A sampling exchange consumes `Unresolved` and produces private
+`Truth(North|South)` and `Seed(0..3)` assets. The policy first proposes a truth-independent public
 `BeginObserve` exchange, which consumes `Planning` and the sensor and produces
 `AwaitingObservation`. Nature then fires the uniquely applicable hidden
 `ResolveObservation` exchange, which:
@@ -56,13 +59,14 @@ A rescue exchange succeeds only when the agent's location and Nature's truth
 match.
 
 Micro's rates have variables: `instantiate/{truth}/{seed}` draws a scenario,
+its relation's rows giving each the weight Nature draws it by, `{weight}`;
 `resolve-observation/{truth}/{seed}/{report}` answers an observation over a
 relation of what the sensor reports of each site at each seed, and derives
 the seed after it (`{next}`, the first again after the last), and
 `move/base/{to}`, `rescue/{location}` and `evacuate/{location}` go to each
 site. Each role is fixed to the agent's or Nature's account. Nature draws
-among the scenarios `state.moves` offers, and answers with the resolution
-it offers. A reading may point where the agent has no road, as seed zero
+among the scenarios `state.moves` offers, by their weights
+(`state.values`), and answers with the resolution it offers. A reading may point where the agent has no road, as seed zero
 does of a survivor south in Micro; the move it proposes names no rate, and
 is refused.
 

@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param,
-    Pattern, Quantity, QuantityExpression as Q, Rate, Relation, Rounding, Segment, Slot, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, OneSegment, Param, Pattern,
+    Quantity, QuantityExpression as Q, Rate, Relation, Rounding, Segment, Slot, basket,
 };
 
 pub mod incident;
@@ -42,7 +42,6 @@ pub enum Asset {
     Sensor,
     UsedSensor,
     Unresolved,
-    ScenarioWeight(Location, u8),
     Truth(Location),
     Seed(u8),
     Belief(Location),
@@ -119,11 +118,13 @@ pub fn scenario(truth: Location, seed: u8) -> World {
     );
     build(
         Account::from(basket([(Asset::Truth(truth), 1), (Asset::Seed(seed), 1)])),
+        &[],
         size,
     )
 }
 
-/// Builds an unresolved world from user-provided, core-encoded prior weights.
+/// Builds an unresolved world from user-provided, core-encoded prior weights:
+/// the rows of the draw's relation, a scenario of no weight having none.
 pub fn uncertain(prior: impl IntoIterator<Item = (Location, u8, u64)>) -> World {
     let prior = prior.into_iter().collect::<Vec<_>>();
     let size = if prior
@@ -139,16 +140,31 @@ pub fn uncertain(prior: impl IntoIterator<Item = (Location, u8, u64)>) -> World 
     } else {
         RescueSize::Micro
     };
-    let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
-    for (truth, seed, weight) in prior {
-        assert_rescue_location(truth);
+    for (truth, seed, _) in &prior {
+        assert_rescue_location(*truth);
         assert!(
-            seed < seed_count(size),
+            *seed < seed_count(size),
             "seed is outside the encoded sensor states"
         );
-        nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(weight));
     }
-    build(Account::from(nature), size)
+    let prior: Vec<_> = prior
+        .into_iter()
+        .filter(|(_, _, weight)| *weight > 0)
+        .collect();
+    build(unresolved(), &prior, size)
+}
+
+/// Nature before it draws a scenario.
+fn unresolved() -> Account<Asset> {
+    Account::from(basket([(Asset::Unresolved, 1)]))
+}
+
+/// Every scenario of `size`'s sites and seeds, each as likely as another.
+fn uniform(size: RescueSize) -> Vec<(Location, u8, u64)> {
+    destinations(size)
+        .iter()
+        .flat_map(|truth| (0..seed_count(size)).map(move |seed| (*truth, seed, 1)))
+        .collect()
 }
 
 pub fn uniform_uncertain() -> World {
@@ -162,30 +178,21 @@ pub fn uniform_uncertain() -> World {
 /// Four possible sites, twice as many sensor states, and a required return
 /// evacuation after contact make this a longer partially observed mission.
 pub fn uniform_uncertain_showcase() -> World {
-    let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
-    for truth in [
-        Location::North,
-        Location::South,
-        Location::East,
-        Location::West,
-    ] {
-        for seed in 0..8 {
-            nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(1));
-        }
-    }
-    build(Account::from(nature), RescueSize::Showcase)
+    build(
+        unresolved(),
+        &uniform(RescueSize::Showcase),
+        RescueSize::Showcase,
+    )
 }
 
 /// Six possible sites and twelve sensor states per site pressure policy
 /// evaluation across 72 explicit Nature scenarios.
 pub fn uniform_uncertain_stress() -> World {
-    let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
-    for truth in destinations(RescueSize::Stress) {
-        for seed in 0..seed_count(RescueSize::Stress) {
-            nature.insert(Asset::ScenarioWeight(*truth, seed), Quantity::new(1));
-        }
-    }
-    build(Account::from(nature), RescueSize::Stress)
+    build(
+        unresolved(),
+        &uniform(RescueSize::Stress),
+        RescueSize::Stress,
+    )
 }
 
 fn destinations(size: RescueSize) -> &'static [Location] {
@@ -234,7 +241,9 @@ fn with_nature(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.account(Role::Nature, Pattern::literal(AccountId::Nature))
 }
 
-fn build(nature: Account<Asset>, size: RescueSize) -> World {
+/// The world of `size` where Nature holds `nature` and draws among the
+/// scenarios of `prior`, each `(truth, seed, weight)`.
+fn build(nature: Account<Asset>, prior: &[(Location, u8, u64)], size: RescueSize) -> World {
     let destinations = destinations(size);
     let seed_count = seed_count(size);
     let extended = !matches!(size, RescueSize::Micro);
@@ -251,13 +260,15 @@ fn build(nature: Account<Asset>, size: RescueSize) -> World {
         .account(AccountId::Nature, nature);
 
     // The rates' variables: the survivor's site, the sensor's seed, the site
-    // it reports, and the seed after it, which the law derives.
+    // it reports, and the seed after it, which the law derives; and the
+    // weight Nature draws each scenario by, which the prior's rows give.
     let truth = Param::<Location>::new(path!("truth"));
     let seed = Param::<u8>::new(path!("seed"));
     let report = Param::<Location>::new(path!("report"));
     let next = Param::<u8>::new(path!("next"));
     let to = Param::<Location>::new(path!("to"));
     let location = Param::<Location>::new(path!("location"));
+    let weight = Param::<u64>::new(path!("weight"));
     let after = || seed.quantity() + Q::constant(1);
     // The sites the survivor may be at, in the order of their identifiers,
     // as the scenarios Nature draws among are ordered.
@@ -297,11 +308,18 @@ fn build(nature: Account<Asset>, size: RescueSize) -> World {
             with_nature(Rate::new())
                 .variable(truth.values(truths.iter().copied()))
                 .variable(seed.range(0, seed_count - 1))
+                .relation(Relation::giving(
+                    [truth.name().clone(), seed.name().clone()],
+                    [weight.name().clone()],
+                    prior.iter().map(|(site, state, odds)| {
+                        [
+                            site.segment(),
+                            Segment::from(u64::from(*state)),
+                            Segment::from(*odds),
+                        ]
+                    }),
+                ))
                 .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
-                .preserve_at(
-                    Role::Nature,
-                    one([AssetPattern::ScenarioWeight(truth.var(), seed.var()).into()]),
-                )
                 .produce_at(Role::Nature, one([AssetPattern::Truth(truth.var()).into()]))
                 .produce_at(Role::Nature, one([AssetPattern::Seed(seed.var()).into()])),
         )
