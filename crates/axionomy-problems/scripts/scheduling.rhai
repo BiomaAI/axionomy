@@ -17,22 +17,12 @@ fn candidates(state) {
     if executing(state) { dispatch(state) } else { state.moves("") }
 }
 
-// The machines an executed operation may run on, in the order the shop
-// considers them.
-fn alternatives(operation) {
-    switch operation {
-        "one-a" | "two-a" => ["one", "two"],
-        "one-b" | "two-b" => ["two", "three"],
-        "one-c" | "two-c" => ["three", "one"],
-    }
-}
-
 // An executed shop's next events, each kind in the economy's order of rates.
 // A completion, a finished repair or closing the day comes first, alone,
 // since it commutes with dispatching; then a disruption that is due.
 // Queueing costs neither time nor work, so an operation waits to be queued
 // until it can start, and then starts at once: of the queued operations that
-// can start, the last in operation and alternative order is the only choice.
+// can start, the last in operation order is the only choice.
 // Otherwise advancing the clock to the next arrival, completion, repair or
 // disruption within the workday, queueing, repairing and resuming,
 // whichever apply.
@@ -72,12 +62,10 @@ fn dispatch(state) {
             let parts = token.split("/");
             switch parts[0] {
                 "ready" => {
-                    let operation = parts[1];
-                    for machine in alternatives(operation) {
-                        let held = machines[machine];
-                        if labor && "idle" in held && "online" in held {
-                            queues[`queue/${operation}/${machine}`] = ();
-                        }
+                    // The machines it may run on: its queue law's instances.
+                    for queue in state.instances(`queue/${parts[1]}`) {
+                        let held = machines[queue.split("/")[2]];
+                        if labor && "idle" in held && "online" in held { queues[queue] = (); }
                     }
                 }
                 "queued" => {
@@ -85,8 +73,7 @@ fn dispatch(state) {
                     let machine = parts[2];
                     let configured = if "configured/one" in machines[machine] { "one" } else { "two" };
                     let start = state.exchange_of(`start/${operation}/${machine}/${configured}`);
-                    let rank = operations().index_of(operation) * 2
-                        + alternatives(operation).index_of(machine);
+                    let rank = operations().index_of(operation);
                     if rank > queued_rank && state.applicable(start) {
                         queued_start = start;
                         queued_rank = rank;

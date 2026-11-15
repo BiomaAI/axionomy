@@ -16,12 +16,14 @@ process ready completions before dispatch. The static slot fixture below
 remains Micro.
 
 Each operation's laws serve both machines it may run on,
-`queue/one-a/{machine}`, and each machine holds how long it takes for each
-operation as a `ProcessingTime(operation)` fact, from which a start computes
-when the work is due; a start splits only by whether the machine must switch
-its setup. The clock advances by one law to any tick, `advance/{to}`. Every
-role is fixed to the account its identifier names. Showcase has 45 rates as
-written, for 96 instances, and Stress 45, for 104.
+`queue/one-a/{machine}`. How long each machine takes for the operation never
+changes, so a start's relation gives it, `{processing-time}`, and the start
+computes from it when the work is due; a start splits only by whether the
+machine must switch its setup. The clock advances by one law to any tick,
+`advance/{to}`. Every role is fixed to the account its identifier names.
+Showcase has 45 rates as written, for 96 instances, and Stress 45, for 104.
+The package's dispatch reads the machines an operation may run on from its
+queue law's instances rather than keeping a table of its own.
 
 ## Specification
 

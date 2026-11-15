@@ -50,9 +50,6 @@ pub enum Asset {
     Makespan(u8),
     Active,
     Solved,
-    /// How many ticks a machine takes to run an operation: a fact of the
-    /// machine.
-    ProcessingTime(Operation),
     Ready(Operation),
     Queued(Operation, Machine),
     Running(Operation, Machine),

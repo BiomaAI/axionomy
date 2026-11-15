@@ -63,6 +63,9 @@ fn on_machine(
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
 }
+/// The machines `operation` may run on, the preferred first, each with how
+/// many ticks it takes there: law structure, which a start's relation gives
+/// as `{processing-time}`.
 pub fn alternatives(operation: Operation) -> [(Machine, u64); 2] {
     match operation {
         Operation::OneA | Operation::TwoA => [(Machine::One, 2), (Machine::Two, 3)],
@@ -98,7 +101,7 @@ pub(super) fn build(stress: bool) -> World {
         );
     }
     for machine in MACHINES {
-        let mut held = basket([
+        let held = basket([
             (Asset::Idle, 1),
             (Asset::Online, 1),
             (Asset::QueueFree, 1),
@@ -111,14 +114,6 @@ pub(super) fn build(stress: bool) -> World {
                 1,
             ),
         ]);
-        // How long the machine takes for each operation it may run.
-        for operation in OPERATIONS {
-            for (runs, duration) in alternatives(operation) {
-                if runs == machine {
-                    held.insert(Asset::ProcessingTime(operation), Quantity::new(duration));
-                }
-            }
-        }
         builder = builder.account(AccountId::Machine(machine), Account::from(held));
     }
     for operation in OPERATIONS {
@@ -159,7 +154,10 @@ pub(super) fn build(stress: bool) -> World {
                 .consume(Role::Machine, basket([(Asset::QueueTicket(operation), 1)]))
                 .produce(Role::Machine, basket([(Asset::QueueFree, 1)])),
         );
-        // A machine set up for the other job takes a tick more, to switch.
+        // A start is due when the machine has run the operation for as long
+        // as it takes there, and a tick more to switch a setup for the other
+        // job.
+        let processing = Param::<u64>::new(path!("processing-time"));
         for configured in [Job::One, Job::Two] {
             let setup = u64::from(configured != job);
             builder = builder.rate_at(
@@ -170,6 +168,11 @@ pub(super) fn build(stress: bool) -> World {
                 }
                 .into(),
                 operation_law(operation)
+                    .relation(Relation::each_giving(
+                        &machine(),
+                        [processing.name().clone()],
+                        alternatives(operation).map(|(runs, ticks)| (runs, [ticks])),
+                    ))
                     .preserve(Role::Machine, basket([(Asset::Online, 1)]))
                     .consume_at(
                         Role::PrimaryJob,
@@ -182,9 +185,7 @@ pub(super) fn build(stress: bool) -> World {
                     .produce_computed(
                         Role::PrimaryJob,
                         Asset::Due,
-                        clock()
-                            + Q::balance(Role::Machine, Asset::ProcessingTime(operation))
-                            + Q::constant(setup),
+                        clock() + processing.quantity() + Q::constant(setup),
                     )
                     .consume(
                         Role::Machine,
