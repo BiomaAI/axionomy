@@ -82,17 +82,23 @@ fn draws(engine: &Engine, at: Point, run: &str) -> Size {
     Size {
         frames: document.frames.len(),
         accounts: document.initial.accounts.len(),
-        rates: model.rates.len(),
+        // A rate with variables is as many rates as it has instances.
+        rates: model
+            .rates
+            .iter()
+            .map(|rate| rate.instances.unwrap_or(1))
+            .sum(),
     }
 }
 
 /// How big a drawn document is: its frames, the accounts it starts with and
-/// its model's rates; of several, the most of each.
+/// the identifiers its model's rates answer to; of several, the most of
+/// each.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Size {
     frames: usize,
     accounts: usize,
-    rates: usize,
+    rates: u64,
 }
 
 impl Size {
@@ -107,7 +113,8 @@ impl Size {
 
 /// The least each sample's Showcase runs must draw, so no refactor quietly
 /// collapses Showcase back into a toy: the longest run's frames, the most
-/// accounts a run starts with, and the most rates its model has.
+/// accounts a run starts with, and the most identifiers its model's rates
+/// answer to.
 fn showcase_pressure(sample: &str) -> Size {
     let (frames, accounts, rates) = match sample {
         "maze" => (8, 2, 19),

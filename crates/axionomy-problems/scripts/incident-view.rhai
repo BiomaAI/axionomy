@@ -1,8 +1,8 @@
 // Rescue's incident: how people read the multi-patient incident. Labels and
 // formats name its identifiers; the scene draws the incident's roads and
 // sites, the evacuation crew, and every casualty someone has found. Its
-// locations and roads, and its quantities, are read as the incident's
-// economy script reads them.
+// locations, its roads from the world's map, and its quantities are read as
+// the incident's economy script reads them.
 
 import "rescue/incident" as incident;
 
@@ -40,10 +40,6 @@ fn label(item) {
     }
     if category == "asset" {
         return switch name {
-            "world-identity" => "Incident identity",
-            "responder-identity" => "Crew identity",
-            "nature-identity" => "Nature identity",
-            "patient-identity" => `${patient(parts[2])} identity`,
             "active" => "Incident in progress",
             "closed" => "Incident closed",
             "time" => "Incident time",
@@ -57,6 +53,7 @@ fn label(item) {
             "saved-vitality" => "Vitality at hospital arrival",
             "at" => `At ${place(parts[2])}`,
             "site" => `Incident site: ${place(parts[2])}`,
+            "distance" => `Roads from ${place(parts[2])} to ${place(parts[3])}`,
             "surveyed" => `${place(parts[2])} searched`,
             "unsearched" => `${place(parts[2])} not yet searched`,
             "known" => `${patient(parts[2])} found at ${place(parts[3])}`,
@@ -176,8 +173,7 @@ fn scene(state, frame) {
         });
     }
     let edges = [];
-    for road in incident::roads() {
-        if !present(state, road[0]) || !present(state, road[1]) { continue; }
+    for road in incident::roads(state) {
         edges.push(#{
             id: `road/${road[0]}/${road[1]}`, source: road[0], target: road[1],
             label: "2 ticks / 1 fuel · fast 1 / 2", classes: [],

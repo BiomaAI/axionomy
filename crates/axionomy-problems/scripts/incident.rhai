@@ -6,14 +6,25 @@
 
 fn locations() { ["base", "north", "south", "east", "harbor", "west"] }
 
-fn roads() {
-    [["base", "north"], ["base", "south"], ["base", "harbor"], ["north", "east"],
-     ["east", "harbor"], ["south", "west"], ["west", "harbor"]]
+fn value(state, account, asset) { state.balance(account, asset).to_int() }
+
+// How many roads apart two places are, as the world's map records it.
+fn distance(state, from, to) {
+    if from == to { 0 } else { value(state, "world", `distance/${from}/${to}`) }
 }
 
-fn distance(from, to) { distances(roads(), from)[to] }
-
-fn value(state, account, asset) { state.balance(account, asset).to_int() }
+// The roads between the places the incident takes place at, each once: the
+// places the map records one road apart.
+fn roads(state) {
+    let places = locations();
+    let roads = [];
+    for (from, index) in places {
+        for to in places.extract(index + 1) {
+            if distance(state, from, to) == 1 { roads.push([from, to]); }
+        }
+    }
+    roads
+}
 
 // Where `account` stands, if anywhere.
 fn whereabouts(seen, account) {
@@ -23,48 +34,18 @@ fn whereabouts(seen, account) {
     ()
 }
 
-// The exchange of `rate`, with the accounts its roles bind.
-fn action(rate) {
-    let bindings = #{ world: "world", responder: "responder" };
-    let parts = rate.split("/");
-    let kind = parts[0];
-    if kind == "discover" {
-        bindings.patient = `patient/${parts[1]}`;
-        bindings.nature = "nature";
-    } else if kind == "report" {
-        bindings.nature = "nature";
-    } else if kind in ["deteriorate", "stabilize", "load", "unload", "lose"] {
-        bindings.patient = `patient/${parts[1]}`;
-    }
-    exchange(rate, bindings, 1)
-}
-
-// What happens without anyone choosing: the first that applies.
+// What happens without anyone choosing, the first that is due: patient by
+// patient, a loss before a decline; then a discovery; then a report.
 fn nature(state) {
-    let count = value(state, "world", "patient-count");
-    for id in 0..count {
-        for cause in ["deterioration", "deadline", "horizon"] {
-            for phase in ["hidden", "found", "onboard"] {
-                let lost = action(`lose/${id}/${phase}/${cause}`);
-                if state.applicable(lost) { return lost; }
-            }
-        }
-        let worse = action(`deteriorate/${id}`);
-        if state.applicable(worse) { return worse; }
-    }
-    for id in 0..count {
-        for location in locations() {
-            let discovered = action(`discover/${id}/${location}`);
-            if state.applicable(discovered) { return discovered; }
+    let declines = state.moves("lose") + state.moves("deteriorate");
+    for id in 0..value(state, "world", "patient-count") {
+        let patient = `patient/${id}`;
+        for due in declines {
+            if due.account("patient") == patient { return due; }
         }
     }
-    for round in 0..2 {
-        for location in locations() {
-            let reported = action(`report/${round}/${location}`);
-            if state.applicable(reported) { return reported; }
-        }
-    }
-    ()
+    let news = state.moves("discover") + state.moves("report");
+    if news.is_empty() { () } else { news[0] }
 }
 
 // The accounts the responder may see.
@@ -80,15 +61,15 @@ fn visible(state) {
 }
 
 fn drive(seen, from, to, urgent, rapid) {
-    let fast = (urgent || rapid) && value(seen, "responder", "fuel") >= distance(from, to) * 2;
-    action(`drive/${from}/${to}/${fast}`)
+    let fast = (urgent || rapid) && value(seen, "responder", "fuel") >= distance(seen, from, to) * 2;
+    seen.exchange_of(`drive/${from}/${to}/${fast}`)
 }
 
 // The responder's choice from what it sees, under `policy`: `triage`,
 // `rapid-north` or `stabilize-first`.
 fn decide(seen, policy) {
     let count = value(seen, "world", "patient-count");
-    if value(seen, "world", "resolved") == count { return action("close"); }
+    if value(seen, "world", "resolved") == count { return seen.exchange_of("close"); }
     let from = whereabouts(seen, "responder");
     if from == () { return (); }
     let now = value(seen, "world", "time");
@@ -96,10 +77,10 @@ fn decide(seen, policy) {
 
     for id in 0..count {
         if value(seen, "responder", `carrying/${id}`) > 0 {
-            if from == "base" { return action(`unload/${id}`); }
+            if from == "base" { return seen.exchange_of(`unload/${id}`); }
             let patient = `patient/${id}`;
             let urgent = value(seen, patient, "vitality") <= 1
-                || value(seen, patient, "next-decline") <= now + distance(from, "base") * 2 + 1;
+                || value(seen, patient, "next-decline") <= now + distance(seen, from, "base") * 2 + 1;
             return drive(seen, from, "base", urgent, rapid);
         }
     }
@@ -119,7 +100,7 @@ fn decide(seen, policy) {
         let patient = `patient/${id}`;
         if value(seen, patient, `at/${from}`) == 0 { continue; }
         let vitality = value(seen, patient, "vitality");
-        let arrival = now + 2 + distance(from, "base") * if rapid { 1 } else { 2 };
+        let arrival = now + 2 + distance(seen, from, "base") * if rapid { 1 } else { 2 };
         let decline = value(seen, patient, "next-decline");
         let projected = if arrival >= decline { (arrival - decline) / 3 + 1 } else { 0 };
         if !rapid
@@ -127,25 +108,25 @@ fn decide(seen, policy) {
             && value(seen, patient, "treatable") > 0
             && (policy == "stabilize-first" || vitality <= projected)
         {
-            return action(`stabilize/${id}/${from}/${value(seen, patient, "harm") > 0}`);
+            return seen.exchange_of(`stabilize/${id}/${from}/${value(seen, patient, "harm") > 0}`);
         }
-        return action(`load/${id}/${from}`);
+        return seen.exchange_of(`load/${id}/${from}`);
     }
 
-    if value(seen, "responder", `unsearched/${from}`) > 0 { return action(`search/${from}`); }
+    if value(seen, "responder", `unsearched/${from}`) > 0 { return seen.exchange_of(`search/${from}`); }
     if from == "base" {
         if value(seen, "world", "supply-available") > 0
             && (value(seen, "responder", "fuel") < 4
                 || value(seen, "responder", "energy") < 4
                 || value(seen, "responder", "medical-kit") == 0)
         {
-            return action("resupply");
+            return seen.exchange_of("resupply");
         }
         if !rapid
             && value(seen, "responder", "sensor") > 0
             && value(seen, "responder", "used-sensor") <= value(seen, "world", "saved-count")
         {
-            return action("scan");
+            return seen.exchange_of("scan");
         }
     }
     if !found.is_empty() {
@@ -167,13 +148,13 @@ fn decide(seen, policy) {
         };
         let preference = first.call(a) - first.call(b);
         if preference != 0 { return preference; }
-        let nearer = distance(from, a) - distance(from, b);
+        let nearer = distance(seen, from, a) - distance(seen, from, b);
         if nearer != 0 { return nearer; }
         if a < b { -1 } else if a > b { 1 } else { 0 }
     });
     if !destinations.is_empty() {
         let to = destinations[0];
-        let needed = distance(from, to) + distance(to, "base");
+        let needed = distance(seen, from, to) + distance(seen, to, "base");
         if from != "base"
             && (value(seen, "responder", "fuel") < needed || value(seen, "responder", "energy") < 3)
         {
@@ -181,7 +162,7 @@ fn decide(seen, policy) {
         }
         return drive(seen, from, to, value(seen, "responder", `hint/${to}`) > 0, rapid);
     }
-    action("wait")
+    seen.exchange_of("wait")
 }
 
 // One turn of an incident: Nature first, then the responder's decision if it
@@ -191,7 +172,7 @@ fn turn(state, policy) {
     if type_of(response) != "()" { return response; }
     let decided = decide(state.view(visible(state)), policy);
     if type_of(decided) != "()" && state.applicable(decided) { return decided; }
-    action("wait")
+    state.exchange_of("wait")
 }
 
 // The decision from what the responder may see of `state`.
