@@ -4,8 +4,8 @@ Cohort-indexed perishable inventory with explicit time and storage effects.
 
 Ten thousand physical units are represented as fungible claims over two
 cohorts. Each cohort has one unique condition fact, so spoilage changes a
-shared fact rather than rewriting every claim holder. A disposable event
-agenda proposes due exchanges, but the economy remains the only authority
+shared fact rather than rewriting every claim holder. The package's outage
+policy proposes each due exchange, but the economy remains the only authority
 on timing, environment, identity, and effects.
 
 The larger profiles use `cold_chain/`. Cohorts hold fresh,
@@ -19,9 +19,9 @@ delivery capacity. Buyers fund fresh/preserved food at different prices.
 Every day settles each cohort's exposure before advancing the clock and
 records unfilled food obligations. Showcase spans six days with a two-day
 outage; Stress tightens storage/fuel over eight days with a three-day outage.
-Four responsive policies share the same seeded outage schedule. Their front
-is explicitly the evaluated policy set, while Micro retains the exact storage
-fixture described below.
+The package's four daily policies share the same seeded outage schedule; their
+front is explicitly the evaluated policy set. Micro is the storage fixture
+described below.
 
 ## Specification
 
@@ -54,44 +54,43 @@ At ambient expiry, one spoil exchange changes the ambient cohort's unique
 fresh condition into `Rotten`; its six thousand claims are untouched. A power
 loss then atomically changes the fridge from cold/powered to
 ambient/unpowered and reclassifies the refrigerated cohort from cold expiry to
-an earlier warmed-expiry condition. The event agenda schedules that newly
-produced condition. Its old cold-expiry candidate remains in the disposable
-queue but is later rejected as infeasible because the authoritative condition
-and environment no longer exist.
-
-The `ClaimIndex` is a receipt-maintained `cohort → account → quantity`
-projection. It provides holder and aggregate-supply queries without becoming
-truth: it can be rebuilt from the economy, and tests compare the incremental
-index to a full rebuild. The `EffectAgenda` similarly indexes fresh condition
-facts and only proposes ordinary spoil exchanges.
+an earlier warmed-expiry condition, which spoils at its own moment. A
+cold-expiry spoil proposed later is rejected as infeasible because the
+authoritative condition and environment no longer exist.
 
 ## Required results
+
+The package's experiments find these on Micro's seventy warehouse and thirty
+fridge claims, pinned in `tests/outcomes`:
+
+- The outage, ten claims moved first, resolves in eight exchanges: every claim
+  kept, none usable, ten cooling energy spent.
+- The exact front of storage plans runs from all seventy claims moved, a
+  hundred usable for seventy energy, to none moved, thirty usable for none.
+- Every cold-chain policy closes Showcase and Stress.
+
+The model's tests check its rules:
 
 - Ten thousand claims occupy the same number of state entries as ten claims.
 - A 1,000-unit move is one scaled multi-account exchange.
 - Each cohort condition has unit supply; multi-unit or repeated spoilage is
   infeasible.
-- Before/reached facts reject early decay and late consumption independently
-  of event-loop discipline.
-- Power loss touches no claim balance and changes one shared cohort fact.
-- The newly warmed cohort spoils at its earlier deadline.
-- The queued cold event becomes stale and is rejected by core assessment.
+- Before/reached facts reject early decay and late consumption.
+- Power loss touches no claim balance and changes one shared cohort fact; the
+  replaced cold condition can no longer spoil.
 - Incorrect location, cohort, or World bindings are rejected by encoded
   identities and conditions.
-- The complete outage trace replays to the encoded goal and becomes quiescent.
-- 128 generated inventory splits and transfers agree with a plain independent
+- The outage replays to the encoded goal and becomes quiescent, and over 128
+  generated inventories and transfers it agrees with a plain independent
   inventory oracle.
-- The receipt-maintained holdings index always equals a complete rebuild.
-- Bounded exact planning evaluates zero through seven 1,000-claim transfers and
-  retains all eight preservation/cooling-energy tradeoffs as replayable traces.
+- A sealed storage plan keeps what it moved cold, for its cooling energy.
 
 ## API pressure
 
 - Structural fungibility through shared asset identity and quantity.
 - Non-fungible facts through unique identity, unit supply, and invariants.
-- Semantic cohort indirection versus disposable physical indexes.
 - Event-driven temporal effects without mutation-on-read or an external clock.
-- Trigger indexes, stale proposal rejection, and receipt-driven projections.
+- Stale proposal rejection by core assessment.
 - Work proportional to shared-fate cohorts rather than physical units.
 - Incremental touched-account commit and receipt-delta invariant validation
   without weakening atomicity.
@@ -100,19 +99,13 @@ facts and only proposes ordinary spoil exchanges.
 
 ## In this folder
 
-- `mod.rs` is the model: the Micro storage fixture, its clock, spoilage and
-  outage, the `ClaimIndex` and `EffectAgenda`, and the storage plans.
+- `mod.rs` is the model: the Micro storage fixture, its clock, spoilage,
+  outage and storage-plan seal.
 - `cold_chain/` is the Showcase and Stress cold chain, an ontology of its own
   laid out the same way: its model in `mod.rs`, and its scripts
   `scripts/cold-chain.rhai` and `scripts/cold-chain-view.rhai`.
 - `package.rs` writes its package: its economies under refs, goals,
   strategies, experiments and view, whose scripts are `scripts/perishables.rhai`
   and `scripts/perishables-view.rhai`.
-
-[`examples/perishables.rs`](https://github.com/BiomaAI/axionomy/blob/main/crates/axionomy-problems/examples/perishables.rs) runs it:
-
-```console
-cargo run -p axionomy-problems --example perishables
-```
 
 Perishables is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).

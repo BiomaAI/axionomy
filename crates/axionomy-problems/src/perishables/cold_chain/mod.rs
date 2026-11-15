@@ -2,7 +2,7 @@
 use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
+    QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
 
 pub const BATCHES: [u8; 6] = [0, 1, 2, 3, 4, 5];
@@ -122,13 +122,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Policy {
-    ProtectCold,
-    ProcessFirst,
-    ConserveFuel,
-    RebalanceCold,
-}
 
 fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
@@ -664,246 +657,21 @@ pub fn total(world: &World, asset: Asset) -> u64 {
         .map(|(_, account)| account.balance(&asset).to_u64())
         .sum()
 }
-pub fn place(world: &World, id: u8) -> Option<Place> {
-    [Place::Warehouse, Place::Fridge]
-        .into_iter()
-        .find(|at| value(world, AccountId::Batch(id), Asset::At(*at)) > 0)
-}
-pub fn candidates(world: &World) -> Vec<Action> {
-    let mut ids: Vec<_> = world.rate_ids().copied().collect();
-    ids.sort();
-    world.applicable(ids.into_iter().flat_map(|id| {
-        let units: Vec<_> = if matches!(
-            id,
-            RateId::Split { .. }
-                | RateId::Deliver { .. }
-                | RateId::Process(_)
-                | RateId::Discard { .. }
-        ) {
-            (1..=12).collect()
-        } else {
-            vec![1]
-        };
-        units.into_iter().map(move |units| action(id, units))
-    }))
-}
-
-fn record(world: &mut World, trace: &mut Trace<Ontology>, rate: RateId, units: u64) -> bool {
-    let exchange = action(rate, units);
-    if units == 0 || !world.is_applicable(&exchange) {
-        return false;
-    }
-    world.apply(exchange.clone()).expect("assessed action");
-    trace.push(exchange);
-    true
-}
-fn cool(world: &mut World, trace: &mut Trace<Ontology>, backup: bool) {
-    let cold_fresh: u64 = BATCHES
-        .into_iter()
-        .filter(|id| place(world, *id) == Some(Place::Fridge))
-        .map(|id| value(world, AccountId::Batch(id), Asset::Fresh))
-        .sum();
-    if cold_fresh == 0 {
-        return;
-    }
-    if backup
-        && value(world, AccountId::World, Asset::Energy) < 2
-        && value(world, AccountId::World, Asset::Fuel) >= 2
-    {
-        record(world, trace, RateId::Generate, 1);
-    }
-    record(world, trace, RateId::Cool, 1);
-}
-fn process(world: &mut World, trace: &mut Trace<Ontology>) {
-    for id in BATCHES {
-        if place(world, id) == Some(Place::Warehouse) {
-            let amount = value(world, AccountId::Batch(id), Asset::Fresh)
-                .min(value(world, AccountId::World, Asset::Labor))
-                .min(value(world, AccountId::World, Asset::Energy));
-            record(world, trace, RateId::Process(id), amount);
-        }
-    }
-}
-pub fn run(initial: &World, policy: Policy) -> Trace<Ontology> {
-    let mut world = initial.clone();
-    let mut trace = Trace::new();
-    let days = value(&world, AccountId::World, Asset::Days);
-    for day in 0..days {
-        if matches!(policy, Policy::ProtectCold | Policy::RebalanceCold) {
-            cool(&mut world, &mut trace, true);
-        }
-        if policy == Policy::ProcessFirst {
-            process(&mut world, &mut trace);
-        }
-        if policy != Policy::ConserveFuel || day % 2 == 0 {
-            let mut shipments: Vec<_> = BATCHES
-                .into_iter()
-                .flat_map(|id| {
-                    let at = place(&world, id);
-                    [false, true]
-                        .into_iter()
-                        .filter_map(move |preserved| at.map(|at| (id, preserved, at)))
-                })
-                .collect();
-            shipments.sort_by_key(|(id, preserved, at)| {
-                (
-                    *preserved,
-                    std::cmp::Reverse(
-                        value(&world, AccountId::Batch(*id), Asset::Heat) * 10
-                            + if policy == Policy::RebalanceCold {
-                                u64::from(*at == Place::Fridge) * 100
-                            } else {
-                                u64::from(*at == Place::Warehouse)
-                            },
-                    ),
-                )
-            });
-            for (id, preserved, at) in shipments {
-                let amount = value(
-                    &world,
-                    AccountId::Batch(id),
-                    if preserved {
-                        Asset::Preserved
-                    } else {
-                        Asset::Fresh
-                    },
-                )
-                .min(value(&world, AccountId::World, Asset::Freight))
-                .min(value(&world, AccountId::World, Asset::Demand));
-                record(
-                    &mut world,
-                    &mut trace,
-                    RateId::Deliver {
-                        batch: id,
-                        preserved,
-                        at,
-                    },
-                    amount,
-                );
-            }
-        }
-        if !matches!(policy, Policy::ProcessFirst | Policy::RebalanceCold) {
-            process(&mut world, &mut trace);
-        }
-        if !matches!(policy, Policy::ProtectCold | Policy::RebalanceCold) {
-            cool(&mut world, &mut trace, policy == Policy::ProcessFirst);
-        }
-        for id in BATCHES {
-            if let Some(at) = place(&world, id) {
-                let amount = value(&world, AccountId::Batch(id), Asset::Spoiled);
-                record(
-                    &mut world,
-                    &mut trace,
-                    RateId::Discard { batch: id, at },
-                    amount,
-                );
-            }
-        }
-        // Split only when a child can actually fit. It inherits the parent's
-        // accumulated heat; moving it to cold storage never resets that history.
-        for id in BATCHES {
-            if place(&world, id) != Some(Place::Warehouse)
-                || value(&world, AccountId::World, Asset::Labor) == 0
-            {
-                continue;
-            }
-            let fresh = value(&world, AccountId::Batch(id), Asset::Fresh);
-            let space = value(&world, AccountId::World, Asset::ColdSpace);
-            if fresh == 0 || space == 0 {
-                continue;
-            }
-            let all = fresh + value(&world, AccountId::Batch(id), Asset::Preserved);
-            if all <= space {
-                record(
-                    &mut world,
-                    &mut trace,
-                    RateId::Move {
-                        batch: id,
-                        from: Place::Warehouse,
-                        to: Place::Fridge,
-                    },
-                    1,
-                );
-            } else if fresh > space
-                && let Some(child) = BATCHES
-                    .into_iter()
-                    .find(|other| value(&world, AccountId::Batch(*other), Asset::Dormant) > 0)
-                && record(
-                    &mut world,
-                    &mut trace,
-                    RateId::Split {
-                        source: id,
-                        destination: child,
-                        at: Place::Warehouse,
-                    },
-                    space,
-                )
-            {
-                record(
-                    &mut world,
-                    &mut trace,
-                    RateId::Move {
-                        batch: child,
-                        from: Place::Warehouse,
-                        to: Place::Fridge,
-                    },
-                    1,
-                );
-            }
-        }
-        if policy == Policy::RebalanceCold {
-            process(&mut world, &mut trace);
-        }
-        assert!(record(&mut world, &mut trace, RateId::EndDay, 1));
-        for id in BATCHES {
-            if value(&world, AccountId::Batch(id), Asset::Fresh) == 0 {
-                assert!(record(&mut world, &mut trace, RateId::AgeEmpty(id), 1));
-            } else if place(&world, id) == Some(Place::Fridge)
-                && value(&world, AccountId::World, Asset::CoolingOn) > 0
-            {
-                assert!(record(&mut world, &mut trace, RateId::AgeCold(id), 1));
-            } else {
-                let at = place(&world, id).unwrap();
-                let spoil = value(&world, AccountId::Batch(id), Asset::Heat) >= 2;
-                assert!(record(
-                    &mut world,
-                    &mut trace,
-                    RateId::AgeWarm {
-                        batch: id,
-                        at,
-                        spoil
-                    },
-                    1
-                ));
-            }
-        }
-        assert!(record(
-            &mut world,
-            &mut trace,
-            if day + 1 == days {
-                RateId::Close
-            } else {
-                RateId::OpenDay(day as u8 + 1)
-            },
-            1
-        ));
-    }
-    assert!(world.matches(&goal()));
-    trace
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn end_day(world: &mut World, next: u8) {
+    /// Ends the day, each batch aging by `ages`, and opens day `next`.
+    fn end_day(world: &mut World, next: u8, ages: [RateId; 6]) {
         world.apply(action(RateId::EndDay, 1)).unwrap();
         assert!(
             !world.is_applicable(&action(RateId::OpenDay(next), 1)),
             "all cohort exposure must settle before the next day"
         );
-        for id in BATCHES {
-            let legal = candidates(world).into_iter().find(|a| matches!(a.rate(), RateId::AgeEmpty(batch) | RateId::AgeCold(batch) | RateId::AgeWarm { batch, .. } if *batch == id)).unwrap();
-            world.apply(legal).unwrap();
+        for age in ages {
+            world
+                .apply(action(age, 1))
+                .unwrap_or_else(|error| panic!("{age:?}: {error}"));
         }
         world.apply(action(RateId::OpenDay(next), 1)).unwrap();
     }
@@ -911,7 +679,22 @@ mod tests {
     fn split_cohorts_inherit_heat_and_diverge_only_after_different_storage_exposure() {
         let mut world = initial(false, 17);
         world.apply(action(RateId::Cool, 1)).unwrap();
-        end_day(&mut world, 1);
+        end_day(
+            &mut world,
+            1,
+            [
+                RateId::AgeWarm {
+                    batch: 0,
+                    at: Place::Warehouse,
+                    spoil: false,
+                },
+                RateId::AgeCold(1),
+                RateId::AgeEmpty(2),
+                RateId::AgeEmpty(3),
+                RateId::AgeEmpty(4),
+                RateId::AgeEmpty(5),
+            ],
+        );
         assert_eq!(value(&world, AccountId::Batch(0), Asset::Heat), 2);
         let before = world.state_key();
         assert!(
@@ -960,7 +743,23 @@ mod tests {
             ))
             .unwrap();
         world.apply(action(RateId::Cool, 1)).unwrap();
-        end_day(&mut world, 2);
+        // The split-off child ages cold; its warm parent spoils.
+        end_day(
+            &mut world,
+            2,
+            [
+                RateId::AgeWarm {
+                    batch: 0,
+                    at: Place::Warehouse,
+                    spoil: true,
+                },
+                RateId::AgeCold(1),
+                RateId::AgeCold(2),
+                RateId::AgeEmpty(3),
+                RateId::AgeEmpty(4),
+                RateId::AgeEmpty(5),
+            ],
+        );
         assert_eq!(value(&world, AccountId::Batch(0), Asset::Spoiled), 4);
         assert_eq!(value(&world, AccountId::Batch(2), Asset::Fresh), 2);
         assert_eq!(value(&world, AccountId::Batch(2), Asset::Heat), 2);
@@ -994,49 +793,5 @@ mod tests {
         )));
         let bad = action(RateId::Process(0), 1).bind(Role::Batch, AccountId::Batch(1));
         assert!(!world.is_applicable(&bad));
-    }
-    #[test]
-    fn common_outage_scenarios_have_replayable_resource_tradeoffs() {
-        let mut outcomes = std::collections::BTreeSet::new();
-        for stress in [false, true] {
-            for seed in 0..4 {
-                let initial = initial(stress, seed);
-                for policy in [
-                    Policy::ProtectCold,
-                    Policy::ProcessFirst,
-                    Policy::ConserveFuel,
-                    Policy::RebalanceCold,
-                ] {
-                    let trace = run(&initial, policy);
-                    assert_eq!(
-                        trace,
-                        run(&initial, policy),
-                        "same policy and outage schedule must replay identically"
-                    );
-                    let replay = initial.replayed(&trace).unwrap();
-                    assert!(replay.matches(&goal()));
-                    assert!(candidates(&replay).is_empty());
-                    assert_eq!(
-                        total(&initial, Asset::Fresh),
-                        total(&replay, Asset::Fresh)
-                            + total(&replay, Asset::Preserved)
-                            + total(&replay, Asset::Spoiled)
-                            + total(&replay, Asset::Disposed)
-                            + total(&replay, Asset::Delivered)
-                    );
-                    let outcome = (
-                        total(&replay, Asset::Delivered),
-                        total(&replay, Asset::SpentEnergy),
-                        total(&replay, Asset::MissedDemand),
-                        total(&replay, Asset::Money),
-                    );
-                    outcomes.insert(outcome);
-                }
-            }
-        }
-        assert!(
-            outcomes.len() >= 4,
-            "policies and capacity must change physical outcomes: {outcomes:?}"
-        );
     }
 }

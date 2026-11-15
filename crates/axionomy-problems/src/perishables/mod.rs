@@ -2,12 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    Receipt, Trace, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
-use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult};
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap};
 
 pub mod cold_chain;
 #[cfg(feature = "packages")]
@@ -15,7 +11,6 @@ pub mod package;
 
 pub const DEFAULT_WAREHOUSE_CLAIMS: u64 = 7_000;
 pub const DEFAULT_FRIDGE_CLAIMS: u64 = 3_000;
-pub const DEFAULT_TRANSFER: u64 = 1_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Location {
@@ -42,19 +37,6 @@ pub enum Moment {
     AmbientExpiry,
     WarmedExpiry,
     ColdExpiry,
-}
-
-impl Moment {
-    /// Where this moment falls in time, harvest first. A moment's identifier
-    /// order is its path's, which says nothing about when it comes.
-    const fn chronology(self) -> u8 {
-        match self {
-            Self::Harvest => 0,
-            Self::AmbientExpiry => 1,
-            Self::WarmedExpiry => 2,
-            Self::ColdExpiry => 3,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -126,16 +108,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type EventTrace = Trace<Ontology>;
-pub type EventReceipt = Receipt<Ontology>;
-pub type Failure = ApplyError<Ontology>;
-pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectiveKey {
-    UsableInventory,
-    CoolingEnergy,
-}
 
 const COHORTS: [Cohort; 2] = [Cohort::Ambient, Cohort::Refrigerated];
 const MOMENTS: [Moment; 4] = [
@@ -346,461 +318,8 @@ pub fn seal_storage_plan() -> Action {
     action(RateId::SealStoragePlan, 1)
 }
 
-pub fn candidates(world: &World) -> Vec<Action> {
-    world.applicable(world.rate_ids().copied().map(|rate| action(rate, 1)))
-}
-
 pub fn storage_plan_goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::PlanSolved, 1)]))
-}
-
-/// A deliberately bounded policy set: transfer another 1,000 claims, advance
-/// to ambient expiry, apply the due cohort effect, or seal the storage plan.
-pub fn storage_plan_candidates(world: &World) -> Vec<Action> {
-    storage_plan_candidates_with_transfer(world, DEFAULT_TRANSFER)
-}
-
-pub fn storage_plan_candidates_with_transfer(world: &World, transfer: u64) -> Vec<Action> {
-    world.applicable([
-        move_to_fridge(transfer),
-        advance(Moment::Harvest, Moment::AmbientExpiry),
-        spoil(Cohort::Ambient, Exposure::Ambient),
-        seal_storage_plan(),
-    ])
-}
-
-/// Exhaustively compares the bounded storage commitments while the underlying
-/// transfer rate remains fungible and accepts arbitrary caller-selected units.
-pub fn storage_plan_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    storage_plan_front_with_transfer(world, DEFAULT_TRANSFER)
-}
-
-pub fn storage_plan_front_with_transfer(
-    world: &World,
-    transfer: u64,
-) -> Result<ParetoResult, ParetoError> {
-    pareto::search(
-        world,
-        &storage_plan_goal(),
-        |world| storage_plan_candidates_with_transfer(world, transfer),
-        storage_objectives,
-    )
-}
-
-pub fn storage_objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    ObjectiveVector::try_new([
-        Objective::maximize(ObjectiveKey::UsableInventory, usable_inventory(world)),
-        Objective::minimize(ObjectiveKey::CoolingEnergy, spent_cooling_energy(world)),
-    ])
-    .expect("storage objective schema is static and unique")
-}
-
-pub fn usable_inventory(world: &World) -> u64 {
-    world
-        .balance(
-            &storage_account(Location::Fridge),
-            &Asset::Claim(Cohort::Refrigerated),
-        )
-        .to_u64()
-}
-
-pub fn spent_cooling_energy(world: &World) -> u64 {
-    world
-        .balance(
-            &storage_account(Location::Fridge),
-            &Asset::SpentCoolingEnergy,
-        )
-        .to_u64()
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClaimIndex {
-    holdings: BTreeMap<Cohort, BTreeMap<AccountId, u64>>,
-}
-
-impl ClaimIndex {
-    pub fn build(world: &World) -> Self {
-        let mut index = Self {
-            holdings: BTreeMap::new(),
-        };
-        for (account, balances) in world.accounts() {
-            for (asset, quantity) in balances.balances().iter() {
-                if let Asset::Claim(cohort) = asset {
-                    index.set(*cohort, *account, quantity.to_u64());
-                }
-            }
-        }
-        index
-    }
-
-    pub fn total(&self, cohort: Cohort) -> u128 {
-        self.holdings
-            .get(&cohort)
-            .into_iter()
-            .flatten()
-            .map(|quantity| u128::from(*quantity.1))
-            .sum()
-    }
-
-    pub fn total_claims(&self) -> u128 {
-        COHORTS.into_iter().map(|cohort| self.total(cohort)).sum()
-    }
-
-    pub fn balance_entries(&self) -> usize {
-        self.holdings.values().map(BTreeMap::len).sum()
-    }
-
-    pub fn holders(&self, cohort: Cohort) -> Vec<(AccountId, u64)> {
-        self.holdings
-            .get(&cohort)
-            .into_iter()
-            .flat_map(|holdings| holdings.iter())
-            .map(|(account, quantity)| (*account, *quantity))
-            .collect()
-    }
-
-    pub fn usable_total(&self, world: &World) -> u128 {
-        TIMED_CONDITIONS
-            .into_iter()
-            .filter(|(cohort, exposure, due)| {
-                world.balance(
-                    &cohort_account(*cohort),
-                    &Asset::Fresh(*cohort, *exposure, *due),
-                ) == Quantity::new(1)
-                    && world.balance(&AccountId::World, &Asset::Before(*due)) == Quantity::new(1)
-            })
-            .map(|(cohort, _, _)| self.total(cohort))
-            .sum()
-    }
-
-    fn apply(&mut self, receipt: &EventReceipt) {
-        for delta in receipt.deltas() {
-            for (asset, quantity) in delta.consumed().iter() {
-                if let Asset::Claim(cohort) = asset {
-                    self.decrease(*cohort, *delta.account(), quantity.to_u64());
-                }
-            }
-            for (asset, quantity) in delta.produced().iter() {
-                if let Asset::Claim(cohort) = asset {
-                    self.increase(*cohort, *delta.account(), quantity.to_u64());
-                }
-            }
-        }
-    }
-
-    fn set(&mut self, cohort: Cohort, account: AccountId, quantity: u64) {
-        if quantity == 0 {
-            return;
-        }
-        self.holdings
-            .entry(cohort)
-            .or_default()
-            .insert(account, quantity);
-    }
-
-    fn increase(&mut self, cohort: Cohort, account: AccountId, quantity: u64) {
-        let balance = self
-            .holdings
-            .entry(cohort)
-            .or_default()
-            .entry(account)
-            .or_default();
-        *balance = balance
-            .checked_add(quantity)
-            .expect("a core-valid receipt cannot overflow the derived account balance");
-    }
-
-    fn decrease(&mut self, cohort: Cohort, account: AccountId, quantity: u64) {
-        let holdings = self
-            .holdings
-            .get_mut(&cohort)
-            .expect("a consumed claim exists in a correctly synchronized index");
-        let balance = holdings
-            .get_mut(&account)
-            .expect("a consumed claim holder exists in a correctly synchronized index");
-        *balance = balance
-            .checked_sub(quantity)
-            .expect("a core-valid receipt cannot underflow the derived account balance");
-        if *balance == 0 {
-            holdings.remove(&account);
-        }
-        if holdings.is_empty() {
-            self.holdings.remove(&cohort);
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct AgendaEntry {
-    at: Moment,
-    sequence: u64,
-    action: Action,
-}
-
-impl PartialEq for AgendaEntry {
-    fn eq(&self, other: &Self) -> bool {
-        self.at == other.at && self.sequence == other.sequence
-    }
-}
-
-impl Eq for AgendaEntry {}
-
-impl PartialOrd for AgendaEntry {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for AgendaEntry {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // A max-heap: the earliest moment, then the earliest scheduled, first.
-        other
-            .at
-            .chronology()
-            .cmp(&self.at.chronology())
-            .then_with(|| other.sequence.cmp(&self.sequence))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct EffectAgenda {
-    pending: BinaryHeap<AgendaEntry>,
-    next_sequence: u64,
-}
-
-impl EffectAgenda {
-    pub fn build(world: &World) -> Self {
-        let mut agenda = Self {
-            pending: BinaryHeap::new(),
-            next_sequence: 0,
-        };
-        for (cohort, exposure, due) in TIMED_CONDITIONS {
-            if world.balance(
-                &cohort_account(cohort),
-                &Asset::Fresh(cohort, exposure, due),
-            ) == Quantity::new(1)
-            {
-                agenda.schedule(cohort, exposure, due);
-            }
-        }
-        agenda
-    }
-
-    pub fn len(&self) -> usize {
-        self.pending.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.pending.is_empty()
-    }
-
-    pub fn next_due(&self) -> Option<Moment> {
-        self.pending.peek().map(|entry| entry.at)
-    }
-
-    fn observe(&mut self, receipt: &EventReceipt) {
-        for delta in receipt.deltas() {
-            for (asset, _) in delta.produced().iter() {
-                if let Asset::Fresh(cohort, exposure, due) = asset {
-                    self.schedule(*cohort, *exposure, *due);
-                }
-            }
-        }
-    }
-
-    fn schedule(&mut self, cohort: Cohort, exposure: Exposure, at: Moment) {
-        let entry = AgendaEntry {
-            at,
-            sequence: self.next_sequence,
-            action: spoil(cohort, exposure),
-        };
-        self.next_sequence = self
-            .next_sequence
-            .checked_add(1)
-            .expect("the concrete agenda sequence cannot overflow");
-        self.pending.push(entry);
-    }
-
-    fn pop_due(&mut self, now: Moment) -> Vec<Action> {
-        let mut due = Vec::new();
-        while self
-            .pending
-            .peek()
-            .is_some_and(|entry| entry.at.chronology() <= now.chronology())
-        {
-            due.push(
-                self.pending
-                    .pop()
-                    .expect("a peeked agenda entry exists")
-                    .action,
-            );
-        }
-        due
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EffectReport {
-    at: Moment,
-    applied: Vec<RateId>,
-    stale: Vec<RateId>,
-}
-
-impl EffectReport {
-    pub fn at(&self) -> Moment {
-        self.at
-    }
-
-    pub fn applied(&self) -> &[RateId] {
-        &self.applied
-    }
-
-    pub fn stale(&self) -> &[RateId] {
-        &self.stale
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ScenarioRun {
-    world: World,
-    trace: EventTrace,
-    index: ClaimIndex,
-    effects: Vec<EffectReport>,
-}
-
-impl ScenarioRun {
-    pub fn world(&self) -> &World {
-        &self.world
-    }
-
-    pub fn trace(&self) -> &EventTrace {
-        &self.trace
-    }
-
-    pub fn claim_index(&self) -> &ClaimIndex {
-        &self.index
-    }
-
-    pub fn effects(&self) -> &[EffectReport] {
-        &self.effects
-    }
-}
-
-pub fn run_outage_scenario(source: &World, moved: u64) -> Result<ScenarioRun, Failure> {
-    let mut world = source.clone();
-    let mut trace = EventTrace::new();
-    let mut index = ClaimIndex::build(&world);
-    let mut agenda = EffectAgenda::build(&world);
-
-    if moved > 0 {
-        apply_recorded(
-            &mut world,
-            &mut trace,
-            &mut index,
-            &mut agenda,
-            move_to_fridge(moved),
-        )?;
-    }
-    apply_recorded(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        advance(Moment::Harvest, Moment::AmbientExpiry),
-    )?;
-    let ambient = settle_due(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        Moment::AmbientExpiry,
-    )?;
-    apply_recorded(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        lose_power(),
-    )?;
-    apply_recorded(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        advance(Moment::AmbientExpiry, Moment::WarmedExpiry),
-    )?;
-    let warmed = settle_due(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        Moment::WarmedExpiry,
-    )?;
-    apply_recorded(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        advance(Moment::WarmedExpiry, Moment::ColdExpiry),
-    )?;
-    let cold = settle_due(
-        &mut world,
-        &mut trace,
-        &mut index,
-        &mut agenda,
-        Moment::ColdExpiry,
-    )?;
-    apply_recorded(&mut world, &mut trace, &mut index, &mut agenda, finish())?;
-
-    debug_assert_eq!(index, ClaimIndex::build(&world));
-    Ok(ScenarioRun {
-        world,
-        trace,
-        index,
-        effects: vec![ambient, warmed, cold],
-    })
-}
-
-fn apply_recorded(
-    world: &mut World,
-    trace: &mut EventTrace,
-    index: &mut ClaimIndex,
-    agenda: &mut EffectAgenda,
-    action: Action,
-) -> Result<(), Failure> {
-    let receipt = world.apply(action)?;
-    index.apply(&receipt);
-    agenda.observe(&receipt);
-    trace.push(receipt.exchange().clone());
-    Ok(())
-}
-
-fn settle_due(
-    world: &mut World,
-    trace: &mut EventTrace,
-    index: &mut ClaimIndex,
-    agenda: &mut EffectAgenda,
-    now: Moment,
-) -> Result<EffectReport, Failure> {
-    let mut report = EffectReport {
-        at: now,
-        applied: Vec::new(),
-        stale: Vec::new(),
-    };
-    for action in agenda.pop_due(now) {
-        let rate = *action.rate();
-        match world.apply(action) {
-            Ok(receipt) => {
-                index.apply(&receipt);
-                agenda.observe(&receipt);
-                trace.push(receipt.exchange().clone());
-                report.applied.push(rate);
-            }
-            Err(ApplyError::Infeasible { .. }) => report.stale.push(rate),
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(report)
 }
 
 fn storage_account(location: Location) -> AccountId {
@@ -1151,7 +670,7 @@ fn deadline_invariant(moment: Moment) -> LinearInvariant<Asset> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::AssessmentStatus;
+    use axionomy::{AssessmentStatus, Trace};
     use proptest::prelude::*;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1173,19 +692,52 @@ mod tests {
         }
     }
 
+    /// The claims of `cohort`, wherever they are held.
+    fn claims(world: &World, cohort: Cohort) -> u64 {
+        world
+            .accounts()
+            .map(|(_, account)| account.balance(&Asset::Claim(cohort)).to_u64())
+            .sum()
+    }
+
+    /// The outage, `moved` claims first moved to the fridge: each timed
+    /// condition spoils its cohort once its moment comes, except the cold
+    /// one, which the power loss has already replaced, and the outage ends.
+    fn outage(moved: u64) -> Trace<Ontology> {
+        (moved > 0)
+            .then(|| move_to_fridge(moved))
+            .into_iter()
+            .chain([
+                advance(Moment::Harvest, Moment::AmbientExpiry),
+                spoil(Cohort::Ambient, Exposure::Ambient),
+                lose_power(),
+                advance(Moment::AmbientExpiry, Moment::WarmedExpiry),
+                spoil(Cohort::Refrigerated, Exposure::WarmedAfterOutage),
+                advance(Moment::WarmedExpiry, Moment::ColdExpiry),
+                finish(),
+            ])
+            .collect()
+    }
+
     #[test]
     fn ten_thousand_units_share_two_balance_entries_and_two_condition_facts() {
         let small = initial_with_inventory(7, 3);
         let large = initial();
-        let index = ClaimIndex::build(&large);
+        let claim_entries = large
+            .accounts()
+            .flat_map(|(_, account)| account.balances().iter())
+            .filter(|(asset, _)| matches!(asset, Asset::Claim(_)))
+            .count();
 
         assert_eq!(
             large.state_key().balances().len(),
             small.state_key().balances().len()
         );
-        assert_eq!(index.total_claims(), 10_000);
-        assert_eq!(index.balance_entries(), 2);
-        assert_eq!(index.usable_total(&large), 10_000);
+        assert_eq!(
+            claims(&large, Cohort::Ambient) + claims(&large, Cohort::Refrigerated),
+            10_000
+        );
+        assert_eq!(claim_entries, 2);
         assert_eq!(
             large.balance(
                 &cohort_account(Cohort::Ambient),
@@ -1203,31 +755,31 @@ mod tests {
     }
 
     #[test]
-    fn storage_front_exposes_the_full_preservation_energy_curve() {
-        let initial = initial();
-        let result = storage_plan_front(&initial).unwrap();
-        let mut outcomes = Vec::new();
+    fn a_sealed_storage_plan_keeps_what_it_moved_cold_for_its_energy() {
+        let plan: Trace<Ontology> = [
+            move_to_fridge(1_000),
+            advance(Moment::Harvest, Moment::AmbientExpiry),
+            spoil(Cohort::Ambient, Exposure::Ambient),
+            seal_storage_plan(),
+        ]
+        .into_iter()
+        .collect();
+        let sealed = initial().replayed(&plan).expect("the storage plan seals");
 
-        for entry in result.front().entries() {
-            let replayed = initial.replayed(entry.payload()).unwrap();
-            assert!(replayed.matches(&storage_plan_goal()));
-            assert_eq!(&storage_objectives(&replayed), entry.objectives());
-            outcomes.push((usable_inventory(&replayed), spent_cooling_energy(&replayed)));
-        }
-
-        outcomes.sort_unstable();
+        assert!(sealed.matches(&storage_plan_goal()));
         assert_eq!(
-            outcomes,
-            [
-                (3_000, 0),
-                (4_000, 1_000),
-                (5_000, 2_000),
-                (6_000, 3_000),
-                (7_000, 4_000),
-                (8_000, 5_000),
-                (9_000, 6_000),
-                (10_000, 7_000),
-            ]
+            sealed.balance(
+                &storage_account(Location::Fridge),
+                &Asset::Claim(Cohort::Refrigerated),
+            ),
+            Quantity::new(4_000)
+        );
+        assert_eq!(
+            sealed.balance(
+                &storage_account(Location::Fridge),
+                &Asset::SpentCoolingEnergy,
+            ),
+            Quantity::new(1_000)
         );
     }
 
@@ -1235,13 +787,11 @@ mod tests {
     fn fungible_transfer_scales_one_exchange_without_scaling_shared_facts() {
         let mut world = initial();
         let receipt = world
-            .apply(move_to_fridge(DEFAULT_TRANSFER))
+            .apply(move_to_fridge(1_000))
             .expect("the batched transfer applies");
-        let index = ClaimIndex::build(&world);
 
-        assert_eq!(index.total(Cohort::Ambient), 6_000);
-        assert_eq!(index.total(Cohort::Refrigerated), 4_000);
-        assert_eq!(index.total_claims(), 10_000);
+        assert_eq!(claims(&world, Cohort::Ambient), 6_000);
+        assert_eq!(claims(&world, Cohort::Refrigerated), 4_000);
         assert_eq!(receipt.exchange().units(), Quantity::new(1_000));
         assert_eq!(
             world.balance(
@@ -1363,31 +913,28 @@ mod tests {
     }
 
     #[test]
-    fn event_driven_outage_run_replays_and_discards_stale_cold_event() {
+    fn the_outage_replays_and_the_replaced_cold_condition_never_spoils() {
         let source = initial();
-        let before = source.state_key();
-        let run = run_outage_scenario(&source, DEFAULT_TRANSFER).unwrap();
+        let trace = outage(1_000);
+        let (last, before_finish) = trace.exchanges().split_last().unwrap();
+        let mut world = source
+            .replayed(&before_finish.iter().cloned().collect())
+            .unwrap();
 
-        assert_eq!(source.state_key(), before);
-        assert!(run.world().matches(&goal()));
-        assert_eq!(run.claim_index().total(Cohort::Ambient), 6_000);
-        assert_eq!(run.claim_index().total(Cohort::Refrigerated), 4_000);
-        assert_eq!(run.claim_index(), &ClaimIndex::build(run.world()));
-        assert_eq!(run.effects()[0].applied().len(), 1);
-        assert_eq!(run.effects()[1].applied().len(), 1);
-        assert!(run.effects()[2].applied().is_empty());
-        assert_eq!(run.effects()[2].stale().len(), 1);
-        assert_eq!(
-            run.effects()[2].stale(),
-            &[RateId::Spoil {
-                cohort: Cohort::Refrigerated,
-                exposure: Exposure::Cold,
-            }]
+        assert!(!world.is_applicable(&spoil(Cohort::Refrigerated, Exposure::Cold)));
+        world.apply(last.clone()).unwrap();
+        assert!(world.matches(&goal()));
+        assert_eq!(claims(&world, Cohort::Ambient), 6_000);
+        assert_eq!(claims(&world, Cohort::Refrigerated), 4_000);
+        assert!(
+            world
+                .rate_ids()
+                .all(|rate| !world.is_applicable(&action(*rate, 1)))
         );
-        assert!(candidates(run.world()).is_empty());
-
-        let replayed = source.replayed(run.trace()).unwrap();
-        assert_eq!(replayed.state_key(), run.world().state_key());
+        assert_eq!(
+            source.replayed(&trace).unwrap().state_key(),
+            world.state_key()
+        );
     }
 
     proptest! {
@@ -1406,35 +953,25 @@ mod tests {
             };
             let oracle = Oracle::run(warehouse_claims, fridge_claims, moved);
             let source = initial_with_inventory(warehouse_claims, fridge_claims);
-            let run = run_outage_scenario(&source, moved).unwrap();
+            let world = source.replayed(&outage(moved)).unwrap();
 
+            prop_assert_eq!(claims(&world, Cohort::Ambient), oracle.warehouse_claims);
+            prop_assert_eq!(claims(&world, Cohort::Refrigerated), oracle.fridge_claims);
             prop_assert_eq!(
-                run.claim_index().total(Cohort::Ambient),
-                u128::from(oracle.warehouse_claims)
-            );
-            prop_assert_eq!(
-                run.claim_index().total(Cohort::Refrigerated),
-                u128::from(oracle.fridge_claims)
-            );
-            prop_assert_eq!(
-                run.world().balance(
+                world.balance(
                     &cohort_account(Cohort::Ambient),
                     &Asset::Rotten(Cohort::Ambient),
                 ) == Quantity::new(1),
                 oracle.ambient_rotten
             );
             prop_assert_eq!(
-                run.world().balance(
+                world.balance(
                     &cohort_account(Cohort::Refrigerated),
                     &Asset::Rotten(Cohort::Refrigerated),
                 ) == Quantity::new(1),
                 oracle.refrigerated_rotten
             );
-            prop_assert_eq!(
-                run.claim_index(),
-                &ClaimIndex::build(run.world())
-            );
-            prop_assert!(source.replayed(run.trace()).is_ok());
+            prop_assert!(world.matches(&goal()));
         }
     }
 }

@@ -30,7 +30,7 @@ const COLD_CHAIN: &str = include_str!("../../scripts/cold-chain.rhai");
 const VIEW: &str = include_str!("../../scripts/perishables-view.rhai");
 const COLD_CHAIN_VIEW: &str = include_str!("../../scripts/cold-chain-view.rhai");
 
-/// The seed the sample's Rust cold chains run with, which picks the day the cold
+/// The seed the sample's cold chains are built with, which picks the day the cold
 /// chain's outage begins.
 const SEED: u64 = 17;
 
