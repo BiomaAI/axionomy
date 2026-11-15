@@ -1416,12 +1416,13 @@ The current foundation is intentionally bounded:
 - An economy's constants are one value each, whole number or word, read by
   name in every rate (D-059). Values that differ per case are a relation's;
   constants are never computed from one another.
-- The kernel lists a rate's instances (`instances_of`) and the engine offers
-  those whose roles the rate fixes (`CandidateSet::Instances`, D-055); an
-  instance with a free role is proposed by a script, which binds it. The
-  engine checks every instance at every state, so where a state's moves are
-  few among many instances (sokoban's pushes, the job shop's dispatch) a
-  script that proposes only those stays several times faster.
+- The kernel lists a rate's instances (`instances_of`) and the exchanges of
+  those whose roles the rate fixes (`fixed_exchanges`), which the engine
+  offers (`CandidateSet::Instances`, D-055, D-060); an instance with a free
+  role is proposed by a script, which binds it. Every listed exchange is
+  checked at every state, cheaply where its accounts lack what it takes
+  (D-060); a book of very many instances, few of which ever apply, pays for
+  each.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
 - Stable insertion-ordered maps make iteration, diagnostics, and ordinary
@@ -2465,6 +2466,25 @@ derived value named as a constant is refused, as is a constant named twice
 or a number no quantity holds. The store keeps constants in the state's
 tree under `c` (format 7); an economy without them is written as before in
 JSON.
+
+### D-060: An exchange is first checked against what its accounts hold
+
+Decided with the user after D-059. Offering every instance at every state
+built every instance's exchange again and assessed each in full, so a
+sample whose moves were few among many instances, sokoban's 259 on its
+largest board, ran four to five times slower than a script proposing only
+the moves from the player's cell, and kept the script. Now the kernel lists
+each rate's instances that fix every role as exchanges once per rate book
+(`Economy::fixed_exchanges`, shared by every economy that has the book,
+with `Economy::exchange_of` for one), and checks each exchange first
+against what its accounts hold: its units of each asset it consumes from
+a role, and each asset it preserves there. One that fails is not
+applicable, with no assessment built; the specification proves this
+sound: an accepted exchange takes only what its accounts held
+(`accepted_holds`). On sokoban's largest board the engine's list is now
+faster than the script was (A* 11.0 s against 12.7 s, breadth-first 6.3 s
+against 11.1 s), so candidate scripts that only enumerate moves are
+deleted.
 
 ## 16. Success criteria
 
