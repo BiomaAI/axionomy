@@ -1498,27 +1498,31 @@ discipline is not a trust boundary.
 
 Each sample once wrote one concrete rate per value of every identifier its
 law depended on, and its scripts computed which concrete rate applied. With
-rates with variables (D-054) each law is written once; the instances are
-the same, so what every package finds is the same (D-053's pins), apart
-from the arms whose exchanges are now named by shorter identifiers or chosen
-among instances in their order. Rates as written, Stress instance (or the
+rates with variables (D-054) each law is written once; the instances are the
+same, so what every package finds is the same (D-053's pins), apart from the
+arms whose exchanges are now named by shorter identifiers or chosen among
+instances in their order. Rates as written, Stress instance (or the
 largest), before → after: Connect Four 226 → 4 (Micro 1,282 → 4), Work
 League 1,954 → 23, the fleet 290 → 21, sokoban 259 → 4, the incident 203 →
-22, the expedition 226 → 40, the cold chain 161 → 15, scheduling 104 → 45,
+22, the expedition 226 → 40, the cold chain 161 → 14, scheduling 104 → 45,
 bridge 100 → 18, the marketplace 86 → 6 (92 instances, a dispatch for each
 carrier), the AMM season 35 → 16, rescue Micro 22 → 6, mission Micro 39 →
-11, logistics Micro 51 → 17, perishables Micro 13 → 11, lending 15 → 13.
-Since D-058 the numbers that differ per case are their relations' rows, not
-balances: distances, crossing and processing times, order and contract
-terms, each day's weather, supply and pulse, Nature's odds; the assets that
-held them are gone. Maze, exact cover and workshop keep their rates and
-fix their accounts; their moves are their instances (D-055). The scripts
-lost their binding tables and their loops over rate identifiers: Connect
-Four's went from 449 to 150 lines, its bitboards, tactics and negamax
-replaced by the engine's minimax. What stays one rate per value is what differs in shape or in
-numbers no relation can hold, kept as facts in the economy instead: what
-Nature hides until it is observed (a relation is law every reader sees),
-and a world's single constants (a season's length, a market's terms).
+11, logistics Micro 51 → 7, perishables Micro 13 → 7, lending 15 → 13. What
+differs per case and never changes is a relation's rows, not balances:
+numbers since D-058 (distances, crossing and processing times, order and
+contract terms, each day's weather, supply and pulse, Nature's odds) and
+names since D-059 (a contract's place, an order's item and destination, a
+route's ends); what a world holds once (a season's length, a market's terms,
+a board's size) is a constant; the assets that held them are gone. Maze,
+exact cover, workshop and sokoban fix their accounts, and their moves are
+their instances that apply (D-055, D-060). The scripts lost their binding
+tables, their loops over rate identifiers and their copies of the law:
+Connect Four's went from 449 to 150 lines, its bitboards, tactics and
+negamax replaced by the engine's minimax; sokoban's from 105 to 48; the work
+league's policies read contracts, costs and odds from the law. What stays
+one rate per value is what differs in shape; what stays a fact in the
+economy is what Nature hides until it is observed (a relation is law every
+reader sees).
 
 ### 13.5 Objectives can remain assets while algorithms remain generic
 
