@@ -217,7 +217,7 @@ fn sell(state, actor, units) {
 fn decision(state, actor) {
     let remaining = held(state, actor, "decisions");
     if held(state, actor, "trading") == 0 || remaining == 0 { return (); }
-    let scale = state.balance("world", "scale");
+    let scale = state.constant("scale");
     let price = price_milli(state);
     let reference = held(state, actor, "reference-price");
     let energy = held(state, actor, "energy");
@@ -331,7 +331,7 @@ fn turns(state, actor) {
 // The day's close once every actor has ended trading: the next day's
 // entitlements, or, on the last day, the market's close.
 fn day_end(state, day) {
-    let last = day + 1 == state.balance("world", "days").to_int();
+    let last = day + 1 == state.constant("season-length").to_int();
     state.exchange_of(if last { "close-market" } else { `advance-day/${day}` })
 }
 

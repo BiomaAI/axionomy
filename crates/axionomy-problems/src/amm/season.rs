@@ -35,6 +35,15 @@ fn world_law() -> Rate<Ontology> {
             Q::constant(1),
         )
 }
+/// How many days the season lasts, `{season-length}`: a constant.
+fn season_length() -> Param<u64> {
+    Param::new(path!("season-length"))
+}
+/// What the season's stock and amounts are multiplied by, `{scale}`: a
+/// constant.
+fn season_scale() -> Param<u64> {
+    Param::new(path!("scale"))
+}
 fn weather(seed: u64, day: u8) -> u64 {
     if axionomy_search::sampling::splitmix(seed, u64::from(day)).is_multiple_of(3) {
         40
@@ -123,11 +132,14 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     let world = basket([
         (Asset::MarketActive, 1),
         (Asset::AtDay(0), 1),
-        (Asset::Days, u64::from(days)),
-        (Asset::Scale, scale),
         (Asset::CurrentSunlight, weather(seed, 0)),
     ]);
-    builder = builder.account(AccountId::World, Account::from(world));
+    // The season's length and scale are the whole world's and never change:
+    // constants every rate reads by name, as the policies do.
+    builder = builder
+        .account(AccountId::World, Account::from(world))
+        .constant(&season_length(), u64::from(days))
+        .constant(&season_scale(), scale);
 
     // Meeting a need and settling an obligation, at the season's scale.
     builder = builder
@@ -300,7 +312,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             path!("capacity-arrives-before-close"),
             q(Role::World, Asset::Day) + Q::constant(3),
             C::LessThanOrEqual,
-            q(Role::World, Asset::Days),
+            season_length().quantity(),
         );
     builder = builder.rate(RateId::InvestProduction, invest);
     // Commissioning is a due event, independent of the actor's trading budget.
@@ -603,7 +615,12 @@ mod tests {
             }
         }
         let day = period(world) as u8;
-        let last = u64::from(day + 1) == world.balance(&AccountId::World, &Asset::Days).to_u64();
+        let days = world
+            .constants()
+            .find(|(name, _)| *name == season_length().name())
+            .and_then(|(_, days)| days.number())
+            .expect("a season has a length");
+        let last = u64::from(day + 1) == days;
         world.apply(event(day, last)).unwrap();
     }
     fn rejects_without_change(world: &mut World, action: Action) {

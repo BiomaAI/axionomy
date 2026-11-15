@@ -54,8 +54,6 @@ pub enum Asset {
     MarketEnded,
     Day,
     AtDay(u8),
-    Days,
-    Scale,
     MarketOpen,
     Trading,
     Done,

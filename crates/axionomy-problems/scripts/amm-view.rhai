@@ -57,8 +57,6 @@ fn label(item) {
             "market-ended" => "Market season closed",
             "day" => "Time elapsed",
             "at-day" => `Market day ${ordinal(parts[2])}`,
-            "days" => "Season length",
-            "scale" => "Production scale",
             "market-open" => "Market access open",
             "trading" => "Still trading today",
             "done" => "Trading finished for today",
@@ -128,7 +126,7 @@ fn unit(asset) {
         "production-capacity" | "future-capacity" | "pending-capacity" => "units / day",
         "credit" => "credits",
         "reference-price" => "credit / energy",
-        "day" | "days" | "construction-due" => "days",
+        "day" | "construction-due" => "days",
         "current-sunlight" => "%",
         _ => (),
     }
