@@ -392,8 +392,9 @@ engine runs one from a point and gets a run and its thinking. MCP's
 breadth-first search becomes one such strategy.
 
 Built so far: a strategy is a definition (`strategy/<path>`) naming its
-candidate set and scripts, and a candidate set is a script or a list of
-exchanges reconsidered at each state. A strategy is how to choose; the goal
+candidate set and scripts, and a candidate set is a script, a list of
+exchanges, or the instances of the economy's rates under a prefix whose
+roles the rates fix (D-055), reconsidered at each state. A strategy is how to choose; the goal
 and the effort are the caller's, named with each run like the point it
 starts from (D-052). An effort is a seed, a budget of expansions, which
 only searches spend, and turns, which only policies and games play.

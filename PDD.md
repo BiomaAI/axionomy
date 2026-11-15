@@ -205,6 +205,18 @@ Repeated builder calls for one role merge their baskets.
 `preserve` represents a read arc, catalyst, fact, permission, or condition. It
 does not require the awkward consume-then-reproduce convention.
 
+A rate may have **variables** (D-054). Its identifier is a pattern, `{name}`
+standing for one segment, `stabilize/{patient}/{location}`; each variable
+has a finite domain (a range of whole numbers, or segments listed). Its
+assets, the accounts it fixes for roles, and its quantities name the
+variables the same way. A rate may also list **relations**, the rows of
+values some variables take together, for law structure that never changes,
+and **derived values**, whole numbers computed from the variables when an
+identifier is read. An identifier written in full names one instance: the
+ordinary rate written with those values, built as a rate written by hand is
+built, entries naming one asset adding up. A rate without variables is its
+own only instance (`literal_agrees`).
+
 ### 4.3 Exchange
 
 An exchange contains:
@@ -215,6 +227,15 @@ Exchange = (rate_id, account-role bindings, units)
 
 All roles mentioned by the rate must be bound. Unknown bindings are rejected.
 Every bound account must exist, and distinct-role declarations must hold.
+
+`rate_id` is an identifier written in full. It names the one rate whose
+identifier matches it, and the values the match gives are that rate's
+variables; the exchange applies that instance. Before it does, the values
+must lie in their domains and in a row of every relation, variables the rate
+keeps distinct must differ, every derived value must be a quantity, and each
+role the rate fixes must be bound to its account (`resolve_allowed`). Refusals
+are reported in that order, after `ZeroUnits`; everything after resolution is
+the concrete pipeline, unchanged.
 
 For units `n > 0`, the effect accumulated for one concrete account is:
 
@@ -458,7 +479,11 @@ economy is unchanged and the error names the failing exchange's position.
 
 Model construction and deserialization share one canonical boundary.
 `EconomyBuilder::build` returns structured issues rather than silently
-replacing duplicate account or rate identifiers. Baskets likewise reject
+replacing duplicate account or rate identifiers. Rates with variables are
+checked there too: an identifier repeating a variable, a variable named but
+not declared or declared but not read, listed values read as a number,
+repeated values or relation rows, malformed relations, derived values that
+read an exchange, and two rates one identifier could match. Baskets likewise reject
 duplicate asset identifiers, remove zero quantities, and accept quantities only
 as decimal strings below `2²⁵⁶`. Invalid serialized input cannot construct a looser economy
 than ordinary Rust input.
@@ -1382,14 +1407,13 @@ The current foundation is intentionally bounded:
   type. Raw counts remain valid and explicitly mean atoms of their asset key.
 - Typed `uom` and Jiff adapters currently require the lowered atom count to fit
   `u64`, although kernel quantities are 256-bit.
-- Rates are concrete. There is no variable matching, unification, guard
-  language, or parameterized rate schema.
-- Problem builders may generate many concrete rates to represent one logical
-  schema.
-- Candidate binding enumeration is supplied by the model or adapter; the core
-  filters and validates proposals but does not enumerate every account
-  permutation. Search supports lazy visitor-based generation, but there is no
-  typed parameterized rate-schema language or automatic binding enumerator.
+- A rate's variables have finite domains and stand for one segment each; a
+  value is matched by equality, never unified across rates or computed by a
+  guard. Relations list their rows; derived values are whole numbers. Data
+  that exchanges change is state, never a relation (D-054).
+- The kernel lists a rate's instances (`instances_of`) and the engine offers
+  those whose roles the rate fixes (`CandidateSet::Instances`, D-055); an
+  instance with a free role is proposed by a script, which binds it.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
 - Stable insertion-ordered maps make iteration, diagnostics, and ordinary
@@ -1616,9 +1640,9 @@ factor.
 
 1. Measure concrete rate construction and lazy candidate enumeration in larger
    scheduling, game, and logistics models.
-2. If that pressure is material, define a serializable parameterized
-   rate-schema language with typed finite binding domains and automatic
-   candidate instantiation without arbitrary hidden guards.
+2. Built: rates with variables, relations, derived values and fixed
+   accounts, serialized as data, checked when an economy is built, with the
+   kernel listing instances and the engine offering them (D-054, D-055).
 3. Add explicit wire-schema versioning only when compatibility with deployed
    historical data becomes a real requirement.
 4. Finish [storage, runs and replay](docs/STORAGE.md). The canonical tree,
@@ -2321,6 +2345,36 @@ finds rewrites the pins and says why in its commit. A model's own tests
 still apply its rules by exchanges, and the independent oracles of exact
 cover, scheduling and perishables stay: they check the economy, not a
 strategy.
+
+### D-054: A rate has variables, read from the identifier an exchange names
+
+Decided with the user after D-053. A rate's identifier may be a pattern,
+`{name}` standing for one path segment as in RFC 6570 level 1, OpenAPI path
+templating and axum; a variable has a finite domain, a rate may relate
+variables (rows they take together), require two to differ, derive whole
+numbers from them and fix the account a role is bound to. An exchange names
+an instance, and applies the ordinary rate that instance is. There is no
+separate family or schema type: a rate with no variables is a concrete rate,
+byte for byte in JSON. It is data only: Rust ontologies, packages and MCP
+author the same data, and nothing executable decides what an instance is.
+Law structure that never changes, such as adjacency, is a relation; facts
+exchanges change are state the rate reads. Fixing accounts changes the
+principle that a role is checked only by what its account holds: a rate may
+now also say which account. Until now an ontology emitted one rate per value
+of every identifier it depended on, and scripts computed which concrete rate
+applied. Typed ontologies write patterns through the `…Pattern` mirrors
+`#[derive(Identifier)]` writes, never through text.
+
+### D-055: The engine lists the moves; scripts build on them
+
+Decided with D-054. The kernel lists every identifier a rate answers to,
+each variable's values in turn, kept where they name an instance. The engine
+offers, at one unit, the exchange of each instance whose roles the rate
+fixes (`CandidateSet::Instances`, under a prefix), and gives scripts the same
+through `state.moves(prefix)` and `state.exchange_of(rate)`. A package no
+longer writes a script to enumerate what its rates already say; a script
+proposes only what rates cannot: a choice, a binding of a free role, a
+quantity.
 
 ## 16. Success criteria
 

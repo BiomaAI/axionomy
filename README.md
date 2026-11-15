@@ -50,8 +50,8 @@ primitives:
 | --- | --- |
 | Asset | A resource, fact, proposition, capability, condition, memory item, or state token |
 | Account | An owner, actor, location, scope, or namespace |
-| Rate | A law describing what may be consumed, produced, and preserved |
-| Exchange | One concrete, role-bound firing of a rate |
+| Rate | A law describing what may be consumed, produced, and preserved; its identifier may name variables, `move/{from}/{to}` |
+| Exchange | One concrete, role-bound firing of a rate, or of one instance of it, `move/hall/kitchen` |
 
 The non-negotiable rule is:
 
@@ -164,6 +164,10 @@ packages, the engine; CLI, MCP, HTTP, and Studio remain outer adapters.
 - Atomic multi-account exchanges with consume, produce, and preserve baskets.
 - Serializable state-evaluated rate laws with exact integer expressions,
   named exchange parameters, and authoritative conditions for nonlinear rules.
+- Rates with variables: finite domains, relations, derived values and fixed
+  accounts, written as data, checked when an economy is built, each instance
+  the rate written by hand for its values; typed patterns derived beside
+  every identifier.
 - Full-width `MulDiv` with an explicit `Rounding` direction for fees, prices,
   and shares: intermediate products never overflow, and rounding is never implicit.
 - Explanatory assessments, complete shortfalls, projected deltas, and receipts.

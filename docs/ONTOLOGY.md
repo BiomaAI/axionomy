@@ -407,9 +407,13 @@ own types, written down, also reads as a `Paths` economy.
 - [ ] Every fact a law reads is an asset; nothing a law needs lives outside
       the economy.
 - [ ] Rates are laws over roles; who takes part is bound by each exchange.
+- [ ] One rate with variables per law, not one rate per value: its
+      identifier, assets and fixed accounts written with the `…Pattern`
+      mirrors, law structure that never changes as relations, what exchanges
+      change as state.
 - [ ] Nothing relies on an identifier's order for a domain order.
-- [ ] Roles that must be a particular account preserve that account's
-      identity asset.
+- [ ] Roles that must be a particular account are fixed to it
+      (`Rate::account`), not checked through an identity asset.
 - [ ] Conserved quantities are declared as invariants.
 - [ ] Each measured asset has one atomic basis, and amounts are written
       through `axionomy-units` or `axionomy-time` when they come in other
