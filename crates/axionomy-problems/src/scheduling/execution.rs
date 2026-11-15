@@ -1,7 +1,9 @@
 //! Executed job shop with queues, setup, shared labor and recoverable disruption.
 //! Each operation's laws serve both machines it may run on, `{machine}`, and
 //! the clock advances to any tick, `{to}`; every role is fixed to the account
-//! its identifier names.
+//! its identifier names. When each job arrives is its operations' queue laws'
+//! rows; when Machine Two fails and how long a repair takes are the shop's
+//! constants.
 use super::*;
 use axionomy::path;
 use axionomy::{OptionPattern, QuantityComparison as C};
@@ -73,31 +75,43 @@ pub fn alternatives(operation: Operation) -> [(Machine, u64); 2] {
         Operation::OneC | Operation::TwoC => [(Machine::Three, 1), (Machine::One, 2)],
     }
 }
+/// The tick Machine Two fails at, `{fault-at}`: one for the whole shop, a
+/// constant.
+fn fault_at() -> Param<u64> {
+    Param::new(path!("fault-at"))
+}
+/// How many ticks a repair takes, `{repair-duration}`: a constant.
+fn repair_duration() -> Param<u64> {
+    Param::new(path!("repair-duration"))
+}
 pub(super) fn build(stress: bool) -> World {
     let horizon = if stress { 24 } else { 16 };
+    // When each job arrives: the second later under stress.
+    let arrival = |job| -> u64 {
+        match job {
+            Job::One => 0,
+            Job::Two if stress => 3,
+            Job::Two => 1,
+        }
+    };
     let mut schedule = basket([
         (Asset::Active, 1),
         (Asset::Labor, if stress { 1 } else { 2 }),
         (Asset::RepairKit, 1),
         (Asset::TimeRemaining, horizon),
-        (Asset::FaultAt, if stress { 4 } else { 3 }),
         (Asset::FaultPending, 1),
-        (Asset::RepairDuration, if stress { 3 } else { 2 }),
     ]);
     for operation in OPERATIONS {
         schedule.insert(Asset::NotStarted(operation), Quantity::new(1));
     }
-    let mut builder = EconomyBuilder::new().account(AccountId::Success, Account::from(schedule));
-    for (job, ready, arrival) in [
-        (Job::One, Operation::OneA, 0),
-        (Job::Two, Operation::TwoA, if stress { 3 } else { 1 }),
-    ] {
+    let mut builder = EconomyBuilder::new()
+        .account(AccountId::Success, Account::from(schedule))
+        .constant(&fault_at(), if stress { 4 } else { 3 })
+        .constant(&repair_duration(), if stress { 3 } else { 2 });
+    for (job, ready) in [(Job::One, Operation::OneA), (Job::Two, Operation::TwoA)] {
         builder = builder.account(
             AccountId::Job(job),
-            Account::from(basket([
-                (Asset::Ready(ready), 1),
-                (Asset::Arrival, arrival),
-            ])),
+            Account::from(basket([(Asset::Ready(ready), 1)])),
         );
     }
     for machine in MACHINES {
@@ -118,6 +132,9 @@ pub(super) fn build(stress: bool) -> World {
     }
     for operation in OPERATIONS {
         let job = operation_spec(operation).0;
+        // An operation is queued once its job has arrived, which never
+        // changes: each machine's row gives it, `{arrival}`.
+        let arrives = Param::<u64>::new(path!("arrival"));
         builder = builder.rate_at(
             RateIdPattern::Queue {
                 operation: Slot::Is(operation),
@@ -125,11 +142,16 @@ pub(super) fn build(stress: bool) -> World {
             }
             .into(),
             operation_law(operation)
+                .relation(Relation::each_giving(
+                    &machine(),
+                    [arrives.name().clone()],
+                    alternatives(operation).map(|(runs, _)| (runs, [arrival(job)])),
+                ))
                 .condition(
                     path!("job-has-arrived"),
                     clock(),
                     C::GreaterThanOrEqual,
-                    Q::balance(Role::PrimaryJob, Asset::Arrival),
+                    arrives.quantity(),
                 )
                 .consume(Role::PrimaryJob, basket([(Asset::Ready(operation), 1)]))
                 .produce_at(
@@ -287,7 +309,7 @@ pub(super) fn build(stress: bool) -> World {
                 path!("disruption-is-due"),
                 clock(),
                 C::Equal,
-                Q::balance(Role::Schedule, Asset::FaultAt),
+                fault_at().quantity(),
             )
             .consume(Role::Schedule, basket([(Asset::FaultPending, 1)]))
             .produce(Role::Schedule, basket([(Asset::FaultOccurred, 1)]))
@@ -350,7 +372,7 @@ pub(super) fn build(stress: bool) -> World {
             .produce_computed(
                 Role::Machine,
                 Asset::Due,
-                clock() + Q::balance(Role::Schedule, Asset::RepairDuration),
+                clock() + repair_duration().quantity(),
             )
             .consume(
                 Role::Schedule,
@@ -390,7 +412,7 @@ pub(super) fn build(stress: bool) -> World {
                 path!("cannot-skip-a-scheduled-disruption"),
                 to.quantity(),
                 C::LessThanOrEqual,
-                Q::balance(Role::Schedule, Asset::FaultAt)
+                fault_at().quantity()
                     + Q::balance(Role::Schedule, Asset::FaultOccurred) * Q::constant(horizon),
             )
             .consume_computed(

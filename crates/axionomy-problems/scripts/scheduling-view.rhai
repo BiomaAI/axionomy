@@ -63,17 +63,14 @@ fn asset_label(name, parts) {
         "busy-labor" => "Occupied crew",
         "repair-kit" => "Repair kit",
         "used-repair-kit" => "Repair kit used",
-        "arrival" => "Job release time",
         "due" => "Activity completes at",
         "work-remaining" => "Interrupted work remaining",
         "done" => "Job completed",
         "completion-time" => "Actual completion time",
         "now" => "World time",
         "time-remaining" => "Workday remaining",
-        "fault-at" => "Scheduled disruption time",
         "fault-pending" => "Disruption pending",
         "fault-occurred" => "Disruption occurred",
-        "repair-duration" => "Repair duration",
         "not-started" => `${operation_name(parts[2])} has not started`,
         "started" => `${operation_name(parts[2])} started`,
         "start-time" => `${operation_name(parts[2])} start time`,
@@ -139,8 +136,8 @@ fn label(item) {
 
 fn format(asset) {
     switch asset.split("/")[0] {
-        "arrival" | "due" | "work-remaining" | "completion-time" | "now" | "time-remaining"
-            | "fault-at" | "repair-duration" | "start-time" | "end-time" => #{ scale: 0, unit: "ticks" },
+        "due" | "work-remaining" | "completion-time" | "now" | "time-remaining" | "start-time"
+            | "end-time" => #{ scale: 0, unit: "ticks" },
         _ => (),
     }
 }
@@ -213,6 +210,11 @@ fn machine_holding(state, account, asset, operation) {
     ()
 }
 
+// When `operation`'s job arrives, as the rows of its queue law give it.
+fn arrival(state, operation) {
+    state.values(state.instances(`queue/${operation}`)[0]).arrival
+}
+
 fn execution_scene(state) {
     let now = state.balance("success", "now");
     let lanes = [];
@@ -241,8 +243,8 @@ fn execution_scene(state) {
             `running until ${state.balance(account, "due")}`
         } else if queued != () {
             "reserved in machine queue"
-        } else if now < state.balance(account, "arrival") {
-            `job arrives at ${state.balance(account, "arrival")}`
+        } else if now < arrival(state, operation) {
+            `job arrives at ${arrival(state, operation)}`
         } else if state.balance(account, `ready/${operation}`) > 0 {
             "ready for machine choice"
         } else {

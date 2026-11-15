@@ -25,23 +25,19 @@ fn candidates(state) {
 // can start, the last in operation order is the only choice.
 // Otherwise advancing the clock to the next arrival, completion, repair or
 // disruption within the workday, queueing, repairing and resuming,
-// whichever apply.
+// whichever apply. A job yet to arrive holds its first operation ready, and
+// its queue law's rows give when it arrives.
 fn dispatch(state) {
     let schedule = state.balances("success");
     if !("active" in schedule) { return []; }
     let now = state.balance("success", "now");
     let times = [];
     for job in ["one", "two"] {
-        times.push(state.balance(`job/${job}`, "arrival"));
         times.push(state.balance(`job/${job}`, "due"));
     }
     times.push(state.balance("machine/two", "due"));
     let fault_pending = "fault-pending" in schedule;
-    if fault_pending { times.push(state.balance("success", "fault-at")); }
-    let upcoming = ();
-    for time in times {
-        if time > now && (upcoming == () || time < upcoming) { upcoming = time; }
-    }
+    if fault_pending { times.push(state.constant("fault-at")); }
 
     let machines = #{
         one: state.balances("machine/one"),
@@ -64,6 +60,7 @@ fn dispatch(state) {
                 "ready" => {
                     // The machines it may run on: its queue law's instances.
                     for queue in state.instances(`queue/${parts[1]}`) {
+                        times.push(state.values(queue).arrival);
                         let held = machines[queue.split("/")[2]];
                         if labor && "idle" in held && "online" in held { queues[queue] = (); }
                     }
@@ -90,13 +87,18 @@ fn dispatch(state) {
         }
     }
 
+    let upcoming = ();
+    for time in times {
+        if time > now && (upcoming == () || time < upcoming) { upcoming = time; }
+    }
+
     let first = ["close"] + completions.keys();
     if "repairing" in machines.two { first.push("complete-repair"); }
     for rate in first {
         let proposal = state.exchange_of(rate);
         if state.applicable(proposal) { return [proposal]; }
     }
-    if fault_pending && now == state.balance("success", "fault-at") {
+    if fault_pending && now == state.constant("fault-at") {
         for rate in ["fault/none"] + faults.keys() {
             let proposal = state.exchange_of(rate);
             if state.applicable(proposal) { return [proposal]; }
