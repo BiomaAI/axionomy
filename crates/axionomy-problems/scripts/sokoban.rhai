@@ -1,7 +1,6 @@
-// Sokoban: the exchanges the player may try. Moves and pushes from the
-// player's cell, left, right, up and down; finishing; latching a panel. Only
-// those that apply, in that order. Each is its rate's exchange, which fixes
-// every role to the cell or puzzle it names.
+// Sokoban: what a search reads beyond the moves, which are the rates'
+// instances that apply (every rate fixes each role to the cell or puzzle
+// it names): A*'s lower bound, and the cost of a step.
 
 fn number(text, prefix) {
     parse_int(text.sub_string(prefix.len()))
@@ -20,51 +19,6 @@ fn goals(state) {
         if role.starts_with("goal/") { goals.push(number(finish.account(role), "cell/")); }
     }
     goals
-}
-
-fn candidates(state) {
-    let size = dimensions(state);
-    let width = size[0];
-    let height = size[1];
-    // The player's cell, and each crate with the cell it is on.
-    let player = -1;
-    let crates = [];
-    for account in state.accounts("cell/") {
-        let cell = number(account, "cell/");
-        let holds = state.balances(account);
-        if "player" in holds { player = cell; }
-        for asset in holds.keys() {
-            if asset.starts_with("crate/") { crates.push([number(asset, "crate/"), cell]); }
-        }
-    }
-    if player < 0 { return []; }
-
-    let x = player % width;
-    let y = player / width;
-    let neighbours = [];
-    if x > 0 { neighbours.push(player - 1); }
-    if x + 1 < width { neighbours.push(player + 1); }
-    if y > 0 { neighbours.push(player - width); }
-    if y + 1 < height { neighbours.push(player + width); }
-
-    let proposals = [];
-    for next in neighbours {
-        if "empty" in state.balances(`cell/${next}`) {
-            proposals.push(state.exchange_of(`move/${player}/${next}`));
-            continue;
-        }
-        let pushed = crates.filter(|pair| pair[1] == next);
-        if pushed.is_empty() { continue; }
-        let to_x = (next % width) * 2 - x;
-        let to_y = (next / width) * 2 - y;
-        if to_x < 0 || to_y < 0 || to_x >= width || to_y >= height { continue; }
-        let to = to_y * width + to_x;
-        if "empty" in state.balances(`cell/${to}`) {
-            proposals.push(state.exchange_of(`push/${player}/${next}/${to}/${pushed[0][0]}`));
-        }
-    }
-    proposals.push(state.exchange_of("finish"));
-    proposals.filter(|proposal| state.applicable(proposal)) + state.moves("latch")
 }
 
 // A*'s lower bound: each crate's distance to its nearest goal cell, in

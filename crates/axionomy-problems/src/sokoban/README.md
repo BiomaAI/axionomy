@@ -91,7 +91,8 @@ The model's tests apply the rules directly:
 - `mod.rs` is the model: every warehouse, its moves, pushes and mechanisms.
 - `package.rs` writes its package, the warehouse's only implementation of
   its searches: its economies under refs, goals, strategies, experiments and
-  view, whose scripts are `scripts/sokoban.rhai` and
-  `scripts/sokoban-view.rhai`.
+  view. The searches' moves are the rates' instances that apply
+  (`CandidateSet::Instances`); `scripts/sokoban.rhai` holds only A*'s lower
+  bound and a step's cost, and `scripts/sokoban-view.rhai` draws the board.
 
 Sokoban is one of the [conformance problems](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
