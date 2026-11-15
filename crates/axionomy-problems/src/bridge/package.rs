@@ -3,11 +3,10 @@
 //! credit and on-time objectives and the elapsed time, its strategies, and
 //! an experiment comparing them on each instance.
 //!
-//! The exact Pareto searches run on Micro alone, as the Rust bridge runs them:
-//! timed traffic is compared over the policies it evaluates, and the Rust
-//! preference for a traveller is the best of those runs by that traveller's
-//! on-time trips, priority and credit, which `pick` finds among the
-//! experiment's results.
+//! The exact Pareto searches run on Micro alone: timed traffic is compared
+//! over the policies the script plays, and the preference for a traveller is
+//! the best of those runs by that traveller's on-time trips, priority and
+//! credit, which the engine's `pick` finds among the experiment's results.
 
 use crate::{
     bridge::{self, Ontology},

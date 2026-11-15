@@ -2,12 +2,7 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
-    basket,
-};
-use axionomy_search::{
-    SearchSolution, bfs,
-    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
 
 #[cfg(feature = "packages")]
@@ -142,14 +137,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Solution = SearchSolution<Ontology>;
-pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectiveKey {
-    Priority(AgentId),
-    Credit(AgentId),
-}
 
 pub fn initial() -> World {
     build(1)
@@ -510,136 +497,6 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Bridge, basket([(Asset::Solved, 1)]))
 }
 
-pub fn candidates(world: &World) -> Vec<Action> {
-    if timed::enabled(world) {
-        return timed::candidates(world);
-    }
-    let mut ids: Vec<_> = world.rate_ids().copied().collect();
-    ids.sort();
-    world.applicable(ids.into_iter().map(action))
-}
-
-pub fn solve(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), |world| {
-        if timed::enabled(world) {
-            timed::search_candidates(world)
-        } else {
-            candidates(world)
-        }
-    })
-}
-
-/// Exhaustively compares valid allocation mechanisms using participant
-/// priority and retained-credit assets.
-pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    pareto::search(world, &goal(), candidates, objectives)
-}
-
-pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    ObjectiveVector::try_new([
-        Objective::maximize(
-            ObjectiveKey::Priority(AgentId::A),
-            priority(world, AgentId::A),
-        ),
-        Objective::maximize(
-            ObjectiveKey::Priority(AgentId::B),
-            priority(world, AgentId::B),
-        ),
-        Objective::maximize(ObjectiveKey::Credit(AgentId::A), credit(world, AgentId::A)),
-        Objective::maximize(ObjectiveKey::Credit(AgentId::B), credit(world, AgentId::B)),
-    ])
-    .expect("bridge objective schema is static and unique")
-}
-
-pub fn priority(world: &World, agent: AgentId) -> u64 {
-    world
-        .balance(&AccountId::Agent(agent), &Asset::PriorityBenefit)
-        .to_u64()
-}
-
-pub fn credit(world: &World, agent: AgentId) -> u64 {
-    world
-        .balance(&AccountId::Agent(agent), &Asset::Credit)
-        .to_u64()
-}
-
-pub fn first_come_proposal(first: AgentId) -> Option<Trace<Ontology>> {
-    let second = other(first);
-    validated_trace([
-        RateId::ClaimFirst { agent: first },
-        RateId::Cross { agent: first },
-        RateId::ClaimSecond { agent: second },
-        RateId::Cross { agent: second },
-        RateId::Finish,
-    ])
-}
-
-pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Trace<Ontology>> {
-    let winner = if bid_a >= bid_b {
-        AgentId::A
-    } else {
-        AgentId::B
-    };
-    let loser = other(winner);
-    let (winning_bid, losing_bid) = if winner == AgentId::A {
-        (bid_a, bid_b)
-    } else {
-        (bid_b, bid_a)
-    };
-    validated_trace([
-        RateId::SubmitBid {
-            agent: AgentId::A,
-            amount: bid_a,
-        },
-        RateId::SubmitBid {
-            agent: AgentId::B,
-            amount: bid_b,
-        },
-        RateId::Resolve {
-            winner,
-            winning_bid,
-            losing_bid,
-        },
-        RateId::Cross { agent: winner },
-        RateId::YieldToWaiting { agent: loser },
-        RateId::Cross { agent: loser },
-        RateId::Finish,
-    ])
-}
-
-pub fn first_come_showcase(first: AgentId) -> Option<Trace<Ontology>> {
-    timed::run(&initial_showcase(), timed::Policy::Priority(first))
-}
-
-pub fn first_come_stress(first: AgentId) -> Option<Trace<Ontology>> {
-    timed::run(&initial_stress(), timed::Policy::Priority(first))
-}
-
-pub fn auction_showcase() -> Option<Trace<Ontology>> {
-    timed::run(&initial_showcase(), timed::Policy::Auction)
-}
-
-pub fn auction_stress() -> Option<Trace<Ontology>> {
-    timed::run(&initial_stress(), timed::Policy::Auction)
-}
-
-fn validated_trace<const N: usize>(rates: [RateId; N]) -> Option<Trace<Ontology>> {
-    validated_trace_from(initial(), rates)
-}
-
-fn validated_trace_from(
-    mut world: World,
-    rates: impl IntoIterator<Item = RateId>,
-) -> Option<Trace<Ontology>> {
-    let mut trace = Trace::new();
-    for rate in rates {
-        let exchange = action(rate);
-        world.apply(exchange.clone()).ok()?;
-        trace.push(exchange);
-    }
-    world.matches(&goal()).then_some(trace)
-}
-
 fn other(agent: AgentId) -> AgentId {
     match agent {
         AgentId::A => AgentId::B,
@@ -647,6 +504,9 @@ fn other(agent: AgentId) -> AgentId {
     }
 }
 
+/// The exchange applying `rate` once: a traveller's own move bound to its
+/// account and the bridge, a resolution to its winner and loser, a round's
+/// reset or the finish to both travellers.
 pub fn action(rate: RateId) -> Action {
     match rate {
         RateId::SubmitBid { agent, .. }
@@ -680,25 +540,52 @@ mod tests {
 
     #[test]
     fn auction_and_first_come_are_both_valid_mechanisms() {
-        let first_come = first_come_proposal(AgentId::B).expect("mechanism is feasible");
-        let auction = auction_proposal(2, 1).expect("mechanism is feasible");
-        assert_eq!(first_come.exchanges().len(), 5);
-        assert_eq!(auction.exchanges().len(), 7);
-        assert!(auction.exchanges().iter().any(|exchange| {
-            matches!(
-                exchange.rate(),
-                RateId::Resolve {
-                    winner: AgentId::A,
-                    ..
-                }
-            )
-        }));
+        let first_come = [
+            RateId::ClaimFirst { agent: AgentId::B },
+            RateId::Cross { agent: AgentId::B },
+            RateId::ClaimSecond { agent: AgentId::A },
+            RateId::Cross { agent: AgentId::A },
+            RateId::Finish,
+        ];
+        let auction = [
+            RateId::SubmitBid {
+                agent: AgentId::A,
+                amount: 2,
+            },
+            RateId::SubmitBid {
+                agent: AgentId::B,
+                amount: 1,
+            },
+            RateId::Resolve {
+                winner: AgentId::A,
+                winning_bid: 2,
+                losing_bid: 1,
+            },
+            RateId::Cross { agent: AgentId::A },
+            RateId::YieldToWaiting { agent: AgentId::B },
+            RateId::Cross { agent: AgentId::B },
+            RateId::Finish,
+        ];
+        // A bid of A=2 and B=1 resolves to A, never to B.
+        let bid = initial()
+            .replayed(&auction[..2].iter().copied().map(action).collect())
+            .unwrap();
+        assert!(!bid.is_applicable(&action(RateId::Resolve {
+            winner: AgentId::B,
+            winning_bid: 2,
+            losing_bid: 1,
+        })));
 
-        for trace in [&first_come, &auction] {
-            let mut replay = initial();
-            replay.replay(trace).expect("mechanism must replay");
-            assert!(replay.matches(&goal()));
-            assert!(candidates(&replay).is_empty());
+        for rates in [&first_come[..], &auction[..]] {
+            let settled = initial()
+                .replayed(&rates.iter().copied().map(action).collect())
+                .expect("the mechanism replays");
+            assert!(settled.matches(&goal()));
+            assert!(
+                settled
+                    .rate_ids()
+                    .all(|rate| !settled.is_applicable(&action(*rate)))
+            );
         }
     }
 
@@ -761,47 +648,5 @@ mod tests {
         .bind(Role::Bridge, AccountId::Bridge);
 
         assert!(!world.is_applicable(&swapped));
-    }
-
-    #[test]
-    fn pareto_front_retains_both_priority_allocations_and_rejects_wasteful_payment() {
-        let initial = initial();
-        let result = pareto_front(&initial).unwrap();
-        let mut outcomes = Vec::new();
-
-        for entry in result.front().entries() {
-            let replayed = initial.replayed(entry.payload()).unwrap();
-            assert!(replayed.matches(&goal()));
-            assert_eq!(&objectives(&replayed), entry.objectives());
-            outcomes.push((
-                priority(&replayed, AgentId::A),
-                priority(&replayed, AgentId::B),
-                credit(&replayed, AgentId::A),
-                credit(&replayed, AgentId::B),
-            ));
-        }
-
-        outcomes.sort_unstable();
-        assert_eq!(outcomes, [(0, 1, 2, 2), (1, 0, 2, 2)]);
-    }
-
-    #[test]
-    fn stress_profile_requires_a_bounded_third_round() {
-        let showcase = first_come_showcase(AgentId::A).expect("showcase proposal");
-        let stress = first_come_stress(AgentId::A).expect("stress proposal");
-        assert!(stress.exchanges().len() > showcase.exchanges().len());
-
-        for trace in [stress, auction_stress().expect("stress auction proposal")] {
-            let replayed = initial_stress()
-                .replayed(&trace)
-                .expect("stress mechanism replays");
-            assert!(replayed.matches(&goal()));
-            assert_eq!(
-                replayed
-                    .balance(&AccountId::Bridge, &Asset::RoundsRemaining)
-                    .to_u64(),
-                0
-            );
-        }
     }
 }

@@ -6,12 +6,6 @@ use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 pub fn enabled(world: &World) -> bool {
     world.rate(&RateId::Advance { to: 1 }).is_some()
 }
-pub fn now(world: &World) -> u64 {
-    world.balance(&AccountId::Bridge, &Asset::Now).to_u64()
-}
-fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Agent(agent), &asset).to_u64()
-}
 fn clock() -> Q<Ontology> {
     Q::balance(Role::Bridge, Asset::Now)
 }
@@ -314,205 +308,97 @@ pub(super) fn build(source: World) -> World {
         .expect("timed bridge is closed")
 }
 
-/// Propose the next meaningful time boundary; the core also validates arbitrary
-/// user-selected waits. Arrival, completion, and lease times come from accounts.
-pub fn next_time(world: &World) -> Option<u8> {
-    let now = now(world);
-    [AgentId::A, AgentId::B]
-        .into_iter()
-        .flat_map(|agent| {
-            let mut events = Vec::new();
-            if balance(world, agent, Asset::At(Side::West)) > 0 {
-                events.push(balance(world, agent, Asset::Arrival));
-            }
-            if balance(world, agent, Asset::InTransit) + balance(world, agent, Asset::OnDetour) > 0
-            {
-                events.push(balance(world, agent, Asset::ReadyAt));
-            }
-            if balance(world, agent, Asset::CrossingRight) > 0
-                && balance(world, agent, Asset::At(Side::West)) > 0
-            {
-                events.push(balance(world, agent, Asset::LeaseUntil) + 1);
-            }
-            events
-        })
-        .filter(|time| *time > now && *time <= 64)
-        .min()
-        .map(|time| time as u8)
-}
-pub fn candidates(world: &World) -> Vec<Action> {
-    let next = next_time(world);
-    let mut ids: Vec<_> = world
-        .rate_ids()
-        .copied()
-        .filter(|id| match id {
-            RateId::Advance { to } => Some(*to) == next,
-            _ => true,
-        })
-        .collect();
-    ids.sort();
-    world.applicable(ids.into_iter().map(action))
-}
-pub fn search_candidates(world: &World) -> Vec<Action> {
-    let candidates = candidates(world);
-    let ready = candidates.iter().find(|a| {
-        matches!(
-            a.rate(),
-            RateId::Complete { .. } | RateId::ResetRound | RateId::Finish | RateId::Cross { .. }
-        )
-    });
-    if let Some(ready) = ready {
-        return vec![ready.clone()];
-    }
-    candidates
-        .into_iter()
-        .filter(|a| {
-            !matches!(
-                a.rate(),
-                RateId::SubmitBid { .. }
-                    | RateId::WithdrawBid { .. }
-                    | RateId::Resolve { .. }
-                    | RateId::ExpireReservation { .. }
-            )
-        })
-        .collect()
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Policy {
-    Priority(AgentId),
-    Auction,
-    Adaptive,
-}
-
-pub fn run(initial: &World, policy: Policy) -> Option<Trace<Ontology>> {
-    let mut world = initial.clone();
-    let mut trace = Trace::new();
-    for _ in 0..150 {
-        if world.matches(&goal()) {
-            return Some(trace);
-        }
-        let choices = candidates(&world);
-        let mut chosen = choices
-            .iter()
-            .find(|a| {
-                matches!(
-                    a.rate(),
-                    RateId::Complete { .. }
-                        | RateId::ResetRound
-                        | RateId::Finish
-                        | RateId::Cross { .. }
-                        | RateId::Resolve { .. }
-                )
-            })
-            .cloned();
-        if chosen.is_none() {
-            match policy {
-                Policy::Priority(first) => {
-                    let is_first = world
-                        .balance(&AccountId::Bridge, &Asset::FirstTurn)
-                        .to_u64()
-                        > 0;
-                    chosen = choices.iter().find(|a| matches!(a.rate(), RateId::ClaimFirst { agent } if *agent == first && is_first) || matches!(a.rate(), RateId::ClaimSecond { .. } | RateId::YieldToWaiting { .. })).cloned();
-                }
-                Policy::Auction => {
-                    if world
-                        .balance(&AccountId::Bridge, &Asset::FirstTurn)
-                        .to_u64()
-                        > 0
-                    {
-                        if [AgentId::A, AgentId::B]
-                            .iter()
-                            .all(|agent| now(&world) >= balance(&world, *agent, Asset::Arrival))
-                        {
-                            for agent in [AgentId::A, AgentId::B] {
-                                let slack = balance(&world, agent, Asset::Deadline)
-                                    .saturating_sub(now(&world) + duration(agent));
-                                let amount = (if slack <= 2 { 2 } else { 1 })
-                                    .min(credit(&world, agent))
-                                    as u8;
-                                let bid = action(RateId::SubmitBid { agent, amount });
-                                if world.is_applicable(&bid) {
-                                    chosen = Some(bid);
-                                    break;
-                                }
-                            }
-                            if chosen.is_none() {
-                                chosen = choices
-                                    .iter()
-                                    .find(|a| matches!(a.rate(), RateId::ClaimFirst { .. }))
-                                    .cloned();
-                            }
-                        }
-                    } else {
-                        chosen = choices
-                            .iter()
-                            .find(|a| {
-                                matches!(
-                                    a.rate(),
-                                    RateId::YieldToWaiting { .. } | RateId::ClaimSecond { .. }
-                                )
-                            })
-                            .cloned();
-                    }
-                }
-                Policy::Adaptive => {
-                    // Pay for the alternate route only when congestion makes
-                    // the bridge miss a deadline that the detour can still meet.
-                    chosen = choices
-                        .iter()
-                        .filter(|a| matches!(a.rate(), RateId::Detour { .. }))
-                        .find(|a| {
-                            let RateId::Detour { agent, .. } = *a.rate() else {
-                                unreachable!()
-                            };
-                            let deadline = balance(&world, agent, Asset::Deadline);
-                            let occupied_until =
-                                balance(&world, other(agent), Asset::ReadyAt).max(now(&world));
-                            now(&world) + 3 <= deadline
-                                && occupied_until + duration(agent) > deadline
-                        })
-                        .cloned();
-                    if chosen.is_none() {
-                        chosen = choices
-                            .iter()
-                            .filter(|a| {
-                                matches!(
-                                    a.rate(),
-                                    RateId::ClaimFirst { .. }
-                                        | RateId::ClaimSecond { .. }
-                                        | RateId::YieldToWaiting { .. }
-                                )
-                            })
-                            .min_by_key(|a| {
-                                let agent = match *a.rate() {
-                                    RateId::ClaimFirst { agent }
-                                    | RateId::ClaimSecond { agent }
-                                    | RateId::YieldToWaiting { agent } => agent,
-                                    _ => unreachable!(),
-                                };
-                                balance(&world, agent, Asset::Deadline)
-                            })
-                            .cloned();
-                    }
-                }
-            }
-        }
-        let chosen = chosen.or_else(|| {
-            choices
-                .iter()
-                .find(|a| matches!(a.rate(), RateId::Advance { .. }))
-                .cloned()
-        })?;
-        world.apply(chosen.clone()).ok()?;
-        trace.push(chosen);
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
+        world.balance(&AccountId::Agent(agent), &asset).to_u64()
+    }
+
+    /// `world` after `rates`, each applied in turn.
+    fn played(world: &World, rates: &[RateId]) -> World {
+        let mut world = world.clone();
+        for rate in rates {
+            world
+                .apply(action(*rate))
+                .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
+        }
+        world
+    }
+
+    /// The first round, A first: A crosses on time, and B, who waits for the
+    /// lane, crosses late.
+    const WAITED_ROUND: [RateId; 9] = [
+        RateId::ClaimFirst { agent: AgentId::A },
+        RateId::Cross { agent: AgentId::A },
+        RateId::Advance { to: 1 },
+        RateId::Advance { to: 3 },
+        RateId::Complete {
+            agent: AgentId::A,
+            detour: false,
+            late: false,
+        },
+        RateId::ClaimSecond { agent: AgentId::B },
+        RateId::Cross { agent: AgentId::B },
+        RateId::Advance { to: 5 },
+        RateId::Complete {
+            agent: AgentId::B,
+            detour: false,
+            late: true,
+        },
+    ];
+
+    /// The first round, A first, while B pays for the detour and arrives on
+    /// time.
+    const DETOURED_ROUND: [RateId; 8] = [
+        RateId::ClaimFirst { agent: AgentId::A },
+        RateId::Cross { agent: AgentId::A },
+        RateId::Advance { to: 1 },
+        RateId::Detour {
+            agent: AgentId::B,
+            waiting: false,
+        },
+        RateId::Advance { to: 3 },
+        RateId::Complete {
+            agent: AgentId::A,
+            detour: false,
+            late: false,
+        },
+        RateId::Advance { to: 4 },
+        RateId::Complete {
+            agent: AgentId::B,
+            detour: true,
+            late: false,
+        },
+    ];
+
+    /// A later round, reset and started at `at`: A crosses first, then B,
+    /// both on time.
+    fn later_round(at: u8) -> [RateId; 11] {
+        [
+            RateId::ResetRound,
+            RateId::Advance { to: at },
+            RateId::ClaimFirst { agent: AgentId::A },
+            RateId::Cross { agent: AgentId::A },
+            RateId::Advance { to: at + 2 },
+            RateId::Advance { to: at + 3 },
+            RateId::Complete {
+                agent: AgentId::A,
+                detour: false,
+                late: false,
+            },
+            RateId::ClaimSecond { agent: AgentId::B },
+            RateId::Cross { agent: AgentId::B },
+            RateId::Advance { to: at + 5 },
+            RateId::Complete {
+                agent: AgentId::B,
+                detour: false,
+                late: false,
+            },
+        ]
+    }
+
     #[test]
     fn lane_occupancy_and_expiring_reservations_are_enforced_by_core() {
         let mut world = initial_showcase();
@@ -552,36 +438,43 @@ mod tests {
         assert_eq!(balance(&world, AgentId::B, Asset::OnDetour), 1);
     }
     #[test]
-    fn policies_replay_and_trade_deadlines_against_credit_on_identical_traffic() {
-        for initial in [initial_showcase(), initial_stress()] {
-            let policies = [
-                Policy::Priority(AgentId::A),
-                Policy::Priority(AgentId::B),
-                Policy::Auction,
-                Policy::Adaptive,
-            ];
-            let mut outcomes = Vec::new();
-            for policy in policies {
-                let trace = run(&initial, policy).expect("policy completes traffic");
-                assert_eq!(trace, run(&initial, policy).unwrap());
-                let replay = initial.replayed(&trace).unwrap();
-                assert!(replay.matches(&goal()));
-                assert!(candidates(&replay).is_empty());
-                outcomes.push((
-                    [AgentId::A, AgentId::B]
-                        .into_iter()
-                        .map(|a| balance(&replay, a, Asset::Late))
-                        .sum::<u64>(),
-                    credit(&replay, AgentId::A) + credit(&replay, AgentId::B),
-                ));
-            }
-            assert!(
-                outcomes[0].0 > outcomes[3].0,
-                "responsive detours avoid lateness: {outcomes:?}"
-            );
-            assert!(outcomes[0].1 > outcomes[3].1, "detours have a real price");
-            let solved = solve(&initial).unwrap();
-            assert!(initial.replayed(solved.trace()).unwrap().matches(&goal()));
+    fn a_paid_detour_avoids_a_late_trip_on_the_same_traffic() {
+        let world = initial_showcase();
+        let waited = played(
+            &world,
+            &[&WAITED_ROUND[..], &later_round(6), &[RateId::Finish]].concat(),
+        );
+        let detoured = played(
+            &world,
+            &[&DETOURED_ROUND[..], &later_round(5), &[RateId::Finish]].concat(),
+        );
+        let late = |end: &World| {
+            balance(end, AgentId::A, Asset::Late) + balance(end, AgentId::B, Asset::Late)
+        };
+        let credit = |end: &World| {
+            balance(end, AgentId::A, Asset::Credit) + balance(end, AgentId::B, Asset::Credit)
+        };
+        for end in [&waited, &detoured] {
+            assert!(end.matches(&goal()));
         }
+        assert_eq!((late(&waited), credit(&waited)), (1, 8));
+        assert_eq!((late(&detoured), credit(&detoured)), (0, 7));
+    }
+
+    #[test]
+    fn stress_needs_a_third_round() {
+        let two_rounds = [&WAITED_ROUND[..], &later_round(6)].concat();
+        let finish = action(RateId::Finish);
+        assert!(played(&initial_showcase(), &two_rounds).is_applicable(&finish));
+        let stress = played(&initial_stress(), &two_rounds);
+        assert!(!stress.is_applicable(&finish));
+        let solved = played(&stress, &[&later_round(12)[..], &[RateId::Finish]].concat());
+        assert!(solved.matches(&goal()));
+        assert_eq!(
+            solved
+                .balance(&AccountId::Bridge, &Asset::RoundsRemaining)
+                .to_u64(),
+            0
+        );
     }
 }
