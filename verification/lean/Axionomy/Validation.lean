@@ -13,10 +13,16 @@ inductive Issue (AccountId RateId Role : Type) where
   | missingAccount (account : AccountId)
   /-- An identifier gives a rate's variable a value outside its domain. -/
   | outsideDomain (rate : RateId) (name : String)
+  /-- An identifier gives some variables values no row of a relation of its
+  rate holds together. -/
+  | outsideRelation (rate : RateId) (names : List String)
   /-- An identifier gives two variables a rate requires to differ one value. -/
   | variablesMustDiffer (rate : RateId) (left right : String)
   /-- A role is bound to an account other than the one its rate fixes. -/
   | wrongAccount (role : Role) (expected : AccountId)
+  /-- A value the rate derives from its variables' values is not a whole
+  number it can hold. -/
+  | derivedFails (rate : RateId) (name : String)
   deriving DecidableEq, Repr
 
 structure Metadata (Role : Type) where

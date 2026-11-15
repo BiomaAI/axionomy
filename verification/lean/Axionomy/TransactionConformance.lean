@@ -41,6 +41,8 @@ def failure : Transaction.Failure Nat Nat Nat Nat → Json
   | .structural (.variablesMustDiffer id left right) => tagged "variables_must_differ"
       [("rate", toJson id), ("left", toJson left), ("right", toJson right)]
   | .structural (.wrongAccount role expected) => tagged "wrong_account" [("role", toJson role), ("expected", toJson expected)]
+  | .structural (.outsideRelation id names) => tagged "outside_relation" [("rate", toJson id), ("variables", toJson names)]
+  | .structural (.derivedFails id name) => tagged "derived_fails" [("rate", toJson id), ("variable", toJson name)]
   | .structural .zeroUnits => tagged "zero_units"
   | .structural (.missingParameter key) => tagged "missing_parameter" [("parameter", toJson key)]
   | .structural (.unknownParameter key) => tagged "unknown_parameter" [("parameter", toJson key)]

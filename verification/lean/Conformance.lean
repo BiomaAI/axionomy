@@ -389,6 +389,8 @@ def validationIssue (issue : Validation.Issue Nat Nat Nat) : ValidationIssueCase
   | .outsideDomain id name => ⟨"outsideDomain", [id], name⟩
   | .variablesMustDiffer id left right => ⟨"variablesMustDiffer", [id], left ++ "," ++ right⟩
   | .wrongAccount role expected => ⟨"wrongAccount", [role, expected], ""⟩
+  | .outsideRelation id names => ⟨"outsideRelation", [id], ",".intercalate names⟩
+  | .derivedFails id name => ⟨"derivedFails", [id], name⟩
 
 structure ValidationCase where
   roles : List Nat

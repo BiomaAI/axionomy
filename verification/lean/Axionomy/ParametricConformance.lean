@@ -88,6 +88,11 @@ them that a rate without variables never had are left out. -/
 def schemaJson (schema : Schema Role) : Json := Json.mkObj <|
   optional "variables" (schema.variables.map domainJson) ++
   optional "distinct_variables" (schema.distinctVariables.map toJson) ++
+  optional "relations" (schema.relations.map fun relation => Json.mkObj [
+    ("variables", toJson relation.names),
+    ("rows", toJson (relation.rows.map fun row => row.map segmentText))]) ++
+  optional "derived" (schema.derived.map fun derived => Json.mkObj [
+    ("name", toJson derived.name), ("value", termJson derived.value)]) ++
   optional "accounts" (schema.accounts.map fun (role, account) => toJson (role, patternText account)) ++
   optional "opens" (schema.opens.map toJson) ++ optional "closes" (schema.closes.map toJson) ++ [
   ("consume", basketsJson schema.consume), ("produce", basketsJson schema.produce),
@@ -130,6 +135,10 @@ def failureJson : Parametric.Failure Role → Json
       [("rate", toJson (writtenText id)), ("left", toJson left), ("right", toJson right)]
   | .structural (.wrongAccount role expected) => tagged "wrong_account"
       [("role", toJson role), ("expected", toJson (writtenText expected))]
+  | .structural (.outsideRelation id names) => tagged "outside_relation"
+      [("rate", toJson (writtenText id)), ("variables", toJson names)]
+  | .structural (.derivedFails id name) => tagged "derived_fails"
+      [("rate", toJson (writtenText id)), ("variable", toJson name)]
   | .rateOverflow id asset => tagged "rate_overflow" [("rate", toJson (writtenText id)), ("asset", toJson (writtenText asset))]
   | .lawEvaluation id message => tagged "law_evaluation" [("rate", toJson (writtenText id)), ("message", toJson message)]
   | .conditionFailed id label => tagged "condition_failed" [("rate", toJson (writtenText id)), ("label", toJson label)]
@@ -176,7 +185,10 @@ def normalize (schema : Schema Role) : Schema Role :=
 
 def law (id : String) (schema : Schema Role) : Law Role := ⟨pattern id, normalize schema⟩
 
-def blank : Schema Role := ⟨[], [], [], [], [], [], [], [], [], [], [], [], [], []⟩
+def blank : Schema Role := ⟨[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []⟩
+
+def relation (names : List String) (rows : List (List String)) : Relation :=
+  ⟨names, rows.map fun row => row.map Path.segmentOf⟩
 
 def range (name : String) (first last : Nat) : Variable := ⟨name, .range first last⟩
 def values (name : String) (listed : List String) : Variable := ⟨name, .values (listed.map Path.segmentOf)⟩
@@ -245,6 +257,31 @@ def admit : Law Role := law "admit/{patient}" { blank with
   consume := [(0, entries [("bed", 1)])]
   produce := [(1, entries [("admitted", 1)])] }
 
+-- A step between cells that adjoin: which do is law structure, a relation
+-- over the identifier's variables.
+def step : Law Role := law "step/{from}/{to}" { blank with
+  variables := [values "from" ["a", "b", "c"], values "to" ["a", "b", "c"]]
+  relations := [relation ["from", "to"] [["a", "b"], ["b", "a"], ["b", "c"], ["c", "b"]]]
+  consume := [(0, entries [("at/{from}", 1)])]
+  produce := [(0, entries [("at/{to}", 1)])] }
+
+-- Climbing from a row to the next: the next row is derived from the row,
+-- and so is the cost.
+def climb : Law Role := law "climb/{row}" { blank with
+  variables := [range "row" 0 3]
+  derived := [⟨"next", .binary .add (.var "row") (.constant 1)⟩,
+    ⟨"cost", .binary .mul (.var "next") (.constant 2)⟩]
+  consume := [(0, entries [("row/{row}", 1)])]
+  produce := [(0, entries [("row/{next}", 1)])]
+  computedConsume := [⟨0, pattern "kit", .var "cost"⟩] }
+
+-- Descending to the row before: none is before the first.
+def descend : Law Role := law "descend/{row}" { blank with
+  variables := [range "row" 0 3]
+  derived := [⟨"previous", .binary .sub (.var "row") (.constant 1)⟩]
+  consume := [(0, entries [("row/{row}", 1)])]
+  produce := [(0, entries [("row/{previous}", 1)])] }
+
 -- A rate with no variables beside them.
 def rest : Law Role := law "rest" { blank with
   consume := [(0, entries [("kit", 1)])]
@@ -257,10 +294,11 @@ def world : List (Written × List (Written × Nat)) := [
   account "patient/10" [("at/east", 1)],
   account "column/0" [("height", 1)],
   account "cell/0/1" [],
-  account "cell/0/0" [("piece", 1)]]
+  account "cell/0/0" [("piece", 1)],
+  account "climber" [("row/0", 1), ("row/1", 1), ("kit", 6), ("at/a", 1)]]
 
 def fixtures : Array Json := Id.run do
-  let rates := [stabilize, drive, pile, brim, drop, admit, rest]
+  let rates := [stabilize, drive, pile, brim, drop, admit, step, climb, descend, rest]
   let mut cases := #[]
   for (label, proposal) in [
       ("instance", proposal "stabilize/1/east" [(0, "responder"), (1, "patient/1")]),
@@ -281,6 +319,14 @@ def fixtures : Array Json := Id.run do
       ("opens-a-written-account", proposal "admit/3" [(0, "responder"), (1, "patient/3")]),
       ("opens-an-existing-account", proposal "admit/2" [(0, "responder"), (1, "patient/2")]),
       ("numbers-order-naturally", proposal "admit/9" [(0, "responder"), (1, "patient/9")]),
+      ("related", proposal "step/a/b" [(0, "climber")]),
+      ("outside-a-relation", proposal "step/a/c" [(0, "responder")]),
+      ("relation-before-differ", proposal "step/a/a" [(0, "responder")]),
+      ("derived", proposal "climb/1" [(0, "climber")]),
+      ("derived-amount-infeasible", proposal "climb/0" [(0, "climber")] 2),
+      ("derived-fails", proposal "descend/0" [(0, "climber")]),
+      ("derived-after-domain", proposal "descend/4" [(0, "climber")]),
+      ("derived-zero-units-first", proposal "descend/0" [(0, "climber")] 0),
       ("no-variables", proposal "rest" [(0, "responder")])] do
     cases := cases.push (scenario label world rates proposal)
   return cases
@@ -292,6 +338,9 @@ def issueJson : ModelIssue → Json
   | .notNatural rate name => tagged "not_natural" [("rate", toJson (patternText rate)), ("variable", toJson name)]
   | .repeatedValue rate name => tagged "repeated_value" [("rate", toJson (patternText rate)), ("variable", toJson name)]
   | .overlapping rate other => tagged "overlapping_rates" [("rate", toJson (patternText rate)), ("other", toJson (patternText other))]
+  | .malformedRelation rate names => tagged "malformed_relation" [("rate", toJson (patternText rate)), ("variables", toJson names)]
+  | .repeatedRow rate names => tagged "repeated_row" [("rate", toJson (patternText rate)), ("variables", toJson names)]
+  | .derivedReads rate name => tagged "derived_reads" [("rate", toJson (patternText rate)), ("variable", toJson name)]
 
 /-- A model's rates, in the order the kernel keeps them, and what is wrong
 with them. -/
@@ -301,7 +350,26 @@ def model (label : String) (rates : List (Law Role)) : Json :=
     ("issues", toJson ((check ordered).map issueJson))]
 
 def models : Array Json := #[
-  model "clean" [stabilize, drive, pile, drop, admit, rest],
+  model "clean" [stabilize, drive, pile, drop, admit, step, climb, descend, rest],
+  model "relation-names-an-undeclared-variable" [law "step/{from}" { blank with
+    variables := [values "from" ["a"]], relations := [relation ["from", "to"] [["a", "b"]]] }],
+  model "malformed-relation" [law "step/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from", "to"] [["a", "b"], ["a"]]] }],
+  model "repeated-row" [law "step/{from}/{to}" { blank with
+    variables := [values "from" ["a"], values "to" ["b"]],
+    relations := [relation ["from", "to"] [["a", "b"], ["a", "b"]]] }],
+  model "derived-reads-an-exchange" [law "climb/{row}" { blank with
+    variables := [range "row" 0 1], derived := [⟨"next", .binary .add (.var "row") .units⟩] }],
+  model "derived-repeats-a-variable" [law "climb/{row}" { blank with
+    variables := [range "row" 0 1], derived := [⟨"row", .constant 1⟩] }],
+  model "derived-reads-a-later-value" [law "climb/{row}" { blank with
+    variables := [range "row" 0 1],
+    derived := [⟨"next", .var "after"⟩, ⟨"after", .binary .add (.var "row") (.constant 2)⟩] }],
+  model "derived-in-the-identifier" [law "climb/{row}/{next}" { blank with
+    variables := [range "row" 0 1], derived := [⟨"next", .binary .add (.var "row") (.constant 1)⟩] }],
+  model "derived-from-listed-values" [law "go/{to}" { blank with
+    variables := [values "to" ["x"]], derived := [⟨"next", .binary .add (.var "to") (.constant 1)⟩] }],
   model "repeated-variable" [law "swap/{a}/{a}" { blank with variables := [values "a" ["x", "y"]] }],
   model "undeclared-variable" [law "move/{to}" { blank with
     variables := [values "to" ["x"]], produce := [(0, entries [("at/{from}", 1)])] }],

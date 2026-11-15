@@ -43,11 +43,26 @@ structure Check (Role : Type) where
   comparison : Evaluation.Comparison
   right : Term Role
 
+/-- The values some of a rate's variables may take together, one row each:
+law structure that never changes, such as which cells of a board adjoin. -/
+structure Relation where
+  names : List String
+  rows : List (List Segment)
+  deriving DecidableEq, Repr
+
+/-- A whole number a rate computes from its variables' values, named as a
+variable is; its identifier never names it. -/
+structure Derived (Role : Type) where
+  name : String
+  value : Term Role
+
 /-- A rate whose assets and accounts may be patterns. `accounts` fixes the
 account a role is bound to. -/
 structure Schema (Role : Type) where
   variables : List Variable
   distinctVariables : List (String × String) := []
+  relations : List Relation := []
+  derived : List (Derived Role) := []
   accounts : List (Role × Pattern) := []
   roles : List Role
   distinct : List (Role × Role)
@@ -146,6 +161,62 @@ def Schema.instantiate (cmpRole : Role → Role → Ordering) (schema : Schema R
     opens := schema.opens
     closes := schema.closes }
 
+/-- Whether a quantity reads what only an exchange has: its units, a
+parameter, or a balance. -/
+def Term.reads : Term Role → Bool
+  | .units | .parameter _ | .balance _ _ => true
+  | .binary _ left right => left.reads || right.reads
+  | .mulDiv _ left right denominator => left.reads || right.reads || denominator.reads
+  | _ => false
+
+/-- What the quantities read where nothing but the variables' values is known. -/
+def unknown : Evaluation.Context Role Written Nat := ⟨0, fun _ => none, fun _ _ => .error .unboundRole⟩
+
+/-- A derived value's number for `arguments`, if it is a whole number a
+quantity can hold. -/
+def Derived.evaluate (arguments : Arguments) (derived : Derived Role) : Option Nat :=
+  match derived.value.instantiate arguments with
+  | .error _ => none
+  | .ok expression =>
+    match Evaluation.eval (Evaluation.naturals Quantity.limit) unknown expression with
+    | .ok value => some value
+    | .error _ => none
+
+/-- The variables' values followed by each derived value, in order, each
+computed from the values before it; or the first that has no number. -/
+def Schema.derive (schema : Schema Role) (arguments : Arguments) : Except String Arguments :=
+  schema.derived.foldlM (init := arguments) fun known derived =>
+    match derived.evaluate known with
+    | some value => .ok (known ++ [(derived.name, .number value)])
+    | none => .error derived.name
+
+/-- Deriving values keeps the variables' values and adds after them. -/
+theorem derive_extends {schema : Schema Role} {arguments values : Arguments}
+    (derived : schema.derive arguments = .ok values) : ∃ added, values = arguments ++ added := by
+  unfold Schema.derive at derived
+  suffices general : ∀ (known : Arguments) (rest : List (Derived Role)) (result : Arguments),
+      rest.foldlM (fun known derived =>
+        match derived.evaluate known with
+        | some value => .ok (known ++ [(derived.name, .number value)])
+        | none => .error derived.name) known = (.ok result : Except String Arguments) →
+      ∃ added, result = known ++ added by
+    exact general arguments schema.derived values derived
+  intro known rest
+  induction rest generalizing known with
+  | nil =>
+    intro result done
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at done
+    exact ⟨[], by simp [done]⟩
+  | cons head tail ih =>
+    intro result done
+    simp only [List.foldlM_cons, bind, Except.bind] at done
+    cases evaluated : head.evaluate known with
+    | none => simp [evaluated] at done
+    | some value =>
+      simp only [evaluated] at done
+      obtain ⟨added, same⟩ := ih _ result done
+      exact ⟨(head.name, .number value) :: added, by simp [same]⟩
+
 /-- The accounts the rate fixes for `arguments`, role by role. -/
 def Schema.fixed (schema : Schema Role) (arguments : Arguments) : List (Role × Written) :=
   schema.accounts.filterMap fun (role, account) => (role, ·) <$> substitute arguments account
@@ -163,20 +234,27 @@ def Term.naturals {Role : Type} : Term Role → List String
   | .mulDiv _ left right denominator => left.naturals ++ right.naturals ++ denominator.naturals
   | _ => []
 
-/-- Every variable a schema names, wherever it names one. -/
+/-- Every variable or derived value a schema's assets, accounts and
+quantities name. -/
 def Schema.named {Role : Type} (schema : Schema Role) : List String :=
   let amounts := schema.computedConsume ++ schema.computedProduce ++ schema.computedPreserve
   (schema.consume ++ schema.produce ++ schema.preserve).flatMap
       (fun (_, entries) => entries.flatMap fun (asset, _) => Pattern.variables asset) ++
     schema.accounts.flatMap (fun (_, account) => Pattern.variables account) ++
     amounts.flatMap (fun amount => Pattern.variables amount.asset ++ amount.quantity.variables) ++
-    schema.conditions.flatMap (fun check => check.left.variables ++ check.right.variables) ++
+    schema.conditions.flatMap (fun check => check.left.variables ++ check.right.variables)
+
+/-- Every variable a schema names that only the identifier gives: those its
+relations and distinct pairs constrain. -/
+def Schema.identifying {Role : Type} (schema : Schema Role) : List String :=
+  schema.relations.flatMap (·.names) ++
     schema.distinctVariables.flatMap (fun (left, right) => [left, right])
 
 def Schema.naturals {Role : Type} (schema : Schema Role) : List String :=
   let amounts := schema.computedConsume ++ schema.computedProduce ++ schema.computedPreserve
   amounts.flatMap (fun amount => amount.quantity.naturals) ++
-    schema.conditions.flatMap (fun check => check.left.naturals ++ check.right.naturals)
+    schema.conditions.flatMap (fun check => check.left.naturals ++ check.right.naturals) ++
+    schema.derived.flatMap (fun derived => derived.value.naturals)
 
 /-- What an entry adds: its amount where it names `asset`. -/
 def contribution (arguments : Arguments) (asset : Written) (entry : Pattern × Nat) : Nat :=
