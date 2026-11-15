@@ -4,7 +4,7 @@
 
 use crate::messages::{Direction, EconomyEntries, RateEntries};
 use axionomy::InvariantPath;
-use axionomy::{AccountPath, AssetPath, Pattern, RatePath, RolePath, paths};
+use axionomy::{AccountPath, AssetPath, Pattern, RatePath, RolePath, VariablePath, paths};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
@@ -25,11 +25,23 @@ pub(crate) enum AuthoringError {
     },
     #[error("rate `{rate}` already has a {direction} amount of `{asset}` for role `{role}`")]
     RateHas {
-        rate: RatePath,
+        rate: Pattern<RatePath>,
         direction: Direction,
         role: RolePath,
-        asset: AssetPath,
+        asset: Pattern<AssetPath>,
     },
+    #[error("rate `{rate}` already declares the variable `{variable}`")]
+    RateDeclares {
+        rate: Pattern<RatePath>,
+        variable: VariablePath,
+    },
+    #[error("rate `{rate}` already fixes the account of role `{role}`")]
+    RateFixes {
+        rate: Pattern<RatePath>,
+        role: RolePath,
+    },
+    #[error("the entries make no economy: {0}")]
+    Model(String),
     #[error("invariant `{invariant}` already weights `{asset}`")]
     InvariantWeights {
         invariant: InvariantPath,
@@ -64,6 +76,11 @@ impl RateEntries {
             .map(BTreeMap::len)
             .sum::<usize>();
         1 + amounts
+            + self.variables.len()
+            + self.distinct_variables.len()
+            + self.relations.len()
+            + self.derived.len()
+            + self.accounts.len()
             + self.distinct.len()
             + self.computed.len()
             + self.conditions.len()
@@ -83,6 +100,11 @@ pub(crate) fn entries(economy: &paths::Economy) -> usize {
         .rates()
         .map(|(_, rate)| {
             1 + crate::read::amounts(rate).count()
+                + rate.variables().len()
+                + rate.distinct_variable_pairs().count()
+                + rate.relations().len()
+                + rate.derived().len()
+                + rate.fixed_accounts().count()
                 + rate.distinct_roles().count()
                 + rate.conditions().len()
                 + rate.opened_roles().count()
@@ -136,9 +158,9 @@ pub(crate) fn extend(
     }
 
     for (id, added) in entries.rates {
-        let key = Pattern::literal(id.clone());
-        let rate = rates.shift_remove(&key).unwrap_or_default();
-        rates.insert(key, extend_rate(&id, rate, added)?);
+        let rate = rates.shift_remove(&id).unwrap_or_default();
+        let rate = extend_rate(&id, rate, added)?;
+        rates.insert(id, rate);
     }
 
     for (path, weights) in entries.invariants {
@@ -172,16 +194,47 @@ pub(crate) fn extend(
     let builder = invariants
         .into_values()
         .fold(builder, paths::EconomyBuilder::invariant);
-    Ok(builder
+    builder
         .build()
-        .expect("authored IDs are unique keys, so the model has no duplicate identifiers"))
+        .map_err(|error| AuthoringError::Model(error.to_string()))
 }
 
 fn extend_rate(
-    id: &RatePath,
+    id: &Pattern<RatePath>,
     mut rate: paths::Rate,
     added: RateEntries,
 ) -> Result<paths::Rate, AuthoringError> {
+    for variable in added.variables {
+        if rate
+            .variables()
+            .iter()
+            .any(|declared| declared.name() == variable.name())
+        {
+            return Err(AuthoringError::RateDeclares {
+                rate: id.clone(),
+                variable: variable.name().clone(),
+            });
+        }
+        rate = rate.variable(variable);
+    }
+    for (left, right) in added.distinct_variables {
+        rate = rate.distinct_variables(left, right);
+    }
+    for relation in added.relations {
+        rate = rate.relation(relation);
+    }
+    for derived in added.derived {
+        rate = rate.derive(derived.name().clone(), derived.value().clone());
+    }
+    for (role, account) in added.accounts {
+        if rate.fixed_accounts().any(|(fixed, _)| *fixed == role) {
+            return Err(AuthoringError::RateFixes {
+                rate: id.clone(),
+                role,
+            });
+        }
+        rate = rate.account(role, account);
+    }
     let statics = [
         (Direction::Consume, added.consume),
         (Direction::Produce, added.produce),
@@ -194,10 +247,10 @@ fn extend_rate(
                 Direction::Produce => rate.produced(&role),
                 Direction::Preserve => rate.preserved(&role),
             };
-            if let Some(asset) = amounts.keys().find(|asset| {
-                existing
-                    .is_some_and(|basket| basket.get(&Pattern::literal((*asset).clone())).is_some())
-            }) {
+            if let Some(asset) = amounts
+                .keys()
+                .find(|asset| existing.is_some_and(|basket| basket.get(*asset).is_some()))
+            {
                 return Err(AuthoringError::RateHas {
                     rate: id.clone(),
                     direction,
@@ -205,15 +258,14 @@ fn extend_rate(
                     asset: asset.clone(),
                 });
             }
-            let basket: paths::Basket = amounts
+            let entries = amounts
                 .into_iter()
-                .filter(|(_, quantity)| !quantity.is_zero())
-                .collect();
-            // The basket's assets are new to this role, so adding it cannot overflow.
+                .filter(|(_, quantity)| !quantity.is_zero());
+            // The entries are new to this role, so adding them cannot overflow.
             rate = match direction {
-                Direction::Consume => rate.consume(role, basket),
-                Direction::Produce => rate.produce(role, basket),
-                Direction::Preserve => rate.preserve(role, basket),
+                Direction::Consume => rate.consume_at(role, entries),
+                Direction::Produce => rate.produce_at(role, entries),
+                Direction::Preserve => rate.preserve_at(role, entries),
             };
         }
     }
@@ -223,13 +275,13 @@ fn extend_rate(
     for computed in added.computed {
         rate = match computed.direction {
             Direction::Consume => {
-                rate.consume_computed(computed.role, computed.asset, computed.quantity)
+                rate.consume_computed_at(computed.role, computed.asset, computed.quantity)
             }
             Direction::Produce => {
-                rate.produce_computed(computed.role, computed.asset, computed.quantity)
+                rate.produce_computed_at(computed.role, computed.asset, computed.quantity)
             }
             Direction::Preserve => {
-                rate.preserve_computed(computed.role, computed.asset, computed.quantity)
+                rate.preserve_computed_at(computed.role, computed.asset, computed.quantity)
             }
         };
     }

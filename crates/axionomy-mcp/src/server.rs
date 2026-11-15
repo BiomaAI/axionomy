@@ -1058,7 +1058,10 @@ impl AxionomyMcp {
                 AuthoringError::TooLarge { .. } => FailureCode::TooLarge,
                 AuthoringError::AccountHolds { .. }
                 | AuthoringError::RateHas { .. }
+                | AuthoringError::RateDeclares { .. }
+                | AuthoringError::RateFixes { .. }
                 | AuthoringError::InvariantWeights { .. } => FailureCode::Conflict,
+                AuthoringError::Model(_) => FailureCode::InvalidRequest,
             };
             ToolError::new(code, error.to_string())
         })?;

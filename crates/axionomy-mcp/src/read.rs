@@ -11,7 +11,7 @@ use crate::{
     store::{Loaded, Origin},
 };
 use axionomy::{
-    AccountPath, AssetPath, Pattern, Quantity, RatePath, RolePath,
+    AccountPath, AssetPath, Pattern, Quantity, RatePath, RolePath, VariablePath,
     paths::{self, Paths},
 };
 use axionomy_store::state;
@@ -266,7 +266,7 @@ fn read_economy(
             ),
         )
     };
-    let no_rate = |rate: &RatePath| {
+    let no_rate = |rate: &Pattern<RatePath>| {
         lacks(
             "rate",
             rate,
@@ -340,10 +340,24 @@ fn read_economy(
         )
         .and_then(|page| json(&page)),
         Target::Rate { rate: id, .. } => {
-            let rate = economy.instance(id).map_err(|_| no_rate(id))?;
+            let (rate, law) = definition(economy, id).ok_or_else(|| no_rate(id))?;
             json(&RateView {
                 economy_id,
                 rate: id,
+                law: law.as_ref().map(|(key, _)| *key),
+                arguments: law
+                    .iter()
+                    .flat_map(|(_, arguments)| arguments.iter())
+                    .collect(),
+                variables: rate.variables(),
+                distinct_variables: rate.distinct_variable_pairs().collect(),
+                relations: rate.relations(),
+                derived: rate.derived(),
+                accounts: rate.fixed_accounts().collect(),
+                instances: id
+                    .as_literal()
+                    .is_none()
+                    .then(|| economy.instances_of(id).count()),
                 roles: rate.roles().collect(),
                 distinct: rate
                     .distinct_roles()
@@ -357,11 +371,11 @@ fn read_economy(
             })
         }
         Target::RateAmounts { rate: id, .. } => {
-            let rate = economy.instance(id).map_err(|_| no_rate(id))?;
+            let (rate, _) = definition(economy, id).ok_or_else(|| no_rate(id))?;
             page(address, amounts(&rate).enumerate(), PAGE_ROWS).and_then(|page| json(&page))
         }
         Target::RateConditions { rate: id, .. } => {
-            let rate = economy.instance(id).map_err(|_| no_rate(id))?;
+            let (rate, _) = definition(economy, id).ok_or_else(|| no_rate(id))?;
             page(address, rate.conditions().iter().enumerate(), PAGE_ROWS)
                 .and_then(|page| json(&page))
         }
@@ -422,6 +436,32 @@ fn read_economy(
                 address.target.uri()
             )))
         }
+    }
+}
+
+/// A rate, and where it is an instance, the rate it is one of as written and
+/// the values it gives.
+type Definition<'e> = (
+    std::borrow::Cow<'e, paths::Rate>,
+    Option<(&'e Pattern<RatePath>, axionomy::Arguments)>,
+);
+
+/// The rate `id` names: a rate as written, or the instance an identifier
+/// names with the rate it is an instance of, as written, and the values it
+/// gives.
+fn definition<'e>(economy: &'e paths::Economy, id: &Pattern<RatePath>) -> Option<Definition<'e>> {
+    match id.as_literal() {
+        Some(instance) => {
+            let rate = economy.instance(instance).ok()?;
+            let law = economy
+                .named(instance)
+                .filter(|(key, _)| key.as_literal().is_none());
+            Some((rate, law))
+        }
+        None => economy
+            .rates()
+            .find(|(key, _)| *key == id)
+            .map(|(_, rate)| (std::borrow::Cow::Borrowed(rate), None)),
     }
 }
 
@@ -562,7 +602,27 @@ struct RateRow<'a> {
 #[derive(Serialize)]
 struct RateView<'a> {
     economy_id: &'a EconomyId,
-    rate: &'a RatePath,
+    rate: &'a Pattern<RatePath>,
+    /// The rate this is an instance of, as written, where `rate` names one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    law: Option<&'a Pattern<RatePath>>,
+    /// The values `rate` gives the variables of `law`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    arguments: Vec<(&'a VariablePath, &'a axionomy::Segment)>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    variables: &'a [axionomy::Variable],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    distinct_variables: Vec<&'a (VariablePath, VariablePath)>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    relations: &'a [axionomy::Relation],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    derived: &'a [axionomy::Derived<axionomy::paths::Paths>],
+    /// The account each of these roles must be bound to.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    accounts: Vec<(&'a RolePath, &'a Pattern<AccountPath>)>,
+    /// How many identifiers a rate with variables answers to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instances: Option<usize>,
     roles: Vec<&'a RolePath>,
     distinct: Vec<(&'a RolePath, &'a RolePath)>,
     parameters: Vec<&'a ParameterPath>,

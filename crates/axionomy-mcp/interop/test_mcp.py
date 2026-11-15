@@ -363,6 +363,57 @@ async def test_exchanges_open_and_close_accounts(url: str) -> None:
         assert [item["account"] for item in accounts["items"]] == ["treasury"]
 
 
+# One rate for every road between two places: its ID names its variables, a
+# relation says which places a road joins, and it fixes the driver's account.
+ROADS = {
+    "accounts": {"driver": {"at/east": "1", "fuel": "5"}},
+    "rates": {
+        "drive/{from}/{to}": {
+            "variables": [
+                {"name": "from", "values": ["east", "north", "west"]},
+                {"name": "to", "values": ["east", "north", "west"]},
+            ],
+            "relations": [{"variables": ["from", "to"], "rows": [["east", "north"], ["north", "west"]]}],
+            "accounts": {"driver": "driver"},
+            "consume": {"driver": {"at/{from}": "1", "fuel": "1"}},
+            "produce": {"driver": {"at/{to}": "1"}},
+        }
+    },
+}
+
+
+async def test_a_rate_with_variables_is_authored_and_an_instance_applied(url: str) -> None:
+    def drive(rate: str, driver: str = "driver") -> dict[str, Any]:
+        return {"rate": rate, "bindings": {"driver": driver}, "units": "1"}
+
+    async with Client(url) as client:
+        economy_id = await create(client, ROADS)
+        rates = await page(client, f"axionomy://economy/{economy_id}/rates")
+        assert [item["rate"] for item in rates["items"]] == ["drive/{from}/{to}"]
+        law = await page(client, f"axionomy://economy/{economy_id}/rates/drive/%7Bfrom%7D/%7Bto%7D")
+        assert law["instances"] == 2
+        assert law["relations"] == [{"variables": ["from", "to"], "rows": [["east", "north"], ["north", "west"]]}]
+        instance = await page(client, f"axionomy://economy/{economy_id}/rates/drive/east/north")
+        assert instance["law"] == "drive/{from}/{to}"
+        assert instance["arguments"] == [["from", "east"], ["to", "north"]]
+
+        driven = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": drive("drive/east/north")})
+        assert not driven.is_error, driven.structured_content
+        there = await page(client, f"axionomy://economy/{driven.structured_content['economy_id']}/accounts/driver")
+        assert there["items"] == [{"asset": "at/north", "quantity": "1"}, {"asset": "fuel", "quantity": "4"}]
+
+        no_road = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": drive("drive/east/west")})
+        assert no_road.structured_content["error"] == "invalid"
+        assert "no row of its relation holds" in no_road.structured_content["message"]
+
+        refused = await client.call_tool(
+            "axionomy_economy_create",
+            {"entries": {"rates": {"drive/{to}": {"produce": {"driver": {"at/{from}": "1"}}}}}},
+        )
+        assert refused.is_error
+        assert refused.structured_content["error"] == "invalid_request"
+
+
 # Work done outside the economy (a robot, a model, a person) is modelled, not
 # orchestrated: asking produces a `requested` token, the outside party's result
 # is an exchange that consumes it, and a deadline is a condition on a clock.

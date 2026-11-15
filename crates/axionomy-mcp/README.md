@@ -126,6 +126,35 @@ weights. An entry that would replace something already present is a
 each of which stores a valid economy. The kernel's `EconomyBuilder` builds
 every economy, so the kernel alone decides what a valid economy is.
 
+A rate's ID may name **variables**, one segment each, so one rate stands for
+every case it covers. Its assets, the accounts it fixes for roles, and its
+quantities name them the same way; an exchange names an instance,
+`drive/east/north`, and applies the rate with those values:
+
+```json
+{
+  "rates": {
+    "drive/{from}/{to}": {
+      "variables": [
+        { "name": "from", "values": ["east", "north", "west"] },
+        { "name": "to", "values": ["east", "north", "west"] }
+      ],
+      "relations": [{ "variables": ["from", "to"], "rows": [["east", "north"], ["north", "west"]] }],
+      "accounts": { "driver": "driver" },
+      "consume": { "driver": { "at/{from}": "1", "fuel": "1" } },
+      "produce": { "driver": { "at/{to}": "1" } }
+    }
+  }
+}
+```
+
+A variable takes a `range` of whole numbers or the `values` listed; a
+`relation` lists the rows some variables may take together;
+`distinct_variables` pairs must differ; `derived` values are whole numbers
+computed from the variables, usable as `{name}` after them; `accounts` fixes
+the account a role must be bound to. A rate whose variables are undeclared,
+unread or overlap another rate makes no economy: `invalid_request`.
+
 ## Resources
 
 Resources hold the data. Their URI templates (RFC 6570) are listed by
@@ -139,7 +168,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/accounts{?prefix,cursor}` | Accounts in path order and how many assets each holds, optionally by path prefix such as `agents/7/` |
 | `…/accounts/{+account}{?prefix,cursor}` | An account's nonzero balances in asset path order, optionally by asset-path prefix |
 | `…/rates{?asset,cursor}` | Rates and their roles, optionally only those that move `asset` |
-| `…/rates/{+rate}` | Roles, distinct pairs, parameters and counts |
+| `…/rates/{+rate}` | Roles, distinct pairs, parameters and counts; a rate with variables (`drive/%7Bfrom%7D/%7Bto%7D`) also its variables, relations, derived values, fixed accounts and how many instances it has; an instance (`drive/east/north`) the rate it is an instance of and its values |
 | `…/rate-amounts/{+rate}{?cursor}` | Fixed, then computed, amounts per unit |
 | `…/rate-conditions/{+rate}{?cursor}` | Conditions every exchange must satisfy |
 | `…/invariants{?cursor}` | Conservation laws and how many assets each weights |

@@ -6,7 +6,7 @@ use crate::{
     messages::{Amounts, Issue, IssueKind, QuantityLine},
     resources::Target,
 };
-use axionomy::{RatePath, paths};
+use axionomy::{Pattern, RatePath, paths};
 use std::fmt::Write as _;
 
 /// Shortfalls a failure message names before counting the rest.
@@ -38,7 +38,7 @@ impl Issue {
         let rate_uri = |rate: &RatePath| {
             Target::Rate {
                 economy_id: economy_id.clone(),
-                rate: rate.clone(),
+                rate: Pattern::literal(rate.clone()),
             }
             .uri()
         };
@@ -155,7 +155,7 @@ impl Issue {
                     "condition `{condition}` of rate `{rate}` does not hold in this economy; the rate's conditions are listed at {}",
                     Target::RateConditions {
                         economy_id: economy_id.clone(),
-                        rate: rate.clone(),
+                        rate: Pattern::literal(rate.clone()),
                     }
                     .uri()
                 ),

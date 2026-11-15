@@ -6,8 +6,8 @@
 
 use crate::handles::{AssessmentId, EconomyId, RefId};
 use axionomy::{
-    AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Quantity,
-    RatePath, RolePath, VariablePath, paths,
+    AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Pattern,
+    Quantity, RatePath, Relation, RolePath, Variable, VariablePath, paths,
 };
 use axionomy_engine::{
     Ended, ExperimentPath, GoalPath, ObjectivePath, PackagePath, StrategyPath, Version,
@@ -21,6 +21,10 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 /// Quantities by asset.
 pub type Amounts = BTreeMap<AssetPath, Quantity>;
 
+/// What a rate moves of each asset it names, which may name the rate's
+/// variables: `at/{location}`.
+pub type RateAmounts = BTreeMap<Pattern<AssetPath>, Quantity>;
+
 /// Entries to add to an economy, at most 10,000 per call. Adding never
 /// replaces: an account must not already hold an asset it is given, and a
 /// rate role or invariant must not already list an asset it is given.
@@ -32,9 +36,13 @@ pub struct EconomyEntries {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub accounts: BTreeMap<AccountPath, Amounts>,
     /// Rates by rate ID. A new rate ID adds that rate; an existing one gains
-    /// the given amounts, role pairs and conditions.
+    /// the given amounts, role pairs and conditions. An ID may name the
+    /// rate's variables, one segment each, as `stabilize/{patient}`: an
+    /// exchange then names an instance, `stabilize/1`, and the rate applies
+    /// with `patient = 1` wherever its assets, accounts and quantities name
+    /// `{patient}`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub rates: BTreeMap<RatePath, RateEntries>,
+    pub rates: BTreeMap<Pattern<RatePath>, RateEntries>,
     /// Linear conservation laws by path: an integer weight per asset. Every
     /// exchange must leave each law's weighted sum over all accounts unchanged.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -46,15 +54,37 @@ pub struct EconomyEntries {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RateEntries {
+    /// The variables the rate's ID names, each with its values: a range of
+    /// whole numbers, `{"name": "patient", "range": ["1", "3"]}`, or segments
+    /// listed, `{"name": "location", "values": ["east", "north"]}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variables: Vec<Variable>,
+    /// Variable pairs that must take different values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub distinct_variables: Vec<(VariablePath, VariablePath)>,
+    /// Rows of values some variables may take together:
+    /// `{"variables": ["from", "to"], "rows": [["a", "b"], ["b", "c"]]}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<Relation>,
+    /// Whole numbers computed from the variables' values, in order, each
+    /// usable as `{name}` after it: `{"name": "next", "value": {"kind": "add",
+    /// "left": {"kind": "variable", "name": "row"}, "right": {"kind":
+    /// "constant", "value": "1"}}}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<axionomy::Derived<axionomy::paths::Paths>>,
+    /// The account each of these roles must be bound to, which may name the
+    /// rate's variables: `patient/{patient}`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub accounts: BTreeMap<RolePath, Pattern<AccountPath>>,
     /// Assets taken from each role's account.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub consume: BTreeMap<RolePath, Amounts>,
+    pub consume: BTreeMap<RolePath, RateAmounts>,
     /// Assets given to each role's account.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub produce: BTreeMap<RolePath, Amounts>,
+    pub produce: BTreeMap<RolePath, RateAmounts>,
     /// Assets each role's account must hold and keeps.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub preserve: BTreeMap<RolePath, Amounts>,
+    pub preserve: BTreeMap<RolePath, RateAmounts>,
     /// Role pairs that must bind different accounts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub distinct: Vec<(RolePath, RolePath)>,
@@ -83,7 +113,7 @@ pub struct RateEntries {
 pub struct ComputedEntry {
     pub direction: Direction,
     pub role: RolePath,
-    pub asset: AssetPath,
+    pub asset: Pattern<AssetPath>,
     pub quantity: paths::QuantityExpression,
 }
 

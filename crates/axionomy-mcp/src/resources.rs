@@ -7,7 +7,7 @@
 use axionomy::InvariantPath;
 
 use crate::handles::{AssessmentId, EconomyId, HandleError};
-use axionomy::{AccountPath, AssetPath, RatePath, path::Path};
+use axionomy::{AccountPath, AssetPath, Pattern, RatePath, path::Path};
 use rmcp::{
     ErrorData as McpError,
     model::{Resource, ResourceTemplate},
@@ -49,15 +49,15 @@ pub(crate) enum Target {
     },
     Rate {
         economy_id: EconomyId,
-        rate: RatePath,
+        rate: Pattern<RatePath>,
     },
     RateAmounts {
         economy_id: EconomyId,
-        rate: RatePath,
+        rate: Pattern<RatePath>,
     },
     RateConditions {
         economy_id: EconomyId,
-        rate: RatePath,
+        rate: Pattern<RatePath>,
     },
     Invariants {
         economy_id: EconomyId,
@@ -142,7 +142,7 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://economy/{economy_id}/accounts{?prefix,cursor}", "accounts", "Accounts", "Accounts in path order, each with how many assets it holds, optionally only paths that start with `prefix`, such as `agents/7/`."),
         ("axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}", "balances", "Account balances", "An account's nonzero balances in asset path order, optionally only assets whose path starts with `prefix`. The account path appears as is, as in `accounts/agents/7/wallet`."),
         ("axionomy://economy/{economy_id}/rates{?asset,cursor}", "rates", "Rates", "Rates with the roles an exchange of each binds, optionally only rates that move `asset`: the exchanges an economy can take."),
-        ("axionomy://economy/{economy_id}/rates/{+rate}", "rate", "Rate", "A rate's roles, distinct role pairs, parameters and how many amounts and conditions it has."),
+        ("axionomy://economy/{economy_id}/rates/{+rate}", "rate", "Rate", "A rate's roles, distinct role pairs, parameters and how many amounts and conditions it has. `rate` is a rate as listed, which may name variables (`stabilize/{patient}`, braces percent-encoded), or an identifier an exchange names (`stabilize/1`), read as that instance: the rate with its variables' values, and which rate it is an instance of."),
         ("axionomy://economy/{economy_id}/rate-amounts/{+rate}{?cursor}", "rate-amounts", "Rate amounts", "What one unit of the rate consumes, produces and preserves, by role: fixed quantities, then computed ones."),
         ("axionomy://economy/{economy_id}/rate-conditions/{+rate}{?cursor}", "rate-conditions", "Rate conditions", "Comparisons every exchange of the rate must satisfy."),
         ("axionomy://economy/{economy_id}/invariants{?cursor}", "invariants", "Invariants", "Linear conservation laws, each with how many assets it weights."),
@@ -167,6 +167,12 @@ impl Target {
     /// The canonical URI of this target's first page.
     pub(crate) fn uri(&self) -> String {
         let mut uri = String::from(SCHEME);
+        let rate = match self {
+            Self::Rate { rate, .. }
+            | Self::RateAmounts { rate, .. }
+            | Self::RateConditions { rate, .. } => rate.text(),
+            _ => String::new(),
+        };
         let (segments, query): (Vec<&str>, Vec<(&str, &str)>) = match self {
             Self::Economy { economy_id } => (vec!["economy", economy_id.as_str()], vec![]),
             Self::Accounts { economy_id, prefix } => (
@@ -194,16 +200,16 @@ impl Target {
                     .map(|asset| ("asset", asset.as_str()))
                     .collect(),
             ),
-            Self::Rate { economy_id, rate } => (
-                under(["economy", economy_id.as_str(), "rates"], rate),
+            Self::Rate { economy_id, .. } => (
+                written(["economy", economy_id.as_str(), "rates"], &rate),
                 vec![],
             ),
-            Self::RateAmounts { economy_id, rate } => (
-                under(["economy", economy_id.as_str(), "rate-amounts"], rate),
+            Self::RateAmounts { economy_id, .. } => (
+                written(["economy", economy_id.as_str(), "rate-amounts"], &rate),
                 vec![],
             ),
-            Self::RateConditions { economy_id, rate } => (
-                under(["economy", economy_id.as_str(), "rate-conditions"], rate),
+            Self::RateConditions { economy_id, .. } => (
+                written(["economy", economy_id.as_str(), "rate-conditions"], &rate),
                 vec![],
             ),
             Self::Invariants { economy_id } => {
@@ -383,13 +389,23 @@ fn under<'a, K>(prefix: [&'a str; 3], path: &'a Path<K>) -> Vec<&'a str> {
     prefix.into_iter().chain(path.segments()).collect()
 }
 
+/// `prefix` and the segments `text` writes, each encoded as a URI segment:
+/// a variable's braces too.
+fn written<'a>(prefix: [&'a str; 3], text: &'a str) -> Vec<&'a str> {
+    prefix.into_iter().chain(text.split('/')).collect()
+}
+
 /// The handle a URI segment is, or why it is none.
 fn handle<T: FromStr<Err = HandleError>>(uri: &str, segment: &str) -> Result<T, McpError> {
     segment.parse().map_err(|error| malformed(uri, error))
 }
 
-/// The path URI segments spell, or why they spell none.
-fn joined<K>(uri: &str, kind: &str, segments: &[&str]) -> Result<Path<K>, McpError> {
+/// The path or pattern URI segments spell, or why they spell none.
+fn joined<T: FromStr<Err: fmt::Display>>(
+    uri: &str,
+    kind: &str,
+    segments: &[&str],
+) -> Result<T, McpError> {
     let path = segments.join("/");
     path.parse()
         .map_err(|error| malformed(uri, format!("`{path}` is not {kind} path: {error}")))
