@@ -9,7 +9,19 @@ use axionomy_units::{
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    axionomy::Segments,
+)]
 enum AssetId {
     Usd,
     Yen,
@@ -23,7 +35,7 @@ type MassMeasure = axionomy_units::MeasuredAsset<
     axionomy_units::si::SI<axionomy_units::MeasureScalar>,
 >;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum AccountId {
     Treasury,
 }
@@ -35,8 +47,8 @@ impl axionomy::Ontology for Depot {
     const NAME: &'static str = "depot";
     type Account = AccountId;
     type Asset = UnitAsset<AssetId>;
-    type Rate = ();
-    type Role = ();
+    type Rate = u8;
+    type Role = u8;
 }
 
 fn usd() -> (AssetSchema<AssetId>, axionomy_units::DecimalAsset<AssetId>) {

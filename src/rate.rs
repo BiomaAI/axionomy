@@ -986,8 +986,8 @@ mod conservation_conformance {
         const NAME: &'static str = "numbers";
         type Account = u64;
         type Asset = u64;
-        type Rate = ();
-        type Role = ();
+        type Rate = u8;
+        type Role = u8;
     }
 
     #[derive(Debug, Deserialize)]
@@ -1093,18 +1093,22 @@ mod conservation_conformance {
 mod metadata_conformance {
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(
+        Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, crate::Segments,
+    )]
     struct Role(u64);
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(
+        Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, crate::Segments,
+    )]
     struct Asset(u64);
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     enum Test {}
 
     impl Ontology for Test {
         const NAME: &'static str = "test";
-        type Account = ();
+        type Account = u8;
         type Asset = Asset;
-        type Rate = ();
+        type Rate = u8;
         type Role = Role;
     }
 

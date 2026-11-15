@@ -4,7 +4,7 @@ use axionomy::{
     ExchangeAssessment, Goal, LinearInvariant, Quantity, Rate, ReplayError, Trace, basket,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum Asset {
     Input,
     Catalyst,
@@ -14,7 +14,7 @@ enum Asset {
     Solved,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum AccountId {
     Source,
     Machine,
@@ -23,7 +23,7 @@ enum AccountId {
     Missing,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum Role {
     Source,
     Machine,
@@ -32,7 +32,7 @@ enum Role {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum RateId {
     Transform,
     Finish,

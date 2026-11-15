@@ -563,12 +563,12 @@ mod tests {
     use axionomy::{Account, EconomyBuilder, Rate, basket};
     use std::ops::ControlFlow;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum AccountId {
         Agent,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum Asset {
         Start,
         Done,
@@ -576,14 +576,14 @@ mod tests {
         Time,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum RateId {
         Fast,
         Efficient,
         Wasteful,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum Role {
         Actor,
     }

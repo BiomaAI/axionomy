@@ -17,7 +17,7 @@ pub mod rate;
 pub use account::{Account, AccountError};
 pub use amount::AssetAmount;
 /// Derives an identifier written as its path: see [`path::Segments`].
-pub use axionomy_derive::Identifier;
+pub use axionomy_derive::{Identifier, Segments};
 pub use basket::{Basket, BasketError};
 pub use economy::{
     AccountAssessment, AccountShortfall, Apply, ApplyError, ApplyResult, AssessmentStatus,
@@ -68,13 +68,14 @@ pub use rate::{
 use std::{fmt::Debug, hash::Hash};
 
 /// What the kernel needs of an identifier type: values it can clone, compare,
-/// order, hash and show. Every account, asset, rate and role type is one.
+/// order, hash and show, written as one path ([`path::Segments`]). Every
+/// account, asset, rate and role type is one.
 ///
-/// `#[derive(Identifier)]` makes a type one that is also written as its path
-/// and ordered as that path: see [`path::Segments`].
-pub trait Identifier: Clone + Eq + Ord + Hash + Debug {}
+/// `#[derive(Identifier)]` makes a type one that is also ordered as its path
+/// and serialized as it.
+pub trait Identifier: Clone + Eq + Ord + Hash + Debug + path::Segments {}
 
-impl<T: Clone + Eq + Ord + Hash + Debug> Identifier for T {}
+impl<T: Clone + Eq + Ord + Hash + Debug + path::Segments> Identifier for T {}
 
 /// The vocabulary of one kind of economy, under one name: who holds
 /// (accounts), what is held (assets), the laws by which holdings change

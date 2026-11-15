@@ -384,11 +384,11 @@ shows, whose experiment replays each strategy's run.
 
 ```rust
 use axionomy::{
-    Account, EconomyBuilder, Exchange, Goal, LinearInvariant, Ontology, Quantity,
-    Rate, basket, path,
+    Account, EconomyBuilder, Exchange, Goal, Identifier, LinearInvariant, Ontology,
+    Quantity, Rate, basket, path,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum Asset {
     Raw,
     Finished,
@@ -396,19 +396,19 @@ enum Asset {
     Solved,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum AccountId {
     Workshop,
     Success,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum Role {
     Shop,
     Goal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum RateId {
     Build,
     Finish,

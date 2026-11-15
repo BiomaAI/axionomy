@@ -381,6 +381,15 @@ mod tests {
     }
 
     #[test]
+    fn a_number_reads_only_as_it_is_written() {
+        assert_eq!(read_text::<u8>("0"), Ok(0));
+        assert_eq!(read_text::<u64>("10"), Ok(10));
+        for text in ["07", "00", "+7", "256"] {
+            assert!(read_text::<u8>(text).is_err(), "{text}");
+        }
+    }
+
+    #[test]
     fn parents_and_children_stay_paths() {
         let loans: AccountPath = "loans".parse().unwrap();
         let loan = loans.child("42").unwrap();
@@ -477,11 +486,16 @@ macro_rules! unsigned_segments {
                 segments.push(self.to_string());
             }
 
+            /// Reads a number written as one canonical decimal segment, so
+            /// writing it again gives the same segment: `07` is not 7.
             fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError> {
                 let segment = segments.segment()?;
-                segment
-                    .parse()
-                    .map_err(|_| IdentifierError::Unexpected(segment.to_owned()))
+                let canonical = segment.bytes().all(|byte| byte.is_ascii_digit())
+                    && (segment == "0" || !segment.starts_with('0'));
+                canonical
+                    .then(|| segment.parse().ok())
+                    .flatten()
+                    .ok_or_else(|| IdentifierError::Unexpected(segment.to_owned()))
             }
         }
     )*};

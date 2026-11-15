@@ -11,24 +11,36 @@ use axionomy_units::{
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    axionomy::Segments,
+)]
 enum AssetId {
     Cargo,
     Permission,
     Work,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum AccountId {
     Depot,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum RateId {
     Store,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum Role {
     Depot,
 }
@@ -42,6 +54,48 @@ impl axionomy::Ontology for Depot {
     type Asset = UnitAsset<AssetId>;
     type Rate = RateId;
     type Role = Role;
+}
+
+#[test]
+fn a_unit_asset_is_written_as_one_path_and_read_back() {
+    use axionomy::path::{AssetPath, read, write};
+    use axionomy_units::si::acceleration::meter_per_second_squared;
+    use axionomy_units::si::rational64::Acceleration;
+    let mut schema = AssetSchema::new();
+    let cargo = schema
+        .define_measure(AssetId::Cargo, Mass::new::<gram>(Rational::new(1, 1000)))
+        .unwrap();
+    let work = schema
+        .define_measure(
+            AssetId::Work,
+            Acceleration::new::<meter_per_second_squared>(Rational::from_integer(2)),
+        )
+        .unwrap();
+    let permission = schema.define_discrete(AssetId::Permission).unwrap();
+    for (asset, path) in [
+        (
+            cargo.asset().clone(),
+            "measured/0/1/0/0/0/0/0/1/1000000/uom-plain/cargo",
+        ),
+        (
+            work.asset().clone(),
+            "measured/1/0/n2/0/0/0/0/2/1/uom-plain/work",
+        ),
+        (permission.clone(), "discrete/permission"),
+    ] {
+        let written: AssetPath = write(&asset);
+        assert_eq!(written.as_str(), path);
+        assert_eq!(read::<_, UnitAsset<AssetId>>(&written).unwrap(), asset);
+    }
+    let dollars = AssetSchema::new()
+        .define_decimal(AssetId::Cargo, 2)
+        .unwrap();
+    let written: AssetPath = write(dollars.asset());
+    assert_eq!(written.as_str(), "decimal/2/cargo");
+    assert_eq!(
+        &read::<_, UnitAsset<AssetId>>(&written).unwrap(),
+        dollars.asset()
+    );
 }
 
 #[test]
@@ -251,7 +305,7 @@ fn malformed_non_positive_atomic_basis_is_rejected_by_serde() {
         "id":"Cargo",
         "definition":{"Measured":{
             "dimension":{"length":0,"mass":1,"time":0,"electric_current":0,"thermodynamic_temperature":0,"amount_of_substance":0,"luminous_intensity":0},
-            "kind":"uom:plain",
+            "kind":"uom-plain",
             "atomic_base_value":[0,1]
         }}
     }"#;

@@ -1,5 +1,8 @@
 use crate::MeasureScalar;
-use axionomy::{AssetAmount, Quantity};
+use axionomy::{
+    AssetAmount, Quantity,
+    path::{IdentifierError, SegmentReader, Segments},
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use uom::si::{Dimension, marker};
@@ -51,13 +54,13 @@ impl DimensionSignature {
 /// `uom` distinguishes quantities such as energy and torque even when their
 /// dimension exponents match. Axionomy stores this identifier instead of an
 /// unstable Rust type name. Custom `uom` kinds can implement this trait with a
-/// namespaced, durable identifier.
+/// namespaced, durable identifier: one path segment, such as `lab-viscosity`.
 pub trait StableMeasureKind {
     const ID: &'static str;
 }
 
 impl StableMeasureKind for dyn uom::Kind {
-    const ID: &'static str = "uom:plain";
+    const ID: &'static str = "uom-plain";
 }
 
 macro_rules! stable_kinds {
@@ -69,14 +72,14 @@ macro_rules! stable_kinds {
 }
 
 stable_kinds! {
-    AngleKind => "uom:angle",
-    SolidAngleKind => "uom:solid-angle",
-    InformationKind => "uom:information",
-    TemperatureKind => "uom:temperature",
-    ConstituentConcentrationKind => "uom:constituent-concentration",
-    SurfaceTensionKind => "uom:surface-tension",
-    KinematicViscosityKind => "uom:kinematic-viscosity",
-    IlluminanceKind => "uom:illuminance",
+    AngleKind => "uom-angle",
+    SolidAngleKind => "uom-solid-angle",
+    InformationKind => "uom-information",
+    TemperatureKind => "uom-temperature",
+    ConstituentConcentrationKind => "uom-constituent-concentration",
+    SurfaceTensionKind => "uom-surface-tension",
+    KinematicViscosityKind => "uom-kinematic-viscosity",
+    IlluminanceKind => "uom-illuminance",
 }
 
 /// Stable identity for a dimensionally distinct `uom` quantity kind.
@@ -96,8 +99,7 @@ impl MeasureKind {
     }
 
     fn try_new(id: String) -> Result<Self, MeasureDefinitionError> {
-        let valid =
-            !id.is_empty() && id.len() <= 128 && id.bytes().all(|byte| byte.is_ascii_graphic());
+        let valid = id.len() <= 128 && !id.contains('/') && axionomy::path::is_path(&id);
         if valid {
             Ok(Self(id))
         } else {
@@ -281,6 +283,130 @@ pub enum DecimalPrecisionError {
 pub enum MeasureDefinitionError {
     #[error("atomic physical basis must be greater than zero")]
     InvalidAtomicBasis,
-    #[error("measurement kind identifier must be 1-128 printable ASCII characters")]
+    #[error("measurement kind identifier must be one path segment of at most 128 characters")]
     InvalidKind,
+}
+
+/// An exponent, a non-negative one as itself and a negative one as `n` and
+/// its magnitude, so every exponent is one path segment.
+fn write_exponent(exponent: i8, segments: &mut Vec<String>) {
+    segments.push(if exponent < 0 {
+        format!("n{}", exponent.unsigned_abs())
+    } else {
+        exponent.to_string()
+    });
+}
+
+fn read_exponent(segments: &mut SegmentReader<'_>) -> Result<i8, IdentifierError> {
+    let segment = segments.segment()?;
+    let unexpected = || IdentifierError::Unexpected(segment.to_owned());
+    let (negative, magnitude) = match segment.strip_prefix('n') {
+        Some(magnitude) => (true, magnitude),
+        None => (false, segment),
+    };
+    let canonical = magnitude.bytes().all(|byte| byte.is_ascii_digit())
+        && (magnitude == "0" && !negative || !magnitude.starts_with('0'));
+    let magnitude: u8 = canonical
+        .then(|| magnitude.parse().ok())
+        .flatten()
+        .ok_or_else(unexpected)?;
+    let exponent = i16::from(magnitude) * if negative { -1 } else { 1 };
+    i8::try_from(exponent).map_err(|_| unexpected())
+}
+
+/// A unit asset's path: its definition, then its identity's own path, last
+/// so an identity of any length still reads back. A definition is
+/// `discrete`, `decimal` and its decimals, or `measured`, its seven
+/// dimension exponents, its atomic base value as numerator and denominator,
+/// and its kind: `measured/1/0/n2/0/0/0/0/1/1000/uom-plain/fuel`.
+impl<Id: Segments> Segments for UnitAsset<Id> {
+    fn write_segments(&self, segments: &mut Vec<String>) {
+        match &self.definition {
+            AssetDefinition::Discrete => segments.push("discrete".into()),
+            AssetDefinition::Decimal(precision) => {
+                segments.push("decimal".into());
+                precision.decimals.write_segments(segments);
+            }
+            AssetDefinition::Measured(measure) => {
+                segments.push("measured".into());
+                for exponent in measure.dimension.exponents() {
+                    write_exponent(exponent, segments);
+                }
+                // A positive basis, so both parts are positive.
+                measure
+                    .atomic_base_value
+                    .numer()
+                    .unsigned_abs()
+                    .write_segments(segments);
+                measure
+                    .atomic_base_value
+                    .denom()
+                    .unsigned_abs()
+                    .write_segments(segments);
+                segments.push(measure.kind.0.clone());
+            }
+        }
+        self.id.write_segments(segments);
+    }
+
+    fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError> {
+        let definition = match segments.segment()? {
+            "discrete" => AssetDefinition::Discrete,
+            "decimal" => {
+                let decimals = u8::read_segments(segments)?;
+                AssetDefinition::Decimal(
+                    DecimalPrecision::new(decimals)
+                        .map_err(|error| IdentifierError::Unexpected(error.to_string()))?,
+                )
+            }
+            "measured" => {
+                let mut exponents = [0; 7];
+                for exponent in &mut exponents {
+                    *exponent = read_exponent(segments)?;
+                }
+                let [
+                    length,
+                    mass,
+                    time,
+                    electric_current,
+                    thermodynamic_temperature,
+                    amount_of_substance,
+                    luminous_intensity,
+                ] = exponents;
+                let dimension = DimensionSignature {
+                    length,
+                    mass,
+                    time,
+                    electric_current,
+                    thermodynamic_temperature,
+                    amount_of_substance,
+                    luminous_intensity,
+                };
+                let part = |segments: &mut SegmentReader<'_>| {
+                    let value = u64::read_segments(segments)?;
+                    i64::try_from(value).map_err(|_| IdentifierError::Unexpected(value.to_string()))
+                };
+                let numerator = part(segments)?;
+                let denominator = part(segments)?;
+                if denominator == 0 {
+                    return Err(IdentifierError::Unexpected("0".into()));
+                }
+                let kind = MeasureKind::try_new(segments.segment()?.to_owned())
+                    .map_err(|error| IdentifierError::Unexpected(error.to_string()))?;
+                AssetDefinition::Measured(
+                    MeasureDefinition::new(
+                        dimension,
+                        kind,
+                        MeasureScalar::new(numerator, denominator),
+                    )
+                    .map_err(|error| IdentifierError::Unexpected(error.to_string()))?,
+                )
+            }
+            other => return Err(IdentifierError::Unexpected(other.to_owned())),
+        };
+        Ok(Self {
+            id: Id::read_segments(segments)?,
+            definition,
+        })
+    }
 }

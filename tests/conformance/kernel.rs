@@ -357,24 +357,24 @@ struct ExpressionCase {
     sink_after: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, axionomy::Segments)]
 enum Asset {
     Token,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, axionomy::Segments)]
 enum AccountId {
     Source,
     Sink,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, axionomy::Segments)]
 enum Role {
     Source,
     Sink,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, axionomy::Segments)]
 enum RateId {
     Change,
 }
@@ -396,9 +396,9 @@ enum Merged {}
 
 impl axionomy::Ontology for Merged {
     const NAME: &'static str = "merged";
-    type Account = ();
+    type Account = u8;
     type Asset = u64;
-    type Rate = ();
+    type Rate = u8;
     type Role = u64;
 }
 

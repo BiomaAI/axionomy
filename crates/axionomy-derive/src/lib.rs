@@ -22,12 +22,31 @@ use syn::{Data, DeriveInput, Fields, Ident, parse_macro_input, spanned::Spanned}
 #[proc_macro_derive(Identifier)]
 pub fn identifier(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand(&input)
+    expand(&input, Whole::Identifier)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
 
-fn expand(input: &DeriveInput) -> syn::Result<Tokens> {
+/// `#[derive(Segments)]`: only the path a value is written as, for a type
+/// that keeps its own order and serialization, as types written in a
+/// fixture's numbers do. `#[derive(Identifier)]` is this, ordered and
+/// serialized as its path.
+#[proc_macro_derive(Segments)]
+pub fn segments(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand(&input, Whole::Segments)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// What a derive makes of a type: its path only, or the identifier whole.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Whole {
+    Segments,
+    Identifier,
+}
+
+fn expand(input: &DeriveInput, whole: Whole) -> syn::Result<Tokens> {
     if !input.generics.params.is_empty() {
         return Err(syn::Error::new(
             input.generics.span(),
@@ -111,10 +130,7 @@ fn expand(input: &DeriveInput) -> syn::Result<Tokens> {
             ));
         }
     };
-    let order = ordering(input)?;
-    Ok(quote! {
-        #order
-
+    let segments = quote! {
         impl ::axionomy::path::Segments for #name {
             fn write_segments(&self, segments: &mut ::std::vec::Vec<::std::string::String>) {
                 #write
@@ -126,6 +142,15 @@ fn expand(input: &DeriveInput) -> syn::Result<Tokens> {
                 #read
             }
         }
+    };
+    if whole == Whole::Segments {
+        return Ok(segments);
+    }
+    let order = ordering(input)?;
+    Ok(quote! {
+        #order
+
+        #segments
 
         impl ::axionomy::__serde::Serialize for #name {
             fn serialize<S: ::axionomy::__serde::Serializer>(

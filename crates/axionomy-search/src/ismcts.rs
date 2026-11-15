@@ -692,13 +692,13 @@ mod tests {
     use crate::action_source::lazy_actions;
     use axionomy::{Account, EconomyBuilder, ObservationKey, Quantity, Rate, basket};
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum AccountId {
         Agent,
         Nature,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum Asset {
         Ready,
         AwaitingSignal,
@@ -713,7 +713,7 @@ mod tests {
         Lost,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum RateId {
         Inspect,
         RevealHeads,
@@ -728,7 +728,7 @@ mod tests {
         TailsWrong,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum Role {
         Agent,
         Nature,

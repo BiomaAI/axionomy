@@ -13,7 +13,17 @@ use serde_json::{Value, json};
 macro_rules! identifier {
     ($name:ident) => {
         #[derive(
-            Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize,
+            Debug,
+            Clone,
+            Copy,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            Deserialize,
+            Serialize,
+            axionomy::Segments,
         )]
         #[serde(transparent)]
         struct $name(u64);

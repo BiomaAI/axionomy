@@ -688,13 +688,13 @@ mod tests {
     use axionomy::Quantity;
     use axionomy::{Account, EconomyBuilder, Rate, basket};
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum AccountId {
         Game,
         Nature,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum Asset {
         Ready,
         Won,
@@ -707,7 +707,7 @@ mod tests {
         BadWeight,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum RateId {
         Win,
         Lose,
@@ -717,7 +717,7 @@ mod tests {
         Bad,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
     enum Role {
         Game,
         Nature,
