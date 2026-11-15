@@ -594,7 +594,14 @@ button.id-link:hover { color: var(--brass); }
 .inspector-heading code { font: 10px var(--mono); color: var(--muted); overflow-wrap: anywhere; user-select: all; }
 .inspector-close { flex: 0 0 auto; width: 26px; min-height: 26px; padding: 0; display: grid; place-items: center; }
 .inspector-body { display: grid; gap: 10px; padding: 9px 11px 11px; font-size: 11px; }
-.inspector-dock { position: fixed; right: 16px; bottom: 16px; z-index: 78; width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 150px); overflow: auto; display: grid; align-content: end; gap: 8px; }
+/* Pinned inspectors dock in a column of their own at the right, below the
+   activity line, and the page makes room for it, so they cover nothing; on
+   a narrow window they are a sheet along the bottom, and the page can
+   scroll anything above it. */
+.inspector-dock { position: fixed; top: 42px; right: 16px; bottom: 16px; z-index: 78; width: 380px; overflow: auto; display: grid; align-content: start; gap: 8px; }
+@media (min-width: 1101px) {
+  .app-shell.docked { padding-right: calc(380px + 16px + 24px); }
+}
 .inspector { background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 10px 26px #0009; }
 .inspector .inspector-body { max-height: min(46vh, 440px); overflow: auto; }
 
@@ -674,8 +681,9 @@ input[type="search"] { min-height: 32px; padding: 0 10px; border: 1px solid var(
 @media (max-width: 880px) {
   .rules-body { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 520px) {
-  .inspector-dock { right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 60vh; }
+@media (max-width: 1100px) {
+  .inspector-dock { top: auto; right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 45vh; align-content: end; }
+  .app-shell.docked { padding-bottom: calc(45vh + 16px); }
 }
 @media (prefers-color-scheme: light) {
   .id-card, .inspector { box-shadow: 0 10px 26px #2a251a2b; }

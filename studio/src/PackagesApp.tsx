@@ -255,8 +255,6 @@ export function PackagesApp() {
   /** The history the one on screen is set against: picked (a point), closed (null), or the one it left (undefined). */
   const [compareWith, setCompareWith] = useState<PointId | null>();
   const worldPanel = useRef<HTMLDivElement>(null);
-  /** The transport, which pinned inspectors never cover. */
-  const [transport, setTransport] = useState<HTMLElement | null>(null);
   /** The inspectors pinned open, latest last. */
   const [pinned, setPinned] = useState<Subject[]>([]);
   const pin = useCallback((subject: Subject) => setPinned((current) => [...current.filter((each) => subjectKey(each) !== subjectKey(subject)), subject]), []);
@@ -640,7 +638,7 @@ export function PackagesApp() {
 
   return <InspectionProvider value={{ inspect, pin }}>
   <QuantityFormats.Provider value={document?.formats ?? {}}>
-  <div className="app-shell packages-workspace">
+  <div className={`app-shell packages-workspace${pinned.length > 0 ? " docked" : ""}`}>
     <header className="topbar">
       <Brand />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
@@ -682,7 +680,7 @@ export function PackagesApp() {
         {!opened ? <div className="empty-state">No refs</div>
           : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
           : snapshot && <>
-            <PlaybackControls ref={setTransport} position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />
+            <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />
             <section className="stage point-stage">
               <div className="panel world-panel" ref={worldPanel}>
                 <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
@@ -719,7 +717,7 @@ export function PackagesApp() {
               leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => setCompareWith(null)} />}
           </>}
       </main>}
-    <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} clear={transport} />
+    <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
   </div>
   </QuantityFormats.Provider>
   </InspectionProvider>;

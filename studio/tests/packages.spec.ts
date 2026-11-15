@@ -278,14 +278,17 @@ test("names open inspectors: an account pinned follows the cursor, and the rules
   await page.getByRole("button", { name: "Next exchange" }).click();
   await page.locator(".ticker-panel .exchange-rate").click();
   await expect(inspectors(page).getByRole("region", { name: /^Rate / })).toContainText("Player's cell");
-  // However far the page is scrolled, the inspectors never cover the transport.
+  // However far the page is scrolled, the docked inspectors cover nothing:
+  // the page makes room for them.
   for (const y of [0, 120, 260, 400, 10_000]) {
     await page.evaluate((top) => window.scrollTo(0, top), y);
     await expect.poll(() => page.evaluate(() => {
       const dock = document.querySelector(".inspector-dock")!.getBoundingClientRect();
-      const transport = document.querySelector(".playback")!.getBoundingClientRect();
-      return dock.bottom <= transport.top || dock.top >= transport.bottom || dock.right <= transport.left || dock.left >= transport.right;
-    }), `scrolled to ${y}`).toBe(true);
+      return [".playback", ".tree-panel", ".world-panel", ".action-panel", ".ticker-panel", ".accounts-panel"].filter((panel) => {
+        const box = document.querySelector(panel)!.getBoundingClientRect();
+        return !(dock.bottom <= box.top || dock.top >= box.bottom || dock.right <= box.left || dock.left >= box.right);
+      });
+    }), `scrolled to ${y}`).toEqual([]);
   }
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.keyboard.press("Escape");
