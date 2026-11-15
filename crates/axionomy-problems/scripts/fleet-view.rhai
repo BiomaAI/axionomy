@@ -41,8 +41,6 @@ fn asset_label(parts) {
         "dock-used" => "Hub staging space used",
         "at" => `At ${capital(parts[2])}`,
         "travelling" => `Travelling ${capital(parts[2])} → ${capital(parts[3])}`,
-        "road" => `Fuel by road ${capital(parts[2])} → ${capital(parts[3])}`,
-        "trunk" => `Trunk road ${capital(parts[2])} → ${capital(parts[3])}`,
         "awaiting-outcome" => "Awaiting the trip outcome",
         "ready" => "Ready",
         "departed-at" => "Departed at",
@@ -162,8 +160,7 @@ fn unit(asset) {
         "time" | "time-remaining" | "horizon" | "departed-at" | "ready-at" | "arrival" | "deadline"
             | "expiry" =>
             "ticks",
-        "fuel" | "tank-space" | "spent-fuel" | "space" | "weight" | "dock-space" | "dock-used"
-            | "road" =>
+        "fuel" | "tank-space" | "spent-fuel" | "space" | "weight" | "dock-space" | "dock-used" =>
             "units",
         "money" | "revenue" | "price" => "credits",
         _ => (),
@@ -202,14 +199,16 @@ fn entity(key, label, glyph, anchor, role, tone, status, account) {
 }
 
 // A van where it stands, or how far along the road it travels.
-fn van_entity(state, van, now) {
+fn van_entity(state, roads, van, now) {
     let own = `vehicle/${van}`;
     let at = fleet::whereabouts(state, own);
     let travel = ();
-    for road in fleet::roads() {
-        for leg in [[road[0], road[1]], [road[1], road[0]]] {
+    let road = ();
+    for candidate in roads {
+        for leg in [[candidate.from, candidate.to], [candidate.to, candidate.from]] {
             if travel == () && fleet::value(state, own, `travelling/${leg[0]}/${leg[1]}`) > 0 {
                 travel = leg;
+                road = candidate;
             }
         }
     }
@@ -217,13 +216,6 @@ fn van_entity(state, van, now) {
     let anchor = if at != () {
         #{ kind: "graph_node", node: at }
     } else if travel != () {
-        let road = ();
-        for candidate in fleet::roads() {
-            if road == () && ((candidate[0] == travel[0] && candidate[1] == travel[1])
-                || (candidate[0] == travel[1] && candidate[1] == travel[0])) {
-                road = candidate;
-            }
-        }
         let start = fleet::value(state, own, "departed-at");
         let progress = if ready_at > start {
             let elapsed = if now > start { now - start } else { 0 };
@@ -234,8 +226,8 @@ fn van_entity(state, van, now) {
         };
         #{
             kind: "graph_edge",
-            edge: `road/${road[0]}/${road[1]}`,
-            progress: if road[0] == travel[0] { progress } else { 1.0 - progress },
+            edge: `road/${road.from}/${road.to}`,
+            progress: if road.from == travel[0] { progress } else { 1.0 - progress },
         }
     } else {
         #{ kind: "unanchored" }
@@ -286,19 +278,20 @@ fn scene(state, frame) {
         x: node[2],
         y: node[3],
     });
-    let edges = fleet::roads().map(|road| #{
-        id: `road/${road[0]}/${road[1]}`,
-        source: road[0],
-        target: road[1],
-        label: if road[0] == "depot" && road[1] == "hub" { "one vehicle at a time" }
-            else if road[0] == "depot" && road[1] == "north" { "express · 2 fuel · breakdown risk" }
+    let roads = fleet::roads(state);
+    let edges = roads.map(|road| #{
+        id: `road/${road.from}/${road.to}`,
+        source: road.from,
+        target: road.to,
+        label: if road.trunk { "one vehicle at a time" }
+            else if road.fuel > 1 { `express · ${road.fuel} fuel · breakdown risk` }
             else { "2 ticks + possible delay" },
         classes: [],
     });
 
     let entities = [];
     for van in fleet::vans() {
-        entities.push(van_entity(state, van, now));
+        entities.push(van_entity(state, roads, van, now));
         for id in 0..count {
             if fleet::value(state, `vehicle/${van}`, `cargo/${id}`) > 0 {
                 let cargo = entity(

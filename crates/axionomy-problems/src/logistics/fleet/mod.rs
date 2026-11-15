@@ -69,12 +69,6 @@ pub enum Asset {
     DockUsed,
     At(Location),
     Travelling(Location, Location),
-    /// A road from one place to another, as the fuel a trip along it burns:
-    /// a fact of the world's map.
-    Road(Location, Location),
-    /// The trunk road the vans share, as the one lane a van on it takes: a
-    /// fact of the world's map.
-    Trunk(Location, Location),
     AwaitingOutcome,
     Ready,
     DepartedAt,
@@ -321,6 +315,20 @@ fn finish(van: &Param<Van>, state: Pattern<Asset>) -> Rate<Ontology> {
 fn order_weight() -> Q<Ontology> {
     q(Role::Order, Asset::Weight)
 }
+/// `rate` freeing the hub's staging space the order holds: none, where it
+/// waits at the depot.
+fn unstaged(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.consume_computed(
+        Role::Order,
+        Asset::DockUsed,
+        q(Role::Order, Asset::DockUsed),
+    )
+    .produce_computed(
+        Role::World,
+        Asset::DockSpace,
+        q(Role::Order, Asset::DockUsed),
+    )
+}
 /// `rate` freeing, in the van `role` plays, the payload space the order's
 /// cargo takes and the refrigerated slot a cold one takes.
 fn release_capacity(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
@@ -346,7 +354,7 @@ fn directed_roads() -> impl Iterator<Item = (Location, Location)> {
 pub fn initial(stress: bool, seed: u64) -> World {
     let count: u8 = if stress { 6 } else { 4 };
     let horizon = if stress { 52 } else { 40 };
-    let mut world = basket([
+    let world = basket([
         (Asset::Active, 1),
         (Asset::Horizon, horizon),
         (Asset::TimeRemaining, horizon),
@@ -357,13 +365,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::Permit(Van::Cold), 1),
         (Asset::Permit(Van::Freight), 1),
     ]);
-    for (from, to) in directed_roads() {
-        let fuel = if express(from, to) { 2 } else { 1 };
-        world.insert(Asset::Road(from, to), Quantity::new(fuel));
-        if main_road(from, to) {
-            world.insert(Asset::Trunk(from, to), Quantity::new(1));
-        }
-    }
     let mut builder = EconomyBuilder::new()
         .account(AccountId::World, Account::from(world))
         .account(
@@ -441,30 +442,37 @@ pub fn initial(stress: bool, seed: u64) -> World {
         builder = builder.account(AccountId::Order(id), Account::from(stock));
     }
 
-    // The rates' variables: a van, an order and the two ends of a road.
+    // The rates' variables: a van, an order, the two ends of a road and a
+    // trip's outcome; and the numbers the world's map gives a road.
     let van = Param::<Van>::new(path!("van"));
     let order = Param::<u8>::new(path!("order"));
     let (from, to) = (
         Param::<Location>::new(path!("from")),
         Param::new(path!("to")),
     );
+    let (fuel, lane) = (
+        Param::<u64>::new(path!("fuel")),
+        Param::<u64>::new(path!("trunk-lane")),
+    );
     let every_order = || order.range(0, count - 1);
     let at = |place: &Param<Location>| AssetPattern::At(place.var()).into();
     let cargo = || AssetPattern::Cargo(order.var()).into();
     let travelling = || AssetPattern::Travelling(from.var(), to.var()).into();
-    // A trip goes along a road, which the world's map says the fuel of and
-    // whether it is the trunk road.
+    // A trip goes along a road: the world's map is a relation over the
+    // directed roads, giving the fuel a trip along one burns and the trunk
+    // road's one lane it takes, on the trunk road.
     let on_road = |rate: Rate<Ontology>| {
         rate.variable(from.every())
             .variable(to.every())
-            .relation(Relation::pairs(&from, &to, directed_roads()))
-    };
-    let road = || Q::balance_at(Role::World, AssetPattern::Road(from.var(), to.var()).into());
-    let trunk = || {
-        Q::balance_at(
-            Role::World,
-            AssetPattern::Trunk(from.var(), to.var()).into(),
-        )
+            .relation(Relation::pairs_giving(
+                &from,
+                &to,
+                [fuel.name().clone(), lane.name().clone()],
+                directed_roads().map(|(start, end)| {
+                    let burnt = if express(start, end) { 2 } else { 1 };
+                    (start, end, [burnt, u64::from(main_road(start, end))])
+                }),
+            ))
     };
 
     builder = builder.rate_at(
@@ -492,43 +500,68 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 Role::Vehicle,
                 one([Pattern::literal(Asset::Ready), at(&from)]),
             )
-            .consume_computed(Role::Vehicle, Asset::Fuel, road())
+            .consume_computed(Role::Vehicle, Asset::Fuel, fuel.quantity())
             .produce_at(
                 Role::Vehicle,
                 one([travelling(), Pattern::literal(Asset::AwaitingOutcome)]),
             )
-            .produce_computed(Role::Vehicle, Asset::SpentFuel, road())
-            .produce_computed(Role::Vehicle, Asset::TankSpace, road())
+            .produce_computed(Role::Vehicle, Asset::SpentFuel, fuel.quantity())
+            .produce_computed(Role::Vehicle, Asset::TankSpace, fuel.quantity())
             .produce_computed(Role::Vehicle, Asset::DepartedAt, clock())
-            .consume_computed(Role::World, Asset::RoadSpace, trunk())
-            .produce_computed(Role::Vehicle, Asset::OnMainRoad, trunk()),
+            .consume_computed(Role::World, Asset::RoadSpace, lane.quantity())
+            .produce_computed(Role::Vehicle, Asset::OnMainRoad, lane.quantity()),
     );
-    for outcome in [Outcome::Clear, Outcome::Delayed, Outcome::Breakdown] {
-        let duration = match outcome {
-            Outcome::Clear => 2,
-            Outcome::Delayed => 4,
-            Outcome::Breakdown => 6,
-        };
-        // Bit extraction from the hidden ticket: floor is the operation
-        // itself, not a settlement choice.
-        let shifted = Q::divide(
-            Q::balance_at(
-                Role::Nature,
-                AssetPattern::TicketWord(van.var(), from.var(), to.var()).into(),
-            ),
-            q(Role::Vehicle, Asset::TicketDivisor),
-            Rounding::Floor,
-        );
-        let code = shifted.clone()
-            - (Q::divide(shifted, Q::constant(4), Rounding::Floor) * Q::constant(4));
-        let mut resolution = on_road(each_van(law(), &van))
+    // Nature resolves a trip by the outcome its hidden ticket holds for the
+    // van's trip on that road: a relation over the outcomes gives each one's
+    // code in the ticket, how long after its departure the trip ends and how
+    // many breakdowns it brings. Bit extraction from the hidden ticket:
+    // floor is the operation itself, not a settlement choice.
+    let outcome = Param::<Outcome>::new(path!("outcome"));
+    let (code, duration, breakdowns) = (
+        Param::<u64>::new(path!("code")),
+        Param::<u64>::new(path!("duration")),
+        Param::<u64>::new(path!("breakdowns")),
+    );
+    let shifted = Q::divide(
+        Q::balance_at(
+            Role::Nature,
+            AssetPattern::TicketWord(van.var(), from.var(), to.var()).into(),
+        ),
+        q(Role::Vehicle, Asset::TicketDivisor),
+        Rounding::Floor,
+    );
+    let drawn =
+        shifted.clone() - (Q::divide(shifted, Q::constant(4), Rounding::Floor) * Q::constant(4));
+    builder = builder.rate_at(
+        RateIdPattern::Resolve {
+            van: van.var(),
+            from: from.var(),
+            to: to.var(),
+            outcome: outcome.var(),
+        }
+        .into(),
+        on_road(each_van(law(), &van))
+            .variable(outcome.every())
+            .relation(Relation::each_giving(
+                &outcome,
+                [
+                    code.name().clone(),
+                    duration.name().clone(),
+                    breakdowns.name().clone(),
+                ],
+                [
+                    (Outcome::Clear, [Outcome::Clear as u64, 2, 0]),
+                    (Outcome::Delayed, [Outcome::Delayed as u64, 4, 0]),
+                    (Outcome::Breakdown, [Outcome::Breakdown as u64, 6, 1]),
+                ],
+            ))
             .account(Role::Nature, Pattern::literal(AccountId::Nature))
             .preserve_at(Role::Vehicle, one([travelling()]))
             .condition(
                 path!("match-hidden-vehicle-trip-route-ticket"),
-                code,
+                drawn,
                 C::Equal,
-                Q::constant(outcome as u64),
+                code.quantity(),
             )
             .consume(Role::Vehicle, basket([(Asset::AwaitingOutcome, 1)]))
             .produce(Role::Vehicle, basket([(Asset::Trip, 1), (Asset::Wear, 1)]))
@@ -540,25 +573,12 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .produce_computed(
                 Role::Vehicle,
                 Asset::ReadyAt,
-                q(Role::Vehicle, Asset::DepartedAt) + Q::constant(duration),
-            );
-        if outcome == Outcome::Breakdown {
-            resolution = resolution
-                .consume(Role::Vehicle, basket([(Asset::Integrity, 1)]))
-                .produce(Role::Vehicle, basket([(Asset::Damage, 1)]))
-                .produce(Role::World, basket([(Asset::DamageCount, 1)]));
-        }
-        builder = builder.rate_at(
-            RateIdPattern::Resolve {
-                van: van.var(),
-                from: from.var(),
-                to: to.var(),
-                outcome: Slot::Is(outcome),
-            }
-            .into(),
-            resolution,
-        );
-    }
+                q(Role::Vehicle, Asset::DepartedAt) + duration.quantity(),
+            )
+            .consume_computed(Role::Vehicle, Asset::Integrity, breakdowns.quantity())
+            .produce_computed(Role::Vehicle, Asset::Damage, breakdowns.quantity())
+            .produce_computed(Role::World, Asset::DamageCount, breakdowns.quantity()),
+    );
     builder = builder.rate_at(
         RateIdPattern::Arrive {
             van: van.var(),
@@ -579,8 +599,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 Asset::DepartedAt,
                 q(Role::Vehicle, Asset::DepartedAt),
             )
-            .consume_computed(Role::Vehicle, Asset::OnMainRoad, trunk())
-            .produce_computed(Role::World, Asset::RoadSpace, trunk()),
+            .consume_computed(Role::Vehicle, Asset::OnMainRoad, lane.quantity())
+            .produce_computed(Role::World, Asset::RoadSpace, lane.quantity()),
     );
     builder = builder.rate_at(
         RateIdPattern::Refuel(van.var()).into(),
@@ -715,34 +735,31 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .consume(Role::Order, basket([(Asset::Scheduled, 1)]))
             .produce(Role::Order, basket([(Asset::Waiting, 1)])),
     );
-    // Loading at the hub also frees the staging space the order held there.
-    for place in [Location::Depot, Location::Hub] {
-        let mut load = take_capacity(
+    // Loading takes a waiting order where the van stands, at the depot or
+    // the hub, and frees the staging space the order holds there.
+    // The places an order waits at.
+    let place = Param::<Location>::new(path!("at"));
+    let waiting = [Location::Depot, Location::Hub];
+    builder = builder.rate_at(
+        RateIdPattern::Load {
+            van: van.var(),
+            order: order.var(),
+            at: place.var(),
+        }
+        .into(),
+        unstaged(take_capacity(
             each_order(ready(&van), &order, every_order()),
             Role::Vehicle,
-        )
-        .preserve(Role::Vehicle, basket([(Asset::At(place), 1)]))
-        .consume(
+        ))
+        .variable(place.values(waiting))
+        .preserve_at(Role::Vehicle, one([at(&place)]))
+        .consume_at(
             Role::Order,
-            basket([(Asset::Waiting, 1), (Asset::At(place), 1)]),
+            one([Pattern::literal(Asset::Waiting), at(&place)]),
         )
         .produce(Role::Order, basket([(Asset::InTransit, 1)]))
-        .produce_at(Role::Vehicle, one([cargo()]));
-        if place == Location::Hub {
-            load = load
-                .consume_computed(Role::Order, Asset::DockUsed, order_weight())
-                .produce_computed(Role::World, Asset::DockSpace, order_weight());
-        }
-        builder = builder.rate_at(
-            RateIdPattern::Load {
-                van: van.var(),
-                order: order.var(),
-                at: Slot::Is(place),
-            }
-            .into(),
-            load,
-        );
-    }
+        .produce_at(Role::Vehicle, one([cargo()])),
+    );
     builder = builder.rate_at(
         RateIdPattern::Stage {
             van: van.var(),
@@ -879,26 +896,20 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 basket([(Asset::Resolved, 1), (Asset::ExpiredCount, 1)]),
             )
     };
-    for place in [Location::Depot, Location::Hub] {
-        let mut expire = expiring().consume(
-            Role::Order,
-            basket([(Asset::Waiting, 1), (Asset::At(place), 1)]),
-        );
-        if place == Location::Hub {
-            expire = expire
-                .consume_computed(Role::Order, Asset::DockUsed, order_weight())
-                .produce_computed(Role::World, Asset::DockSpace, order_weight());
+    builder = builder.rate_at(
+        RateIdPattern::Expire {
+            order: order.var(),
+            carrier: Slot::Is(None),
+            at: place.var(),
         }
-        builder = builder.rate_at(
-            RateIdPattern::Expire {
-                order: order.var(),
-                carrier: Slot::Is(None),
-                at: Slot::Is(place),
-            }
-            .into(),
-            expire,
-        );
-    }
+        .into(),
+        unstaged(expiring())
+            .variable(place.values(waiting))
+            .consume_at(
+                Role::Order,
+                one([Pattern::literal(Asset::Waiting), at(&place)]),
+            ),
+    );
     builder = builder.rate_at(
         RateIdPattern::Expire {
             order: order.var(),

@@ -11,9 +11,23 @@
 fn vans() { ["cold", "freight"] }
 fn locations() { ["depot", "hub", "north", "south", "east"] }
 
-fn roads() {
-    [["depot", "hub"], ["hub", "north"], ["hub", "south"], ["north", "east"],
-     ["south", "east"], ["depot", "north"]]
+// The roads, each once, as the world's map gives them: the cold van's trips
+// from each place to a later one, with the fuel a trip burns and whether it
+// takes the trunk road's one lane.
+fn roads(state) {
+    let places = locations();
+    let roads = [];
+    for trip in state.instances("depart") {
+        let parts = trip.split("/");
+        if parts[1] == "cold" && places.index_of(parts[2]) < places.index_of(parts[3]) {
+            let values = state.values(trip);
+            roads.push(#{
+                from: values.from, to: values.to, fuel: values.fuel,
+                trunk: values["trunk-lane"] > 0,
+            });
+        }
+    }
+    roads
 }
 
 fn value(state, account, asset) { state.balance(account, asset).to_int() }
@@ -35,10 +49,6 @@ fn destination(id) {
     if id == 1 || id == 2 { "south" } else if id == 3 || id == 4 { "east" } else { "north" }
 }
 
-fn express(from, to) {
-    (from == "depot" && to == "north") || (from == "north" && to == "depot")
-}
-
 fn other_van(van) { if van == "cold" { "freight" } else { "cold" } }
 
 // The exchange of `rate` if it applies.
@@ -47,10 +57,10 @@ fn applying(state, rate) {
     if state.applicable(proposal) { proposal } else { () }
 }
 
-// The first road from `from` toward `to` on a shortest path by public road
-// costs, avoiding the express road when `reliable`; nothing at `to` or
-// when no road leads there.
-fn first_road(from, to, reliable) {
+// The first road from `from` toward `to` on a shortest path over `roads`,
+// avoiding the express road, which burns extra fuel, when `reliable`;
+// nothing at `to` or when no road leads there.
+fn first_road(roads, from, to, reliable) {
     if from == to { return (); }
     let queue = [[from, ()]];
     let seen = [from];
@@ -59,16 +69,16 @@ fn first_road(from, to, reliable) {
         let at = queue[head][0];
         let first = queue[head][1];
         head += 1;
-        for road in roads() {
+        for road in roads {
             let next = ();
-            if at == road[0] {
-                next = road[1];
-            } else if at == road[1] {
-                next = road[0];
+            if at == road.from {
+                next = road.to;
+            } else if at == road.to {
+                next = road.from;
             } else {
                 continue;
             }
-            if reliable && express(at, next) { continue; }
+            if reliable && road.fuel > 1 { continue; }
             let hop = if first == () { next } else { first };
             if next == to { return hop; }
             if !(next in seen) {
@@ -200,7 +210,7 @@ fn decision(state, van, policy) {
         } else {
             destination(cargo[0])
         };
-        let next = first_road(from, target, reliable);
+        let next = first_road(roads(state), from, target, reliable);
         if next != () {
             let departure = applying(state, `depart/${van}/${from}/${next}`);
             if departure != () { return departure; }
@@ -217,7 +227,7 @@ fn decision(state, van, policy) {
                 }
             }
             if staged {
-                let next = first_road(from, "hub", reliable);
+                let next = first_road(roads(state), from, "hub", reliable);
                 if next != () {
                     let departure = applying(state, `depart/${van}/${from}/${next}`);
                     if departure != () { return departure; }
@@ -225,7 +235,7 @@ fn decision(state, van, policy) {
             }
         }
         if from != "depot" {
-            let next = first_road(from, "depot", reliable);
+            let next = first_road(roads(state), from, "depot", reliable);
             if next != () {
                 let departure = applying(state, `depart/${van}/${from}/${next}`);
                 if departure != () { return departure; }

@@ -17,12 +17,17 @@ the weather result. A finite two-slot hub supports asynchronous cargo handoffs;
 direct transfers require actual co-location and free compatible capacity.
 
 The fleet's rates have variables: one law serves every van, order and road,
-`load/{van}/{order}/hub`, and laws split only where their shape differs,
-loading at the depot or the hub, delivering on time or late, each trip
-outcome, repairing a broken-down or a worn van. A trip goes along a road, a
-relation over the map's directed roads; the fuel it burns and whether it
-takes the trunk road's one lane are `Road(from, to)` and `Trunk(from, to)`
-facts of the world's map. An order's payload space, refrigerated slot,
+`load/{van}/{order}/{at}`, and laws split only where their shape differs,
+delivering on time or late, an order expiring waiting or aboard,
+repairing a broken-down or a worn van. A trip goes along a road: the
+world's map is a relation over the directed roads, giving the fuel a trip
+burns (`{fuel}`) and the trunk road's one lane it takes (`{trunk-lane}`),
+which the policies and the view read (`state.instances`, `state.values`).
+Nature resolves a trip by one law, `resolve/{van}/{from}/{to}/{outcome}`,
+a relation over the outcomes giving each one's code in the hidden ticket,
+how long the trip takes and how many breakdowns it brings. Loading, or an
+order expiring while it waits, at the depot or the hub frees the staging
+space the order holds there. An order's payload space, refrigerated slot,
 staging space and payment come from its own account's weight, cold-cargo
 flag and price, a delivery is made where the van stands at the order's
 destination, and an order expires at its `Expiry`. Each role is fixed to its
