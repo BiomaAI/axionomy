@@ -22,8 +22,6 @@ fn agent(name) {
 
 fn asset_label(name, parts) {
     switch name {
-        "agent-identity" => `Identity: ${agent(parts[2])}`,
-        "bridge-identity" => "Bridge identity",
         "at" => if parts[2] == "west" { "At the west bank" } else { "At the east bank" },
         "energy" => "Crossing energy",
         "spent-energy" => "Energy spent crossing",
@@ -50,6 +48,7 @@ fn asset_label(name, parts) {
         "deadline" => "Arrival deadline",
         "lease-until" => "Reservation valid through",
         "ready-at" => "Travel completes at",
+        "crossing-time" => "A crossing holds the lane for",
         "in-transit" => "On the bridge",
         "on-detour" => "On the alternate route",
         "detouring" => "Detouring",
@@ -100,8 +99,8 @@ fn format(asset) {
     switch asset.split("/")[0] {
         "energy" | "spent-energy" => #{ scale: 0, unit: "units" },
         "credit" | "escrow" | "spent-credit" => #{ scale: 0, unit: "credits" },
-        "now" | "time-remaining" | "arrival" | "deadline" | "lease-until" | "ready-at" =>
-            #{ scale: 0, unit: "ticks" },
+        "now" | "time-remaining" | "arrival" | "deadline" | "lease-until" | "ready-at"
+            | "crossing-time" => #{ scale: 0, unit: "ticks" },
         _ => (),
     }
 }

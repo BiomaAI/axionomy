@@ -4,37 +4,18 @@
 // here proposes one exchange a turn; the kernel applies it or refuses it.
 
 // Whether the economy keeps time: timed traffic can advance its clock.
-fn timed(state) { "advance/1" in state.rates("advance/") }
+fn timed(state) { !state.rates("advance").is_empty() }
 
 // The shared clock, and what an agent, `a` or `b`, holds of `asset`.
 fn clock(state) { state.balance("bridge", "now").to_int() }
 fn held(state, agent, asset) { state.balance(`agent/${agent}`, asset).to_int() }
 fn other(agent) { if agent == "a" { "b" } else { "a" } }
 
-// How many ticks an agent's crossing occupies the lane.
-fn duration(agent) { if agent == "a" { 3 } else { 2 } }
+// How many ticks an agent's crossing occupies the lane, as it records.
+fn duration(state, agent) { held(state, agent, "crossing-time") }
 
 // A rate's kind, its first segment, such as `cross` or `submit-bid`.
 fn kind(rate) { rate.split("/")[0] }
-
-// `rate` bound to the accounts its roles name.
-fn action(rate) {
-    let parts = rate.split("/");
-    switch parts[0] {
-        "resolve" => exchange(rate, #{
-            winner: `agent/${parts[1]}`,
-            loser: `agent/${other(parts[1])}`,
-            bridge: "bridge",
-        }, 1),
-        "reset-round" | "finish" => exchange(rate, #{
-            "agent-a": "agent/a",
-            "agent-b": "agent/b",
-            bridge: "bridge",
-        }, 1),
-        "advance" => exchange(rate, #{ bridge: "bridge" }, 1),
-        _ => exchange(rate, #{ traveler: `agent/${parts[1]}`, bridge: "bridge" }, 1),
-    }
-}
 
 // The next time something happens: an arrival, a crossing or detour that
 // completes, or an unused reservation that expires. Nothing when none is
@@ -60,16 +41,24 @@ fn next_time(state) {
     next
 }
 
-// Every rate, in order, that applies; timed traffic only advances its clock
-// to the next time something happens.
+// Every move that applies, in the order of their identifiers; timed traffic
+// only advances its clock to the next time something happens.
 fn candidates(state) {
-    let rates = state.rates("");
-    if timed(state) {
-        let next = next_time(state);
-        let due = if next == () { "" } else { `advance/${next}` };
-        rates = rates.filter(|rate| !rate.starts_with("advance/") || rate == due);
+    let choices = [];
+    let kinds = [];
+    for rate in state.rates("") {
+        let kind = kind(rate);
+        if kind == "advance" || kinds.contains(kind) { continue; }
+        kinds.push(kind);
+        choices += state.moves(kind);
     }
-    rates.map(|rate| action(rate)).filter(|proposal| state.applicable(proposal))
+    let next = if timed(state) { next_time(state) } else { () };
+    if next != () {
+        let advance = state.exchange_of(`advance/${next}`);
+        if state.applicable(advance) { choices.push(advance); }
+    }
+    choices.sort(|a, b| if a.rate() < b.rate() { -1 } else if a.rate() > b.rate() { 1 } else { 0 });
+    choices
 }
 
 // What plain search routes over: in timed traffic, a ready crossing,
@@ -107,7 +96,7 @@ fn priority_claim(state, choices, first) {
 // 1, never more than the agent's credit.
 fn bid(state, agent) {
     if !timed(state) { return if agent == "a" { 2 } else { 1 }; }
-    let slack = held(state, agent, "deadline") - (clock(state) + duration(agent));
+    let slack = held(state, agent, "deadline") - (clock(state) + duration(state, agent));
     let amount = if slack <= 2 { 2 } else { 1 };
     let credit = held(state, agent, "credit");
     if credit < amount { credit } else { amount }
@@ -121,8 +110,10 @@ fn auction_claim(state, choices) {
         let now = clock(state);
         if now < held(state, "a", "arrival") || now < held(state, "b", "arrival") { return (); }
         for agent in ["a", "b"] {
-            let offer = action(`submit-bid/${agent}/${bid(state, agent)}`);
-            if state.applicable(offer) { return offer; }
+            let offer = `submit-bid/${agent}/${bid(state, agent)}`;
+            for choice in choices {
+                if choice.rate() == offer { return choice; }
+            }
         }
         for choice in choices {
             if kind(choice.rate()) == "claim-first" { return choice; }
@@ -147,7 +138,7 @@ fn adaptive_claim(state, choices) {
         let deadline = held(state, agent, "deadline");
         let occupied = held(state, other(agent), "ready-at");
         if occupied < now { occupied = now; }
-        if now + 3 <= deadline && occupied + duration(agent) > deadline { return choice; }
+        if now + 3 <= deadline && occupied + duration(state, agent) > deadline { return choice; }
     }
     let earliest = ();
     let chosen = ();

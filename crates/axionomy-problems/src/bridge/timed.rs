@@ -1,7 +1,7 @@
 //! Shared-time traffic: finite leases, occupied crossings, deadlines and a detour.
 use super::*;
+use axionomy::QuantityComparison as C;
 use axionomy::path;
-use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 pub fn enabled(world: &World) -> bool {
     world.rate(&RateId::Advance { to: 1 }).is_some()
@@ -12,18 +12,16 @@ fn clock() -> Q<Ontology> {
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
 }
-fn law() -> Rate<Ontology> {
-    Rate::new()
-        .preserve(
-            Role::Bridge,
-            basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
-        )
-        .condition(path!("one-event"), Q::units(), C::Equal, Q::constant(1))
+/// One event at a time.
+fn one_event(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.condition(path!("one-event"), Q::units(), C::Equal, Q::constant(1))
 }
-fn traveler(agent: AgentId) -> Rate<Ontology> {
-    law()
-        .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
-        .distinct(Role::Traveler, Role::Bridge)
+fn law() -> Rate<Ontology> {
+    one_event(at_the_bridge())
+}
+/// A move of either traveller, `{agent}`, one event at a time.
+fn timed_traveller() -> Rate<Ontology> {
+    one_event(traveller())
 }
 fn arrived(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
     rate.condition(
@@ -47,19 +45,21 @@ pub(super) fn build(source: World) -> World {
                 AccountId::Agent(agent) => basket([
                     (Asset::Arrival, u64::from(*agent == AgentId::B)),
                     (Asset::Deadline, if *agent == AgentId::A { 7 } else { 4 }),
+                    (Asset::CrossingTime, duration(*agent)),
                 ]),
             })
             .unwrap();
         builder = builder.account(*id, account);
     }
+    // Each untimed rate keeps its law, timed: the family its instances
+    // belong to says how.
     for (key, rate) in source.rates() {
-        let id = key
-            .as_literal()
-            .expect("the untimed bridge's rates are written out");
-        let mut rate =
-            rate.clone()
-                .condition(path!("one-event"), Q::units(), C::Equal, Q::constant(1));
-        match *id {
+        let family = source
+            .instances_of(key)
+            .next()
+            .expect("every untimed rate has an instance");
+        let mut rate = one_event(rate.clone());
+        match family {
             RateId::SubmitBid { .. } => rate = arrived(rate, Role::Traveler),
             RateId::ClaimFirst { .. }
             | RateId::ClaimSecond { .. }
@@ -77,8 +77,9 @@ pub(super) fn build(source: World) -> World {
                     clock() + Q::constant(2),
                 );
             }
-            RateId::Cross { agent } => {
-                rate = clear(traveler(agent), Role::Traveler, Asset::LeaseUntil)
+            // A crossing holds the lane for the traveller's crossing time.
+            RateId::Cross { .. } => {
+                rate = clear(timed_traveller(), Role::Traveler, Asset::LeaseUntil)
                     .preserve(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
                     .condition(
                         path!("reservation-has-not-expired"),
@@ -97,7 +98,7 @@ pub(super) fn build(source: World) -> World {
                     .produce_computed(
                         Role::Traveler,
                         Asset::ReadyAt,
-                        clock() + Q::constant(duration(agent)),
+                        clock() + Q::balance(Role::Traveler, Asset::CrossingTime),
                     );
             }
             RateId::ResetRound => {
@@ -110,125 +111,133 @@ pub(super) fn build(source: World) -> World {
             }
             _ => {}
         }
-        builder = builder.rate(*id, rate);
+        builder = builder.rate_at(key.clone(), rate);
     }
-    for agent in [AgentId::A, AgentId::B] {
-        for late in [false, true] {
-            for detour in [false, true] {
-                let mut complete = clear(traveler(agent), Role::Traveler, Asset::ReadyAt)
-                    .condition(
-                        path!("travel-duration-elapsed"),
-                        clock(),
-                        C::GreaterThanOrEqual,
-                        Q::balance(Role::Traveler, Asset::ReadyAt),
-                    )
-                    .condition(
-                        path!("deadline-outcome"),
-                        if late {
-                            clock()
-                        } else {
-                            Q::balance(Role::Traveler, Asset::Deadline)
-                        },
-                        C::GreaterThanOrEqual,
-                        if late {
-                            Q::balance(Role::Traveler, Asset::Deadline) + Q::constant(1)
-                        } else {
-                            clock()
-                        },
-                    )
-                    .consume(
-                        Role::Traveler,
-                        basket([
-                            (
-                                if detour {
-                                    Asset::Detouring
-                                } else {
-                                    Asset::CrossingRight
-                                },
-                                1,
-                            ),
-                            (
-                                if detour {
-                                    Asset::OnDetour
-                                } else {
-                                    Asset::InTransit
-                                },
-                                1,
-                            ),
-                        ]),
-                    )
-                    .produce(
-                        Role::Traveler,
-                        basket([
-                            (Asset::At(Side::East), 1),
-                            (Asset::Crossed, 1),
-                            (if late { Asset::Late } else { Asset::OnTime }, 1),
-                        ]),
-                    );
-                if detour {
-                    // If nobody used the bridge this round, close its first turn.
-                    complete = complete
-                        .consume_computed(
-                            Role::Bridge,
-                            Asset::FirstTurn,
-                            Q::balance(Role::Bridge, Asset::FirstTurn),
-                        )
-                        .produce_computed(
-                            Role::Bridge,
-                            Asset::SecondTurn,
-                            Q::balance(Role::Bridge, Asset::FirstTurn),
-                        );
-                } else {
-                    complete = complete.produce(
-                        Role::Bridge,
-                        basket([(Asset::CapacityFree, 1), (Asset::SecondTurn, 1)]),
-                    );
-                }
-                builder = builder.rate(
-                    RateId::Complete {
-                        agent,
-                        detour,
-                        late,
+    for late in [false, true] {
+        for detour in [false, true] {
+            let mut complete = clear(timed_traveller(), Role::Traveler, Asset::ReadyAt)
+                .condition(
+                    path!("travel-duration-elapsed"),
+                    clock(),
+                    C::GreaterThanOrEqual,
+                    Q::balance(Role::Traveler, Asset::ReadyAt),
+                )
+                .condition(
+                    path!("deadline-outcome"),
+                    if late {
+                        clock()
+                    } else {
+                        Q::balance(Role::Traveler, Asset::Deadline)
                     },
-                    complete,
+                    C::GreaterThanOrEqual,
+                    if late {
+                        Q::balance(Role::Traveler, Asset::Deadline) + Q::constant(1)
+                    } else {
+                        clock()
+                    },
+                )
+                .consume(
+                    Role::Traveler,
+                    basket([
+                        (
+                            if detour {
+                                Asset::Detouring
+                            } else {
+                                Asset::CrossingRight
+                            },
+                            1,
+                        ),
+                        (
+                            if detour {
+                                Asset::OnDetour
+                            } else {
+                                Asset::InTransit
+                            },
+                            1,
+                        ),
+                    ]),
+                )
+                .produce(
+                    Role::Traveler,
+                    basket([
+                        (Asset::At(Side::East), 1),
+                        (Asset::Crossed, 1),
+                        (if late { Asset::Late } else { Asset::OnTime }, 1),
+                    ]),
+                );
+            if detour {
+                // If nobody used the bridge this round, close its first turn.
+                complete = complete
+                    .consume_computed(
+                        Role::Bridge,
+                        Asset::FirstTurn,
+                        Q::balance(Role::Bridge, Asset::FirstTurn),
+                    )
+                    .produce_computed(
+                        Role::Bridge,
+                        Asset::SecondTurn,
+                        Q::balance(Role::Bridge, Asset::FirstTurn),
+                    );
+            } else {
+                complete = complete.produce(
+                    Role::Bridge,
+                    basket([(Asset::CapacityFree, 1), (Asset::SecondTurn, 1)]),
                 );
             }
-        }
-        for waiting in [false, true] {
-            builder = builder.rate(
-                RateId::Detour { agent, waiting },
-                arrived(traveler(agent), Role::Traveler)
-                    .consume(
-                        Role::Traveler,
-                        basket([
-                            (
-                                if waiting {
-                                    Asset::Waiting
-                                } else {
-                                    Asset::CanBid
-                                },
-                                1,
-                            ),
-                            (Asset::At(Side::West), 1),
-                            (Asset::Energy, 1),
-                            (Asset::Credit, 1),
-                        ]),
-                    )
-                    .produce(
-                        Role::Traveler,
-                        basket([
-                            (Asset::Detouring, 1),
-                            (Asset::OnDetour, 1),
-                            (Asset::SpentEnergy, 1),
-                            (Asset::SpentCredit, 1),
-                        ]),
-                    )
-                    .produce_computed(Role::Traveler, Asset::ReadyAt, clock() + Q::constant(3)),
+            builder = builder.rate_at(
+                RateIdPattern::Complete {
+                    agent: agent().var(),
+                    detour: Slot::Is(detour),
+                    late: Slot::Is(late),
+                }
+                .into(),
+                complete,
             );
         }
-        builder = builder.rate(
-            RateId::ExpireReservation { agent },
-            clear(traveler(agent), Role::Traveler, Asset::LeaseUntil)
+    }
+    for waiting in [false, true] {
+        builder = builder.rate_at(
+            RateIdPattern::Detour {
+                agent: agent().var(),
+                waiting: Slot::Is(waiting),
+            }
+            .into(),
+            arrived(timed_traveller(), Role::Traveler)
+                .consume(
+                    Role::Traveler,
+                    basket([
+                        (
+                            if waiting {
+                                Asset::Waiting
+                            } else {
+                                Asset::CanBid
+                            },
+                            1,
+                        ),
+                        (Asset::At(Side::West), 1),
+                        (Asset::Energy, 1),
+                        (Asset::Credit, 1),
+                    ]),
+                )
+                .produce(
+                    Role::Traveler,
+                    basket([
+                        (Asset::Detouring, 1),
+                        (Asset::OnDetour, 1),
+                        (Asset::SpentEnergy, 1),
+                        (Asset::SpentCredit, 1),
+                    ]),
+                )
+                .produce_computed(Role::Traveler, Asset::ReadyAt, clock() + Q::constant(3)),
+        );
+    }
+    builder = builder
+        .rate_at(
+            RateIdPattern::ExpireReservation {
+                agent: agent().var(),
+            }
+            .into(),
+            clear(timed_traveller(), Role::Traveler, Asset::LeaseUntil)
                 .preserve(Role::Traveler, basket([(Asset::At(Side::West), 1)]))
                 .condition(
                     path!("unused-reservation-expired"),
@@ -245,48 +254,40 @@ pub(super) fn build(source: World) -> World {
                     Role::Bridge,
                     basket([(Asset::CapacityFree, 1), (Asset::SecondTurn, 1)]),
                 ),
-        );
-        for amount in 1..=2 {
-            builder = builder.rate(
-                RateId::WithdrawBid { agent, amount },
-                traveler(agent)
-                    .consume(
-                        Role::Traveler,
-                        basket([
-                            (Asset::Submitted, 1),
-                            (Asset::Bid(amount), 1),
-                            (Asset::Escrow, u64::from(amount)),
-                        ]),
-                    )
-                    .produce(
-                        Role::Traveler,
-                        basket([(Asset::CanBid, 1), (Asset::Credit, u64::from(amount))]),
-                    ),
-            );
-        }
-    }
-    for to in 1..=64 {
-        builder = builder.rate(
-            RateId::Advance { to },
-            law()
-                .condition(
-                    path!("clock-moves-forward"),
-                    clock() + Q::constant(1),
-                    C::LessThanOrEqual,
-                    Q::constant(u64::from(to)),
+        )
+        .rate_at(
+            RateIdPattern::WithdrawBid {
+                agent: agent().var(),
+                amount: amount().var(),
+            }
+            .into(),
+            timed_traveller()
+                .variable(amount().range(1, 2))
+                .consume_at(
+                    Role::Traveler,
+                    one([
+                        Pattern::literal(Asset::Submitted),
+                        AssetPattern::Bid(amount().var()).into(),
+                    ]),
                 )
-                .consume_computed(
-                    Role::Bridge,
-                    Asset::TimeRemaining,
-                    Q::constant(u64::from(to)) - clock(),
-                )
-                .produce_computed(
-                    Role::Bridge,
-                    Asset::Now,
-                    Q::constant(u64::from(to)) - clock(),
-                ),
+                .consume_computed(Role::Traveler, Asset::Escrow, amount().quantity())
+                .produce(Role::Traveler, basket([(Asset::CanBid, 1)]))
+                .produce_computed(Role::Traveler, Asset::Credit, amount().quantity()),
         );
-    }
+    let to = Param::<u8>::new(path!("to"));
+    builder = builder.rate_at(
+        RateIdPattern::Advance { to: to.var() }.into(),
+        law()
+            .variable(to.range(1, 64))
+            .condition(
+                path!("clock-moves-forward"),
+                clock() + Q::constant(1),
+                C::LessThanOrEqual,
+                to.quantity(),
+            )
+            .consume_computed(Role::Bridge, Asset::TimeRemaining, to.quantity() - clock())
+            .produce_computed(Role::Bridge, Asset::Now, to.quantity() - clock()),
+    );
     for invariant in source.invariants() {
         let invariant = match invariant.name().as_str() {
             "two-agent-positions" => invariant
@@ -321,7 +322,7 @@ mod tests {
         let mut world = world.clone();
         for rate in rates {
             world
-                .apply(action(*rate))
+                .apply(action(&world, *rate))
                 .unwrap_or_else(|error| panic!("{rate:?}: {error}"));
         }
         world
@@ -402,15 +403,20 @@ mod tests {
     #[test]
     fn lane_occupancy_and_expiring_reservations_are_enforced_by_core() {
         let mut world = initial_showcase();
-        assert!(!world.is_applicable(&action(RateId::ClaimFirst { agent: AgentId::B })));
+        assert!(!world.is_applicable(&action(&world, RateId::ClaimFirst { agent: AgentId::B })));
         world
-            .apply(action(RateId::ClaimFirst { agent: AgentId::A }))
+            .apply(action(&world, RateId::ClaimFirst { agent: AgentId::A }))
             .unwrap();
         let mut expired = world.clone();
-        expired.apply(action(RateId::Advance { to: 3 })).unwrap();
-        assert!(!expired.is_applicable(&action(RateId::Cross { agent: AgentId::A })));
         expired
-            .apply(action(RateId::ExpireReservation { agent: AgentId::A }))
+            .apply(action(&expired, RateId::Advance { to: 3 }))
+            .unwrap();
+        assert!(!expired.is_applicable(&action(&expired, RateId::Cross { agent: AgentId::A })));
+        expired
+            .apply(action(
+                &expired,
+                RateId::ExpireReservation { agent: AgentId::A },
+            ))
             .unwrap();
         assert_eq!(
             expired
@@ -419,20 +425,28 @@ mod tests {
             1
         );
         world
-            .apply(action(RateId::Cross { agent: AgentId::A }))
+            .apply(action(&world, RateId::Cross { agent: AgentId::A }))
             .unwrap();
-        world.apply(action(RateId::Advance { to: 1 })).unwrap();
-        assert!(!world.is_applicable(&action(RateId::ClaimSecond { agent: AgentId::B })));
-        assert!(!world.is_applicable(&action(RateId::Complete {
-            agent: AgentId::A,
-            detour: false,
-            late: false
-        })));
         world
-            .apply(action(RateId::Detour {
-                agent: AgentId::B,
-                waiting: false,
-            }))
+            .apply(action(&world, RateId::Advance { to: 1 }))
+            .unwrap();
+        assert!(!world.is_applicable(&action(&world, RateId::ClaimSecond { agent: AgentId::B })));
+        assert!(!world.is_applicable(&action(
+            &world,
+            RateId::Complete {
+                agent: AgentId::A,
+                detour: false,
+                late: false
+            }
+        )));
+        world
+            .apply(action(
+                &world,
+                RateId::Detour {
+                    agent: AgentId::B,
+                    waiting: false,
+                },
+            ))
             .unwrap();
         assert_eq!(balance(&world, AgentId::A, Asset::InTransit), 1);
         assert_eq!(balance(&world, AgentId::B, Asset::OnDetour), 1);
@@ -464,7 +478,7 @@ mod tests {
     #[test]
     fn stress_needs_a_third_round() {
         let two_rounds = [&WAITED_ROUND[..], &later_round(6)].concat();
-        let finish = action(RateId::Finish);
+        let finish = action(&initial_showcase(), RateId::Finish);
         assert!(played(&initial_showcase(), &two_rounds).is_applicable(&finish));
         let stress = played(&initial_stress(), &two_rounds);
         assert!(!stress.is_applicable(&finish));

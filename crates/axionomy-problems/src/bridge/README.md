@@ -30,10 +30,19 @@ Crossing returns the bridge's capacity token and enables the second turn. A
 waiting or first-come agent can then receive the second right. Finish requires
 both agents to hold `Crossed`.
 
-Every participant and the bridge preserve identity assets. Agent names in
-rate identifiers therefore cannot be used to impersonate another account or
-swap the encoded auction winner. Finish consumes the bridge's active lifecycle
-asset, making the terminal economy quiescent.
+The rates have variables: one law serves both travellers, `cross/{agent}`,
+and a bid or a withdrawal of either amount, `submit-bid/{agent}/{amount}`.
+A resolution is a law for each winner, `resolve/a/{winning-bid}/{losing-bid}`,
+whose loser is the other traveller and whose bids a relation keeps to the
+higher winning, A on a tie. Timed laws split only where their shape differs:
+a completion by detour and lateness, a detour by whether the traveller was
+waiting. A crossing holds the lane for the traveller's `CrossingTime`, a fact
+of its account, and the clock advances by one law, `advance/{to}`. Every role
+is fixed to the account its identifier names, so an agent's name in an
+identifier cannot be used to impersonate another account or swap the auction
+winner, and no identity asset pins a binding. Finish consumes the bridge's
+active lifecycle asset, making the terminal economy quiescent. Micro has 8
+rates as written, for 17 instances; Showcase and Stress 18, for 100.
 
 ## Required results
 
@@ -50,7 +59,8 @@ The model's tests apply the rules directly:
 - First-come and auction plans both replay to the same goal.
 - A bid of A=2 and B=1 resolves to A.
 - A second claim while capacity is held is rejected.
-- Bidder impersonation and winner/loser rebinding are rejected.
+- Bidder impersonation and winner/loser rebinding are rejected, and no
+  identifier names a winner who bid less.
 - Rejection leaves every account unchanged.
 
 ## API pressure
