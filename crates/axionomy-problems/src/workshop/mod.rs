@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    basket,
+    Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern,
+    Quantity, Rate, basket,
 };
 #[cfg(feature = "packages")]
 pub mod package;
@@ -18,7 +18,6 @@ pub enum AccountId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
     Wood,
-    CustomerIdentity(u8),
     Credit,
     Frame,
     Panel,
@@ -104,6 +103,11 @@ pub fn initial_stress() -> World {
     production::build(true)
 }
 
+/// A law of the workshop, its shop role fixed to the workshop's account.
+fn law() -> Rate<Ontology> {
+    Rate::new().account(Role::Shop, Pattern::literal(AccountId::Workshop))
+}
+
 fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
     EconomyBuilder::new()
         .account(
@@ -118,7 +122,7 @@ fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
         )
         .rate(
             RateId::BasicChair,
-            Rate::new()
+            law()
                 .preserve(Role::Shop, basket([(Asset::Active, 1)]))
                 .consume(
                     Role::Shop,
@@ -137,7 +141,7 @@ fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
         )
         .rate(
             RateId::EfficientBatch,
-            Rate::new()
+            law()
                 .preserve(Role::Shop, basket([(Asset::Active, 1)]))
                 .consume(
                     Role::Shop,
@@ -158,7 +162,7 @@ fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
         // that declared invariants, rather than solver discipline, are final.
         .rate(
             RateId::CounterfeitChair,
-            Rate::new()
+            law()
                 .preserve(Role::Shop, basket([(Asset::Active, 1)]))
                 .consume(Role::Shop, basket([(Asset::Wood, 1), (Asset::Time, 1)]))
                 .produce(
@@ -168,7 +172,7 @@ fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
         )
         .rate(
             RateId::Finish,
-            Rate::new()
+            law()
                 .preserve(Role::Shop, basket([(Asset::Chair, target)]))
                 .consume(Role::Shop, basket([(Asset::Active, 1)]))
                 .produce(Role::Shop, basket([(Asset::Solved, 1)])),

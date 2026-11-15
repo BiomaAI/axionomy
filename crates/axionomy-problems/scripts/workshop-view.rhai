@@ -19,7 +19,6 @@ fn label(item) {
     }
     if category == "asset" {
         return switch name {
-            "customer-identity" => `Customer ${ordinal(parts[2])} identity`,
             "credit" => "Credit",
             "frame" => "Prepared frames",
             "panel" => "Prepared panel material",
@@ -104,6 +103,13 @@ fn entity(key, label, glyph, anchor, role, tone, status) {
         glyph: glyph, anchor: anchor, role: role, tone: tone, status: status,
         evidence: [], metrics: [],
     }
+}
+
+// The entity, showing `account`.
+fn of_account(entity, account) {
+    entity.account = `workshop/account/${account}`;
+    entity.evidence = [#{ kind: "account", account: `workshop/account/${account}` }];
+    entity
 }
 
 // The entity, showing the balance of `asset` that `account` holds.
@@ -201,10 +207,10 @@ fn scene(state, frame) {
             else if !state.balance("workshop", `prepared/${order}`).is_zero() { "components ready" }
             else if !state.balance("workshop", `raw/${order}`).is_zero() { "accepted · awaiting components" }
             else { "available" };
-        let contract = linked(entity(
+        let contract = of_account(entity(
             `contract/${order}`, `Contract ${ordinal(order)}`, "task", at("credit"), "attachment",
             if status == "delivered and paid" { "success" } else { "neutral" }, status,
-        ), account, `customer-identity/${order}`);
+        ), account);
         contract.metrics = [asset_metric("escrow", "Customer funds", "credit", state.balance(account, "credit"))];
         entities.push(contract);
     }

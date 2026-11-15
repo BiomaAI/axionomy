@@ -27,6 +27,11 @@ Efficient: 3 Wood + 2 Labor + 3 Time --Tool--> 2 Chair + 1 Waste
 Labor becomes `SpentLabor`. The tool is preserved. Material and labor
 accounting are global linear invariants.
 
+Every rate fixes its roles' accounts: the shop is the workshop, and a
+delivery's customer is its order's own, so no identity token pins it. The
+searches therefore try the economy's own recipes, each rate's exchange that
+applies, in the rates' order; no script proposes them.
+
 The rate book deliberately includes a malformed proposal:
 
 ```text

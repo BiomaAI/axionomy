@@ -37,9 +37,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         },
     )?;
     engine.keep_goal(&path!("workshop/delivered"), &written(&workshop::goal()))?;
+    // Every rate fixes the workshop to its shop role and a delivery its
+    // order's customer, so the recipes are every rate's exchange that
+    // applies, in the rates' order.
     engine.keep_candidates(
         &path!("workshop/recipes"),
-        &CandidateSet::Script(call("candidates")),
+        &CandidateSet::Instances { under: None },
     )?;
     let objectives: Vec<ObjectivePath> = vec![
         path!("workshop/waste"),

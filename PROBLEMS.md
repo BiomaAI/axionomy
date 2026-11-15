@@ -26,10 +26,10 @@ A solver may use an adapter to translate a rate ID into proposed role
 bindings, but the bindings become part of the exchange and the rate remains
 the authority for validity and effects. A field in `RateId` is descriptive,
 not authorization. When a role must represent a particular cell, slot,
-participant, institution, or result account, the rate requires preserved
-identity or capability assets from that role. Adversarial tests deliberately
-rebind roles to ensure the core rejects domain-invalid exchanges even when
-they bypass the example's trusted action helper.
+participant, institution, or result account, the rate fixes that account, or
+requires preserved identity or capability assets from that role. Adversarial
+tests deliberately rebind roles to ensure the core rejects domain-invalid
+exchanges even when they bypass the example's trusted action helper.
 
 ## Problems
 

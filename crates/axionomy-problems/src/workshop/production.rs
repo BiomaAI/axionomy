@@ -3,8 +3,8 @@ use super::*;
 use axionomy::path;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
-fn law(time: u64, labor: u64) -> Rate<Ontology> {
-    Rate::new()
+fn work(time: u64, labor: u64) -> Rate<Ontology> {
+    law()
         .preserve(Role::Shop, basket([(Asset::Active, 1)]))
         .consume(
             Role::Shop,
@@ -57,14 +57,11 @@ pub(super) fn build(stress: bool) -> World {
         builder = builder
             .account(
                 AccountId::Customer(order),
-                Account::from(basket([
-                    (Asset::CustomerIdentity(order), 1),
-                    (Asset::Credit, price),
-                ])),
+                Account::from(basket([(Asset::Credit, price)])),
             )
             .rate(
                 RateId::Accept(order),
-                law(1, 0)
+                work(1, 0)
                     .consume(
                         Role::Shop,
                         basket([(Asset::Idle, 1), (Asset::Contract(order), 1)]),
@@ -75,7 +72,7 @@ pub(super) fn build(stress: bool) -> World {
             let wear = if precise || upgraded { 1 } else { 2 };
             let scrap = u64::from(!precise && !upgraded);
             let mut prepare = tooling(
-                law(if precise { 3 } else { 1 }, if precise { 2 } else { 1 }),
+                work(if precise { 3 } else { 1 }, if precise { 2 } else { 1 }),
                 wear,
             )
             .consume(
@@ -107,7 +104,7 @@ pub(super) fn build(stress: bool) -> World {
             .rate(
                 RateId::Assemble(order),
                 tooling(
-                    law(
+                    work(
                         if item == Asset::Table { 2 } else { 1 },
                         if item == Asset::Table { 2 } else { 1 },
                     ),
@@ -128,7 +125,7 @@ pub(super) fn build(stress: bool) -> World {
             )
             .rate(
                 RateId::Deliver(order),
-                law(1, 0)
+                work(1, 0)
                     .consume(
                         Role::Shop,
                         basket([(Asset::Assembled(order), 1), (item, 1)]),
@@ -142,13 +139,9 @@ pub(super) fn build(stress: bool) -> World {
                             (Asset::Credit, price),
                         ]),
                     )
-                    .preserve(
-                        Role::Customer,
-                        basket([(Asset::CustomerIdentity(order), 1)]),
-                    )
+                    .account(Role::Customer, Pattern::literal(AccountId::Customer(order)))
                     .consume(Role::Customer, basket([(Asset::Credit, price)]))
-                    .produce(Role::Customer, basket([(item, 1)]))
-                    .distinct(Role::Shop, Role::Customer),
+                    .produce(Role::Customer, basket([(item, 1)])),
             )
             .invariant(
                 LinearInvariant::new(path!("contract-lifecycle").join(&path::write(&order)))
@@ -168,7 +161,7 @@ pub(super) fn build(stress: bool) -> World {
     builder
         .rate(
             RateId::Repair,
-            law(2, 1)
+            work(2, 1)
                 .condition(
                     path!("tool-has-wear"),
                     Q::balance(Role::Shop, Asset::Wear),
@@ -186,7 +179,7 @@ pub(super) fn build(stress: bool) -> World {
         )
         .rate(
             RateId::Upgrade,
-            law(4, 3)
+            work(4, 3)
                 .preserve(Role::Shop, basket([(Asset::Idle, 1)]))
                 .consume(
                     Role::Shop,
@@ -199,20 +192,20 @@ pub(super) fn build(stress: bool) -> World {
         )
         .rate(
             RateId::Recycle,
-            law(2, 1)
+            work(2, 1)
                 .preserve(Role::Shop, basket([(Asset::Idle, 1)]))
                 .consume(Role::Shop, basket([(Asset::Offcut, 2)]))
                 .produce(Role::Shop, basket([(Asset::Wood, 1), (Asset::Waste, 1)])),
         )
         .rate(
             RateId::CounterfeitChair,
-            law(1, 0)
+            work(1, 0)
                 .consume(Role::Shop, basket([(Asset::Wood, 1)]))
                 .produce(Role::Shop, basket([(Asset::Chair, 2)])),
         )
         .rate(
             RateId::Finish,
-            Rate::new()
+            law()
                 .preserve(Role::Shop, basket([(Asset::Completed, target)]))
                 .consume(Role::Shop, basket([(Asset::Active, 1), (Asset::Idle, 1)]))
                 .produce(Role::Shop, basket([(Asset::Solved, 1)]))
