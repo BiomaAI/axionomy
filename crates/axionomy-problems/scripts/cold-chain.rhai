@@ -11,10 +11,12 @@
 // The batches, in the order the policies visit them.
 fn batch_ids() { [0, 1, 2, 3, 4, 5] }
 
-// The most stored electricity a day may open with, and the electricity the
-// grid supplies on a day without an outage.
+// The most stored electricity a day may open with.
 fn battery() { 6 }
-fn grid_supply() { 3 }
+
+// The electricity the grid supplies as day `day` opens, as the law gives
+// it: none on a day of the outage.
+fn grid_supply(state, day) { state.values(`open-day/${day}`)["grid-supply"] }
 
 // What a policy reads of a batch: where it is ("" when dormant), its fresh,
 // preserved and spoiled crates, its heat, whether it is dormant, and the
@@ -297,8 +299,7 @@ fn end_day(state, day, days) {
         return;
     }
     let next = day + 1;
-    let supply = if state.balance("world", `outage/${next}`) > 0 { 0 } else { grid_supply() };
-    this.energy = this.energy + min(quantity(supply), battery() - this.energy);
+    this.energy = this.energy + min(grid_supply(state, next), battery() - this.energy);
     this.labor = quantity(2);
     this.freight = quantity(2);
     this.demand = quantity(2);

@@ -2,7 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
+    Rate, Relation, basket,
 };
 
 pub mod cold_chain;
@@ -178,27 +179,7 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
             ])),
         )
         .rate(RateId::MoveToFridge, move_to_fridge_rate())
-        .rate(
-            RateId::Advance {
-                from: Moment::Harvest,
-                to: Moment::AmbientExpiry,
-            },
-            advance_rate(Moment::Harvest, Moment::AmbientExpiry),
-        )
-        .rate(
-            RateId::Advance {
-                from: Moment::AmbientExpiry,
-                to: Moment::WarmedExpiry,
-            },
-            advance_rate(Moment::AmbientExpiry, Moment::WarmedExpiry),
-        )
-        .rate(
-            RateId::Advance {
-                from: Moment::WarmedExpiry,
-                to: Moment::ColdExpiry,
-            },
-            advance_rate(Moment::WarmedExpiry, Moment::ColdExpiry),
-        )
+        .rate_at(advance_id(), advance_rate())
         .rate(RateId::LosePower, lose_power_rate());
 
     for (cohort, exposure, _) in TIMED_CONDITIONS {
@@ -428,16 +409,48 @@ fn move_to_fridge_rate() -> Rate<Ontology> {
     )
 }
 
-fn advance_rate(from: Moment, to: Moment) -> Rate<Ontology> {
+/// The moments a step of the clock goes from and to.
+fn moments() -> (Param<Moment>, Param<Moment>) {
+    (Param::new(path!("from")), Param::new(path!("to")))
+}
+
+/// `advance/{from}/{to}`: a step of the clock.
+fn advance_id() -> Pattern<RateId> {
+    let (from, to) = moments();
+    RateIdPattern::Advance {
+        from: from.var(),
+        to: to.var(),
+    }
+    .into()
+}
+
+/// A step of the clock from one moment to the next: a relation over the
+/// moments pairs each with the one after it.
+fn advance_rate() -> Rate<Ontology> {
+    let (from, to) = moments();
+    let one = |asset: AssetPattern| (asset.into(), Quantity::new(1));
     active_world(
         Rate::new()
-            .consume(
+            .variable(from.every())
+            .variable(to.every())
+            .relation(Relation::pairs(
+                &from,
+                &to,
+                MOMENTS.into_iter().zip(MOMENTS.into_iter().skip(1)),
+            ))
+            .consume_at(
                 Role::World,
-                basket([(Asset::Now(from), 1), (Asset::Before(to), 1)]),
+                [
+                    one(AssetPattern::Now(from.var())),
+                    one(AssetPattern::Before(to.var())),
+                ],
             )
-            .produce(
+            .produce_at(
                 Role::World,
-                basket([(Asset::Now(to), 1), (Asset::Reached(to), 1)]),
+                [
+                    one(AssetPattern::Now(to.var())),
+                    one(AssetPattern::Reached(to.var())),
+                ],
             ),
     )
 }

@@ -2,7 +2,7 @@
 use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Slot, basket,
+    QuantityComparison as C, QuantityExpression as Q, Rate, Relation, Slot, basket,
 };
 
 pub const BATCHES: [u8; 6] = [0, 1, 2, 3, 4, 5];
@@ -55,7 +55,6 @@ pub enum Asset {
     MissedDemand,
     Day,
     Days,
-    Outage(u8),
     Decisions,
     Aging,
     PendingAge(u8),
@@ -177,7 +176,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     let cold = if stress { 3 } else { 4 };
     let outage_start = 2 + (seed % 2) as u8;
     let outage_days = if stress { 3 } else { 2 };
-    let mut environment = basket([
+    let environment = basket([
         (Asset::Decisions, 1),
         (Asset::CoolingOff, 1),
         (Asset::Days, days),
@@ -191,9 +190,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
         (Asset::Demand, 2),
         (Asset::FutureDemand, (days - 1) * 2),
     ]);
-    for day in outage_start..outage_start + outage_days as u8 {
-        environment.insert(Asset::Outage(day), Quantity::new(1));
-    }
     let mut builder = EconomyBuilder::new()
         .account(AccountId::World, Account::from(environment))
         .account(
@@ -229,71 +225,114 @@ pub fn initial(stress: bool, seed: u64) -> World {
         builder = builder.account(AccountId::Batch(id), Account::from(assets));
     }
 
-    // The rates' variables: a batch, and the batches a split takes from and
-    // starts.
+    // The rates' variables: a batch, the batches a split takes from and
+    // starts, and the places a batch stands in and moves between; and the
+    // number a relation gives each place, whether it is refrigerated: a
+    // crate there takes that many cold slots, none in the warehouse and one
+    // in cold storage.
     let batch = Param::<u8>::new(path!("batch"));
     let (source, destination) = (
         Param::<u8>::new(path!("source")),
         Param::<u8>::new(path!("destination")),
     );
-    for at in [Place::Warehouse, Place::Fridge] {
-        let mut split = decisions()
+    let place = Param::<Place>::new(path!("at"));
+    let (from, to) = (Param::<Place>::new(path!("from")), Param::new(path!("to")));
+    let at = |place: &Param<Place>| AssetPattern::At(place.var()).into();
+    let refrigerated = Param::<u64>::new(path!("refrigerated"));
+    let cold_slots = |place: Place| u64::from(place == Place::Fridge);
+    // `rate` where the batch stands, `{at}`, which the relation says is
+    // refrigerated or not.
+    let stored = |rate: Rate<Ontology>| {
+        rate.variable(place.every()).relation(Relation::each_giving(
+            &place,
+            [refrigerated.name().clone()],
+            [Place::Warehouse, Place::Fridge].map(|at| (at, [cold_slots(at)])),
+        ))
+    };
+    // The cold slots the exchange's crates take where the batch stands.
+    let slots = || Q::units() * refrigerated.quantity();
+
+    // Splitting fresh crates off a batch into a dormant one where it
+    // stands: the child inherits the parent's heat and origins, and the
+    // cold slots its crates take.
+    let mut split = stored(
+        decisions()
             .variable(source.range(BATCHES[0], BATCHES[5]))
-            .variable(destination.range(BATCHES[0], BATCHES[5]))
-            .distinct_variables(source.name().clone(), destination.name().clone())
-            .account(Role::Source, AccountIdPattern::Batch(source.var()).into())
-            .account(
-                Role::Destination,
-                AccountIdPattern::Batch(destination.var()).into(),
-            )
-            .preserve(
-                Role::Source,
-                basket([(Asset::Active, 1), (Asset::At(at), 1)]),
-            )
-            .condition(
-                path!("leave-a-nonempty-parent-cohort"),
-                q(Role::Source, Asset::Fresh),
-                C::GreaterThanOrEqual,
-                Q::units() + Q::constant(1),
-            )
-            .consume(Role::Source, basket([(Asset::Fresh, 1)]))
-            .consume_computed(Role::Destination, Asset::Dormant, Q::constant(1))
-            .produce(Role::Destination, basket([(Asset::Fresh, 1)]))
-            .produce_computed(Role::Destination, Asset::Active, Q::constant(1))
-            .produce_computed(Role::Destination, Asset::At(at), Q::constant(1))
-            .produce_computed(Role::Destination, Asset::Heat, q(Role::Source, Asset::Heat));
-        for origin in [0, 1] {
-            split = split.produce_computed(
-                Role::Destination,
-                Asset::Origin(origin),
-                q(Role::Source, Asset::Origin(origin)),
-            );
-        }
-        if at == Place::Fridge {
-            split = split
-                .consume(Role::Source, basket([(Asset::ColdOccupancy, 1)]))
-                .produce(Role::Destination, basket([(Asset::ColdOccupancy, 1)]));
-        }
-        builder = builder.rate_at(
-            RateIdPattern::Split {
-                source: source.var(),
-                destination: destination.var(),
-                at: Slot::Is(at),
-            }
-            .into(),
-            split,
+            .variable(destination.range(BATCHES[0], BATCHES[5])),
+    )
+    .distinct_variables(source.name().clone(), destination.name().clone())
+    .account(Role::Source, AccountIdPattern::Batch(source.var()).into())
+    .account(
+        Role::Destination,
+        AccountIdPattern::Batch(destination.var()).into(),
+    )
+    .preserve_at(
+        Role::Source,
+        one([Pattern::literal(Asset::Active), at(&place)]),
+    )
+    .condition(
+        path!("leave-a-nonempty-parent-cohort"),
+        q(Role::Source, Asset::Fresh),
+        C::GreaterThanOrEqual,
+        Q::units() + Q::constant(1),
+    )
+    .consume(Role::Source, basket([(Asset::Fresh, 1)]))
+    .consume_computed(Role::Destination, Asset::Dormant, Q::constant(1))
+    .produce(Role::Destination, basket([(Asset::Fresh, 1)]))
+    .produce_computed(Role::Destination, Asset::Active, Q::constant(1))
+    .produce_computed_at(Role::Destination, at(&place), Q::constant(1))
+    .produce_computed(Role::Destination, Asset::Heat, q(Role::Source, Asset::Heat))
+    .consume_computed(Role::Source, Asset::ColdOccupancy, slots())
+    .produce_computed(Role::Destination, Asset::ColdOccupancy, slots());
+    for origin in [0, 1] {
+        split = split.produce_computed(
+            Role::Destination,
+            Asset::Origin(origin),
+            q(Role::Source, Asset::Origin(origin)),
         );
-        let to = if at == Place::Warehouse {
-            Place::Fridge
-        } else {
-            Place::Warehouse
-        };
-        let amount = q(Role::Batch, Asset::Fresh)
-            + q(Role::Batch, Asset::Preserved)
-            + q(Role::Batch, Asset::Spoiled);
-        let mut movement = once(active(decisions(), &batch))
-            .consume(Role::Batch, basket([(Asset::At(at), 1)]))
-            .produce(Role::Batch, basket([(Asset::At(to), 1)]))
+    }
+    builder = builder.rate_at(
+        RateIdPattern::Split {
+            source: source.var(),
+            destination: destination.var(),
+            at: place.var(),
+        }
+        .into(),
+        split,
+    );
+    // Moving a whole batch between the warehouse and cold storage, a unit
+    // of labor: its crates take the cold space where it goes and free the
+    // cold space where it was, a relation over the two moves giving how
+    // many slots a crate frees and takes.
+    let (freed, taken) = (
+        Param::<u64>::new(path!("cold-slots-freed")),
+        Param::<u64>::new(path!("cold-slots-taken")),
+    );
+    let amount = q(Role::Batch, Asset::Fresh)
+        + q(Role::Batch, Asset::Preserved)
+        + q(Role::Batch, Asset::Spoiled);
+    builder = builder.rate_at(
+        RateIdPattern::Move {
+            batch: batch.var(),
+            from: from.var(),
+            to: to.var(),
+        }
+        .into(),
+        once(active(decisions(), &batch))
+            .variable(from.every())
+            .variable(to.every())
+            .relation(Relation::pairs_giving(
+                &from,
+                &to,
+                [freed.name().clone(), taken.name().clone()],
+                [
+                    (Place::Warehouse, Place::Fridge),
+                    (Place::Fridge, Place::Warehouse),
+                ]
+                .map(|(start, end)| (start, end, [cold_slots(start), cold_slots(end)])),
+            ))
+            .consume_at(Role::Batch, one([at(&from)]))
+            .produce_at(Role::Batch, one([at(&to)]))
             .condition(
                 path!("move-a-nonempty-cohort"),
                 amount.clone(),
@@ -301,30 +340,38 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 Q::constant(1),
             )
             .consume(Role::World, basket([(Asset::Labor, 1)]))
-            .produce(Role::World, basket([(Asset::SpentLabor, 1)]));
-        if to == Place::Fridge {
-            movement = movement
-                .consume_computed(Role::World, Asset::ColdSpace, amount.clone())
-                .produce_computed(Role::Batch, Asset::ColdOccupancy, amount);
-        } else {
-            movement = movement
-                .consume_computed(Role::Batch, Asset::ColdOccupancy, amount.clone())
-                .produce_computed(Role::World, Asset::ColdSpace, amount);
-        }
+            .produce(Role::World, basket([(Asset::SpentLabor, 1)]))
+            .consume_computed(
+                Role::World,
+                Asset::ColdSpace,
+                amount.clone() * taken.quantity(),
+            )
+            .produce_computed(
+                Role::Batch,
+                Asset::ColdOccupancy,
+                amount.clone() * taken.quantity(),
+            )
+            .consume_computed(
+                Role::Batch,
+                Asset::ColdOccupancy,
+                amount.clone() * freed.quantity(),
+            )
+            .produce_computed(Role::World, Asset::ColdSpace, amount * freed.quantity()),
+    );
+    // Delivering fresh or preserved crates where the batch stands, which
+    // frees the cold slots they took.
+    for preserved in [false, true] {
+        let price = if preserved { 2 } else { 3 };
         builder = builder.rate_at(
-            RateIdPattern::Move {
+            RateIdPattern::Deliver {
                 batch: batch.var(),
-                from: Slot::Is(at),
-                to: Slot::Is(to),
+                preserved: Slot::Is(preserved),
+                at: place.var(),
             }
             .into(),
-            movement,
-        );
-        for preserved in [false, true] {
-            let price = if preserved { 2 } else { 3 };
-            let mut deliver = active(decisions(), &batch)
+            stored(active(decisions(), &batch))
                 .account(Role::Buyer, Pattern::literal(AccountId::Buyer))
-                .preserve(Role::Batch, basket([(Asset::At(at), 1)]))
+                .preserve_at(Role::Batch, one([at(&place)]))
                 .consume(
                     Role::Batch,
                     basket([(
@@ -351,79 +398,66 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         (Asset::SatisfiedDemand, 1),
                         (Asset::UsedFreight, 1),
                     ]),
-                );
-            if at == Place::Fridge {
-                deliver = deliver
-                    .consume(Role::Batch, basket([(Asset::ColdOccupancy, 1)]))
-                    .produce(Role::World, basket([(Asset::ColdSpace, 1)]));
-            }
-            builder = builder.rate_at(
-                RateIdPattern::Deliver {
-                    batch: batch.var(),
-                    preserved: Slot::Is(preserved),
-                    at: Slot::Is(at),
-                }
-                .into(),
-                deliver,
-            );
+                )
+                .consume_computed(Role::Batch, Asset::ColdOccupancy, slots())
+                .produce_computed(Role::World, Asset::ColdSpace, slots()),
+        );
+    }
+    // Discarding spoiled crates where the batch stands, which frees the
+    // cold slots they took.
+    builder = builder.rate_at(
+        RateIdPattern::Discard {
+            batch: batch.var(),
+            at: place.var(),
         }
-        let mut discard = active(decisions(), &batch)
-            .preserve(Role::Batch, basket([(Asset::At(at), 1)]))
+        .into(),
+        stored(active(decisions(), &batch))
+            .preserve_at(Role::Batch, one([at(&place)]))
             .consume(Role::Batch, basket([(Asset::Spoiled, 1)]))
-            .produce(Role::World, basket([(Asset::Disposed, 1)]));
-        if at == Place::Fridge {
-            discard = discard
-                .consume(Role::Batch, basket([(Asset::ColdOccupancy, 1)]))
-                .produce(Role::World, basket([(Asset::ColdSpace, 1)]));
+            .produce(Role::World, basket([(Asset::Disposed, 1)]))
+            .consume_computed(Role::Batch, Asset::ColdOccupancy, slots())
+            .produce_computed(Role::World, Asset::ColdSpace, slots()),
+    );
+    // A batch with fresh crates ages warm where it stands, in cold storage
+    // only while the cooling is off: it gains heat, and spoils once it was
+    // warm before.
+    for spoil in [false, true] {
+        let mut warm = stored(aging(&batch))
+            .preserve_at(Role::Batch, one([at(&place)]))
+            .condition(
+                path!("fresh-stock-is-present"),
+                q(Role::Batch, Asset::Fresh),
+                C::GreaterThanOrEqual,
+                Q::constant(1),
+            )
+            .condition(
+                path!("thermal-threshold"),
+                q(Role::Batch, Asset::Heat),
+                if spoil {
+                    C::GreaterThanOrEqual
+                } else {
+                    C::LessThanOrEqual
+                },
+                Q::constant(if spoil { 2 } else { 1 }),
+            )
+            .produce(Role::Batch, basket([(Asset::Heat, 2)]))
+            .preserve_computed(Role::World, Asset::CoolingOff, refrigerated.quantity());
+        if spoil {
+            warm = clear(warm, Role::Batch, Asset::Fresh).produce_computed(
+                Role::Batch,
+                Asset::Spoiled,
+                q(Role::Batch, Asset::Fresh),
+            );
         }
         builder = builder.rate_at(
-            RateIdPattern::Discard {
+            RateIdPattern::AgeWarm {
                 batch: batch.var(),
-                at: Slot::Is(at),
+                at: place.var(),
+                spoil: Slot::Is(spoil),
             }
             .into(),
-            discard,
+            warm,
         );
-        for spoil in [false, true] {
-            let mut warm = aging(&batch)
-                .preserve(Role::Batch, basket([(Asset::At(at), 1)]))
-                .condition(
-                    path!("fresh-stock-is-present"),
-                    q(Role::Batch, Asset::Fresh),
-                    C::GreaterThanOrEqual,
-                    Q::constant(1),
-                )
-                .condition(
-                    path!("thermal-threshold"),
-                    q(Role::Batch, Asset::Heat),
-                    if spoil {
-                        C::GreaterThanOrEqual
-                    } else {
-                        C::LessThanOrEqual
-                    },
-                    Q::constant(if spoil { 2 } else { 1 }),
-                )
-                .produce(Role::Batch, basket([(Asset::Heat, 2)]));
-            if at == Place::Fridge {
-                warm = warm.preserve(Role::World, basket([(Asset::CoolingOff, 1)]));
-            }
-            if spoil {
-                warm = clear(warm, Role::Batch, Asset::Fresh).produce_computed(
-                    Role::Batch,
-                    Asset::Spoiled,
-                    q(Role::Batch, Asset::Fresh),
-                );
-            }
-            builder = builder.rate_at(
-                RateIdPattern::AgeWarm {
-                    batch: batch.var(),
-                    at: Slot::Is(at),
-                    spoil: Slot::Is(spoil),
-                }
-                .into(),
-                warm,
-            );
-        }
     }
     builder = builder.rate_at(
         RateIdPattern::Process(batch.var()).into(),
@@ -489,18 +523,24 @@ pub fn initial(stress: bool, seed: u64) -> World {
         end = end.produce(Role::World, basket([(Asset::PendingAge(id), 1)]));
     }
     builder = builder.rate(RateId::EndDay, end);
-    // Each day opens with the grid's supply, three units of electricity
-    // but none on a day of the outage the world records, as much of it as
-    // the battery takes.
+    // Each day opens with the grid's supply, as much of it as the battery
+    // takes: three units of electricity, but none on a day of the outage, a
+    // relation over the days gives which.
     let day = Param::<u8>::new(path!("day"));
-    let supply = Q::constant(3)
-        * (Q::constant(1) - Q::balance_at(Role::World, AssetPattern::Outage(day.var()).into()));
+    let grid = Param::<u64>::new(path!("grid-supply"));
+    let outage = outage_start..outage_start + outage_days as u8;
+    let supply = grid.quantity();
     let accepted = Q::minimum(
         supply.clone(),
         Q::constant(6) - q(Role::World, Asset::Energy),
     );
     let mut open = ages_resolved(once(law()))
         .variable(day.range(1, days as u8 - 1))
+        .relation(Relation::each_giving(
+            &day,
+            [grid.name().clone()],
+            (1..days as u8).map(|day| (day, [if outage.contains(&day) { 0 } else { 3u64 }])),
+        ))
         .condition(
             path!("next-day"),
             q(Role::World, Asset::Day) + Q::constant(1),

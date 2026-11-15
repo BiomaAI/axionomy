@@ -19,16 +19,21 @@ delivery capacity. Buyers fund fresh/preserved food at different prices.
 Every day settles each cohort's exposure before advancing the clock and
 records unfilled food obligations. Showcase spans six days with a two-day
 outage; Stress tightens storage/fuel over eight days with a three-day outage.
-The cold chain's rates have variables: one law serves every batch,
-`deliver/{batch}/true/fridge`, and every pair of batches a split takes from
-and starts, `split/{source}/{destination}/warehouse`, and laws split only
-where their shape differs: in the warehouse or cold storage, fresh or
-preserved crates, warm aging that spoils or not. A day opens as
-`open-day/{day}`, the grid supplying three units of electricity but none on
-a day the world's `Outage(day)` facts mark, so the seed changes only those
-facts, not the law. Each role is fixed to its account, the world, the buyer
-or the batch its identifier names, so no identity token pins a binding, and
-a plan binds each exchange's roles to the accounts its rate fixes.
+The cold chain's rates have variables: one law serves every batch and
+place, `deliver/{batch}/true/{at}`, and every pair of batches a split takes
+from and starts, `split/{source}/{destination}/{at}`, a relation over the
+places giving the cold slots a crate there takes, none in the warehouse and
+one in cold storage, which ages a batch warm only while the cooling is off.
+A move between the two, `move/{batch}/{from}/{to}`, takes the cold space
+where the batch goes and frees it where it was. Laws split only where
+their shape differs: fresh or preserved crates, warm aging that spoils or
+not. A day opens as `open-day/{day}`, a relation over the days giving the
+grid's supply, three units of electricity but none on a day of the outage,
+so the seed changes only those numbers, not the law; the policies read
+them with `state.values`. Each role is fixed to its account, the world,
+the buyer or the batch its identifier names, so no identity token pins a
+binding, and a plan binds each exchange's roles to the accounts its rate
+fixes.
 
 The package's four daily policies share the same seeded outage schedule; their
 front is explicitly the evaluated policy set. Micro is the storage fixture
@@ -59,7 +64,10 @@ fact, plus complementary `Before(deadline)` and `Reached(deadline)` facts.
 Advancing the clock consumes the applicable `Before` fact and produces its
 `Reached` fact. Consequently fruit cannot spoil early, but it also cannot be
 eaten or moved after expiry while a simulator is still materializing due
-effects.
+effects. One law advances the clock, `advance/{from}/{to}`, a relation over
+the moments pairing each with the one after it. Eating and spoiling stay
+one rate per cohort and exposure: the storage facts, the moment and the
+condition each requires are identifiers, not numbers a relation could give.
 
 At ambient expiry, one spoil exchange changes the ambient cohort's unique
 fresh condition into `Rotten`; its six thousand claims are untouched. A power

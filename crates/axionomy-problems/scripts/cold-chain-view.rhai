@@ -62,7 +62,6 @@ fn asset_label(parts) {
         "missed-demand" => "Food obligations missed",
         "day" => "Time elapsed",
         "days" => "Run length",
-        "outage" => `Grid outage on day ${parse_int(parts[2]) + 1}`,
         "decisions" => "Taking today's decisions",
         "aging" => "Settling today's heat exposure",
         "pending-age" => `${cohort_label(parts[2])} still to age today`,
@@ -251,7 +250,7 @@ fn scene(state, frame) {
         metric("day", "Day", day + 1, ()),
         metric(
             "grid", "Grid supply",
-            if val(state, "world", `outage/${day}`) > 0 { "outage" } else { "available" }, (),
+            if day > 0 && chain::grid_supply(state, day) == 0 { "outage" } else { "available" }, (),
         ),
         metric(
             "cooling", "Refrigeration",
