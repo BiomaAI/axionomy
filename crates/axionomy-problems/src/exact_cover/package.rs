@@ -38,9 +38,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &path!("exact-cover/covered"),
         &written(&exact_cover::goal()),
     )?;
+    // Every rate fixes the problem's account to its role, so the selections
+    // are every rate's exchange that applies, in the rates' order.
     engine.keep_candidates(
         &path!("exact-cover/selections"),
-        &CandidateSet::Script(call("candidates")),
+        &CandidateSet::Instances { under: None },
     )?;
     let strategies = [
         (

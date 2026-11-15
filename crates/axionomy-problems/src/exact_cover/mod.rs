@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity,
+    Rate, basket,
 };
 
 #[cfg(feature = "packages")]
@@ -229,6 +229,11 @@ pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Problem, basket([(Asset::Solved, 1)]))
 }
 
+/// A law of the problem, its one role fixed to the problem's account.
+fn law() -> Rate<Ontology> {
+    Rate::new().account(Role::Problem, Pattern::literal(AccountId::Problem))
+}
+
 fn build(elements: &[Element], available: &[SetId]) -> World {
     let mut problem = Basket::new();
     for element in elements {
@@ -259,7 +264,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
             }
             builder = builder.rate(
                 RateId::Select { set, before },
-                Rate::new()
+                law()
                     .preserve(Role::Problem, basket([(Asset::Active, 1)]))
                     .consume(Role::Problem, consume)
                     .produce(Role::Problem, produce),
@@ -299,7 +304,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
     builder
         .rate(
             RateId::Finish,
-            Rate::new()
+            law()
                 .preserve(Role::Problem, finish_requirements)
                 .consume(Role::Problem, basket([(Asset::Active, 1)]))
                 .produce(Role::Problem, basket([(Asset::Solved, 1)])),

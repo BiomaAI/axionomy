@@ -23,6 +23,10 @@ Selecting a subset preserves the active problem lifecycle, consumes its availabi
 subsets become inapplicable because they require already-consumed uncovered
 tokens.
 
+Every rate fixes its one role to the problem's account, so breadth-first
+search tries the economy's own selections: each rate's exchange that applies,
+in the rates' order. No script proposes them.
+
 ## Required results
 
 The package's experiments find these, pinned in `tests/outcomes`:
