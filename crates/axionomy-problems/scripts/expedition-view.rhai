@@ -67,7 +67,6 @@ fn label(item) {
             "weather-blocked" => `${capital(parts[2])} blocked by the hazard`,
             "at" => `At ${capital(parts[2])}`,
             "travelling" => `Travelling to ${capital(parts[2])}`,
-            "distance" => `Roads from ${capital(parts[2])} to ${capital(parts[3])}`,
             "team-at" => `${capital(parts[2])} at ${capital(parts[3])}`,
             "team-travelling" => `${capital(parts[2])} travelling`,
             "ready" => "Ready",

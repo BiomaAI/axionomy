@@ -16,13 +16,16 @@ and pair of places, `share/{objective}/{location}/true`, and laws split only
 where their shape differs: each teammate's journeys, arrivals and
 treatment, since each plays a role of its own, sharing by radio or in
 person, each phase and cause of a loss, a clinical pulse that harms or
-passes over. A journey takes the road distance between two places, which
-the world's map holds as `Distance(from, to)` facts; the policies read the
-same map. A pulse falls on the days a relation lists, and a report advances
-the scan to the round it derives. A delivery and a loss in transit are each
-objective's own, since an archive's carrier and a casualty's differ, and the
-clock's ticks and the pulses' ends stay one rate per day, two ticks bringing
-the weather and the last pulse scheduling none. Each role is fixed to its
+passes over. A journey takes the road distance between two places: the
+world's map is the departure's relation over every two places, giving how
+many roads apart they are, and the policies read the same map
+(`state.values`). A pulse falls on the days a relation lists, and a report
+advances the scan to the round it derives. One law steps the clock,
+`tick/{day}`, its relation over the days giving whether the weather closes
+in or clears that day, and one ends a pulse, `finish-clinical/{day}`, its
+relation giving how many days on the next pulse falls, the last scheduling
+none. A delivery and a loss in transit are each objective's own, since an
+archive's carrier and a casualty's differ. Each role is fixed to its
 account, so no identity token pins a binding. Nature takes the weather or a
 pulse's end, then, objective by objective, a decline, a loss, finished work
 or a discovery, then each teammate's arrival and a report (`state.moves`);

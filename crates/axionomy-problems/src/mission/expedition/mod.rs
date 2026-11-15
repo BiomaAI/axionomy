@@ -63,8 +63,6 @@ pub enum Asset {
     WeatherBlocked(Location),
     At(Location),
     Travelling(Location),
-    /// How many roads apart two places are: a fact of the world's map.
-    Distance(Location, Location),
     TeamAt(Agent, Location),
     TeamTravelling(Agent),
     Ready,
@@ -260,15 +258,17 @@ fn identity() -> Rate<Ontology> {
 fn event() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
 }
+/// `rate` once the clinical pulse due before the next tick has settled.
+fn pulse_settled(rate: Rate<Ontology>) -> Rate<Ontology> {
+    rate.condition(
+        path!("settle-scheduled-clinical-events-first"),
+        clock() + Q::constant(1),
+        C::LessThanOrEqual,
+        q(Role::World, Asset::NextClinical),
+    )
+}
 fn law() -> Rate<Ontology> {
-    event()
-        .preserve(Role::World, basket([(Asset::EnvironmentReady, 1)]))
-        .condition(
-            path!("settle-scheduled-clinical-events-first"),
-            clock() + Q::constant(1),
-            C::LessThanOrEqual,
-            q(Role::World, Asset::NextClinical),
-        )
+    pulse_settled(event().preserve(Role::World, basket([(Asset::EnvironmentReady, 1)])))
 }
 fn permit(rate: Rate<Ontology>, agent: Agent, energy: u64) -> Rate<Ontology> {
     rate.consume(Role::World, basket([(Asset::Permit(agent), 1)]))
@@ -341,6 +341,11 @@ pub fn distance(from: Location, to: Location) -> u64 {
 }
 /// The days a clinical pulse falls on.
 const PULSES: [u8; 3] = [8, 16, 24];
+/// The days after the last pulse its end schedules the next for: past any
+/// expedition's horizon, so none.
+const LAST_PULSE_GAP: u64 = 100;
+/// The ticks after which the hazard site's weather closes in, and clears.
+const WEATHER: [u8; 2] = [5, 10];
 pub fn initial(stress: bool, seed: u64) -> World {
     let count: u8 = if stress { 3 } else { 2 };
     let horizon: u64 = if stress { 32 } else { 28 };
@@ -364,12 +369,6 @@ pub fn initial(stress: bool, seed: u64) -> World {
     ]);
     for location in LOCATIONS {
         world.insert(Asset::WeatherOpen(location), Quantity::new(1));
-        for to in LOCATIONS.into_iter().filter(|to| *to != location) {
-            world.insert(
-                Asset::Distance(location, to),
-                Quantity::new(distance(location, to)),
-            );
-        }
     }
     for agent in AGENTS {
         world.insert(Asset::Permit(agent), Quantity::new(1));
@@ -397,13 +396,15 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .account(AccountId::Nature, Account::from(hidden));
 
     // The rates' variables: an objective, a site, two places, a scan round
-    // and a pulse day.
+    // and a day; and the numbers relations give: how many roads apart two
+    // places are, and what a day brings.
     let objective_id = Param::<u8>::new(path!("objective"));
     let location = Param::<Location>::new(path!("location"));
     let (from, to) = (
         Param::<Location>::new(path!("from")),
         Param::new(path!("to")),
     );
+    let apart = Param::<u64>::new(path!("distance"));
     let (round, next) = (Param::<u8>::new(path!("round")), Param::new(path!("next")));
     let day = Param::<u8>::new(path!("day"));
     let site = || location.values(sites.iter().copied());
@@ -412,6 +413,19 @@ pub fn initial(stress: bool, seed: u64) -> World {
     let every_objective = || objective_id.range(0, count - 1);
     let objectives =
         |which: fn(u8) -> bool| objective_id.values((0..count).filter(|id| which(*id)));
+    // The world's map: every two places, and how many roads apart they are.
+    let map = || {
+        Relation::pairs_giving(
+            &from,
+            &to,
+            [apart.name().clone()],
+            LOCATIONS
+                .into_iter()
+                .flat_map(|start| LOCATIONS.map(|end| (start, end)))
+                .filter(|(start, end)| start != end)
+                .map(|(start, end)| (start, end, [distance(start, end)])),
+        )
+    };
 
     for agent in AGENTS {
         let mut stock = basket([
@@ -433,11 +447,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
         }
         builder = builder.account(AccountId::Agent(agent), Account::from(stock));
         // A journey takes the road distance between two places, as the
-        // world's map records it, slowed by the traveller's harm.
-        let duration = Q::balance_at(
-            Role::World,
-            AssetPattern::Distance(from.var(), to.var()).into(),
-        ) + q(role(agent), Asset::Harm);
+        // world's map gives it, slowed by the traveller's harm.
+        let duration = apart.quantity() + q(role(agent), Asset::Harm);
         builder = builder.rate_at(
             RateIdPattern::Depart {
                 agent: Slot::Is(agent),
@@ -448,7 +459,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
             before_horizon(permit(law(), agent, 0), duration.clone())
                 .variable(from.every())
                 .variable(to.every())
-                .distinct_variables(from.name().clone(), to.name().clone())
+                .relation(map())
                 .preserve_at(
                     Role::World,
                     one([AssetPattern::WeatherOpen(to.var()).into()]),
@@ -1090,88 +1101,93 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 basket([(Asset::AwaitingReport, 1), (Asset::UsedSensor, 1)]),
             ),
     );
-    for day in 0..horizon as u8 {
-        let mut tick = law()
-            .condition(
-                path!("clock-step"),
-                clock(),
-                C::Equal,
-                Q::constant(day.into()),
+    // The clock steps a day while the environment is settled and the
+    // clinical pulse due has settled. The day the weather closes in and
+    // the day it clears, the step leaves the environment unsettled, the
+    // weather falling due: a relation over the days gives which.
+    let (closes, clears) = (
+        Param::<u64>::new(path!("weather-closes")),
+        Param::<u64>::new(path!("weather-clears")),
+    );
+    let weather = closes.quantity() + clears.quantity();
+    let mut tick = pulse_settled(event())
+        .variable(day.range(0, horizon as u8 - 1))
+        .relation(Relation::each_giving(
+            &day,
+            [closes.name().clone(), clears.name().clone()],
+            (0..horizon as u8).map(|day| {
+                (
+                    day,
+                    [
+                        u64::from(day + 1 == WEATHER[0]),
+                        u64::from(day + 1 == WEATHER[1]),
+                    ],
+                )
+            }),
+        ))
+        .condition(path!("clock-step"), clock(), C::Equal, day.quantity())
+        .preserve_computed(
+            Role::World,
+            Asset::EnvironmentReady,
+            Q::constant(1) - weather.clone(),
+        )
+        .consume_computed(Role::World, Asset::EnvironmentReady, weather)
+        .consume(Role::World, basket([(Asset::TimeRemaining, 1)]))
+        .produce(Role::World, basket([(Asset::Time, 1)]))
+        .produce_computed(Role::World, Asset::WeatherDue(false), closes.quantity())
+        .produce_computed(Role::World, Asset::WeatherDue(true), clears.quantity());
+    for agent in AGENTS {
+        tick = tick
+            .consume_computed(
+                Role::World,
+                Asset::UsedPermit(agent),
+                q(Role::World, Asset::UsedPermit(agent)),
             )
-            .consume(Role::World, basket([(Asset::TimeRemaining, 1)]))
-            .produce(Role::World, basket([(Asset::Time, 1)]));
-        for agent in AGENTS {
-            tick = tick
-                .consume_computed(
-                    Role::World,
-                    Asset::UsedPermit(agent),
-                    q(Role::World, Asset::UsedPermit(agent)),
-                )
-                .produce_computed(
-                    Role::World,
-                    Asset::Permit(agent),
-                    q(Role::World, Asset::UsedPermit(agent)),
-                );
-        }
-        // Tick and Nature settlement are distinct authoritative exchanges.
-        if [5, 10].contains(&(day + 1)) {
-            tick = event()
-                .condition(
-                    path!("clock-step"),
-                    clock(),
-                    C::Equal,
-                    Q::constant(day.into()),
-                )
-                .consume(
-                    Role::World,
-                    basket([(Asset::EnvironmentReady, 1), (Asset::TimeRemaining, 1)]),
-                )
-                .produce(
-                    Role::World,
-                    basket([(Asset::Time, 1), (Asset::WeatherDue(day + 1 == 10), 1)]),
-                );
-            for agent in AGENTS {
-                tick = tick
-                    .consume_computed(
-                        Role::World,
-                        Asset::UsedPermit(agent),
-                        q(Role::World, Asset::UsedPermit(agent)),
-                    )
-                    .produce_computed(
-                        Role::World,
-                        Asset::Permit(agent),
-                        q(Role::World, Asset::UsedPermit(agent)),
-                    );
-            }
-        }
-        builder = builder.rate(RateId::Tick(day), tick);
+            .produce_computed(
+                Role::World,
+                Asset::Permit(agent),
+                q(Role::World, Asset::UsedPermit(agent)),
+            );
     }
-    for day in [8, 16, 24] {
-        builder = builder.rate(
-            RateId::FinishClinical(day),
-            event()
-                .condition(
-                    path!("scheduled-pulse"),
-                    q(Role::World, Asset::NextClinical),
-                    C::Equal,
-                    Q::constant(day.into()),
-                )
-                .condition(
-                    path!("all-casualties-assessed"),
-                    q(Role::World, Asset::ClinicalCount),
-                    C::Equal,
-                    Q::constant(u64::from(count.div_ceil(2))),
-                )
-                .consume_computed(
-                    Role::World,
-                    Asset::ClinicalCount,
-                    q(Role::World, Asset::ClinicalCount),
-                )
-                .produce(
-                    Role::World,
-                    basket([(Asset::NextClinical, if day == 24 { 100 } else { 8 })]),
-                ),
-        );
+    builder = builder.rate_at(RateIdPattern::Tick(day.var()).into(), tick);
+    // A pulse ends once every casualty is assessed, scheduling the next
+    // pulse as many days on as a relation over the pulses gives, the last
+    // scheduling none.
+    let gap = Param::<u64>::new(path!("days-to-next-pulse"));
+    builder = builder.rate_at(
+        RateIdPattern::FinishClinical(day.var()).into(),
+        event()
+            .variable(day.range(PULSES[0], PULSES[2]))
+            .relation(Relation::each_giving(
+                &day,
+                [gap.name().clone()],
+                PULSES.iter().enumerate().map(|(index, &pulse)| {
+                    let next = PULSES
+                        .get(index + 1)
+                        .map_or(LAST_PULSE_GAP, |&next| u64::from(next - pulse));
+                    (pulse, [next])
+                }),
+            ))
+            .condition(
+                path!("scheduled-pulse"),
+                q(Role::World, Asset::NextClinical),
+                C::Equal,
+                day.quantity(),
+            )
+            .condition(
+                path!("all-casualties-assessed"),
+                q(Role::World, Asset::ClinicalCount),
+                C::Equal,
+                Q::constant(u64::from(count.div_ceil(2))),
+            )
+            .consume_computed(
+                Role::World,
+                Asset::ClinicalCount,
+                q(Role::World, Asset::ClinicalCount),
+            )
+            .produce_computed(Role::World, Asset::NextClinical, gap.quantity()),
+    );
+    for day in PULSES {
         builder = builder.invariant(
             LinearInvariant::new(path!("clinical-pulse").join(&path::write(&day)))
                 .weight(Asset::ClinicalDue(day), 1)

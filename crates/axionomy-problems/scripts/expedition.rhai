@@ -12,19 +12,21 @@
 
 fn locations() { ["base", "north", "east", "south", "west"] }
 fn agents() { ["scout", "medic"] }
-// The fewest roads from `from` to `to`, as the world's map records it.
+// The fewest roads from `from` to `to`, as the world's map gives it.
 fn distance(state, from, to) {
-    if from == to { 0 } else { state.balance("world", `distance/${from}/${to}`).to_int() }
+    if from == to { 0 } else { state.values(`depart/scout/${from}/${to}`).distance.to_int() }
 }
 
-// The roads between the expedition's places, each once: the places the map
-// records one road apart.
+// The roads between the expedition's places, each once: the journeys the
+// map gives one road long, from the earlier place to the later.
 fn roads(state) {
     let places = locations();
     let roads = [];
-    for (from, index) in places {
-        for to in places.extract(index + 1) {
-            if distance(state, from, to) == 1 { roads.push([from, to]); }
+    for journey in state.instances("depart/scout") {
+        let parts = journey.split("/");
+        if places.index_of(parts[2]) < places.index_of(parts[3])
+            && state.values(journey).distance == 1 {
+            roads.push([parts[2], parts[3]]);
         }
     }
     roads
