@@ -95,7 +95,10 @@ fn label(item) {
 }
 
 // Cooling energy reads in units; every other quantity is a count.
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     switch asset {
         "cooling-energy" | "spent-cooling-energy" => #{ scale: 0, unit: "units" },
         _ => (),

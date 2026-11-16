@@ -29,9 +29,13 @@ export function useQuantity(): (asset: string, atoms: string) => string {
   return (asset, atoms) => formatQuantity(atoms, formats[asset]);
 }
 
-/** A quantity of `asset`, formatted; the exact atoms stay one hover away. */
-export function Amount({ asset, atoms }: { asset: string; atoms: string }) {
-  const format = useContext(QuantityFormats)[asset];
+/** Atoms written in `format`; the exact atoms stay one hover away. */
+export function Formatted({ atoms, format }: { atoms: string; format?: QuantityFormat }) {
   const text = formatQuantity(atoms, format);
   return format ? <span className="amount" title={`${atoms} atoms`}>{text}</span> : <>{text}</>;
+}
+
+/** A quantity of `asset`, formatted as the open document formats it. */
+export function Amount({ asset, atoms }: { asset: string; atoms: string }) {
+  return <Formatted atoms={atoms} format={useContext(QuantityFormats)[asset]} />;
 }

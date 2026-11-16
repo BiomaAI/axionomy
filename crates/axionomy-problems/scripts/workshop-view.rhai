@@ -81,7 +81,10 @@ fn unit(asset) {
     }
 }
 
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     let unit = unit(asset);
     if unit == () { () } else { #{ scale: 0, unit: unit } }
 }

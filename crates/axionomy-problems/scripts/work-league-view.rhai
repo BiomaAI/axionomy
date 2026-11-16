@@ -164,7 +164,10 @@ fn unit(asset) {
 
 // Time reads in ticks of the shared work clock, earnings in credits, and
 // energy, material, waste and supplies in units.
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     let unit = unit(asset);
     if unit == () { () } else { #{ scale: 0, unit: unit } }
 }

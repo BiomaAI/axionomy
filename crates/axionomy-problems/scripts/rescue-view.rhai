@@ -53,7 +53,10 @@ fn label(item) {
     }
 }
 
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     if asset == "energy" || asset == "spent-energy" { #{ scale: 0, unit: "units" } } else { () }
 }
 

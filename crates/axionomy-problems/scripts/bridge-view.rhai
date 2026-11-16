@@ -94,7 +94,10 @@ fn label(item) {
 
 // Energy reads in units and credit in credits; every time the bridge keeps
 // is a tick of its world clock.
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     switch asset.split("/")[0] {
         "energy" | "spent-energy" => #{ scale: 0, unit: "units" },
         "credit" | "escrow" | "spent-credit" => #{ scale: 0, unit: "credits" },

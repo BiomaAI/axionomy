@@ -134,7 +134,10 @@ fn label(item) {
     }
 }
 
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     switch asset.split("/")[0] {
         "due" | "work-remaining" | "completion-time" | "now" | "time-remaining" | "start-time"
             | "end-time" => #{ scale: 0, unit: "ticks" },

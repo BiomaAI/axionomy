@@ -469,7 +469,9 @@ and any run reads as `Paths` (D-044).
 
 Built: a view is a definition kept per ontology (`view/<ontology>`) naming
 script functions, each optional: `label(item)` for an account, asset, rate
-or role written `account/<path>` and so on; `format(asset)`;
+or role written `account/<path>` and so on; `format(item)` for an asset's
+quantities or a constant's value, written `asset/<path>` or
+`constant/<name>`;
 `carry(carried, before, exchange, after)` for what a view carries from frame
 to frame, such as each actor's running contribution; `scene(state, frame)`,
 where `frame` is `#{ index, exchanges, carried }`, so classes may depend on

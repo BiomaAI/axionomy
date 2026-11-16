@@ -77,9 +77,23 @@ fn label(item) {
     }
 }
 
+// The market's terms are WAD-scaled shares, read as percentages; the
+// scheduled price drop reads as cash and when it happens in periods.
+fn constant_format(name) {
+    switch name {
+        "shock-after" => #{ scale: 0, unit: "periods" },
+        "price-drop" => #{ scale: 0, unit: "cash" },
+        _ => #{ scale: 16, unit: "%" },
+    }
+}
+
 // The borrow index is a WAD-scaled multiplier. Values the market keeps in
 // cash read as cash, and the clock counts periods.
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] == "constant" { return constant_format(item[1]); }
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     switch asset.split("/")[0] {
         "borrow-index" => #{ scale: 18 },
         "cash" | "reserves" | "collateral-price" => #{ scale: 0, unit: "cash" },

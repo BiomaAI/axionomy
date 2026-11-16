@@ -33,7 +33,7 @@ import {
 } from "./packageEngine";
 import { branchesOf, lastPart, parsePoint, type BranchInfo, type Note } from "./packageTree";
 import { Brand, PlaybackControls, changingBalances } from "./Playback";
-import { QuantityFormats } from "./Quantity";
+import { Formatted, QuantityFormats } from "./Quantity";
 import { RateTable } from "./RateView";
 import { SceneView, type ReplayMotionMode } from "./SceneView";
 import { Term } from "./Term";
@@ -708,7 +708,7 @@ export function PackagesApp() {
               <div className="rules-body">
                 <RateTable rates={model.rates} />
                 {((model.constants ?? []).length > 0 || model.goal.length > 0 || model.invariants.length > 0) && <div className="rules-side">
-                  {(model.constants ?? []).length > 0 && <section className="view-section"><h4><Term name="constant">Constants</Term></h4><dl className="facts">{model.constants?.map((constant) => <Fragment key={constant.name}><dt>{constant.name}</dt><dd>{constant.value}</dd></Fragment>)}</dl></section>}
+                  {(model.constants ?? []).length > 0 && <section className="view-section"><h4><Term name="constant">Constants</Term></h4><dl className="facts">{model.constants?.map((constant) => <Fragment key={constant.name}><dt>{constant.name}</dt><dd><Formatted atoms={constant.value} format={constant.format ?? undefined} /></dd></Fragment>)}</dl></section>}
                   {model.goal.length > 0 && <section className="view-section"><h4><Term name="goal">Goal</Term></h4>{model.goal.map((goal) => <div className="effect" key={goal.account.key}><IdLink subject={{ kind: "account", id: goal.account }} /><div className="holdings">{goal.required.map((required) => <Holding key={required.asset.key} value={required} />)}</div></div>)}</section>}
                   {model.invariants.length > 0 && <section className="view-section"><h4>Invariants</h4><dl className="facts">{model.invariants.map((invariant) => <InvariantRow key={invariant.name} invariant={invariant} />)}</dl></section>}
                 </div>}

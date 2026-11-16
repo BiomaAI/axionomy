@@ -1,7 +1,7 @@
 //! A view drawn as data: labels and formats, what it carries from frame to
 //! frame, and leaderboards the engine ranks.
 
-use axionomy::{OntologyPath, Quantity, Rate, basket, path::Path, paths};
+use axionomy::{OntologyPath, Quantity, Rate, Segment, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError, ScriptCall, View};
 use axionomy_store::{Point, Store};
 
@@ -15,10 +15,12 @@ fn pay(to: &str, units: u64) -> paths::Exchange {
         .bind(path("to"), path(to))
 }
 
-/// A bank paying three players: five to alice, five to bob, two to carol.
+/// A bank paying three players: five to alice, five to bob, two to carol,
+/// under a fee it never charges.
 fn paid() -> (Engine, Point) {
     let engine = Engine::new(Store::memory().unwrap()).unwrap();
     let economy = paths::EconomyBuilder::new()
+        .constant_value(path("fee"), Segment::from(125_u64))
         .account(path("bank"), basket([(path("cash"), 100)]).into())
         .account(path("player/alice"), basket([]).into())
         .account(path("player/bob"), basket([]).into())
@@ -61,7 +63,9 @@ fn keep(engine: &Engine, source: &str, view: View) {
 
 const SCRIPT: &str = r#"
     fn label(item) { if item == "asset/cash" { "Cash" } else { () } }
-    fn format(asset) { if asset == "cash" { #{ scale: 2, unit: "USD" } } else { () } }
+    fn format(item) {
+        if item == "asset/cash" || item == "constant/fee" { #{ scale: 2, unit: "USD" } } else { () }
+    }
     // How many payments the history has made so far.
     fn carry(carried, before, exchange, after) {
         if carried == () { 1 } else { carried + 1 }
@@ -112,6 +116,14 @@ fn a_view_labels_formats_carries_and_ranks() {
     assert_eq!(
         document.formats[&path("paths/asset/cash")].unit.as_deref(),
         Some("USD")
+    );
+    let fee = &document.model.as_ref().unwrap().constants[0];
+    assert_eq!(
+        (
+            fee.value.as_str(),
+            fee.format.as_ref().unwrap().write(Quantity::new(125))
+        ),
+        ("125", "1.25 USD".to_owned())
     );
     // Unlabeled identifiers read as their paths.
     assert_eq!(document.initial.accounts[0].account.label, "account/bank");

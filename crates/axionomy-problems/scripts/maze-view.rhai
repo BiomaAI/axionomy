@@ -60,7 +60,10 @@ fn label(item) {
     }
 }
 
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     let name = asset.split("/")[0];
     if name == "energy" || name == "spent-energy" || name == "distance" {
         return #{ scale: 0, unit: "units" };

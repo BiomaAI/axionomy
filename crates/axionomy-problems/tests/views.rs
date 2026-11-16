@@ -65,7 +65,7 @@ fn draws(engine: &Engine, at: Point, run: &str) -> Size {
                     .call(
                         &formats.script,
                         formats.function.as_str(),
-                        (asset.to_string(),),
+                        (format!("asset/{asset}"),),
                     )
                     .unwrap();
                 !format.is_unit()
@@ -79,6 +79,25 @@ fn draws(engine: &Engine, at: Point, run: &str) -> Size {
         .map(|asset| asset.as_str())
         .collect();
     assert_eq!(formats, formatted, "{run}: formats");
+    // So has a constant whose value is a number.
+    for constant in &model.constants {
+        let format = view.formats.as_ref().and_then(|formats| {
+            let format: Dynamic = engine
+                .call(
+                    &formats.script,
+                    formats.function.as_str(),
+                    (format!("constant/{}", constant.name),),
+                )
+                .unwrap();
+            (!format.is_unit() && !constant.value.is_word()).then_some(())
+        });
+        assert_eq!(
+            constant.format.is_some(),
+            format.is_some(),
+            "{run}: constant {}",
+            constant.name
+        );
+    }
     Size {
         frames: document.frames.len(),
         accounts: document.initial.accounts.len(),

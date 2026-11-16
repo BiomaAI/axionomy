@@ -133,7 +133,10 @@ fn unit(asset) {
 }
 
 // The reference price is kept in thousandths of a credit per unit of energy.
-fn format(asset) {
+fn format(item) {
+    let item = item.split("/", 2);
+    if item[0] != "asset" { return (); }
+    let asset = item[1];
     let unit = unit(asset);
     if unit == () { () }
     else if asset == "reference-price" { #{ scale: 3, unit: unit } }

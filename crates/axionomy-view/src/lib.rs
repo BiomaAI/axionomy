@@ -509,6 +509,10 @@ pub struct InvariantView {
 pub struct ConstantView {
     pub name: VariablePath,
     pub value: Segment,
+    /// How people read the value, where it is a number whose format is not
+    /// a count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<QuantityFormat>,
 }
 
 /// Read-only explanation of the authoritative economy definition.
@@ -1744,6 +1748,12 @@ pub trait ViewOntology<O: Ontology> {
         QuantityFormat::COUNT
     }
 
+    /// How people read the value of the constant `name`, where it is a
+    /// number; a count unless it says otherwise.
+    fn constant_format(&self, _name: &VariablePath) -> QuantityFormat {
+        QuantityFormat::COUNT
+    }
+
     fn scene(&self, _index: u64, _economy: &Economy<O>) -> Option<Scene> {
         None
     }
@@ -2140,6 +2150,8 @@ where
             .map(|(name, value)| ConstantView {
                 name: name.clone(),
                 value: value.clone(),
+                format: Some(ontology.constant_format(name))
+                    .filter(|format| !value.is_word() && *format != QuantityFormat::COUNT),
             })
             .collect(),
         rates,

@@ -6,7 +6,7 @@
 
 use crate::{Engine, EngineError, ScriptCall, ScriptState, definitions::kind};
 use axionomy::{
-    AccountPath, AssetPath, OntologyPath, RatePath, RolePath,
+    AccountPath, AssetPath, OntologyPath, RatePath, RolePath, VariablePath,
     path::Path,
     paths::{self, Paths},
 };
@@ -36,9 +36,9 @@ pub struct View {
     /// `account/<path>`, `asset/<path>`, `rate/<path>` or `role/<path>`, or
     /// nothing for its path.
     pub labels: Option<ScriptCall>,
-    /// `fn(asset)`: how people read quantities of an asset, written by its
-    /// path, as `#{ scale, digits, unit }`, each optional, or nothing for a
-    /// count.
+    /// `fn(item)`: how people read quantities of an asset or the value of
+    /// a constant, written `asset/<path>` or `constant/<name>`, as
+    /// `#{ scale, digits, unit }`, each optional, or nothing for a count.
     pub formats: Option<ScriptCall>,
     /// `fn(carried, before, exchange, after)`: what the view carries from
     /// each frame to the next, starting from nothing, such as the routes a
@@ -336,6 +336,36 @@ impl<'a> Drawing<'a> {
         })
         .flatten()
     }
+
+    /// How the view's `formats` function reads `item`, `asset/<path>` or
+    /// `constant/<name>`: a count where it says nothing.
+    fn formatted(&self, item: &str) -> QuantityFormat {
+        self.view
+            .and_then(|view| view.formats.as_ref())
+            .and_then(|formats| {
+                self.attempt(|| {
+                    let format: Dynamic = self.engine.call(
+                        &formats.script,
+                        formats.function.as_str(),
+                        (item.to_string(),),
+                    )?;
+                    if format.is_unit() {
+                        return Ok(None);
+                    }
+                    rhai::serde::from_dynamic(&format)
+                        .map(Some)
+                        .map_err(|error| EngineError::Script {
+                            path: formats.script.clone(),
+                            message: format!(
+                                "`{}` formatted `{item}` as {error}",
+                                formats.function
+                            ),
+                        })
+                })
+            })
+            .flatten()
+            .unwrap_or(QuantityFormat::COUNT)
+    }
 }
 
 /// A script's text, or nothing when it returned nothing.
@@ -444,31 +474,11 @@ impl ViewOntology<Paths> for Drawing<'_> {
     }
 
     fn format(&self, asset: &AssetPath) -> QuantityFormat {
-        self.view
-            .and_then(|view| view.formats.as_ref())
-            .and_then(|formats| {
-                self.attempt(|| {
-                    let format: Dynamic = self.engine.call(
-                        &formats.script,
-                        formats.function.as_str(),
-                        (asset.to_string(),),
-                    )?;
-                    if format.is_unit() {
-                        return Ok(None);
-                    }
-                    rhai::serde::from_dynamic(&format)
-                        .map(Some)
-                        .map_err(|error| EngineError::Script {
-                            path: formats.script.clone(),
-                            message: format!(
-                                "`{}` formatted `{asset}` as {error}",
-                                formats.function
-                            ),
-                        })
-                })
-            })
-            .flatten()
-            .unwrap_or(QuantityFormat::COUNT)
+        self.formatted(&format!("asset/{asset}"))
+    }
+
+    fn constant_format(&self, name: &VariablePath) -> QuantityFormat {
+        self.formatted(&format!("constant/{name}"))
     }
 
     fn scene(&self, index: u64, economy: &paths::Economy) -> Option<Scene> {
