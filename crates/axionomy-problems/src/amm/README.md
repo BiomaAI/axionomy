@@ -44,19 +44,24 @@ which the information account signals. Meeting a need is one rate over the
 factory and the household, `use-energy/{actor}`, and settling an obligation
 one over the generator and the factory, `settle-obligation/{actor}`, a
 relation giving each actor's amounts: the energy its need takes, the
-utility it yields and, in a season, the goods the factory makes (none for
-the household), and what each obligation costs. Micro has 8 rates as
-written, for 10 instances; Showcase and Stress 16, for 31 and 35.
+utility it yields and, in a season, the batches of goods it makes (one for
+the factory, none for the household), and what each obligation costs.
+Micro has 8 rates as written, for 10 instances; Showcase and Stress 16,
+for 31 and 35.
 
-A market's scale and a season's length are the whole world's and never
-change, so they are the economy's constants, `{scale}` and
-`{season-length}`. The rows give each amount once, unscaled, and every law
-whose amounts grow with the market (a need's energy and goods, an
-obligation's cost, investment, commissioning, delivery and income) takes
-`{amount} × {scale}`; investment also reads the length. The policies read
-both constants, and each need's energy and obligation's cost from its row
-(`state.constant`, `state.values`); what they trade is their own choice,
-at the market's scale.
+What is the whole world's and never changes is the economy's constants:
+the market's `{scale}`, the pool's fee (`{fee-numerator}` of every
+`{fee-denominator}` paid in trades) and `{share-limit}`; in a season also
+`{season-length}`, `{daily-decisions}`, the `{project-capacity}` an
+investment builds and commissioning brings online, and the goods in a
+`{batch}`, which a met factory need makes and a delivery takes. The rows
+give each amount once, unscaled, and every law whose amounts grow with the
+market (a need's energy and goods, an obligation's cost, investment,
+commissioning, delivery and income) takes `{amount} × {scale}`. The
+policies read the constants, and each need's energy and obligation's cost
+from its row (`state.constant`, `state.values`), and quote the pool from
+the fee they read; what they trade is their own choice, at the market's
+scale.
 
 Sunlight limits daily production. Investment pays credit now and increases
 capacity two days later. Energy storage is bounded. Factory output produces

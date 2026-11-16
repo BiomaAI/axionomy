@@ -190,10 +190,13 @@ fn build(size: MarketSize) -> World {
     };
     let initial_lp = pool_energy;
 
-    // The scale is the whole market's and never changes: a constant the
-    // laws read.
+    // The scale, the pool's fee and its share limit are the whole market's
+    // and never change: constants the laws read.
     let mut builder = EconomyBuilder::new()
         .constant(&market_scale(), scale)
+        .constant(&fee_numerator(), FEE_NUMERATOR)
+        .constant(&fee_denominator(), FEE_DENOMINATOR)
+        .constant(&share_limit(), MAX_LP_SHARES)
         .account(
             AccountId::Pool,
             Account::from(basket([
@@ -373,11 +376,11 @@ fn with_information(rate: Rate<Ontology>) -> Rate<Ontology> {
 
 // The trader receives the output, so it rounds down; the product is full width.
 fn swap_output_expression(input: Asset, output: Asset) -> Q<Ontology> {
-    let input_after_fee = Q::constant(FEE_NUMERATOR) * Q::units();
+    let input_after_fee = fee_numerator().quantity() * Q::units();
     Q::mul_div(
         Q::balance(Role::Pool, output),
         input_after_fee.clone(),
-        (Q::balance(Role::Pool, input) * Q::constant(FEE_DENOMINATOR)) + input_after_fee,
+        (Q::balance(Role::Pool, input) * fee_denominator().quantity()) + input_after_fee,
         Rounding::Floor,
     )
 }
@@ -398,7 +401,7 @@ fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Ontology>) -> Rate<
 }
 
 fn issued_lp_expression() -> Q<Ontology> {
-    Q::constant(MAX_LP_SHARES) - Q::balance(Role::Pool, Asset::UnissuedLpShare)
+    share_limit().quantity() - Q::balance(Role::Pool, Asset::UnissuedLpShare)
 }
 
 // The provider receives shares, so each side rounds down.
@@ -565,23 +568,29 @@ const NEEDS: [(Actor, u64, u64); 2] = [(Actor::Factory, 1_500, 150), (Actor::Hou
 /// Each actor with an obligation, and the credit settling it costs.
 const OBLIGATIONS: [(Actor, u64); 2] = [(Actor::Generator, 4_000), (Actor::Factory, 6_000)];
 
-/// The units a season's factory makes for each need it meets.
+/// The units of goods in a season's batch: what the factory makes for each
+/// need it meets, and what one delivery takes.
 const GOODS: u64 = 100;
+
+/// The decisions each actor has in a season's day.
+const DECISIONS: u64 = 6;
 
 /// The actor whose need or obligation a law meets, `{actor}`.
 fn consumer() -> Param<Actor> {
     Param::new(path!("actor"))
 }
 
-/// The numbers a need's or an obligation's terms give its law.
+/// The numbers a need's or an obligation's terms give its law: the
+/// energy it takes, the utility it yields, the batches of goods it makes
+/// and what settling it costs.
 fn energy() -> Param<u64> {
     Param::new(path!("energy"))
 }
 fn utility() -> Param<u64> {
     Param::new(path!("utility"))
 }
-fn goods() -> Param<u64> {
-    Param::new(path!("goods"))
+fn batches() -> Param<u64> {
+    Param::new(path!("batches"))
 }
 fn cost() -> Param<u64> {
     Param::new(path!("cost"))
@@ -591,6 +600,25 @@ fn cost() -> Param<u64> {
 /// `{scale}`: a constant.
 fn market_scale() -> Param<u64> {
     Param::new(path!("scale"))
+}
+
+/// The pool's fee: of every `{fee-denominator}` paid in, `{fee-numerator}`
+/// trades. Constants.
+fn fee_numerator() -> Param<u64> {
+    Param::new(path!("fee-numerator"))
+}
+fn fee_denominator() -> Param<u64> {
+    Param::new(path!("fee-denominator"))
+}
+
+/// Every share the pool may issue, `{share-limit}`: a constant.
+fn share_limit() -> Param<u64> {
+    Param::new(path!("share-limit"))
+}
+
+/// The goods in a batch, `{batch}`: a season's constant.
+fn batch() -> Param<u64> {
+    Param::new(path!("batch"))
 }
 
 /// `amount` for each unit of the exchange, as a basket's entries are.
@@ -607,13 +635,13 @@ fn scaled(amount: Q<Ontology>) -> Q<Ontology> {
 /// Any actor with a need meeting it, `use-energy/{actor}`, its consumer role
 /// fixed to the actor: it uses the energy its need takes, at the market's
 /// scale, for the need's utility, and where the market makes `goods`, the
-/// factory turns its unmade goods into goods and the household makes none.
-/// What each need takes and gives is law structure: a relation's row for
-/// each actor.
+/// factory turns a batch of its unmade goods into goods and the household
+/// makes none. What each need takes and gives is law structure: a
+/// relation's row for each actor.
 pub(crate) fn use_energy_rate(goods: bool) -> Rate<Ontology> {
     let actor = consumer();
     let made = |actor| match actor {
-        Actor::Factory => GOODS,
+        Actor::Factory => 1,
         _ => 0,
     };
     let energy_used = scaled(energy().quantity());
@@ -629,10 +657,10 @@ pub(crate) fn use_energy_rate(goods: bool) -> Rate<Ontology> {
         .produce_computed(Role::Consumer, Asset::SpentEnergy, energy_used)
         .produce_computed(Role::Consumer, Asset::Utility, per_unit(utility()));
     if goods {
-        let made_goods = scaled(self::goods().quantity());
+        let made_goods = scaled(batches().quantity() * batch().quantity());
         rate.relation(Relation::each_giving(
             &actor,
-            [energy(), utility(), self::goods()].map(|number| number.name().clone()),
+            [energy(), utility(), batches()].map(|number| number.name().clone()),
             NEEDS.map(|(actor, energy, utility)| (actor, [energy, utility, made(actor)])),
         ))
         .consume_computed(Role::Consumer, Asset::UnmadeGoods, made_goods.clone())

@@ -35,7 +35,7 @@ const SEED: u64 = 17;
 /// The most turns a season takes: thin liquidity's opening withdrawal, and
 /// on each of at most twelve days commissioning, every actor's six
 /// decisions and the end of its trading, and the day's close.
-const TURNS: u64 = 1 + 12 * (1 + amm::ACTORS.len() as u64 * 7 + 1);
+const TURNS: u64 = 1 + 12 * (1 + amm::ACTORS.len() as u64 * (amm::DECISIONS + 1) + 1);
 
 /// Each of the market's scenarios, and the script function that plays it,
 /// a season's turn, or with `_plan` Micro's whole day.

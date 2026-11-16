@@ -6,7 +6,8 @@ use super::*;
 use axionomy::QuantityComparison as C;
 use axionomy::path;
 
-const DECISIONS: u64 = 6;
+/// The capacity one investment builds and its commissioning brings online.
+const PROJECT_CAPACITY: u64 = 400;
 
 fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
@@ -38,6 +39,14 @@ fn world_law() -> Rate<Ontology> {
 /// How many days the season lasts, `{season-length}`: a constant.
 fn season_length() -> Param<u64> {
     Param::new(path!("season-length"))
+}
+/// The decisions each actor has a day, `{daily-decisions}`: a constant.
+fn daily_decisions() -> Param<u64> {
+    Param::new(path!("daily-decisions"))
+}
+/// The capacity one project builds, `{project-capacity}`: a constant.
+fn project_capacity() -> Param<u64> {
+    Param::new(path!("project-capacity"))
 }
 fn weather(seed: u64, day: u8) -> u64 {
     if axionomy_search::sampling::splitmix(seed, u64::from(day)).is_multiple_of(3) {
@@ -134,11 +143,15 @@ pub(super) fn build(size: MarketSize, days: u8, seed: u64) -> World {
         (Asset::AtDay(0), 1),
         (Asset::CurrentSunlight, weather(seed, 0)),
     ]);
-    // The season's length is the whole world's and never changes: a
-    // constant every rate reads by name, as the policies do.
+    // The season's length, the decisions a day gives, what a project builds
+    // and the goods in a batch are the whole world's and never change:
+    // constants every rate reads by name, as the policies do.
     builder = builder
         .account(AccountId::World, Account::from(world))
-        .constant(&season_length(), u64::from(days));
+        .constant(&season_length(), u64::from(days))
+        .constant(&daily_decisions(), DECISIONS)
+        .constant(&project_capacity(), PROJECT_CAPACITY)
+        .constant(&batch(), GOODS);
 
     // Meeting a need and settling an obligation, at the market's scale.
     builder = builder
@@ -286,7 +299,7 @@ pub(super) fn build(size: MarketSize, days: u8, seed: u64) -> World {
 
     // A project costs credit and builds capacity, which commissioning
     // brings online: each amount at the market's scale.
-    let (project_cost, built) = (Q::constant(6_000), Q::constant(400));
+    let (project_cost, built) = (Q::constant(6_000), project_capacity().quantity());
     let producer = Role::Producer;
     let invest = with_treasury(actor_law(world_law(), producer))
         .account(producer, own(Actor::Generator))
@@ -336,9 +349,9 @@ pub(super) fn build(size: MarketSize, days: u8, seed: u64) -> World {
             q(producer, Asset::ConstructionDue),
         );
     builder = builder.rate(RateId::CommissionProduction, commission);
-    // The treasury buys what one met need makes, and pays the household's
-    // income, at the market's scale.
-    let (delivered, price) = (scaled(Q::constant(GOODS)), scaled(Q::constant(15_000)));
+    // The treasury buys a batch, what one met need makes, and pays the
+    // household's income, at the market's scale.
+    let (delivered, price) = (scaled(batch().quantity()), scaled(Q::constant(15_000)));
     builder = builder.rate(
         RateId::DeliverGoods,
         with_treasury(actor_law(Rate::new(), Role::Producer))
@@ -526,12 +539,9 @@ fn close_day(mut next: Rate<Ontology>, tomorrow: Option<Q<Ontology>>) -> Rate<On
         )
         .produce(
             role,
-            basket([
-                (Asset::Trading, 1),
-                (Asset::Decisions, DECISIONS),
-                (Asset::LiquidityDecision, 1),
-            ]),
-        );
+            basket([(Asset::Trading, 1), (Asset::LiquidityDecision, 1)]),
+        )
+        .produce_computed(role, Asset::Decisions, per_unit(daily_decisions()));
         if actor == Actor::Speculator {
             next = clear(
                 clear(next, role, Asset::Informed(actor)),

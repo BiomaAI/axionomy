@@ -11,10 +11,6 @@ fn actors() {
     ["founder", "generator", "factory", "household", "speculator", "adaptive-lp", "arbitrageur", "whale"]
 }
 
-// Every share the pool may issue, and the decisions each actor has a day.
-fn share_limit() { 1000000 }
-fn daily_decisions() { 6 }
-
 // `amount` divided by `divisor`, rounded down or up.
 fn divided(amount, divisor) { mul_div(amount, quantity(1), quantity(divisor), "floor") }
 fn divided_up(amount, divisor) { mul_div(amount, quantity(1), quantity(divisor), "ceil") }
@@ -22,27 +18,27 @@ fn divided_up(amount, divisor) { mul_div(amount, quantity(1), quantity(divisor),
 // `amount` less `taken`, or nothing when that is more.
 fn less(amount, taken) { if amount > taken { amount - taken } else { quantity(0) } }
 
+// The pool's fee as its law has it: of every `whole` paid in, `kept` trades.
+fn fee(state) { #{ kept: state.constant("fee-numerator"), whole: state.constant("fee-denominator") } }
+
 // What the pool returns from its reserve `returned` for `input` paid into
-// its reserve `paid`: the constant product after the 0.3% fee, rounded down
-// for the trader.
-fn quote(paid, returned, input) {
-    let after_fee = input * 997;
-    mul_div(returned, after_fee, paid * 1000 + after_fee, "floor")
+// its reserve `paid`: the constant product after `fee`, rounded down for
+// the trader.
+fn quote(fee, paid, returned, input) {
+    let after_fee = input * fee.kept;
+    mul_div(returned, after_fee, paid * fee.whole + after_fee, "floor")
 }
 
 // The trader's protection: 98% of what the pool quotes, rounded down.
 fn guarded(output) { mul_div(output, quantity(98), quantity(100), "floor") }
 
-// The pool's energy for `credit`, and its credit for `energy`.
-fn energy_for(state, credit) {
-    quote(state.balance("pool", "credit"), state.balance("pool", "energy"), credit)
-}
+// The pool's credit for `energy`.
 fn credit_for(state, energy) {
-    quote(state.balance("pool", "energy"), state.balance("pool", "credit"), energy)
+    quote(fee(state), state.balance("pool", "energy"), state.balance("pool", "credit"), energy)
 }
 
-// The shares the pool has issued.
-fn issued(state) { quantity(share_limit()) - state.balance("pool", "unissued-lp-share") }
+// The shares the pool has issued: every share it may issue but those it holds.
+fn issued(state) { state.constant("share-limit") - state.balance("pool", "unissued-lp-share") }
 
 // Credit per energy, scaled by 1,000 and rounded down; nothing without energy.
 fn price_milli(state) {
@@ -90,19 +86,21 @@ fn production(actor, units) { exchange("produce-energy", #{ producer: `actor/${a
 
 // Micro: one market day, planned whole.
 
-// The pool as a plan follows it: its reserves and the shares it has issued.
+// The pool as a plan follows it: its reserves, the shares it has issued
+// and its fee.
 fn reserves(state) {
     #{
         energy: state.balance("pool", "energy"),
         credit: state.balance("pool", "credit"),
-        issued: issued(state)
+        issued: issued(state),
+        fee: fee(state)
     }
 }
 
 // The pool after a trader pays `input` into `paid` (`energy` or `credit`)
 // for the other reserve; what the trader receives.
 fn swapped(paid, returned, input) {
-    let output = quote(this[paid], this[returned], input);
+    let output = quote(this.fee, this[paid], this[returned], input);
     this[paid] = this[paid] + input;
     this[returned] = this[returned] - output;
     output
@@ -144,7 +142,7 @@ fn sold_for(actor, energy) {
 // credit, raised by 100 until the pool returns enough.
 fn bought_at_least(actor, preferred, required) {
     let credit = preferred;
-    while quote(this.credit, this.energy, credit) < required { credit = credit + 100; }
+    while quote(this.fee, this.credit, this.energy, credit) < required { credit = credit + 100; }
     this.bought_with(actor, credit)
 }
 
@@ -202,12 +200,17 @@ fn today(state) { state.balance("world", "day").to_int() }
 // found by bisection over the pool's quotes; nothing when the budget cannot.
 fn buy_to(state, actor, target, budget) {
     let missing = less(target, held(state, actor, "energy"));
-    if missing == 0 || budget == 0 || energy_for(state, budget) < missing { return (); }
+    if missing == 0 || budget == 0 { return (); }
+    // The pool read once: the search quotes it many times.
+    let fee = fee(state);
+    let credit = state.balance("pool", "credit");
+    let energy = state.balance("pool", "energy");
+    if quote(fee, credit, energy, budget) < missing { return (); }
     let low = 1;
     let high = budget.to_int();
     while low < high {
         let middle = low + (high - low) / 2;
-        if energy_for(state, quantity(middle)) >= missing { high = middle; } else { low = middle + 1; }
+        if quote(fee, credit, energy, quantity(middle)) >= missing { high = middle; } else { low = middle + 1; }
     }
     allowed(state, buy(actor, quantity(low), missing))
 }
@@ -328,12 +331,12 @@ fn decision(state, actor) {
     }
 }
 
-// The turns an actor still trading has taken today. The founder decides
-// nothing in a season, ending its trading at its first turn, so while it
-// trades it has taken none: thin liquidity's opening withdrawal is not a
-// turn of a round.
-fn turns(state, actor) {
-    if actor == "founder" { 0 } else { daily_decisions() - held(state, actor, "decisions").to_int() }
+// The turns an actor still trading has taken today, of the `daily`
+// decisions a day gives. The founder decides nothing in a season, ending
+// its trading at its first turn, so while it trades it has taken none:
+// thin liquidity's opening withdrawal is not a turn of a round.
+fn turns(state, actor, daily) {
+    if actor == "founder" { 0 } else { (daily - held(state, actor, "decisions")).to_int() }
 }
 
 // The day's close once every actor has ended trading: the next day's
@@ -358,12 +361,13 @@ fn season_turn(state, scenario) {
     let due = state.exchange_of("commission-production");
     if state.applicable(due) { return due; }
     let everyone = actors();
+    let daily = state.constant("daily-decisions");
     let trading = [];
     let round = ();
     for actor in everyone {
         if held(state, actor, "trading") > 0 {
             trading.push(actor);
-            let taken = turns(state, actor);
+            let taken = turns(state, actor, daily);
             if round == () || taken < round { round = taken; }
         }
     }
@@ -371,7 +375,7 @@ fn season_turn(state, scenario) {
     let first = (day + round) % everyone.len();
     for offset in 0..everyone.len() {
         let actor = everyone[(first + offset) % everyone.len()];
-        if trading.contains(actor) && turns(state, actor) == round {
+        if trading.contains(actor) && turns(state, actor, daily) == round {
             let decided = if scenario == "no-whale" && actor == "whale" { () } else { decision(state, actor) };
             return if decided == () { state.exchange_of(`end-trading/${actor}`) } else { decided };
         }
