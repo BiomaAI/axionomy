@@ -85,7 +85,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     engine.keep_goal(&path!("logistics/fleet/closed"), &written(&fleet::goal()))?;
     engine.keep_candidates(
         &path!("logistics/moves"),
-        &CandidateSet::Script(micro("moves")),
+        &CandidateSet::Script(micro("choices")),
     )?;
 
     // Micro: the fixed routes turn by turn, and the planner.

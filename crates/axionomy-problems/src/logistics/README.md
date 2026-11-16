@@ -84,8 +84,11 @@ relation over the routes giving the place each starts from and ends at
 gives the fuel and time the leg takes. The routes keep their names, so
 the weather's events do too. What a refuel buys is the economy's constant
 `{refuel-amount}`, which the policies read too. Each role is fixed to its
-account, so the policies and the planner propose each move as its rate's
-exchange (`state.exchange_of`).
+account, so the policies propose each move as its rate's exchange
+(`state.exchange_of`), and the planner weighs the moves that apply
+(`state.moves`) but for Nature's draws, a refuel while the tank holds a
+refuel's worth, and a departure away from where the vehicle is bound,
+which it reads from the network (`state.values`).
 
 Nature draws each resolution by its event, `weather/<route>/<elapsed time>`:
 the weather of that leg, met at the time the vehicle has elapsed when the

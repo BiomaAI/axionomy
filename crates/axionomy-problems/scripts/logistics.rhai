@@ -125,55 +125,31 @@ fn turn(state, random, policy) {
 fn direct(state, random) { turn(state, random, "direct") }
 fn reliable(state, random) { turn(state, random, "reliable") }
 
-// The moves the planner weighs, in the order it weighs them: once Nature
-// has drawn, the repair or the arrival; at the depot, both routes out with
-// a package or the waiting orders to load without, and a refuel when fuel
-// is short; at the customer the delivery, or both routes back; at the
-// junction the leg onward.
-fn moves(state) {
-    let route = active_route(state);
-    let rates = [];
-    if route != () {
-        if state.balance("nature", "weather-ready") > 0 { return []; }
-        if state.balance("nature", `outcome/${route}/breakdown`) > 0 {
-            rates.push(`repair/${route}`);
-        } else {
-            for outcome in ["clear", "delayed"] {
-                if state.balance("nature", `outcome/${route}/${outcome}`) > 0 {
-                    rates.push(`arrive/${route}/${outcome}`);
-                }
-            }
+// The planner's choices: the engine's moves that apply, in their order,
+// but for Nature's draws, a refuel while the tank holds a refuel's worth,
+// and a departure that leads the vehicle astray.
+fn choices(state) {
+    let weighed = [];
+    for move in state.moves("") {
+        let rate = move.rate();
+        if rate.starts_with("resolve/")
+            || rate == "refuel" && state.balance("vehicle", "fuel") >= refuel_amount(state)
+            || rate.starts_with("depart/") && astray(state, rate) {
+            continue;
         }
-    } else {
-        let carrying = carried(state);
-        let at = location(state);
-        if at == "depot" {
-            if carrying != () {
-                rates.push("depart/direct-out");
-                rates.push("depart/safe-out-first");
-            } else {
-                for order in orders() {
-                    if state.balance(`order/${order}`, "waiting") > 0 { rates.push(`load/${order}`); }
-                }
-            }
-            if state.balance("vehicle", "fuel") < refuel_amount(state) { rates.push("refuel"); }
-        } else if at == "customer" {
-            if carrying != () {
-                rates.push(`deliver/${carrying}`);
-            } else {
-                rates.push("depart/direct-back");
-                rates.push("depart/safe-back-first");
-            }
-        } else if at == "junction" {
-            rates.push(if carrying != () { "depart/safe-out-second" } else { "depart/safe-back-second" });
-        }
+        weighed.push(move);
     }
-    let applicable = [];
-    for rate in rates {
-        let proposal = state.exchange_of(rate);
-        if state.applicable(proposal) { applicable.push(proposal); }
-    }
-    applicable
+    weighed
+}
+
+// Whether departing on `rate`'s leg, as the network gives it, leads the
+// vehicle astray: bound for the customer with a package and for the depot
+// without, it never leaves that place nor heads for the other.
+fn astray(state, rate) {
+    let carrying = carried(state) != ();
+    let leg = state.values(rate);
+    leg.from == (if carrying { "customer" } else { "depot" })
+        || leg.to == (if carrying { "depot" } else { "customer" })
 }
 
 // What happens in the planned run without the planner choosing: Nature's
@@ -182,7 +158,7 @@ fn moves(state) {
 fn nature(state, random) {
     let weighted = weather(state);
     if !weighted.is_empty() { return drawn(state, weighted, random); }
-    let forced = moves(state);
+    let forced = choices(state);
     if forced.len() == 1 { return forced[0]; }
     ()
 }
