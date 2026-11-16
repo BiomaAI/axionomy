@@ -33,9 +33,14 @@ differs: warm aging that spoils or not. A day opens as `open-day/{day}`, a
 relation over the days giving the grid's supply, three units of
 electricity but none on a day of the outage, so the seed changes only
 those numbers, not the law. The run's length and the battery's capacity
-are the economy's constants, `{days}` and `{battery}`. The policies read
-the supply and the prices with `state.values` and the constants with
-`state.constant`. Each role is fixed to its account, the world,
+are the economy's constants, `{days}` and `{battery}`: backup generation
+runs while the battery has room for what it makes, and a warm batch
+spoils once its heat reaches a warm day's. The policies copy no number
+of the law: they read the supply, the prices and the cold slots a crate
+takes with `state.values`, the constants with `state.constant`, what
+cooling, generating, processing, delivering, moving, aging and opening a
+day take and give with `state.consumed` and `state.produced`, and a
+trip's fuel with `state.assess`. Each role is fixed to its account, the world,
 the buyer or the batch its identifier names, so no identity token pins a
 binding, and a plan binds each exchange's roles to the accounts its rate
 fixes.

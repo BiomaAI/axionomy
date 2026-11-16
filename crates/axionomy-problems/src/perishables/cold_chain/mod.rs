@@ -8,6 +8,9 @@ use axionomy::{
 pub const BATCHES: [u8; 6] = [0, 1, 2, 3, 4, 5];
 /// The most electricity the battery stores, an economy's constant.
 const BATTERY: u64 = 6;
+/// The electricity a unit of fuel holds: what backup generation makes of
+/// it, and what the closed potential counts it as.
+const FUEL_ENERGY: u32 = 3;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Place {
     Warehouse,
@@ -432,9 +435,16 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .produce_computed(Role::World, Asset::ColdSpace, slots()),
     );
     // A batch with fresh crates ages warm where it stands, in cold storage
-    // only while the cooling is off: it gains heat, and spoils once it was
-    // warm before.
+    // only while the cooling is off: it gains a warm day's heat, and spoils
+    // once it was warm before, its heat at least that.
+    let warmth = 2;
     for spoil in [false, true] {
+        let heat = q(Role::Batch, Asset::Heat);
+        let (heat, threshold) = if spoil {
+            (heat, C::GreaterThanOrEqual)
+        } else {
+            (heat + Q::constant(1), C::LessThanOrEqual)
+        };
         let mut warm = stored(aging(&batch))
             .preserve_at(Role::Batch, one([at(&place)]))
             .condition(
@@ -445,15 +455,11 @@ pub fn initial(stress: bool, seed: u64) -> World {
             )
             .condition(
                 path!("thermal-threshold"),
-                q(Role::Batch, Asset::Heat),
-                if spoil {
-                    C::GreaterThanOrEqual
-                } else {
-                    C::LessThanOrEqual
-                },
-                Q::constant(if spoil { 2 } else { 1 }),
+                heat,
+                threshold,
+                Q::constant(warmth),
             )
-            .produce(Role::Batch, basket([(Asset::Heat, 2)]))
+            .produce(Role::Batch, basket([(Asset::Heat, warmth)]))
             .preserve_computed(Role::World, Asset::CoolingOff, refrigerated.quantity());
         if spoil {
             warm = clear(warm, Role::Batch, Asset::Fresh).produce_computed(
@@ -514,19 +520,22 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 basket([(Asset::CoolingOn, 1), (Asset::SpentEnergy, 2)]),
             ),
     );
+    // Backup generation turns a unit of fuel into its electricity, while
+    // the battery has room for it.
+    let generated = u64::from(FUEL_ENERGY);
     builder = builder.rate(
         RateId::Generate,
         once(decisions())
             .condition(
                 path!("battery-capacity"),
-                q(Role::World, Asset::Energy),
+                q(Role::World, Asset::Energy) + Q::constant(generated),
                 C::LessThanOrEqual,
-                Q::constant(3),
+                battery.quantity(),
             )
             .consume(Role::World, basket([(Asset::Fuel, 1)]))
             .produce(
                 Role::World,
-                basket([(Asset::GeneratorFuel, 1), (Asset::Energy, 3)]),
+                basket([(Asset::GeneratorFuel, 1), (Asset::Energy, generated)]),
             ),
     );
     let mut end = once(law())
@@ -635,8 +644,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .weight(Asset::SpentEnergy, 1)
                 .weight(Asset::GridPotential, 1)
                 .weight(Asset::SpilledEnergy, 1)
-                .weight(Asset::Fuel, 3)
-                .weight(Asset::TransportFuel, 3),
+                .weight(Asset::Fuel, i64::from(FUEL_ENERGY))
+                .weight(Asset::TransportFuel, i64::from(FUEL_ENERGY)),
         )
         .invariant(
             LinearInvariant::new(path!("finite-fuel"))

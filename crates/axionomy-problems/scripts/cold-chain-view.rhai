@@ -186,15 +186,17 @@ fn scene(state, frame) {
         x: node[2],
         y: node[3],
     });
+    // What the links cost, as the law has it.
+    let law = chain::law(state);
     let edges = [
         ["warehouse", "fridge", "space + labor"],
         ["warehouse", "processing", "energy + labor"],
-        ["warehouse", "buyer", "up to 2 crates/day"],
+        ["warehouse", "buyer", `up to ${chain::afforded(law.day.freight, law.delivery.freight)} crates/day`],
         ["fridge", "buyer", "delivery frees space"],
-        ["power", "fridge", "2 energy/day"],
-        ["power", "processing", "1 energy/crate"],
-        ["fuel", "power", "1 fuel → 3 energy"],
-        ["fuel", "buyer", "1 fuel/trip"],
+        ["power", "fridge", `${law.cooling} energy/day`],
+        ["power", "processing", `${law.processing.energy} energy/crate`],
+        ["fuel", "power", `${law.generator_fuel} fuel → ${law.generated} energy`],
+        ["fuel", "buyer", `${law.trip_fuel} fuel/trip`],
     ].map(|route| #{
         id: `cold/${route[0]}/${route[1]}`,
         source: route[0],
@@ -219,7 +221,8 @@ fn scene(state, frame) {
             `${fresh} fresh · ${stable} preserved · ${spoiled} spoiled`, account,
         );
         cohort.metrics = [
-            metric("heat", "Heat exposure", val(state, account, "heat"), "/ 4"),
+            // Out of the heat of its second warm day, which spoils it.
+            metric("heat", "Heat exposure", val(state, account, "heat"), `/ ${law.warmth * 2}`),
             metric(
                 "origin", "Thermal lineage",
                 if val(state, account, "origin/0") > 0 { "ambient origin" } else { "cold origin" },
