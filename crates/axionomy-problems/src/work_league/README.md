@@ -38,7 +38,9 @@ Nature's weight of each outcome of an attempt at a contract in a mode is a
 relation's too, `{weight}`, and an outcome happens only with some weight,
 so Nature holds no account. A wave's fourth contract
 depends on its first, a value the claim derives from `{job}`. Every role is fixed to the account its identifier
-names, so no identity token pins a binding. Micro has 11 rates as written,
+names, so no identity token pins a binding: Micro's recycler holds nothing,
+and its workshop and charger hold only the supplies their services spend.
+Micro has 11 rates as written,
 for 246 instances; Showcase and Stress 23, for 1,030 and 1,954.
 
 Twelve Showcase contracts arrive in three waves; Stress has six waves and 24

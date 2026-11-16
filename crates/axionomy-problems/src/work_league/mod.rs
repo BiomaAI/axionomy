@@ -142,7 +142,6 @@ pub enum Asset {
     RepairSupply,
     SpentRepairSupply,
     ChargeSupply,
-    RecyclerCapacity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -628,10 +627,9 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 (profile.job_count() * 20) as u64,
             )])),
         )
-        .account(
-            AccountId::Facility(Facility::Recycler),
-            Account::from(basket([(Asset::RecyclerCapacity, 1)])),
-        );
+        // The recycler holds nothing: its law fixes the account, which no
+        // token need prove.
+        .account(AccountId::Facility(Facility::Recycler), Account::default());
 
     let mut goal = Goal::new();
     for spec in &jobs {
@@ -854,8 +852,7 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                         (Asset::SpentEnergy, 1),
                         (Asset::ElapsedTime, 1),
                     ]),
-                )
-                .preserve(Role::Facility, basket([(Asset::RecyclerCapacity, 1)])),
+                ),
         );
 
     builder = builder

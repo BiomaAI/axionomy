@@ -79,7 +79,6 @@ fn asset_label(parts) {
         "repair-supply" => "Repair supply",
         "spent-repair-supply" => "Repair supply used",
         "charge-supply" => "Charging energy supply",
-        "recycler-capacity" => "Recycler available",
         _ => (),
     }
 }
