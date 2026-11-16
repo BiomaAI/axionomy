@@ -419,12 +419,19 @@ export function PackagesApp() {
         names = await load(link.package, () => engine.loadUrl(url), false);
         list = await relist();
       }
-      const name = link.name ?? names[0] ?? list.packages[0]?.name;
-      if (!name) return;
-      setPackageName(name);
-      const named = list.packages.find((candidate) => candidate.name === name);
-      if (link.ref && named?.refs.some((ref) => ref.name === link.ref)) void openRef(link.ref, link.step ?? "end");
-      else if (link.point) {
+      // A link naming what the store does not hold opens the first package
+      // there is, and says so.
+      const stored = (name?: string) => list.packages.find((candidate) => candidate.name === name);
+      const named = stored(link.name) ?? stored(names[0]) ?? list.packages[0];
+      if (!named) return;
+      const missing = (words: string) => setSaid((current) => [...current, caution(`${words}: opened ${named.name}.`)]);
+      if (link.name && link.name !== named.name) missing(`No package ${link.name} is stored here`);
+      setPackageName(named.name);
+      if (link.ref && named.refs.some((ref) => ref.name === link.ref)) void openRef(link.ref, link.step ?? "end");
+      else if (link.ref) {
+        if (link.name === named.name) missing(`${named.name} has no ref ${link.ref}`);
+        if (named.refs[0]) void openRef(named.refs[0].name);
+      } else if (link.point) {
         pendingStep.current = link.step ?? "end";
         setOpened({ point: link.point });
       } else if (named?.refs[0]) void openRef(named.refs[0].name);

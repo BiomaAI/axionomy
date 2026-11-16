@@ -329,6 +329,21 @@ test("a link names a package by its URL and opens it", async ({ page }) => {
   await expect(trace(page)).toHaveAttribute("max", "3");
 });
 
+test("a link to what the store does not hold opens the first package, and the brand goes home", async ({ page }) => {
+  await openSample(page, "sokoban");
+  await page.goto("/?name=no-such-package&ref=no%2Fsuch%2Fref");
+  await expect(activity(page)).toContainText("No package no-such-package is stored here", { timeout: 30_000 });
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText(" of ");
+  await page.goto("/?name=sokoban&ref=sokoban%2Fno-such-ref");
+  await expect(activity(page)).toContainText("sokoban has no ref sokoban/no-such-ref: opened sokoban.", { timeout: 30_000 });
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of sokoban/micro");
+  // Home is Studio with nothing linked: the store's first package, at its first ref.
+  await page.getByRole("link", { name: /Axionomy Studio home/ }).click();
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText(" of ", { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/no-such/);
+  await expect(activity(page)).not.toContainText("no-such");
+});
+
 test("keeps Studio within a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?package=/packages/sokoban.zip&name=sokoban&ref=sokoban%2Fmicro%2Fdeadlock");

@@ -6,8 +6,9 @@ import type { ViewDocument, ViewSnapshot } from "./api";
 import type { ReplayMotionMode } from "./SceneView";
 
 /** The masthead's mark. */
+/** Studio's name, a link home: Studio reloaded with nothing linked, opening the store's first package. */
 export function Brand() {
-  return <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></div>;
+  return <a className="brand" href={import.meta.env.BASE_URL} title="Home: reload Studio with nothing linked, at the first package stored"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy Studio home" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></a>;
 }
 
 /**
