@@ -1517,11 +1517,15 @@ names since D-059 (a contract's place, an order's item and destination, a
 route's ends); what a world holds once (a season's length, a market's terms,
 a board's size) is a constant; the assets that held them are gone. Maze,
 exact cover, workshop and sokoban fix their accounts, and their moves are
-their instances that apply (D-055, D-060). The scripts lost their binding
+their instances that apply (D-055, D-060); the marketplace's free parties
+are bound by the engine too (D-061). The scripts lost their binding
 tables, their loops over rate identifiers and their copies of the law:
 Connect Four's went from 449 to 150 lines, its bitboards, tactics and
-negamax replaced by the engine's minimax; sokoban's from 105 to 48; the work
-league's policies read contracts, costs and odds from the law. What stays
+negamax replaced by the engine's minimax; sokoban's from 105 to 48; the
+marketplace's from 336 to 230; the work league's policies read contracts,
+costs and odds from the law, the AMM's its scale, fee and season terms,
+the cold chain's plans every amount they follow, and logistics Micro's
+planner weighs the engine's moves. What stays
 one rate per value is what differs in shape; what stays a fact in the
 economy is what Nature hides until it is observed (a relation is law every
 reader sees).
