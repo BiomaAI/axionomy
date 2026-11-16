@@ -6,6 +6,7 @@ use crate::script::ScriptPath;
 use axionomy::{PathKind, Pattern, RatePath, path::Path, paths, pattern::Piece};
 use axionomy_search::pareto::ObjectiveDirection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt;
 use thiserror::Error;
 
@@ -154,10 +155,12 @@ pub enum CandidateSet {
     Script(ScriptCall),
     /// These exchanges, the ones that apply at each state, in this order.
     Listed(Vec<axionomy::paths::Exchange>),
-    /// Every instance of the rates whose identifiers start with `under`, or
-    /// of every rate, that fixes the account of each of its roles: at one
-    /// unit, those that apply at each state, in the rates' order and each
-    /// rate's instances' order.
+    /// What the rates whose identifiers start with `under`, or every rate,
+    /// offer at each state, those that apply: one unit of each instance,
+    /// every role the rate fixes bound to its account and every role it
+    /// leaves free to each account holding what the role takes, in the
+    /// rates' order and each rate's instances' order
+    /// ([`axionomy::Economy::offers`]).
     Instances { under: Option<RatePath> },
 }
 
@@ -181,15 +184,15 @@ impl CandidateSet {
     }
 }
 
-/// The exchange of every instance of the rates written under `under`, or of
-/// every rate, whose roles the rate fixes, in order, whether it applies or
-/// not: what [`CandidateSet::Instances`] offers before any is checked.
+/// What the rates written under `under`, or every rate, offer the economy
+/// at its state, whether it applies or not: what [`CandidateSet::Instances`]
+/// offers before any is checked ([`axionomy::Economy::offers`]).
 pub fn offered<'a>(
     economy: &'a paths::Economy,
     under: Option<&'a RatePath>,
-) -> impl Iterator<Item = &'a paths::Exchange> + 'a {
+) -> impl Iterator<Item = Cow<'a, paths::Exchange>> + 'a {
     economy
-        .fixed_exchanges()
+        .offers()
         .filter(move |(key, _)| under.is_none_or(|prefix| starts_with(key, prefix)))
         .flat_map(|(_, exchanges)| exchanges)
 }
@@ -198,7 +201,7 @@ pub fn offered<'a>(
 pub(crate) fn applying(economy: &paths::Economy, under: Option<&RatePath>) -> Vec<paths::Exchange> {
     offered(economy, under)
         .filter(|exchange| economy.is_applicable(exchange))
-        .cloned()
+        .map(Cow::into_owned)
         .collect()
 }
 

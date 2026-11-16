@@ -1392,3 +1392,48 @@ fn a_rate_with_variables_offers_its_instances_that_apply() {
     let taken = back[1].clone().cast::<rhai::Map>();
     assert_eq!(taken["at/2"].clone().cast::<Quantity>(), Quantity::new(1));
 }
+
+#[test]
+fn an_instance_binds_a_free_role_to_each_account_holding_what_it_takes() {
+    use axionomy::Pattern;
+
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let pot = || "pot".parse::<Pattern<_>>().unwrap();
+    let economy = paths::EconomyBuilder::new()
+        .account(path("player/a"), basket([(path("token"), 1)]).into())
+        .account(path("player/b"), basket([]).into())
+        .account(path("player/c"), basket([(path("token"), 2)]).into())
+        .account(path("pot"), basket([]).into())
+        // Whoever holds a token may give it to the pot.
+        .rate(
+            path("give"),
+            Rate::new()
+                .account(path("to"), pot())
+                .consume(path("from"), basket([(path("token"), 1)]))
+                .produce(path("to"), basket([(path("token"), 1)])),
+        )
+        // The pot's token may go to anyone: a role taking nothing, which
+        // whoever proposes the exchange must bind.
+        .rate(
+            path("refund"),
+            Rate::new()
+                .account(path("from"), pot())
+                .consume(path("from"), basket([(path("token"), 1)]))
+                .produce(path("to"), basket([(path("token"), 1)])),
+        )
+        .build()
+        .unwrap();
+    engine
+        .keep_candidates(&path("moves"), &CandidateSet::Instances { under: None })
+        .unwrap();
+    let start = engine.author(economy).unwrap();
+    let give = |from: &str| {
+        paths::Exchange::new(path("give"), Quantity::new(1))
+            .bind(path("from"), path(from))
+            .bind(path("to"), path("pot"))
+    };
+    assert_eq!(
+        engine.candidates(start, &path("moves")).unwrap(),
+        vec![give("player/a"), give("player/c")]
+    );
+}

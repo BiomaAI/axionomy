@@ -56,163 +56,60 @@ fn bound(rate, order, party) {
     exchange(rate, bindings, 1)
 }
 
-// The buyers, sellers and carriers who might take part in `deal`'s order,
-// each in the order of the accounts, every buyer with every seller with
-// every carrier: buyers holding the order's purchase intent, sellers
-// offering its item and carriers with capacity, which a settlement or
-// contract consumes. Whether one applies is the kernel's to say; this only
-// skips parties it would refuse.
-fn parties(state, deal) {
-    let buyers = [];
-    for buyer in state.accounts("buyer/") {
-        if state.balance(buyer, `purchase-intent/${deal.order}`) > 0 {
-            buyers.push(buyer);
-        }
-    }
-    let sellers = [];
-    for seller in state.accounts("seller/") {
-        let held = state.balances(seller);
-        if `sale-offer/${deal.item}` in held && `item/${deal.item}` in held {
-            sellers.push(seller);
-        }
-    }
-    let carriers = [];
-    for carrier in state.accounts("carrier/") {
-        if state.balance(carrier, "shipping-capacity") > 0 {
-            carriers.push(carrier);
-        }
-    }
-    let found = [];
-    for buyer in buyers {
-        for seller in sellers {
-            for carrier in carriers {
-                found.push(#{ buyer: buyer, seller: seller, carrier: carrier });
-            }
-        }
-    }
-    found
-}
-
-// Micro: every order's settlement that applies, order by order, then by
-// buyer, seller and carrier, in the order of their accounts.
-fn settlements(state) {
-    let proposals = [];
-    for rate in state.instances("settle-order") {
-        let deal = state.values(rate);
-        for party in parties(state, deal) {
-            let proposal = bound(rate, deal.order, party);
-            if state.applicable(proposal) {
-                proposals.push(proposal);
-            }
-        }
-    }
+// `proposals` order by order, each buyer with each seller with each carrier
+// in the order of their accounts, at the order's price and then ten credits
+// less. Of plans scoring alike the beam keeps the last it finds, so this
+// order decides which.
+fn in_turn(proposals) {
+    proposals.sort(|a, b| {
+        let x = turn(a);
+        let y = turn(b);
+        if x < y { -1 } else if x > y { 1 } else { 0 }
+    });
     proposals
 }
-
-// Whom `order`'s reservation binds: the first buyer who locked the purchase,
-// the first seller who reserved the sale and the first carrier holding the
-// booking; nothing unless there are all three.
-fn booking(state, order) {
-    let party = #{};
-    for buyer in state.accounts("buyer/") {
-        if state.balance(buyer, `purchase-locked/${order}`) > 0 {
-            party.buyer = buyer;
-            break;
-        }
-    }
-    for seller in state.accounts("seller/") {
-        if state.balance(seller, `sale-reserved/${order}`) > 0 {
-            party.seller = seller;
-            break;
-        }
-    }
-    for carrier in state.accounts("carrier/") {
-        if state.balance(carrier, `booking/${order}`) > 0 {
-            party.carrier = carrier;
-            break;
-        }
-    }
-    if party.len() == 3 { party } else { () }
+fn turn(proposal) {
+    let rate = proposal.rate().split("/");
+    let party = ["buyer", "seller", "carrier"].map(|role| proposal.account(role));
+    `${rate[1]}/${party[0]}/${party[1]}/${party[2]}/${rate[2]}`
 }
 
-// Showcase and Stress: what a funded market may do next, as a
-// planner proposes it; nothing once every order has settled. A dispatch or a
-// delivery that applies goes first, alone: the first, order by order, of a
-// reservation's dispatch with its carrier, then its delivery at the order's
-// price on time and late, then at the conceded price on time and late.
-// Otherwise every contract an open order may sign, at its price and then ten
-// credits less, with each buyer, seller and carrier in turn; a reservation's
-// cancellation, at either price, once it has expired; and advancing the
-// clock to the next arrival, expiry or delivery to come, whichever apply.
+// Showcase and Stress: what a funded market may do next, as a planner
+// proposes it; nothing once every order has settled. A dispatch or a
+// delivery that applies goes first, alone: the first, order by order.
+// Otherwise every contract and cancellation that applies, as the rates
+// offer them, and advancing the clock to the next arrival, expiry or
+// delivery to come, if it applies.
 fn fulfillment(state) {
-    let agreements = agreements(state);
     let orders = order_ids(state);
-    let settled = 0;
-    let open = #{};
-    let booked = #{};
-    for order in orders {
-        let held = state.balances(`order/${order}`);
-        if `settled-order/${order}` in held {
-            settled += 1;
-        }
-        if `open-order/${order}` in held {
-            open[order] = terms_of(state, agreements[order]);
-        }
-        let party = booking(state, order);
-        if party != () {
-            booked[order] = #{ party: party, held: held };
-        }
-    }
-    if settled == orders.len() {
+    if orders.all(|order| state.balance(`order/${order}`, `settled-order/${order}`) > 0) {
         return [];
     }
+    let first = state.moves("dispatch") + state.moves("deliver");
     for order in orders {
-        if order in booked {
-            let party = booked[order].party;
-            for rate in [
-                `dispatch/${order}/${id(party.carrier)}`,
-                `deliver/${order}/false/false`,
-                `deliver/${order}/false/true`,
-                `deliver/${order}/true/false`,
-                `deliver/${order}/true/true`,
-            ] {
-                let proposal = bound(rate, order, party);
-                if state.applicable(proposal) {
-                    return [proposal];
-                }
+        for proposal in first {
+            if id(proposal.rate()) == order {
+                return [proposal];
             }
         }
     }
-    let proposed = [];
-    for order in orders {
-        if order in open {
-            let deal = open[order];
-            for party in parties(state, deal) {
-                proposed.push(bound(`contract/${order}/false`, order, party));
-                proposed.push(bound(`contract/${order}/true`, order, party));
-            }
-        }
-    }
+    let proposals = in_turn(state.moves("contract")) + in_turn(state.moves("cancel"));
+    let agreements = agreements(state);
     let now = state.balance("platform", "now");
     // The market's day ends where no time remains.
     let end = now + state.balance("platform", "time-remaining");
     let next = ();
     for order in orders {
+        let held = state.balances(`order/${order}`);
         let times = [];
-        if order in open {
-            times.push(open[order].arrival);
+        if `open-order/${order}` in held {
+            times.push(terms_of(state, agreements[order]).arrival);
         }
-        if order in booked {
-            let party = booked[order].party;
-            let held = booked[order].held;
-            proposed.push(bound(`cancel/${order}/false`, order, party));
-            proposed.push(bound(`cancel/${order}/true`, order, party));
-            if `contract/${order}` in held {
-                times.push(state.balance(`order/${order}`, "lease-until") + 1);
-            }
-            if `in-shipment/${order}` in held {
-                times.push(state.balance(`order/${order}`, "ready-at"));
-            }
+        if `contract/${order}` in held {
+            times.push(state.balance(`order/${order}`, "lease-until") + 1);
+        }
+        if `in-shipment/${order}` in held {
+            times.push(state.balance(`order/${order}`, "ready-at"));
         }
         for time in times {
             if time > now && time <= end && (next == () || time < next) {
@@ -221,12 +118,9 @@ fn fulfillment(state) {
         }
     }
     if next != () {
-        proposed.push(state.exchange_of(`advance/${next}`));
-    }
-    let proposals = [];
-    for proposal in proposed {
-        if state.applicable(proposal) {
-            proposals.push(proposal);
+        let advance = state.exchange_of(`advance/${next}`);
+        if state.applicable(advance) {
+            proposals.push(advance);
         }
     }
     proposals

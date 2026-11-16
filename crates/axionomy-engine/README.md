@@ -40,7 +40,9 @@ goes.
   objective (a script's measure of a state, or its step costs summed over a
   history, with a direction) and a candidate set (a script function returning
   exchanges, exchanges listed, or `Instances`: every instance of the rates
-  under a prefix that fixes the account of each of its roles, at one unit); `holds`, `measure` and `candidates` evaluate them at a point, and
+  under a prefix, at one unit, each fixed role bound to its account and each
+  free role to every account holding what it takes); `holds`, `measure`
+  and `candidates` evaluate them at a point, and
   `measure_state`, `step_cost` and `propose` on an economy in memory.
 - `keep_strategy` keeps a strategy, an algorithm naming the candidates and
   scripts it uses: how to choose, never what for. `run_strategy` runs one
@@ -120,8 +122,9 @@ read a `ScriptState`, the whole economy or a view of the accounts an actor may
 see, through the host API (balances, accounts and rates by prefix, a rate's
 roles and what it fixes for a role to consume, produce or preserve,
 `exchange(...)`, `exchange_of(rate)` with the accounts the rate fixes bound,
-`moves(prefix)` for every instance under a prefix that fixes all its roles
-and applies, `instances(prefix)` for every instance under a prefix,
+`moves(prefix)` for every exchange the instances under a prefix offer
+that applies, each free role bound to every account holding what it takes,
+`instances(prefix)` for every instance under a prefix,
 `values(rate)` for the values an instance has, its variables',
 the values its relations give and its derived values, `constant(name)` for
 one of the economy's constants, `applicable`,

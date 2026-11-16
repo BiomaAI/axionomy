@@ -84,9 +84,26 @@ struct Rates<O: Ontology> {
     /// The instances of rates with variables made so far. An instance
     /// depends only on the rates, so every fork shares them.
     made: RwLock<HashMap<O::Rate, Arc<Rate<O>>>>,
-    /// Each rate's instances whose roles it fixes, as exchanges, once
-    /// listed: [`Economy::fixed_exchanges`].
-    fixed: OnceLock<Vec<Vec<Exchange<O>>>>,
+    /// Each rate's instances as it offers them, once listed:
+    /// [`Economy::offers`].
+    offers: OnceLock<Vec<Vec<Offer<O>>>>,
+}
+
+/// An instance as its rate offers it: the exchange applying it once, each
+/// role the rate fixes bound to its account, and what an account must hold
+/// to take each role the rate leaves free, in the roles' order.
+#[derive(Debug)]
+struct Offer<O: Ontology> {
+    exchange: Exchange<O>,
+    free: Vec<Free<O>>,
+}
+
+/// A role a rate leaves free, and each entry an account must hold to take
+/// it: what the role consumes, at one unit, and what it keeps.
+#[derive(Debug)]
+struct Free<O: Ontology> {
+    role: O::Role,
+    takes: Vec<(O::Asset, Quantity)>,
 }
 
 /// The rate an exchange names: a rate as written, or an instance of one with
@@ -139,7 +156,7 @@ impl<O: Ontology> Rates<O> {
             written,
             literal,
             made: RwLock::default(),
-            fixed: OnceLock::new(),
+            offers: OnceLock::new(),
         }
     }
 
@@ -1182,29 +1199,100 @@ impl<O: Ontology> Economy<O> {
         )
     }
 
-    /// Each rate, in order, with the exchanges of its instances that fix
-    /// the account of every role, in the instances' order: every exchange
-    /// the rates offer whole, which needs no one to choose an account
-    /// ([`Economy::exchange_of`]). Listed once per rate book and shared by
-    /// every economy that has it.
-    pub fn fixed_exchanges(&self) -> impl Iterator<Item = (&Pattern<O::Rate>, &[Exchange<O>])> {
-        let fixed = self.rates.fixed.get_or_init(|| {
+    /// Each rate, in order, with the exchanges its instances offer at this
+    /// state, in the instances' order, each applying its instance once:
+    /// every role the rate fixes bound to that account, and every role it
+    /// leaves free bound to each account that holds what the role takes,
+    /// every entry it consumes and keeps, the first free role outermost and
+    /// the accounts in their order. An instance with a free role that takes
+    /// nothing is not offered: any account would do, so whoever proposes
+    /// must choose. Whether an offered exchange applies is
+    /// [`Economy::is_applicable`]'s to say. What the instances fix and
+    /// take is listed once per rate book and shared by every economy that
+    /// has it.
+    pub fn offers(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &Pattern<O::Rate>,
+            impl Iterator<Item = Cow<'_, Exchange<O>>>,
+        ),
+    > {
+        let offers = self.rates.offers.get_or_init(|| {
             self.rate_ids()
                 .map(|key| {
                     self.instances_of(key)
-                        .filter_map(|id| {
-                            let exchange = self.exchange_of(&id)?;
-                            let instance = self.instance(&id).ok()?;
-                            instance
-                                .roles()
-                                .all(|role| exchange.bindings().contains_key(role))
-                                .then_some(exchange)
-                        })
+                        .filter_map(|id| self.offer(&id))
                         .collect()
                 })
                 .collect()
         });
-        self.rate_ids().zip(fixed.iter().map(Vec::as_slice))
+        self.rate_ids().zip(
+            offers
+                .iter()
+                .map(|offers| offers.iter().flat_map(|offer| self.offered(offer))),
+        )
+    }
+
+    /// How the instance `id` names is offered: none where a role its rate
+    /// leaves free takes nothing.
+    fn offer(&self, id: &O::Rate) -> Option<Offer<O>> {
+        let exchange = self.exchange_of(id)?;
+        let instance = self.instance(id).ok()?;
+        let free = instance
+            .roles()
+            .filter(|role| !exchange.bindings().contains_key(*role))
+            .map(|role| {
+                let takes: Vec<(O::Asset, Quantity)> =
+                    [instance.consumed(role), instance.preserved(role)]
+                        .into_iter()
+                        .flatten()
+                        .flat_map(Basket::iter)
+                        .filter_map(|(asset, quantity)| {
+                            Some((asset.as_literal()?.clone(), *quantity))
+                        })
+                        .collect();
+                (!takes.is_empty()).then(|| Free {
+                    role: role.clone(),
+                    takes,
+                })
+            })
+            .collect::<Option<_>>()?;
+        Some(Offer { exchange, free })
+    }
+
+    /// The exchanges `offer` makes at this state: its own where the rate
+    /// fixes every role, and otherwise one for each way of binding its free
+    /// roles to accounts holding what they take.
+    fn offered<'a>(&'a self, offer: &'a Offer<O>) -> impl Iterator<Item = Cow<'a, Exchange<O>>> {
+        let whole = offer
+            .free
+            .is_empty()
+            .then_some(Cow::Borrowed(&offer.exchange));
+        let mut bound = Vec::new();
+        if !offer.free.is_empty() {
+            bound.push(offer.exchange.clone());
+            for Free { role, takes } in &offer.free {
+                let holders: Vec<&O::Account> = self
+                    .accounts()
+                    .filter(|(_, account)| {
+                        takes
+                            .iter()
+                            .all(|(asset, quantity)| account.balance(asset) >= *quantity)
+                    })
+                    .map(|(id, _)| id)
+                    .collect();
+                bound = bound
+                    .into_iter()
+                    .flat_map(|exchange| {
+                        holders.iter().map(move |account| {
+                            exchange.clone().bind(role.clone(), (*account).clone())
+                        })
+                    })
+                    .collect();
+            }
+        }
+        whole.into_iter().chain(bound.into_iter().map(Cow::Owned))
     }
 
     /// The instance an identifier names: the rate keyed by it, or the

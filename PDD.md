@@ -1416,10 +1416,12 @@ The current foundation is intentionally bounded:
 - An economy's constants are one value each, whole number or word, read by
   name in every rate (D-059). Values that differ per case are a relation's;
   constants are never computed from one another.
-- The kernel lists a rate's instances (`instances_of`) and the exchanges of
-  those whose roles the rate fixes (`fixed_exchanges`), which the engine
-  offers (`CandidateSet::Instances`, D-055, D-060); an instance with a free
-  role is proposed by a script, which binds it. Every listed exchange is
+- The kernel lists a rate's instances (`instances_of`) and the exchanges
+  they offer at a state (`offers`), which the engine offers
+  (`CandidateSet::Instances`, D-055, D-060, D-061): every role the rate
+  fixes bound to its account, and every role it leaves free to each account
+  holding what the role takes. An instance with a free role that takes
+  nothing is proposed by a script, which binds it. Every listed exchange is
   checked at every state, cheaply where its accounts lack what it takes
   (D-060); a book of very many instances, few of which ever apply, pays for
   each.
@@ -2479,7 +2481,7 @@ sample whose moves were few among many instances, sokoban's 259 on its
 largest board, ran four to five times slower than a script proposing only
 the moves from the player's cell, and kept the script. Now the kernel lists
 each rate's instances that fix every role as exchanges once per rate book
-(`Economy::fixed_exchanges`, shared by every economy that has the book,
+(`Economy::fixed_exchanges`, now `Economy::offers` (D-061), shared by every economy that has the book,
 with `Economy::exchange_of` for one), and checks each exchange first
 against what its accounts hold: its units of each asset it consumes from
 a role, and each asset it preserves there. One that fails is not
@@ -2489,6 +2491,23 @@ sound: an accepted exchange takes only what its accounts held
 faster than the script was (A* 11.0 s against 12.7 s, breadth-first 6.3 s
 against 11.1 s), so candidate scripts that only enumerate moves are
 deleted.
+
+### D-061: The engine binds a free role to the accounts that can take it
+
+Decided with the user after D-060. The engine offered only instances whose
+rate fixes every role, so a market whose buyer, seller and carrier are
+whoever holds the order's intent, item and capacity proposed its
+settlements from a script that found those accounts and bound them: a
+copy of what the rate already says the roles take. Now the kernel's list
+(`Economy::offers`) binds each role an instance leaves free to each
+account holding every entry the role consumes, at one unit, and keeps, in
+the roles' order, the first outermost, and the accounts'; whether the
+exchange applies is still the kernel's assessment. A free role that takes
+nothing is not offered, since any account would do: a script proposes it.
+What each instance fixes and each free role takes is listed once per rate
+book. The marketplace's Micro settlements are the engine's list, and its
+market's script keeps only what it chooses: a dispatch or delivery first,
+alone, and the clock advanced only to the next event.
 
 ## 16. Success criteria
 

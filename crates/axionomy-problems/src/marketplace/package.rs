@@ -60,7 +60,9 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     )?;
     engine.keep_candidates(
         &path!("marketplace/settlements"),
-        &CandidateSet::Script(call("settlements")),
+        &CandidateSet::Instances {
+            under: Some(path!("settle-order")),
+        },
     )?;
     engine.keep_candidates(
         &path!("marketplace/fulfillment"),

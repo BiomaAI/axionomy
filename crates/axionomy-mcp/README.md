@@ -183,7 +183,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/invariants/{+invariant}{?cursor}` | Asset weights |
 | `…/changes{?cursor}` | Quantities moved by the exchanges that made the economy, by `exchange_index` |
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
-| `…/moves{?under,cursor}` | The moves the economy's own rates offer whole that apply to it: one unit of each instance of a rate that fixes every role's account, in rate order, optionally only rates under a prefix such as `move` |
+| `…/moves{?under,cursor}` | The moves the economy's own rates offer that apply to it: one unit of each instance, each fixed role bound to its account and each free role to every account holding what the role takes, in rate order, optionally only rates under a prefix such as `move` |
 | `…/diff/{other_id}{?cursor}` | What differs from this economy to another: accounts opened and closed, balances with both quantities, rates and invariants |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it: what an applicable exchange moves, or what an infeasible one lacks and then what it would move |
 

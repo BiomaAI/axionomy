@@ -77,9 +77,12 @@ buyer and seller. They make participant benefit part of the outcome rather
 than a clearing callback.
 
 Money, widgets, buyer and seller lifecycle tokens, shipping capacity, and
-order status are protected by declared invariants. The package's candidates
-derive the buyer, seller, and carrier sets from economy accounts and propose
-ordinary exchanges, which core applicability filters; a refused settlement
+order status are protected by declared invariants. The buyer, seller and
+carrier are roles each rate leaves free, and the engine binds each to every
+account holding what the role takes (D-061): Micro's settlements are the
+engine's list, and the market's script keeps only its choices, a dispatch
+or delivery first, alone, and the clock advanced to the next event. Core
+applicability filters every candidate; a refused settlement
 reports every party's complete shortfall. Its disposable clearing search
 explores compatible applicable settlements, minimizing the gross value a
 clearing forgoes, and its Pareto picks rank the exact front of participant
