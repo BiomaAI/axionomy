@@ -46,10 +46,17 @@ one over the generator and the factory, `settle-obligation/{actor}`, a
 relation giving each actor's amounts: the energy its need takes, the
 utility it yields and, in a season, the goods the factory makes (none for
 the household), and what each obligation costs. Micro has 8 rates as
-written, for 10 instances; Showcase and Stress 16, for 31 and 35. A
-season's length and scale are the whole world's and never change, so they
-are the economy's constants, `{season-length}` and `{scale}`: investment
-reads the length, and the policies read both (`state.constant`).
+written, for 10 instances; Showcase and Stress 16, for 31 and 35.
+
+A market's scale and a season's length are the whole world's and never
+change, so they are the economy's constants, `{scale}` and
+`{season-length}`. The rows give each amount once, unscaled, and every law
+whose amounts grow with the market (a need's energy and goods, an
+obligation's cost, investment, commissioning, delivery and income) takes
+`{amount} × {scale}`; investment also reads the length. The policies read
+both constants, and each need's energy and obligation's cost from its row
+(`state.constant`, `state.values`); what they trade is their own choice,
+at the market's scale.
 
 Sunlight limits daily production. Investment pays credit now and increases
 capacity two days later. Energy storage is bounded. Factory output produces

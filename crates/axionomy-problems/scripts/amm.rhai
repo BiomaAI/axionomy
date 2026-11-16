@@ -54,6 +54,13 @@ fn price_milli(state) {
 // What an actor holds of `asset`.
 fn held(state, actor, asset) { state.balance(`actor/${actor}`, asset) }
 
+// The energy an actor's need takes, and what settling its obligation costs:
+// its row of the law's terms, at the market's scale.
+fn need(state, actor) { state.values(`use-energy/${actor}`).energy * state.constant("scale") }
+fn obligation(state, actor) {
+    state.values(`settle-obligation/${actor}`).cost * state.constant("scale")
+}
+
 // `proposal` when it applies, and nothing otherwise.
 fn allowed(state, proposal) { if state.applicable(proposal) { proposal } else { () } }
 
@@ -150,7 +157,7 @@ fn bought_at_least(actor, preferred, required) {
 // generator settling its obligation.
 fn day_plan(state, scenario) {
     let pool = reserves(state);
-    let scale = if pool.energy >= 40000 { 4 } else { 1 };
+    let scale = state.constant("scale");
     let plan = [];
     if scenario == "thin-liquidity" {
         let shares = divided(pool.issued, 2);
@@ -163,20 +170,20 @@ fn day_plan(state, scenario) {
         pool.deposited(energy, credit);
     }
     plan.push(production("generator", 1500 * scale));
-    plan.push(pool.sold_for("generator", quantity(2500 * scale)));
-    plan.push(pool.bought_at_least("factory", quantity(26000 * scale), 1500));
+    plan.push(pool.sold_for("generator", 2500 * scale));
+    plan.push(pool.bought_at_least("factory", 26000 * scale, need(state, "factory")));
     plan.push(state.exchange_of("use-energy/factory"));
     plan.push(state.exchange_of("settle-obligation/factory"));
-    plan.push(pool.bought_at_least("household", quantity(5000 * scale), 350));
+    plan.push(pool.bought_at_least("household", 5000 * scale, need(state, "household")));
     plan.push(state.exchange_of("use-energy/household"));
     plan.push(state.exchange_of("learn-shortage/speculator"));
-    plan.push(pool.bought_with("speculator", quantity(16000 * scale)));
+    plan.push(pool.bought_with("speculator", 16000 * scale));
     if scenario != "no-whale" {
-        plan.push(pool.bought_with("whale", quantity(45000 * scale)));
+        plan.push(pool.bought_with("whale", 45000 * scale));
     }
     plan.push(production("generator", 1800 * scale));
-    plan.push(pool.sold_for("generator", quantity(1800 * scale)));
-    plan.push(pool.sold_for("arbitrageur", quantity(1200 * scale)));
+    plan.push(pool.sold_for("generator", 1800 * scale));
+    plan.push(pool.sold_for("arbitrageur", 1200 * scale));
     plan.push(state.exchange_of("settle-obligation/generator"));
     plan
 }
@@ -235,7 +242,7 @@ fn decision(state, actor) {
                 let invest = state.exchange_of("invest-production");
                 if state.applicable(invest) { return invest; }
             }
-            if energy > 800 * scale || (energy > 0 && (price > 9000 || cash < 4000 * scale)) {
+            if energy > 800 * scale || (energy > 0 && (price > 9000 || cash < obligation(state, actor))) {
                 let sold = sell(state, actor, 1000 * scale);
                 if sold != () { return sold; }
             }
@@ -258,7 +265,7 @@ fn decision(state, actor) {
                 // Production can be declined when input prices exceed the
                 // procurement revenue.
                 if price <= 19000 {
-                    return buy_to(state, actor, 1500 * scale, less(cash, 2000 * scale));
+                    return buy_to(state, actor, need(state, actor), less(cash, 2000 * scale));
                 }
             }
             allowed(state, state.exchange_of("settle-obligation/factory"))
@@ -269,9 +276,10 @@ fn decision(state, actor) {
             if held(state, actor, "need/household") > 0 {
                 let consume = state.exchange_of("use-energy/household");
                 if state.applicable(consume) { return consume; }
-                return buy_to(state, actor, 350 * scale, cash);
+                return buy_to(state, actor, need(state, actor), cash);
             }
-            if price < 8000 { buy_to(state, actor, 700 * scale, divided(cash, 2)) } else { () }
+            // Cheap energy: stock two days' needs.
+            if price < 8000 { buy_to(state, actor, need(state, actor) * 2, divided(cash, 2)) } else { () }
         }
         "speculator" => {
             let learn = state.exchange_of("learn-shortage/speculator");

@@ -151,6 +151,17 @@ enum MarketSize {
     Stress,
 }
 
+impl MarketSize {
+    /// What the market's stock and every law's amounts are multiplied by:
+    /// its economy's `{scale}`.
+    const fn scale(self) -> u64 {
+        match self {
+            Self::Micro | Self::Showcase => 1,
+            Self::Stress => 4,
+        }
+    }
+}
+
 pub fn initial() -> World {
     build(MarketSize::Micro)
 }
@@ -164,22 +175,25 @@ pub fn initial_stress() -> World {
 }
 
 pub fn initial_showcase_with_seed(seed: u64) -> World {
-    season::build(build(MarketSize::Showcase), 8, 1, seed)
+    season::build(MarketSize::Showcase, 8, seed)
 }
 
 pub fn initial_stress_with_seed(seed: u64) -> World {
-    season::build(build(MarketSize::Stress), 12, 4, seed)
+    season::build(MarketSize::Stress, 12, seed)
 }
 
 fn build(size: MarketSize) -> World {
-    let (pool_energy, pool_credit, actor_scale) = match size {
-        MarketSize::Micro => (4_000, 40_000, 1),
-        MarketSize::Showcase => (10_000, 100_000, 1),
-        MarketSize::Stress => (40_000, 400_000, 4),
+    let scale = size.scale();
+    let (pool_energy, pool_credit) = match size {
+        MarketSize::Micro => (4_000, 40_000),
+        MarketSize::Showcase | MarketSize::Stress => (10_000 * scale, 100_000 * scale),
     };
     let initial_lp = pool_energy;
 
+    // The scale is the whole market's and never changes: a constant the
+    // laws read.
     let mut builder = EconomyBuilder::new()
+        .constant(&market_scale(), scale)
         .account(
             AccountId::Pool,
             Account::from(basket([
@@ -190,7 +204,7 @@ fn build(size: MarketSize) -> World {
         )
         .account(
             AccountId::Treasury,
-            Account::from(basket([(Asset::Credit, 20_000 * actor_scale)])),
+            Account::from(basket([(Asset::Credit, 20_000 * scale)])),
         )
         .account(
             AccountId::Information,
@@ -200,22 +214,22 @@ fn build(size: MarketSize) -> World {
             AccountId::Actor(Actor::Founder),
             Account::from(basket([
                 (Asset::LpShare, initial_lp),
-                (Asset::Credit, 5_000 * actor_scale),
+                (Asset::Credit, 5_000 * scale),
             ])),
         )
         .account(
             AccountId::Actor(Actor::Generator),
             Account::from(basket([
-                (Asset::Energy, 3_000 * actor_scale),
-                (Asset::SolarPotential, 6_000 * actor_scale),
-                (Asset::Credit, 5_000 * actor_scale),
+                (Asset::Energy, 3_000 * scale),
+                (Asset::SolarPotential, 6_000 * scale),
+                (Asset::Credit, 5_000 * scale),
                 (Asset::Obligation(Actor::Generator), 1),
             ])),
         )
         .account(
             AccountId::Actor(Actor::Factory),
             Account::from(basket([
-                (Asset::Credit, 40_000 * actor_scale),
+                (Asset::Credit, 40_000 * scale),
                 (Asset::Need(Actor::Factory), 1),
                 (Asset::Obligation(Actor::Factory), 1),
             ])),
@@ -226,34 +240,34 @@ fn build(size: MarketSize) -> World {
                 // The shallow micro pool can move far enough that meeting the
                 // household's fixed real-energy need costs more than it does
                 // in the deeper showcase pool.
-                (Asset::Credit, 20_000 * actor_scale),
+                (Asset::Credit, 20_000 * scale),
                 (Asset::Need(Actor::Household), 1),
             ])),
         )
         .account(
             AccountId::Actor(Actor::Speculator),
             Account::from(basket([
-                (Asset::Credit, 25_000 * actor_scale),
+                (Asset::Credit, 25_000 * scale),
                 (Asset::Uninformed(Actor::Speculator), 1),
             ])),
         )
         .account(
             AccountId::Actor(Actor::AdaptiveLp),
             Account::from(basket([
-                (Asset::Energy, 2_000 * actor_scale),
-                (Asset::Credit, 20_000 * actor_scale),
+                (Asset::Energy, 2_000 * scale),
+                (Asset::Credit, 20_000 * scale),
             ])),
         )
         .account(
             AccountId::Actor(Actor::Arbitrageur),
             Account::from(basket([
-                (Asset::Energy, 2_500 * actor_scale),
-                (Asset::Credit, 10_000 * actor_scale),
+                (Asset::Energy, 2_500 * scale),
+                (Asset::Credit, 10_000 * scale),
             ])),
         )
         .account(
             AccountId::Actor(Actor::Whale),
-            Account::from(basket([(Asset::Credit, 80_000 * actor_scale)])),
+            Account::from(basket([(Asset::Credit, 80_000 * scale)])),
         );
 
     let buy_output = swap_output_expression(Asset::Credit, Asset::Energy);
@@ -280,11 +294,11 @@ fn build(size: MarketSize) -> World {
     builder = builder
         .rate_at(
             RateIdPattern::UseEnergy(consumer().var()).into(),
-            use_energy_rate(1, false),
+            use_energy_rate(false),
         )
         .rate_at(
             RateIdPattern::SettleObligation(consumer().var()).into(),
-            settle_obligation_rate(1),
+            settle_obligation_rate(),
         );
     builder = builder.rate(
         RateId::LearnShortage(Actor::Speculator),
@@ -573,71 +587,87 @@ fn cost() -> Param<u64> {
     Param::new(path!("cost"))
 }
 
+/// What the market's stock and every law's amounts are multiplied by,
+/// `{scale}`: a constant.
+fn market_scale() -> Param<u64> {
+    Param::new(path!("scale"))
+}
+
 /// `amount` for each unit of the exchange, as a basket's entries are.
 fn per_unit(amount: Param<u64>) -> Q<Ontology> {
     amount.quantity() * Q::units()
 }
 
+/// `amount` at the market's scale, `{amount} × {scale}`, for each unit of
+/// the exchange.
+fn scaled(amount: Q<Ontology>) -> Q<Ontology> {
+    amount * market_scale().quantity() * Q::units()
+}
+
 /// Any actor with a need meeting it, `use-energy/{actor}`, its consumer role
-/// fixed to the actor: it uses the energy its need takes, at `scale`, for
-/// the need's utility, and where the market makes `goods`, the factory turns
-/// its unmade goods into goods and the household makes none. What each
-/// need takes and gives is law structure: a relation's row for each actor.
-pub(crate) fn use_energy_rate(scale: u64, goods: bool) -> Rate<Ontology> {
+/// fixed to the actor: it uses the energy its need takes, at the market's
+/// scale, for the need's utility, and where the market makes `goods`, the
+/// factory turns its unmade goods into goods and the household makes none.
+/// What each need takes and gives is law structure: a relation's row for
+/// each actor.
+pub(crate) fn use_energy_rate(goods: bool) -> Rate<Ontology> {
     let actor = consumer();
     let made = |actor| match actor {
-        Actor::Factory => GOODS * scale,
+        Actor::Factory => GOODS,
         _ => 0,
     };
+    let energy_used = scaled(energy().quantity());
     let rate = Rate::new()
         .variable(actor.values(NEEDS.map(|(actor, ..)| actor)))
         .account(Role::Consumer, AccountIdPattern::Actor(actor.var()).into())
         .consume_at(Role::Consumer, one(AssetPattern::Need(actor.var())))
-        .consume_computed(Role::Consumer, Asset::Energy, per_unit(energy()))
+        .consume_computed(Role::Consumer, Asset::Energy, energy_used.clone())
         .produce_at(
             Role::Consumer,
             one(AssetPattern::SatisfiedNeed(actor.var())),
         )
-        .produce_computed(Role::Consumer, Asset::SpentEnergy, per_unit(energy()))
+        .produce_computed(Role::Consumer, Asset::SpentEnergy, energy_used)
         .produce_computed(Role::Consumer, Asset::Utility, per_unit(utility()));
     if goods {
+        let made_goods = scaled(self::goods().quantity());
         rate.relation(Relation::each_giving(
             &actor,
             [energy(), utility(), self::goods()].map(|number| number.name().clone()),
-            NEEDS.map(|(actor, energy, utility)| (actor, [energy * scale, utility, made(actor)])),
+            NEEDS.map(|(actor, energy, utility)| (actor, [energy, utility, made(actor)])),
         ))
-        .consume_computed(Role::Consumer, Asset::UnmadeGoods, per_unit(self::goods()))
-        .produce_computed(Role::Consumer, Asset::Goods, per_unit(self::goods()))
+        .consume_computed(Role::Consumer, Asset::UnmadeGoods, made_goods.clone())
+        .produce_computed(Role::Consumer, Asset::Goods, made_goods)
     } else {
         rate.relation(Relation::each_giving(
             &actor,
             [energy(), utility()].map(|number| number.name().clone()),
-            NEEDS.map(|(actor, energy, utility)| (actor, [energy * scale, utility])),
+            NEEDS.map(|(actor, energy, utility)| (actor, [energy, utility])),
         ))
     }
 }
 
 /// Any actor with an obligation settling it with the treasury,
 /// `settle-obligation/{actor}`, its consumer role fixed to the actor: it
-/// pays the treasury what its obligation costs, at `scale`, a relation's
-/// row for each actor.
-pub(crate) fn settle_obligation_rate(scale: u64) -> Rate<Ontology> {
+/// pays the treasury what its obligation costs, a relation's row for each
+/// actor, at the market's scale.
+pub(crate) fn settle_obligation_rate() -> Rate<Ontology> {
     let actor = consumer();
+    let paid = scaled(cost().quantity());
     with_treasury(Rate::new())
         .variable(actor.values(OBLIGATIONS.map(|(actor, _)| actor)))
         .relation(Relation::each_giving(
             &actor,
             [cost().name().clone()],
-            OBLIGATIONS.map(|(actor, cost)| (actor, [cost * scale])),
+            OBLIGATIONS.map(|(actor, cost)| (actor, [cost])),
         ))
         .account(Role::Consumer, AccountIdPattern::Actor(actor.var()).into())
         .consume_at(Role::Consumer, one(AssetPattern::Obligation(actor.var())))
-        .consume_computed(Role::Consumer, Asset::Credit, per_unit(cost()))
+        .consume_computed(Role::Consumer, Asset::Credit, paid.clone())
         .produce_at(
             Role::Consumer,
             one(AssetPattern::SettledObligation(actor.var())),
         )
-        .produce_computed(Role::Treasury, Asset::Credit, per_unit(cost()))
+        .produce_computed(Role::Treasury, Asset::Credit, paid)
 }
 
 /// One unit of the asset `asset` names.

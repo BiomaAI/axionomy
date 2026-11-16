@@ -39,11 +39,6 @@ fn world_law() -> Rate<Ontology> {
 fn season_length() -> Param<u64> {
     Param::new(path!("season-length"))
 }
-/// What the season's stock and amounts are multiplied by, `{scale}`: a
-/// constant.
-fn season_scale() -> Param<u64> {
-    Param::new(path!("scale"))
-}
 fn weather(seed: u64, day: u8) -> u64 {
     if axionomy_search::sampling::splitmix(seed, u64::from(day)).is_multiple_of(3) {
         40
@@ -52,8 +47,13 @@ fn weather(seed: u64, day: u8) -> u64 {
     }
 }
 
-pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
+pub(super) fn build(size: MarketSize, days: u8, seed: u64) -> World {
+    let source = super::build(size);
+    let scale = size.scale();
     let mut builder = EconomyBuilder::new();
+    for (name, value) in source.constants() {
+        builder = builder.constant_value(name.clone(), value.clone());
+    }
     for (id, account) in source.accounts() {
         let mut account = account.clone();
         let mut additions = axionomy::Basket::new();
@@ -114,7 +114,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                     Actor::Factory => {
                         additions.insert(
                             Asset::UnmadeGoods,
-                            Quantity::new(u64::from(days) * 100 * scale),
+                            Quantity::new(u64::from(days) * GOODS * scale),
                         );
                     }
                     Actor::Household => {
@@ -134,22 +134,21 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         (Asset::AtDay(0), 1),
         (Asset::CurrentSunlight, weather(seed, 0)),
     ]);
-    // The season's length and scale are the whole world's and never change:
-    // constants every rate reads by name, as the policies do.
+    // The season's length is the whole world's and never changes: a
+    // constant every rate reads by name, as the policies do.
     builder = builder
         .account(AccountId::World, Account::from(world))
-        .constant(&season_length(), u64::from(days))
-        .constant(&season_scale(), scale);
+        .constant(&season_length(), u64::from(days));
 
-    // Meeting a need and settling an obligation, at the season's scale.
+    // Meeting a need and settling an obligation, at the market's scale.
     builder = builder
         .rate_at(
             RateIdPattern::UseEnergy(consumer().var()).into(),
-            actor_law(use_energy_rate(scale, true), Role::Consumer),
+            actor_law(use_energy_rate(true), Role::Consumer),
         )
         .rate_at(
             RateIdPattern::SettleObligation(consumer().var()).into(),
-            actor_law(settle_obligation_rate(scale), Role::Consumer),
+            actor_law(settle_obligation_rate(), Role::Consumer),
         );
     for (key, rate) in source.rates() {
         // The base market's needs and obligations are rebuilt above.
@@ -285,18 +284,16 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             .produce(Role::World, basket([(Asset::MarketEnded, 1)])),
         );
 
+    // A project costs credit and builds capacity, which commissioning
+    // brings online: each amount at the market's scale.
+    let (project_cost, built) = (Q::constant(6_000), Q::constant(400));
     let producer = Role::Producer;
     let invest = with_treasury(actor_law(world_law(), producer))
         .account(producer, own(Actor::Generator))
-        .consume(
-            producer,
-            basket([
-                (Asset::Credit, 6_000 * scale),
-                (Asset::FutureCapacity, 400 * scale),
-            ]),
-        )
-        .produce(producer, basket([(Asset::PendingCapacity, 400 * scale)]))
-        .produce(Role::Treasury, basket([(Asset::Credit, 6_000 * scale)]))
+        .consume_computed(producer, Asset::Credit, scaled(project_cost.clone()))
+        .consume_computed(producer, Asset::FutureCapacity, scaled(built.clone()))
+        .produce_computed(producer, Asset::PendingCapacity, scaled(built.clone()))
+        .produce_computed(Role::Treasury, Asset::Credit, scaled(project_cost))
         .produce_computed(
             producer,
             Asset::ConstructionDue,
@@ -320,13 +317,13 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     let current_sun = q(Role::World, Asset::CurrentSunlight);
     let commission = clear(world_law(), producer, Asset::ConstructionDue)
         .account(producer, own(Actor::Generator))
-        .consume(producer, basket([(Asset::PendingCapacity, 400 * scale)]))
-        .produce(producer, basket([(Asset::ProductionCapacity, 400 * scale)]))
+        .consume_computed(producer, Asset::PendingCapacity, scaled(built.clone()))
+        .produce_computed(producer, Asset::ProductionCapacity, scaled(built.clone()))
         .produce_computed(
             producer,
             Asset::ProductionAllowance,
             Q::mul_div(
-                Q::constant(400 * scale),
+                built * market_scale().quantity(),
                 current_sun,
                 Q::constant(100),
                 Rounding::Floor,
@@ -339,28 +336,27 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             q(producer, Asset::ConstructionDue),
         );
     builder = builder.rate(RateId::CommissionProduction, commission);
+    // The treasury buys what one met need makes, and pays the household's
+    // income, at the market's scale.
+    let (delivered, price) = (scaled(Q::constant(GOODS)), scaled(Q::constant(15_000)));
     builder = builder.rate(
         RateId::DeliverGoods,
         with_treasury(actor_law(Rate::new(), Role::Producer))
             .account(Role::Producer, own(Actor::Factory))
-            .consume(Role::Producer, basket([(Asset::Goods, 100 * scale)]))
-            .produce(
-                Role::Treasury,
-                basket([(Asset::DeliveredGoods, 100 * scale)]),
-            )
-            .consume(Role::Treasury, basket([(Asset::Credit, 15_000 * scale)]))
-            .produce(Role::Producer, basket([(Asset::Credit, 15_000 * scale)])),
+            .consume_computed(Role::Producer, Asset::Goods, delivered.clone())
+            .produce_computed(Role::Treasury, Asset::DeliveredGoods, delivered)
+            .consume_computed(Role::Treasury, Asset::Credit, price.clone())
+            .produce_computed(Role::Producer, Asset::Credit, price),
     );
+    let income = scaled(Q::constant(4_000));
     builder = builder.rate(
         RateId::CollectIncome,
         with_treasury(actor_law(Rate::new(), Role::Consumer))
             .account(Role::Consumer, own(Actor::Household))
             .consume(Role::Consumer, basket([(Asset::IncomeDue, 1)]))
-            .produce(
-                Role::Consumer,
-                basket([(Asset::ReceivedIncome, 1), (Asset::Credit, 4_000 * scale)]),
-            )
-            .consume(Role::Treasury, basket([(Asset::Credit, 4_000 * scale)])),
+            .produce(Role::Consumer, basket([(Asset::ReceivedIncome, 1)]))
+            .produce_computed(Role::Consumer, Asset::Credit, income.clone())
+            .consume_computed(Role::Treasury, Asset::Credit, income),
     );
     // The provider pays reserves to mint shares, so each side rounds up.
     let deposit = |reserve| {
