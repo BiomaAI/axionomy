@@ -221,14 +221,14 @@ impl Scene for IntroScene<'_> {
             (
                 "kernel",
                 "axionomy",
-                "accounts, assets, rates and exchanges, applied whole or refused".to_owned(),
+                "accounts, assets, rates and atomic exchanges".to_owned(),
                 format!("specified in Lean, {} theorems proved", self.facts.proved),
             ),
             (
                 "engine",
                 "axionomy-engine",
                 "points and forks, objectives, searches, games and experiments".to_owned(),
-                "packages: a model's rates, strategies and experiments, stored".to_owned(),
+                "packages store a model's rates, strategies and experiments".to_owned(),
             ),
             (
                 "adapters",
@@ -665,8 +665,8 @@ impl Scene for ModelScene<'_> {
                     opacity={enter(&frame, REFUSE_AT + 1.6)}>{refusal}</text>
                 {caption(&frame, &["An Axionomy economy is accounts", "and the assets they hold."], 0.5, RATE_AT)}
                 {caption(&frame, &["A rate says what each role consumes,", "preserves and produces."], RATE_AT + 0.3, APPLY_AT)}
-                {caption(&frame, &["An exchange applies the rate to accounts:", "all of it commits, or none."], APPLY_AT + 0.3, REFUSE_AT)}
-                {caption(&frame, &["When an exchange can't apply,", "the kernel says what is missing."], REFUSE_AT + 0.3, MODEL_SECONDS + 1.0)}
+                {caption(&frame, &["An exchange applies the rate to accounts", "as one atomic transaction."], APPLY_AT + 0.3, REFUSE_AT)}
+                {caption(&frame, &["When an exchange can't apply,", "the kernel reports the shortfall."], REFUSE_AT + 0.3, MODEL_SECONDS + 1.0)}
             </g>
         )
     }
@@ -938,7 +938,7 @@ impl Scene for UtilityScene<'_> {
                 {heading(&frame, "engine", "Objectives", vec!["sample \u{b7} maze/showcase".to_owned(), "where its experiment's searches end".to_owned()])}
                 {ends}
                 {scatter(&frame, self.facts, 0.3, None)}
-                {caption(&frame, &["Objectives are balances too: each route", "is compared on energy and time at once."], 0.6, UTILITY_SECONDS + 1.0)}
+                {caption(&frame, &["Objectives are measured from balances. The gold", "routes are the Pareto front on energy and time."], 0.6, UTILITY_SECONDS + 1.0)}
             </g>
         )
     }
@@ -1016,12 +1016,9 @@ impl Scene for CounterfactualScene<'_> {
             .collect();
         let top = sy - (count - 1) as f32 / 2.0 * spread;
         let unchanged = if counterfactual.unchanged {
-            format!(
-                "{} still refers to the point the forks start from",
-                counterfactual.start
-            )
+            format!("the ref {} is unchanged", counterfactual.start)
         } else {
-            format!("{} no longer refers to the start", counterfactual.start)
+            format!("the ref {} moved", counterfactual.start)
         };
         fframes::svgr!(
             <g opacity={outro(&frame, COUNTERFACTUAL_SECONDS + CROSS)}>
@@ -1036,7 +1033,7 @@ impl Scene for CounterfactualScene<'_> {
                 <text x={LEFT} y="870" font-family={MONO} font-weight={WEIGHT} font-size="26" fill={if counterfactual.unchanged { PRODUCE } else { CONSUME }}
                     opacity={enter(&frame, COMPARED_AT + 0.6)}>{unchanged}</text>
                 {caption(&frame, &["From any point, an agent can apply each exchange", "on a fork of its own and play on from there."], 0.5, COMPARED_AT)}
-                {caption(&frame, &["Forks are recorded as runs of their own; the point", "the agent started from does not change."], COMPARED_AT + 0.3, COUNTERFACTUAL_SECONDS + 1.0)}
+                {caption(&frame, &["Each fork is a recorded run of its own,", "and the start is unchanged."], COMPARED_AT + 0.3, COUNTERFACTUAL_SECONDS + 1.0)}
             </g>
         )
     }
@@ -1144,7 +1141,7 @@ impl Scene for RolloutScene<'_> {
             <g opacity={outro(&frame, ROLLOUT_SECONDS + CROSS)}>
                 {heading(&frame, "engine", "Rollouts", vec![format!("sample \u{b7} {}", rollouts.experiment), format!("{trials} seeded trials of each policy")])}
                 {arms}
-                {caption(&frame, &["An experiment rolls each policy out once per seed,", "with Nature drawing the scenario from the seed."], 0.5, REFUSALS_AT)}
+                {caption(&frame, &["A Monte Carlo experiment rolls out each policy once", "per seed; Nature samples the scenario from the seed."], 0.5, REFUSALS_AT)}
                 {caption(&frame, &["When a policy proposes an exchange that can't", "apply, the kernel refuses it and the run ends."], REFUSALS_AT + 0.3, ROLLOUT_SECONDS + 1.0)}
             </g>
         )
@@ -1290,23 +1287,20 @@ fn interface<'a>(frame: &Frame, facts: &Facts) -> Svgr<'a> {
     let environment = &facts.environment;
     let (x, y, w, h) = (LEFT, 230.0_f32, 920.0_f32, 470.0_f32);
     let rows = [
+        ("observation", format!("{} balances", environment.observed)),
         (
-            "observes",
-            format!("{} balances of the start's accounts", environment.observed),
-        ),
-        (
-            "chooses",
+            "action",
             format!(
-                "one of {} exchanges, unoffered ones masked",
+                "one of {} exchanges, masked to those offered",
                 environment.actions
             ),
         ),
-        ("steps", "the engine applies the exchange chosen".to_owned()),
+        ("step", "the engine applies the action".to_owned()),
         (
-            "is rewarded",
-            "by the objectives' changes, and at the goal".to_owned(),
+            "reward",
+            "weighted objective deltas, plus a goal bonus".to_owned(),
         ),
-        ("plays", "episodes, each a run the store records".to_owned()),
+        ("episode", "a recorded run".to_owned()),
     ];
     let lines: Vec<Svgr> = rows
         .into_iter()
@@ -1326,7 +1320,7 @@ fn interface<'a>(frame: &Frame, facts: &Facts) -> Svgr<'a> {
     let learner: Vec<Svgr> = [
         "a Q-network over the balances",
         "a replay buffer of steps",
-        "explores offered exchanges",
+        "masked epsilon-greedy",
     ]
     .into_iter()
     .enumerate()
@@ -1342,7 +1336,7 @@ fn interface<'a>(frame: &Frame, facts: &Facts) -> Svgr<'a> {
                 <rect x={x} y={y} width={w} height={h} rx="14" fill={SURFACE} stroke={CYAN} stroke-width="2" />
                 <text x={x + 32.0} y={y + 56.0} font-family={MONO} font-weight={WEIGHT} font-size="32" fill={CYAN}>"axionomy-rl"</text>
                 <text x={x + w - 32.0} y={y + 56.0} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{format!("{} as a task", environment.experiment)}</text>
-                <text x={x + 32.0} y={y + 92.0} font-family={SANS} font-weight={WEIGHT} font-size="24" fill={MUTED}>"what a learner meets"</text>
+                <text x={x + 32.0} y={y + 92.0} font-family={SANS} font-weight={WEIGHT} font-size="24" fill={MUTED}>"an RL environment"</text>
                 {lines}
             </g>
             <g opacity={enter(frame, 1.4)} transform={Transform::translate(0.0, rise(frame, 1.4, 30.0))}>
@@ -1444,7 +1438,7 @@ impl Scene for TrainingScene<'_> {
                     {curves}
                 </g>
                 {scatter(&frame, self.facts, TRAINED_AT + 0.2, Some(TRAINED_AT + 4.8))}
-                {caption(&frame, &["Through axionomy-rl, a learner observes balances,", "chooses exchanges, and is rewarded by objectives."], 0.5, TRAINED_AT)}
+                {caption(&frame, &["axionomy-rl exposes an experiment as an RL environment:", "balances as observations, exchanges as actions."], 0.5, TRAINED_AT)}
                 {caption(&frame, &["A DQN in Burn, rewarded with these objectives,", found], TRAINED_AT + 0.3, TRAINING_SECONDS + 1.0)}
             </g>
         )
@@ -1616,13 +1610,13 @@ impl Scene for TrustScene<'_> {
                 <g font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED} opacity={enter(&frame, 0.2)}>
                     <text x={LEFT} y="200">"run"</text>
                     <text x={exchanges_x} y="200" text-anchor="end">"exchanges"</text>
-                    <text x={recorded_x} y="200">"recorded state"</text>
-                    <text x={replayed_x} y="200">"replayed state"</text>
+                    <text x={recorded_x} y="200">"recorded fingerprint"</text>
+                    <text x={replayed_x} y="200">"replayed fingerprint"</text>
                 </g>
                 {runs}
                 <text x={LEFT} y="612" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED} opacity={enter(&frame, 3.6)}>{format!("{} theorems proved, among them", self.facts.proved)}</text>
                 {theorems}
-                {caption(&frame, &["Every run replays to the same state.", "The kernel's rules are specified in Lean."], 0.6, TRUST_SECONDS + 1.0)}
+                {caption(&frame, &["Every run replays deterministically to the same state,", "and the kernel is specified and proved in Lean."], 0.6, TRUST_SECONDS + 1.0)}
             </g>
         )
     }
