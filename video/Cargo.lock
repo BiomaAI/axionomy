@@ -624,6 +624,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-rl"
+version = "0.3.0"
+dependencies = [
+ "axionomy",
+ "axionomy-engine",
+ "axionomy-search",
+ "axionomy-store",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "axionomy-search"
 version = "0.3.0"
 dependencies = [
@@ -664,6 +675,7 @@ dependencies = [
  "axionomy",
  "axionomy-engine",
  "axionomy-problems",
+ "axionomy-rl",
  "axionomy-store",
  "fframes",
  "fframes_native_player",

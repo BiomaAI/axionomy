@@ -1,12 +1,17 @@
 //! What the video shows, read from the engine when the video is made: the
 //! samples' packages written into a store in memory, their refs reached,
-//! their experiments run, and the routes a DQN learned (`data/learned`)
-//! replayed. No number on screen is typed in by hand.
+//! their experiments run, forks of a start played on, and the routes a DQN
+//! learned (`data/learned`) replayed. No number on screen is typed in by
+//! hand.
 
 use axionomy::{AccountPath, Quantity, RatePath, path, paths};
-use axionomy_engine::{Engine, ExperimentPath, ObjectivePath, Results, offered};
+use axionomy_engine::{
+    Chooser, Ended, Engine, ExperimentPath, ObjectivePath, Results, Strategy, offered,
+};
 use axionomy_problems::packages;
+use axionomy_rl::{Reward, Task};
 use axionomy_store::Store;
+use std::collections::BTreeSet;
 use std::ops::ControlFlow;
 
 /// A balance as the video writes it: the asset's path and its quantity.
@@ -71,13 +76,15 @@ pub struct Reserves {
     pub exchanges: usize,
 }
 
-/// Where a strategy's route ended on the maze Showcase's objectives.
+/// Where a strategy's route ended on the maze Showcase's objectives, and
+/// how many points it forked on the way: the states a search generated.
 #[derive(Debug, Clone)]
 pub struct Outcome {
     pub by: String,
     pub energy: u64,
     pub time: u64,
     pub exchanges: usize,
+    pub forked: usize,
 }
 
 /// The forks of the maze Showcase's start, a few exchanges deep, and the
@@ -104,13 +111,63 @@ pub struct Learned {
     pub curve: Vec<f64>,
 }
 
-/// One sample package as its Showcase start holds it.
+/// One exchange a start offers, applied on a fork of it, and where a
+/// strategy played on from that fork ends.
 #[derive(Debug, Clone)]
-pub struct Package {
-    pub name: String,
-    pub accounts: usize,
-    pub rates: usize,
-    pub instances: usize,
+pub struct Fork {
+    pub rate: String,
+    pub energy: u64,
+    pub time: u64,
+}
+
+/// The maze Showcase's start, each exchange it offers on a fork of its own,
+/// and whether the start's ref still names the same point afterwards.
+#[derive(Debug, Clone)]
+pub struct Counterfactual {
+    pub start: String,
+    pub strategy: String,
+    pub forks: Vec<Fork>,
+    pub unchanged: bool,
+}
+
+/// How a trial ended, as the video colors it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ending {
+    Reached,
+    /// The policy proposed an exchange the kernel refused.
+    Refused,
+    Other,
+}
+
+/// An experiment of many seeded trials: each arm's endings, in seed order.
+#[derive(Debug, Clone)]
+pub struct Rollouts {
+    pub experiment: String,
+    pub arms: Vec<(String, Vec<Ending>)>,
+}
+
+/// A kind of strategy the engine runs, and the samples that run it.
+#[derive(Debug, Clone)]
+pub struct Kind {
+    pub name: &'static str,
+    pub samples: BTreeSet<String>,
+}
+
+/// The kinds of strategy the samples' experiments run: searches over a
+/// candidate set, choosers in games, and scripts.
+#[derive(Debug, Clone, Default)]
+pub struct Kinds {
+    pub searches: Vec<Kind>,
+    pub choosers: Vec<Kind>,
+    pub scripts: Vec<Kind>,
+}
+
+/// An experiment as a learner meets it through `axionomy-rl`.
+#[derive(Debug, Clone)]
+pub struct Environment {
+    pub experiment: String,
+    pub actions: usize,
+    pub observed: usize,
 }
 
 /// A recorded run's end, and the same run replayed from its start.
@@ -168,15 +225,43 @@ fn theorems() -> Vec<Theorem> {
     .collect()
 }
 
+/// The theorems `verification/lean/Axionomy` proves, counted from its files.
+fn proved() -> usize {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../verification/lean/Axionomy");
+    std::fs::read_dir(&dir)
+        .expect("the specification's directory")
+        .map(|entry| entry.expect("an entry").path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "lean")
+        })
+        .map(|path| {
+            std::fs::read_to_string(&path)
+                .expect("a Lean file")
+                .lines()
+                .filter(|line| line.starts_with("theorem "))
+                .count()
+        })
+        .sum()
+}
+
 #[derive(Debug, Clone)]
 pub struct Facts {
+    /// The sample packages, by name.
+    pub samples: Vec<String>,
+    /// How many theorems the specification proves.
+    pub proved: usize,
     pub model: Model,
     pub reserves: Reserves,
     pub searched: Vec<Outcome>,
+    pub counterfactual: Counterfactual,
+    pub rollouts: Rollouts,
     pub forks: Forks,
+    pub kinds: Kinds,
+    pub environment: Environment,
     pub learned: Vec<Learned>,
-    pub packages: Vec<Package>,
-    pub replay: Replay,
+    pub replays: Vec<Replay>,
     pub theorems: Vec<Theorem>,
 }
 
@@ -332,10 +417,11 @@ fn reserves(engine: &Engine) -> Reserves {
     }
 }
 
-fn searched(engine: &Engine, maze: &Results) -> Vec<Outcome> {
+fn searched(engine: &Engine, maze: &Results, forked: &[usize]) -> Vec<Outcome> {
     maze.arms
         .iter()
-        .map(|arm| {
+        .zip(forked)
+        .map(|(arm, forked)| {
             let trial = &arm.trials[0];
             let (_, exchanges) = engine.history(trial.end).expect("its history");
             Outcome {
@@ -343,6 +429,7 @@ fn searched(engine: &Engine, maze: &Results) -> Vec<Outcome> {
                 energy: count(&trial.values[0]),
                 time: count(&trial.values[1]),
                 exchanges: exchanges.len(),
+                forked: *forked,
             }
         })
         .collect()
@@ -436,6 +523,7 @@ fn learned(engine: &Engine) -> Vec<Learned> {
                     energy: measured(&objectives[0]),
                     time: measured(&objectives[1]),
                     exchanges,
+                    forked: 0,
                 },
                 reached: economy.matches(&goal),
                 episodes: rewards.len(),
@@ -445,60 +533,220 @@ fn learned(engine: &Engine) -> Vec<Learned> {
         .collect()
 }
 
-fn packages_shown(engine: &Engine) -> Vec<Package> {
+fn counterfactual(engine: &Engine) -> Counterfactual {
+    let experiment = engine
+        .experiment(&path!("maze/showcase"))
+        .expect("the maze's showcase");
+    let start = engine.referred(&experiment.start).expect("its start");
+    let strategy = path!("maze/dijkstra");
+    let dijkstra = engine.strategy(&strategy).expect("Dijkstra's strategy");
+    let forks = engine
+        .candidates(start, &path!("maze/moves"))
+        .expect("the moves offered")
+        .into_iter()
+        .map(|exchange| {
+            let fork = engine
+                .apply(start, std::slice::from_ref(&exchange))
+                .expect("an offered move applies");
+            let ran = engine
+                .run_strategy(
+                    fork,
+                    &dijkstra,
+                    &experiment.goal,
+                    experiment.effort,
+                    &mut |_| ControlFlow::Continue(()),
+                )
+                .expect("Dijkstra runs from the fork");
+            let measured = |objective: &ObjectivePath| {
+                count(&engine.measure(ran.end, objective).expect("measured"))
+            };
+            Fork {
+                rate: exchange.rate().to_string(),
+                energy: measured(&experiment.objectives[0]),
+                time: measured(&experiment.objectives[1]),
+            }
+        })
+        .collect();
+    Counterfactual {
+        start: experiment.start.to_string(),
+        strategy: strategy.to_string(),
+        forks,
+        unchanged: engine.referred(&experiment.start).expect("its start") == start,
+    }
+}
+
+fn rollouts(engine: &Engine) -> Rollouts {
+    let experiment: ExperimentPath = path!("rescue/micro/monte-carlo");
+    let results = engine
+        .run_experiment(&experiment, &mut |_, _| ControlFlow::Continue(()))
+        .expect("the rescue's Monte Carlo runs");
+    Rollouts {
+        experiment: experiment.to_string(),
+        arms: results
+            .arms
+            .iter()
+            .map(|arm| {
+                let endings = arm
+                    .trials
+                    .iter()
+                    .map(|trial| match trial.ended {
+                        Ended::Reached => Ending::Reached,
+                        Ended::Refused { .. } => Ending::Refused,
+                        _ => Ending::Other,
+                    })
+                    .collect();
+                (arm.arm.strategy.to_string(), endings)
+            })
+            .collect(),
+    }
+}
+
+/// Adds `sample` to the kind named `name`, in the order kinds are met.
+fn tally(kinds: &mut Vec<Kind>, name: &'static str, sample: &str) {
+    match kinds.iter_mut().find(|kind| kind.name == name) {
+        Some(kind) => {
+            kind.samples.insert(sample.into());
+        }
+        None => kinds.push(Kind {
+            name,
+            samples: BTreeSet::from([sample.into()]),
+        }),
+    }
+}
+
+fn kinds(engine: &Engine) -> Kinds {
+    let mut kinds = Kinds::default();
+    let mut seen = BTreeSet::new();
+    for path in engine.experiments().expect("the experiments") {
+        let experiment = engine.experiment(&path).expect("an experiment");
+        for arm in experiment.arms {
+            if !seen.insert(arm.strategy.clone()) {
+                continue;
+            }
+            let sample = arm.strategy.to_string();
+            let sample = sample.split('/').next().expect("a first segment");
+            match engine.strategy(&arm.strategy).expect("a strategy") {
+                Strategy::Policy { .. } => tally(&mut kinds.scripts, "policies", sample),
+                Strategy::Plan { .. } => tally(&mut kinds.scripts, "plans", sample),
+                Strategy::BreadthFirst { .. } => {
+                    tally(&mut kinds.searches, "breadth-first", sample);
+                }
+                Strategy::Cheapest { heuristic, .. } => tally(
+                    &mut kinds.searches,
+                    if heuristic.is_some() {
+                        "A*"
+                    } else {
+                        "Dijkstra"
+                    },
+                    sample,
+                ),
+                Strategy::BranchAndBound { .. } => {
+                    tally(&mut kinds.searches, "branch and bound", sample);
+                }
+                Strategy::Beam { .. } => tally(&mut kinds.searches, "beam", sample),
+                Strategy::BestFirst { .. } => tally(&mut kinds.searches, "best-first", sample),
+                Strategy::Pareto { .. } => tally(&mut kinds.searches, "Pareto", sample),
+                Strategy::Game { players, .. } => {
+                    for player in players {
+                        let name = match player {
+                            Chooser::Policy(_) => "scripted players",
+                            Chooser::Minimax { .. } => "minimax",
+                            Chooser::Mcts { .. } => "MCTS",
+                            Chooser::Ismcts { .. } => "ISMCTS",
+                        };
+                        tally(&mut kinds.choosers, name, sample);
+                    }
+                }
+            }
+        }
+    }
+    const ORDER: [&str; 13] = [
+        "breadth-first",
+        "Dijkstra",
+        "A*",
+        "best-first",
+        "branch and bound",
+        "beam",
+        "Pareto",
+        "minimax",
+        "MCTS",
+        "ISMCTS",
+        "scripted players",
+        "policies",
+        "plans",
+    ];
+    for kinds in [&mut kinds.searches, &mut kinds.choosers, &mut kinds.scripts] {
+        kinds.sort_by_key(|kind| ORDER.iter().position(|name| *name == kind.name));
+    }
+    kinds
+}
+
+fn environment(engine: &Engine) -> Environment {
+    let experiment: ExperimentPath = path!("maze/showcase");
+    // What a learner chooses among and observes does not depend on how it
+    // is rewarded.
+    let reward = Reward {
+        weights: Vec::new(),
+        reached: 0.0,
+    };
+    let task = Task::new(engine, &experiment, &path!("maze/moves"), reward)
+        .expect("the maze's showcase as a task");
+    Environment {
+        experiment: experiment.to_string(),
+        actions: task.actions().len(),
+        observed: task.observed().len(),
+    }
+}
+
+/// The longest run of each experiment, recorded and replayed.
+fn replays(engine: &Engine) -> Vec<Replay> {
     [
-        "connect-four",
-        "work-league",
-        "logistics",
-        "perishables",
-        "amm",
-        "lending",
+        "maze/showcase",
+        "lending/showcase",
+        "logistics/showcase",
+        "marketplace/showcase",
+        "mission/showcase",
+        "amm/showcase",
     ]
     .into_iter()
-    .map(|name| {
-        let start = engine
-            .referred(&format!("{name}/showcase").parse().expect("a ref path"))
-            .expect("a showcase ref");
-        let economy = engine.reach(start).expect("reached").state.economy.clone();
-        Package {
-            name: name.into(),
-            accounts: economy.accounts().count(),
-            rates: economy.rate_ids().count(),
-            instances: economy
-                .rate_ids()
-                .map(|key| economy.instances_of(key).count())
-                .sum(),
+    .map(|experiment| {
+        let results = engine
+            .run_experiment(
+                &experiment.parse().expect("an experiment path"),
+                &mut |_, _| ControlFlow::Continue(()),
+            )
+            .expect("a showcase runs");
+        let (run, end, initial, exchanges) = results
+            .arms
+            .iter()
+            .map(|arm| {
+                let end = arm.trials[0].end;
+                let (initial, exchanges) = engine.history(end).expect("its history");
+                (arm.arm.strategy.to_string(), end, initial, exchanges)
+            })
+            .max_by_key(|(_, _, _, exchanges)| exchanges.len())
+            .expect("an arm");
+        let recorded = engine
+            .reach(end)
+            .expect("reached")
+            .state
+            .economy
+            .state_fingerprint()
+            .get();
+        let mut economy = initial;
+        for exchange in &exchanges {
+            economy
+                .apply(exchange.clone())
+                .expect("a recorded exchange replays");
+        }
+        Replay {
+            run,
+            exchanges: exchanges.len(),
+            recorded,
+            replayed: economy.state_fingerprint().get(),
         }
     })
     .collect()
-}
-
-fn replay(engine: &Engine, maze: &Results) -> Replay {
-    let arm = maze
-        .arms
-        .iter()
-        .find(|arm| arm.arm.strategy.as_str() == "maze/dijkstra")
-        .expect("a Dijkstra arm");
-    let end = arm.trials[0].end;
-    let recorded = engine
-        .reach(end)
-        .expect("reached")
-        .state
-        .economy
-        .state_fingerprint()
-        .get();
-    let (mut economy, exchanges) = engine.history(end).expect("its history");
-    for exchange in &exchanges {
-        economy
-            .apply(exchange.clone())
-            .expect("a recorded exchange replays");
-    }
-    Replay {
-        run: arm.arm.strategy.to_string(),
-        exchanges: exchanges.len(),
-        recorded,
-        replayed: economy.state_fingerprint().get(),
-    }
 }
 
 impl Facts {
@@ -506,22 +754,33 @@ impl Facts {
     /// video shows read from it.
     pub fn read() -> Self {
         let engine = Engine::new(Store::memory().expect("a store")).expect("an engine");
-        for (_, write) in packages() {
+        let mut samples = Vec::new();
+        for (name, write) in packages() {
             write(&engine).expect("a sample package writes");
+            samples.push(name.to_string());
         }
+        // Each arm's search reports the points it has generated as it goes.
+        let mut forked = Vec::new();
         let maze = engine
-            .run_experiment(&path!("maze/showcase"), &mut |_, _| {
+            .run_experiment(&path!("maze/showcase"), &mut |playing, progress| {
+                forked.resize(forked.len().max(playing.arm + 1), 0);
+                forked[playing.arm] = progress.generated();
                 ControlFlow::Continue(())
             })
             .expect("the maze's showcase runs");
         Self {
+            samples,
+            proved: proved(),
             model: model(&engine),
             reserves: reserves(&engine),
-            searched: searched(&engine, &maze),
+            searched: searched(&engine, &maze, &forked),
+            counterfactual: counterfactual(&engine),
+            rollouts: rollouts(&engine),
             forks: forks(&engine, &maze, 3),
+            kinds: kinds(&engine),
+            environment: environment(&engine),
             learned: learned(&engine),
-            packages: packages_shown(&engine),
-            replay: replay(&engine, &maze),
+            replays: replays(&engine),
             theorems: theorems(),
         }
     }

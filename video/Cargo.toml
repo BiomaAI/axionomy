@@ -8,6 +8,7 @@ publish = false
 axionomy = { path = ".." }
 axionomy-engine = { path = "../crates/axionomy-engine" }
 axionomy-problems = { path = "../crates/axionomy-problems", features = ["packages"] }
+axionomy-rl = { path = "../crates/axionomy-rl" }
 axionomy-store = { path = "../crates/axionomy-store" }
 fframes = { version = "=1.4.0", features = ["compile-time-svgtree", "cli"] }
 fframes_skia_renderer = { version = "=1.4.0", features = ["metal"] }

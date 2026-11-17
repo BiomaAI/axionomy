@@ -1,6 +1,9 @@
-//! Axionomy, explained without sound: an economy's accounts, rates and
-//! exchanges, then what that gives an agent (value, utility, simulation,
-//! training), then who can drive it and why its runs can be trusted.
+//! Axionomy, explained without sound: what it ships (a kernel, an engine
+//! and adapters), the kernel's accounts, rates and exchanges, what the
+//! engine gives an agent (value, objectives, counterfactuals, rollouts,
+//! search), training through the adapters, who can drive it, and why its
+//! runs can be trusted. Each scene is headed by the part of Axionomy it
+//! shows; the sample package its numbers come from is named in the corner.
 //!
 //! Every number on screen comes from [`facts::Facts`], read from the engine
 //! when the video is made. Check the video with the CLI in `main.rs`
@@ -8,7 +11,7 @@
 
 pub mod facts;
 
-use facts::{Facts, Holding, Law, Outcome};
+use facts::{Ending, Facts, Holding, Law, Outcome};
 use fframes::{
     AnimateRuntimeInput, AudioMap, Color, Duration, FFramesContext, Frame, Overlap, Scene, Scenes,
     Svgr, Transform, Video,
@@ -129,14 +132,150 @@ fn caption<'a>(frame: &Frame, lines: &[&'a str], from: f32, to: f32) -> Svgr<'a>
     fframes::svgr!(<g opacity={opacity} transform={Transform::translate(0.0, lift)}>{texts}</g>)
 }
 
-/// Where the numbers come from: a path at the top of the frame.
-fn source<'a>(frame: &Frame, text: String, from: f32) -> Svgr<'a> {
+/// The scene's heading: the part of Axionomy it shows and what it shows of
+/// it, and at the right, where its numbers come from, a line or two.
+fn heading<'a>(
+    frame: &Frame,
+    layer: &'static str,
+    title: &'static str,
+    from: Vec<String>,
+) -> Svgr<'a> {
+    let lines: Vec<Svgr> = from
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| {
+            let y = 84.0 + index as f32 * 36.0;
+            let fill = if index == 0 { TEXT } else { MUTED };
+            fframes::svgr!(<text x={RIGHT} y={y} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={fill}>{line}</text>)
+        })
+        .collect();
     fframes::svgr!(
-        <g opacity={enter(frame, from)}>
-            <circle cx={LEFT + 8.0} cy="112" r="8" fill={CYAN} />
-            <text x={LEFT + 32.0} y="122" font-family={MONO} font-weight={WEIGHT} font-size="28" fill={MUTED}>{text}</text>
+        <g opacity={enter(frame, 0.0)}>
+            <text x={LEFT} y="84" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={CYAN}>{layer}</text>
+            <text x={LEFT} y="138" font-family={SANS} font-weight={WEIGHT} font-size="46" fill={TEXT}>{title}</text>
+            {lines}
         </g>
     )
+}
+
+/// `items` joined by commas into lines of at most `width` characters.
+fn wrap(items: impl IntoIterator<Item = String>, width: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for item in items {
+        match lines.last_mut() {
+            Some(line) if line.chars().count() + 2 + item.chars().count() < width => {
+                line.push_str(", ");
+                line.push_str(&item);
+            }
+            Some(line) => {
+                line.push(',');
+                lines.push(item);
+            }
+            None => lines.push(item),
+        }
+    }
+    lines
+}
+
+/// An arrow from `x1` to `x2` at `y` with `label` above it, its dashes
+/// running toward its head from `at`.
+fn arrow<'a>(frame: &Frame, x1: f32, x2: f32, y: f32, label: &'static str, at: f32) -> Svgr<'a> {
+    let toward = (x2 - x1).signum();
+    let head = format!(
+        "M{} {} L{x2} {y} L{} {}",
+        x2 - toward * 14.0,
+        y - 9.0,
+        x2 - toward * 14.0,
+        y + 9.0
+    );
+    let going = (frame.seconds() - at).max(0.0);
+    fframes::svgr!(
+        <g opacity={enter(frame, at)}>
+            <line x1={x1} y1={y} x2={x2 - toward * 4.0} y2={y} stroke={MUTED} stroke-width="2.5"
+                stroke-dasharray="12 9" stroke-dashoffset={-toward * going * 60.0} />
+            <path d={head} fill="none" stroke={MUTED} stroke-width="2.5" stroke-linejoin="round" />
+            <text x={(x1 + x2) / 2.0} y={y - 16.0} text-anchor="middle" font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED}>{label}</text>
+        </g>
+    )
+}
+
+// ---------------------------------------------------------------------------
+// What Axionomy ships: a kernel, an engine, adapters; and the samples.
+
+const INTRO_SECONDS: f32 = 8.5;
+/// When the intro's second caption and the samples come in.
+const SAMPLES_AT: f32 = 4.4;
+
+#[derive(Debug)]
+struct IntroScene<'a> {
+    facts: &'a Facts,
+}
+
+impl Scene for IntroScene<'_> {
+    fn duration(&self) -> Duration<'_> {
+        Duration::Seconds(INTRO_SECONDS)
+    }
+
+    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+        let layers = [
+            (
+                "kernel",
+                "axionomy",
+                "accounts, assets, rates and exchanges, applied whole or refused".to_owned(),
+                format!("specified in Lean, {} theorems proved", self.facts.proved),
+            ),
+            (
+                "engine",
+                "axionomy-engine",
+                "points and forks, objectives, searches, games and experiments".to_owned(),
+                "packages: a model's rates, strategies and experiments, stored".to_owned(),
+            ),
+            (
+                "adapters",
+                "axionomy-rl, axionomy-mcp, Studio",
+                "learners, LLM agents and people driving the engine".to_owned(),
+                "Burn and other RL frameworks, MCP clients, a browser".to_owned(),
+            ),
+        ];
+        let height = 128.0;
+        let bands: Vec<Svgr> = layers
+            .into_iter()
+            .enumerate()
+            .map(|(index, (layer, crates, does, more))| {
+                let y = 200.0 + index as f32 * (height + 18.0);
+                let at = 0.3 + index as f32 * 0.7;
+                fframes::svgr!(
+                    <g opacity={enter(&frame, at)} transform={Transform::translate(0.0, rise(&frame, at, 30.0))}>
+                        <rect x={LEFT} y={y} width={RIGHT - LEFT} height={height} rx="14" fill={SURFACE} stroke={LINE} stroke-width="2" />
+                        <text x={LEFT + 32.0} y={y + 56.0} font-family={MONO} font-weight={WEIGHT} font-size="32" fill={CYAN}>{layer}</text>
+                        <text x={LEFT + 32.0} y={y + 98.0} font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED}>{crates}</text>
+                        <text x={LEFT + 540.0} y={y + 56.0} font-family={SANS} font-weight={WEIGHT} font-size="32" fill={TEXT}>{does}</text>
+                        <text x={LEFT + 540.0} y={y + 98.0} font-family={SANS} font-weight={WEIGHT} font-size="26" fill={MUTED}>{more}</text>
+                    </g>
+                )
+            })
+            .collect();
+        let samples: Vec<Svgr> = wrap(self.facts.samples.iter().cloned(), 72)
+            .into_iter()
+            .enumerate()
+            .map(|(index, line)| {
+                fframes::svgr!(<text x={LEFT + 540.0} y={698.0 + index as f32 * 36.0} font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{line}</text>)
+            })
+            .collect();
+        fframes::svgr!(
+            <g opacity={outro(&frame, INTRO_SECONDS)}>
+                {heading(&frame, "axionomy", "What Axionomy ships", Vec::new())}
+                {bands}
+                <g opacity={enter(&frame, SAMPLES_AT + 0.3)}>
+                    <line x1={LEFT} y1="652" x2={RIGHT} y2="652" stroke={LINE} stroke-width="2" stroke-dasharray="10 8" />
+                    <text x={LEFT + 32.0} y="698" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{format!("{} sample packages", self.facts.samples.len())}</text>
+                    {samples}
+                </g>
+                {caption(&frame, &["Axionomy is an economy engine: a kernel that applies", "exchanges, and an engine that simulates them."], 0.4, SAMPLES_AT)}
+                {caption(&frame, &["The sample packages are models built with it,", "used in this video to show what it can do."], SAMPLES_AT + 0.3, INTRO_SECONDS + 1.0)}
+            </g>
+        )
+    }
 }
 
 /// `text` in the mono face over a patch of the background, so it reads
@@ -167,10 +306,10 @@ fn tag<'a>(
 // The model: accounts, a rate, an exchange, a refusal.
 
 /// The times the model scene's phases start at.
-const RATE_AT: f32 = 5.5;
-const APPLY_AT: f32 = 12.0;
-const REFUSE_AT: f32 = 18.5;
-const MODEL_SECONDS: f32 = 25.5;
+const RATE_AT: f32 = 4.0;
+const APPLY_AT: f32 = 8.2;
+const REFUSE_AT: f32 = 12.4;
+const MODEL_SECONDS: f32 = 16.8;
 
 /// When the exchange's amounts land, and when the refusal's row comes in.
 fn applied(frame: &Frame) -> f32 {
@@ -245,7 +384,7 @@ fn rows(before: &Holding, after: &Holding, shortfalls: &[facts::Short]) -> Vec<R
 }
 
 const ROW: f32 = 40.0;
-const PANEL_TOP: f32 = 190.0;
+const PANEL_TOP: f32 = 210.0;
 const PANEL_WIDTH: f32 = 420.0;
 
 /// A row's y and how much of it shows, moving between its places as the
@@ -467,6 +606,10 @@ impl Scene for ModelScene<'_> {
         Duration::Seconds(MODEL_SECONDS)
     }
 
+    fn overlap(&self) -> Overlap {
+        Overlap::Previous(CROSS)
+    }
+
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
         let model = &self.facts.model;
         let panels: Vec<(f32, &str, Vec<Row>)> = model
@@ -491,13 +634,10 @@ impl Scene for ModelScene<'_> {
             .iter()
             .map(|(x, name, rows)| (*x, *name, rows.as_slice()))
             .collect();
-        // The first panel is there from the first frame.
         let drawn: Vec<Svgr> = panels
             .iter()
             .enumerate()
-            .map(|(index, (x, name, rows))| {
-                panel(&frame, *x, name, rows, -0.3 + index as f32 * 0.5)
-            })
+            .map(|(index, (x, name, rows))| panel(&frame, *x, name, rows, 0.3 + index as f32 * 0.4))
             .collect();
         let refusal = model
             .shortfalls
@@ -511,19 +651,19 @@ impl Scene for ModelScene<'_> {
             .collect::<Vec<_>>()
             .join(", ");
         let point = if frame.seconds() < APPLY_AT + 0.6 {
-            format!("{} \u{b7} its start", model.point)
+            "at its start".to_owned()
         } else {
-            format!("{} \u{b7} after {}", model.point, model.rate.rate)
+            format!("after {}", model.rate.rate)
         };
         fframes::svgr!(
-            <g opacity={outro(&frame, MODEL_SECONDS)}>
-                {source(&frame, point, -0.3)}
+            <g opacity={outro(&frame, MODEL_SECONDS + CROSS)}>
+                {heading(&frame, "kernel", "Accounts, rates and exchanges", vec![format!("sample \u{b7} {}", model.point), point])}
                 {drawn}
                 {card(&frame, &model.rate, RATE_AT, REFUSE_AT, &linked, Some((APPLY_AT, APPLY_AT + 2.4)))}
                 {card(&frame, &model.refused, REFUSE_AT + 0.3, MODEL_SECONDS + 1.0, &linked, None)}
                 <text x={CARD_X} y="860" font-family={MONO} font-weight={WEIGHT} font-size="30" fill={CONSUME}
                     opacity={enter(&frame, REFUSE_AT + 1.6)}>{refusal}</text>
-                {caption(&frame, &["An Axionomy economy is accounts", "and the assets they hold."], 0.3, RATE_AT)}
+                {caption(&frame, &["An Axionomy economy is accounts", "and the assets they hold."], 0.5, RATE_AT)}
                 {caption(&frame, &["A rate says what each role consumes,", "preserves and produces."], RATE_AT + 0.3, APPLY_AT)}
                 {caption(&frame, &["An exchange applies the rate to accounts:", "all of it commits, or none."], APPLY_AT + 0.3, REFUSE_AT)}
                 {caption(&frame, &["When an exchange can't apply,", "the kernel says what is missing."], REFUSE_AT + 0.3, MODEL_SECONDS + 1.0)}
@@ -535,7 +675,7 @@ impl Scene for ModelScene<'_> {
 // ---------------------------------------------------------------------------
 // Value: a pool's reserve ratio, moved by each swap.
 
-const VALUE_SECONDS: f32 = 9.0;
+const VALUE_SECONDS: f32 = 8.5;
 
 #[derive(Debug)]
 struct ValueScene<'a> {
@@ -615,7 +755,7 @@ impl Scene for ValueScene<'_> {
         };
         fframes::svgr!(
             <g opacity={outro(&frame, VALUE_SECONDS + CROSS)}>
-                {source(&frame, format!("amm/showcase \u{b7} the season {} played", reserves.run), 0.0)}
+                {heading(&frame, "kernel", "Value", vec!["sample \u{b7} amm/showcase".to_owned(), format!("the season {} played", reserves.run)])}
                 <g opacity={enter(&frame, 0.2)} transform={Transform::translate(0.0, rise(&frame, 0.2, 40.0))}>
                     <rect x={LEFT} y="240" width="420" height="500" rx="14" fill={SURFACE} stroke={LINE} stroke-width="2" />
                     <text x={LEFT + 24.0} y="292" font-family={MONO} font-weight={WEIGHT} font-size="34" fill={CYAN}>{reserves.pool.clone()}</text>
@@ -754,7 +894,7 @@ fn scatter<'a>(frame: &Frame, facts: &Facts, from: f32, learned_at: Option<f32>)
     )
 }
 
-const UTILITY_SECONDS: f32 = 9.0;
+const UTILITY_SECONDS: f32 = 8.5;
 
 #[derive(Debug)]
 struct UtilityScene<'a> {
@@ -795,7 +935,7 @@ impl Scene for UtilityScene<'_> {
             .collect();
         fframes::svgr!(
             <g opacity={outro(&frame, UTILITY_SECONDS + CROSS)}>
-                {source(&frame, "maze/showcase \u{b7} where its experiment's searches end".to_owned(), 0.0)}
+                {heading(&frame, "engine", "Objectives", vec!["sample \u{b7} maze/showcase".to_owned(), "where its experiment's searches end".to_owned()])}
                 {ends}
                 {scatter(&frame, self.facts, 0.3, None)}
                 {caption(&frame, &["Objectives are balances too: each route", "is compared on energy and time at once."], 0.6, UTILITY_SECONDS + 1.0)}
@@ -805,9 +945,216 @@ impl Scene for UtilityScene<'_> {
 }
 
 // ---------------------------------------------------------------------------
-// Simulation: forks from a point, and a plan committed.
+// Counterfactuals: each exchange a start offers, on a fork, played on.
 
-const FORK_SECONDS: f32 = 9.0;
+const COUNTERFACTUAL_SECONDS: f32 = 10.5;
+/// When the forks' outcomes are compared and the start is shown unchanged.
+const COMPARED_AT: f32 = 5.4;
+
+#[derive(Debug)]
+struct CounterfactualScene<'a> {
+    facts: &'a Facts,
+}
+
+impl Scene for CounterfactualScene<'_> {
+    fn duration(&self) -> Duration<'_> {
+        Duration::Seconds(COUNTERFACTUAL_SECONDS)
+    }
+
+    fn overlap(&self) -> Overlap {
+        Overlap::Previous(CROSS)
+    }
+
+    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+        let counterfactual = &self.facts.counterfactual;
+        let ends: Vec<(u64, u64)> = counterfactual
+            .forks
+            .iter()
+            .map(|fork| (fork.energy, fork.time))
+            .collect();
+        let (sx, sy) = (LEFT + 40.0, 530.0_f32);
+        let count = counterfactual.forks.len().max(1);
+        let spread = 110.0_f32.min(480.0 / count as f32);
+        let (fork_x, play_x, end_x) = (LEFT + 300.0, 980.0_f32, 1290.0_f32);
+        let rows: Vec<Svgr> = counterfactual
+            .forks
+            .iter()
+            .enumerate()
+            .map(|(index, fork)| {
+                let y = sy + (index as f32 - (count - 1) as f32 / 2.0) * spread;
+                let at = 0.8 + index as f32 * 0.2;
+                let grow = draw(&frame, at);
+                let curve = format!(
+                    "M{sx} {sy} C{} {sy} {} {y} {} {y}",
+                    sx + 140.0,
+                    fork_x - 160.0,
+                    fork_x - 24.0
+                );
+                let length = 420.0;
+                let played = draw(&frame, 3.0 + index as f32 * 0.15);
+                let front = !dominated((fork.energy, fork.time), &ends);
+                let lit = front && frame.seconds() >= COMPARED_AT;
+                let tint = if lit { GOLD } else { TEXT };
+                let landed = 3.6 + index as f32 * 0.15;
+                fframes::svgr!(
+                    <g>
+                        <path d={curve} fill="none" stroke={if lit { GOLD } else { MUTED }} stroke-width={if lit { 3.0 } else { 2.0 }}
+                            stroke-dasharray={format!("{length} {length}")} stroke-dashoffset={length * (1.0 - grow)} />
+                        <circle cx={fork_x - 14.0} cy={y} r="7" fill={if lit { GOLD } else { MUTED }} opacity={enter(&frame, at + 0.5)} />
+                        <text x={fork_x} y={y + 9.0} font-family={MONO} font-weight={WEIGHT} font-size="26" fill={TEXT} opacity={enter(&frame, at + 0.4)}>{fork.rate.clone()}</text>
+                        <line x1={play_x} y1={y} x2={lerp(play_x, end_x, played)} y2={y} stroke={if lit { GOLD } else { LINE }} stroke-width="2.5" stroke-dasharray="10 8" />
+                        <g opacity={enter(&frame, landed)}>
+                            <circle cx={end_x + 14.0} cy={y} r="9" fill={if lit { GOLD } else { MUTED }} />
+                            <text x={end_x + 44.0} y={y + 9.0} font-family={MONO} font-weight={WEIGHT} font-size="28" fill={MUTED}>"energy"</text>
+                            <text x={end_x + 230.0} y={y + 9.0} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="28" fill={tint}>{counted(&frame, landed, fork.energy as f32).round().to_string()}</text>
+                            <text x={end_x + 270.0} y={y + 9.0} font-family={MONO} font-weight={WEIGHT} font-size="28" fill={MUTED}>"time"</text>
+                            <text x={end_x + 420.0} y={y + 9.0} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="28" fill={tint}>{counted(&frame, landed, fork.time as f32).round().to_string()}</text>
+                        </g>
+                    </g>
+                )
+            })
+            .collect();
+        let top = sy - (count - 1) as f32 / 2.0 * spread;
+        let unchanged = if counterfactual.unchanged {
+            format!(
+                "{} still refers to the point the forks start from",
+                counterfactual.start
+            )
+        } else {
+            format!("{} no longer refers to the start", counterfactual.start)
+        };
+        fframes::svgr!(
+            <g opacity={outro(&frame, COUNTERFACTUAL_SECONDS + CROSS)}>
+                {heading(&frame, "engine", "Counterfactuals", vec![format!("sample \u{b7} {}", counterfactual.start), "each exchange its start offers, on a fork".to_owned()])}
+                <g opacity={enter(&frame, 0.3)}>
+                    <circle cx={sx} cy={sy} r="16" fill={GOLD} />
+                    {tag(sx - 8.0, sy - 40.0, counterfactual.start.clone(), 24.0, GOLD, "start")}
+                </g>
+                <text x={fork_x} y={top - 70.0} font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED} opacity={enter(&frame, 0.8)}>"applied on its own fork"</text>
+                <text x={play_x} y={top - 70.0} font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED} opacity={enter(&frame, 3.0)}>{format!("then {} to the goal", counterfactual.strategy)}</text>
+                {rows}
+                <text x={LEFT} y="870" font-family={MONO} font-weight={WEIGHT} font-size="26" fill={if counterfactual.unchanged { PRODUCE } else { CONSUME }}
+                    opacity={enter(&frame, COMPARED_AT + 0.6)}>{unchanged}</text>
+                {caption(&frame, &["From any point, an agent can apply each exchange", "on a fork of its own and play on from there."], 0.5, COMPARED_AT)}
+                {caption(&frame, &["Forks are recorded as runs of their own; the point", "the agent started from does not change."], COMPARED_AT + 0.3, COUNTERFACTUAL_SECONDS + 1.0)}
+            </g>
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rollouts: each policy played out once per seed.
+
+const ROLLOUT_SECONDS: f32 = 10.0;
+/// When the rollouts' second caption comes in.
+const REFUSALS_AT: f32 = 5.0;
+
+#[derive(Debug)]
+struct RolloutScene<'a> {
+    facts: &'a Facts,
+}
+
+impl Scene for RolloutScene<'_> {
+    fn duration(&self) -> Duration<'_> {
+        Duration::Seconds(ROLLOUT_SECONDS)
+    }
+
+    fn overlap(&self) -> Overlap {
+        Overlap::Previous(CROSS)
+    }
+
+    fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+        let rollouts = &self.facts.rollouts;
+        let columns = 16;
+        let step = 36.0_f32;
+        let trials = rollouts
+            .arms
+            .iter()
+            .map(|(_, endings)| endings.len())
+            .max()
+            .unwrap_or(0);
+        let arms: Vec<Svgr> = rollouts
+            .arms
+            .iter()
+            .enumerate()
+            .map(|(index, (strategy, endings))| {
+                let x = LEFT + index as f32 * 820.0;
+                let y = 330.0_f32;
+                let dots: Vec<Svgr> = endings
+                    .iter()
+                    .enumerate()
+                    .map(|(trial, ending)| {
+                        let at = 0.8 + trial as f32 * (2.6 / endings.len().max(1) as f32);
+                        let cx = x + 10.0 + (trial % columns) as f32 * step;
+                        let cy = y + (trial / columns) as f32 * step;
+                        let fill = match ending {
+                            Ending::Reached => GOLD,
+                            Ending::Refused => CONSUME,
+                            Ending::Other => MUTED,
+                        };
+                        let landed = enter(&frame, at);
+                        let dot = if landed > 0.0 {
+                            fframes::svgr!(<circle cx={cx} cy={cy} r={11.0 * landed} fill={fill} />)
+                        } else {
+                            Svgr::empty()
+                        };
+                        fframes::svgr!(
+                            <g>
+                                <circle cx={cx} cy={cy} r="11" fill="none" stroke={LINE} stroke-width="2" />
+                                {dot}
+                            </g>
+                        )
+                    })
+                    .collect();
+                let rows = endings.len().div_ceil(columns) as f32;
+                let below = y + rows * step + 40.0;
+                let tally = |which: Ending| endings.iter().filter(|ending| **ending == which).count();
+                let counts: Vec<Svgr> = [
+                    (Ending::Reached, "reached the goal", GOLD),
+                    (Ending::Refused, "refused by the kernel", CONSUME),
+                    (Ending::Other, "ended short of the goal", MUTED),
+                ]
+                .into_iter()
+                .filter(|(which, _, _)| tally(*which) > 0)
+                .enumerate()
+                .map(|(line, (which, label, tint))| {
+                    let at = 3.6 + line as f32 * 0.3;
+                    let ly = below + line as f32 * 46.0;
+                    fframes::svgr!(
+                        <g opacity={enter(&frame, at)}>
+                            <circle cx={x + 10.0} cy={ly - 9.0} r="9" fill={tint} />
+                            <text x={x + 36.0} y={ly} font-family={SANS} font-weight={WEIGHT} font-size="30" fill={TEXT}>{label}</text>
+                            <text x={x + 10.0 + (columns as f32 - 1.0) * step} y={ly} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="30" fill={tint}>
+                                {format!("{} of {}", counted(&frame, at, tally(which) as f32).round(), endings.len())}
+                            </text>
+                        </g>
+                    )
+                })
+                .collect();
+                fframes::svgr!(
+                    <g opacity={enter(&frame, 0.3 + index as f32 * 0.2)}>
+                        <text x={x} y={y - 48.0} font-family={MONO} font-weight={WEIGHT} font-size="30" fill={CYAN}>{strategy.clone()}</text>
+                        {dots}
+                        {counts}
+                    </g>
+                )
+            })
+            .collect();
+        fframes::svgr!(
+            <g opacity={outro(&frame, ROLLOUT_SECONDS + CROSS)}>
+                {heading(&frame, "engine", "Rollouts", vec![format!("sample \u{b7} {}", rollouts.experiment), format!("{trials} seeded trials of each policy")])}
+                {arms}
+                {caption(&frame, &["An experiment rolls each policy out once per seed,", "with Nature drawing the scenario from the seed."], 0.5, REFUSALS_AT)}
+                {caption(&frame, &["When a policy proposes an exchange that can't", "apply, the kernel refuses it and the run ends."], REFUSALS_AT + 0.3, ROLLOUT_SECONDS + 1.0)}
+            </g>
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Search: forks from a point, and a plan committed.
+
+const FORK_SECONDS: f32 = 8.5;
 
 #[derive(Debug)]
 struct ForkScene<'a> {
@@ -894,13 +1241,32 @@ impl Scene for ForkScene<'_> {
             .iter()
             .map(|level| level.len().to_string())
             .collect();
+        let (list_x, list_y) = (1360.0_f32, 470.0_f32);
+        let explored: Vec<Svgr> = self
+            .facts
+            .searched
+            .iter()
+            .enumerate()
+            .map(|(index, outcome)| {
+                let y = list_y + 52.0 + index as f32 * 44.0;
+                let at = 5.2 + index as f32 * 0.2;
+                fframes::svgr!(
+                    <g opacity={enter(&frame, at)} font-family={MONO} font-weight={WEIGHT} font-size="24">
+                        <text x={list_x} y={y} fill={if outcome.by == "maze/a-star" { GOLD } else { TEXT }}>{outcome.by.clone()}</text>
+                        <text x={RIGHT} y={y} text-anchor="end" fill={MUTED}>{counted(&frame, at, outcome.forked as f32).round().to_string()}</text>
+                    </g>
+                )
+            })
+            .collect();
         fframes::svgr!(
             <g opacity={outro(&frame, FORK_SECONDS + CROSS)}>
-                {source(&frame, format!("maze/showcase \u{b7} points forked from its start: {}", counts.join(", ")), 0.0)}
+                {heading(&frame, "engine", "Search", vec!["sample \u{b7} maze/showcase".to_owned(), format!("points forked from its start: {}", counts.join(", "))])}
                 {edges}
                 {nodes}
                 <line x1={lx} y1={ly} x2={lerp(lx, goal_x, tail)} y2={ly} stroke={GOLD} stroke-width="4" stroke-dasharray="12 10" />
                 {labels}
+                <text x={list_x} y={list_y} font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED} opacity={enter(&frame, 5.0)}>"points each search forked"</text>
+                {explored}
                 <g opacity={enter(&frame, lit_at(last) + 1.4)}>
                     <circle cx={goal_x} cy={ly} r="16" fill="none" stroke={GOLD} stroke-width="4" />
                     {tag(goal_x, ly - 36.0, format!("{rest} more exchanges to maze/solved"), 24.0, GOLD, "end")}
@@ -914,7 +1280,84 @@ impl Scene for ForkScene<'_> {
 // ---------------------------------------------------------------------------
 // Training: a DQN in Burn, rewarded with the objectives.
 
-const TRAINING_SECONDS: f32 = 10.0;
+const TRAINING_SECONDS: f32 = 15.0;
+/// When the training scene turns from the learner's interface to what it
+/// learned.
+const TRAINED_AT: f32 = 5.8;
+
+/// What a learner meets through `axionomy-rl`, beside the learner in Burn.
+fn interface<'a>(frame: &Frame, facts: &Facts) -> Svgr<'a> {
+    let environment = &facts.environment;
+    let (x, y, w, h) = (LEFT, 230.0_f32, 920.0_f32, 470.0_f32);
+    let rows = [
+        (
+            "observes",
+            format!("{} balances of the start's accounts", environment.observed),
+        ),
+        (
+            "chooses",
+            format!(
+                "one of {} exchanges, unoffered ones masked",
+                environment.actions
+            ),
+        ),
+        ("steps", "the engine applies the exchange chosen".to_owned()),
+        (
+            "is rewarded",
+            "by the objectives' changes, and at the goal".to_owned(),
+        ),
+        ("plays", "episodes, each a run the store records".to_owned()),
+    ];
+    let lines: Vec<Svgr> = rows
+        .into_iter()
+        .enumerate()
+        .map(|(index, (verb, what))| {
+            let ly = y + 140.0 + index as f32 * 62.0;
+            let at = 0.7 + index as f32 * 0.25;
+            fframes::svgr!(
+                <g opacity={enter(frame, at)}>
+                    <text x={x + 32.0} y={ly} font-family={MONO} font-weight={WEIGHT} font-size="26" fill={MUTED}>{verb}</text>
+                    <text x={x + 240.0} y={ly} font-family={SANS} font-weight={WEIGHT} font-size="29" fill={TEXT}>{what}</text>
+                </g>
+            )
+        })
+        .collect();
+    let (bx, bw) = (RIGHT - 470.0, 470.0_f32);
+    let learner: Vec<Svgr> = [
+        "a Q-network over the balances",
+        "a replay buffer of steps",
+        "explores offered exchanges",
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, line)| {
+        let at = 1.8 + index as f32 * 0.25;
+        fframes::svgr!(<text x={bx + 32.0} y={y + 140.0 + index as f32 * 62.0} font-family={SANS} font-weight={WEIGHT} font-size="29" fill={TEXT} opacity={enter(frame, at)}>{line}</text>)
+    })
+    .collect();
+    let (gap_left, gap_right) = (x + w + 24.0, bx - 24.0);
+    fframes::svgr!(
+        <g opacity={run(frame, &EXIT, TRAINED_AT - 0.3, 1.0, 0.0)}>
+            <g opacity={enter(frame, 0.2)} transform={Transform::translate(0.0, rise(frame, 0.2, 30.0))}>
+                <rect x={x} y={y} width={w} height={h} rx="14" fill={SURFACE} stroke={CYAN} stroke-width="2" />
+                <text x={x + 32.0} y={y + 56.0} font-family={MONO} font-weight={WEIGHT} font-size="32" fill={CYAN}>"axionomy-rl"</text>
+                <text x={x + w - 32.0} y={y + 56.0} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{format!("{} as a task", environment.experiment)}</text>
+                <text x={x + 32.0} y={y + 92.0} font-family={SANS} font-weight={WEIGHT} font-size="24" fill={MUTED}>"what a learner meets"</text>
+                {lines}
+            </g>
+            <g opacity={enter(frame, 1.4)} transform={Transform::translate(0.0, rise(frame, 1.4, 30.0))}>
+                <rect x={bx} y={y} width={bw} height={h} rx="14" fill={SURFACE} stroke={GOLD} stroke-width="2" />
+                <text x={bx + 32.0} y={y + 56.0} font-family={MONO} font-weight={WEIGHT} font-size="32" fill={GOLD}>"Burn"</text>
+                <text x={bx + bw - 32.0} y={y + 56.0} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>"axionomy-burn"</text>
+                <text x={bx + 32.0} y={y + 92.0} font-family={SANS} font-weight={WEIGHT} font-size="24" fill={MUTED}>"a DQN, learning outside Axionomy"</text>
+                {learner}
+            </g>
+            {arrow(frame, gap_left, gap_right, y + 150.0, "balances", 2.4)}
+            {arrow(frame, gap_right, gap_left, y + 250.0, "exchange", 2.7)}
+            {arrow(frame, gap_left, gap_right, y + 350.0, "reward", 3.0)}
+        </g>
+    )
+}
 
 #[derive(Debug)]
 struct TrainingScene<'a> {
@@ -952,7 +1395,7 @@ impl Scene for TrainingScene<'_> {
             "learns its own routes to the goal."
         };
         let (cx, cy, cw, ch) = (LEFT + 70.0, 240.0_f32, 640.0_f32, 470.0_f32);
-        let progress = ((frame.seconds() - 0.6) / 3.8).clamp(0.0, 1.0);
+        let progress = ((frame.seconds() - TRAINED_AT - 0.6) / 3.8).clamp(0.0, 1.0);
         let curves: Vec<Svgr> = learned
             .iter()
             .enumerate()
@@ -975,7 +1418,7 @@ impl Scene for TrainingScene<'_> {
                 fframes::svgr!(
                     <g>
                         <path d={path} fill="none" stroke={color} stroke-width="3" stroke-linejoin="round" />
-                        <text x={cx} y={label_y} font-family={MONO} font-weight={WEIGHT} font-size="24" fill={color} opacity={enter(&frame, 0.8)}>
+                        <text x={cx} y={label_y} font-family={MONO} font-weight={WEIGHT} font-size="24" fill={color} opacity={enter(&frame, TRAINED_AT + 0.8)}>
                             {format!("weighing {}: {} episodes", learned.weighing, learned.episodes)}
                         </text>
                     </g>
@@ -991,28 +1434,39 @@ impl Scene for TrainingScene<'_> {
             .collect();
         fframes::svgr!(
             <g opacity={outro(&frame, TRAINING_SECONDS + CROSS)}>
-                {source(&frame, "crates/axionomy-burn \u{b7} maze/showcase, reward per episode".to_owned(), 0.0)}
-                <g opacity={enter(&frame, 0.3)}>
+                {heading(&frame, "adapters", "Training", vec![format!("sample \u{b7} {}", self.facts.environment.experiment), "crates/axionomy-rl, crates/axionomy-burn".to_owned()])}
+                {interface(&frame, self.facts)}
+                <g opacity={enter(&frame, TRAINED_AT + 0.3)}>
+                    <text x={cx} y={cy - 28.0} font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>"reward per episode"</text>
                     <line x1={cx} y1={cy + ch} x2={cx + cw} y2={cy + ch} stroke={MUTED} stroke-width="2" />
                     <line x1={cx} y1={cy} x2={cx} y2={cy + ch} stroke={MUTED} stroke-width="2" />
                     {ticks}
                     {curves}
                 </g>
-                {scatter(&frame, self.facts, 0.2, Some(4.8))}
-                {caption(&frame, &["A DQN in Burn, rewarded with these objectives,", found], 0.6, TRAINING_SECONDS + 1.0)}
+                {scatter(&frame, self.facts, TRAINED_AT + 0.2, Some(TRAINED_AT + 4.8))}
+                {caption(&frame, &["Through axionomy-rl, a learner observes balances,", "chooses exchanges, and is rewarded by objectives."], 0.5, TRAINED_AT)}
+                {caption(&frame, &["A DQN in Burn, rewarded with these objectives,", found], TRAINED_AT + 0.3, TRAINING_SECONDS + 1.0)}
             </g>
         )
     }
 }
 
 // ---------------------------------------------------------------------------
-// Harnesses: whoever proposes, the kernel decides.
+// Harnesses: whatever proposes an exchange, the kernel decides.
 
-const HARNESS_SECONDS: f32 = 9.0;
+const HARNESS_SECONDS: f32 = 10.0;
 
 #[derive(Debug)]
 struct HarnessScene<'a> {
     facts: &'a Facts,
+}
+
+/// The kinds' names, and the samples running any of them.
+fn named(kinds: &[facts::Kind]) -> (String, Vec<String>) {
+    let names: Vec<&str> = kinds.iter().map(|kind| kind.name).collect();
+    let samples: std::collections::BTreeSet<&String> =
+        kinds.iter().flat_map(|kind| &kind.samples).collect();
+    (names.join(", "), samples.into_iter().cloned().collect())
 }
 
 impl Scene for HarnessScene<'_> {
@@ -1025,51 +1479,67 @@ impl Scene for HarnessScene<'_> {
     }
 
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let kind = |name: &str| match name {
-            "connect-four" => "a game, against minimax or MCTS",
-            "work-league" => "agents competing for the same work",
-            "logistics" => "deliveries under fuel and time windows",
-            "perishables" => "a cold chain",
-            "amm" => "a market with no price feed",
-            "lending" => "collateral, debt and liquidation",
-            _ => "",
+        let kinds = &self.facts.kinds;
+        let sampled = |(names, samples): (String, Vec<String>)| {
+            (names, format!("samples: {}", samples.join(", ")))
         };
-        let count = |at: f32, value: usize| counted(&frame, at, value as f32).round().to_string();
-        let mut rows: Vec<Svgr> = self
+        let learner = self
             .facts
-            .packages
-            .iter()
+            .environment
+            .experiment
+            .split('/')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        let rows: Vec<(&'static str, String, String)> = vec![
+            ("Planners", sampled(named(&kinds.searches))),
+            ("Game AIs", sampled(named(&kinds.choosers))),
+            ("Scripted agents", sampled(named(&kinds.scripts))),
+            (
+                "Learners",
+                (
+                    "axionomy-rl, with Burn or any RL framework".to_owned(),
+                    format!("sample: {learner}, a DQN in Burn"),
+                ),
+            ),
+            (
+                "LLM agents",
+                (
+                    "axionomy-mcp, the engine as MCP tools and resources".to_owned(),
+                    "any package".to_owned(),
+                ),
+            ),
+            (
+                "People",
+                (
+                    "Studio, in the browser".to_owned(),
+                    "any package".to_owned(),
+                ),
+            ),
+        ]
+        .into_iter()
+        .map(|(who, (through, samples))| (who, through, samples))
+        .collect();
+        let drawn: Vec<Svgr> = rows
+            .into_iter()
             .enumerate()
-            .map(|(index, package)| {
-                let y = 240.0 + index as f32 * 88.0;
-                let at = 0.4 + index as f32 * 0.2;
+            .map(|(index, (who, through, samples))| {
+                let y = 236.0 + index as f32 * 104.0;
+                let at = 0.4 + index as f32 * 0.25;
                 fframes::svgr!(
                     <g opacity={enter(&frame, at)} transform={Transform::translate(rise(&frame, at, -40.0), 0.0)}>
-                        <text x={LEFT} y={y} font-family={MONO} font-weight={WEIGHT} font-size="34" fill={CYAN}>{package.name.clone()}</text>
-                        <text x={LEFT + 330.0} y={y} font-family={SANS} font-weight={WEIGHT} font-size="32" fill={TEXT}>{kind(&package.name)}</text>
-                        <g font-family={MONO} font-weight={WEIGHT} font-size="28" text-anchor="end">
-                            <text x={RIGHT - 520.0} y={y} fill={TEXT}>{count(at + 0.2, package.accounts)}</text>
-                            <text x={RIGHT - 520.0 + 16.0} y={y} text-anchor="start" fill={MUTED}>"accounts"</text>
-                            <text x={RIGHT - 250.0} y={y} fill={TEXT}>{count(at + 0.3, package.instances)}</text>
-                            <text x={RIGHT - 250.0 + 16.0} y={y} text-anchor="start" fill={MUTED}>"rate instances"</text>
-                        </g>
+                        <text x={LEFT} y={y} font-family={SANS} font-weight={WEIGHT} font-size="36" fill={TEXT}>{who}</text>
+                        <text x={LEFT + 330.0} y={y} font-family={MONO} font-weight={WEIGHT} font-size="28" fill={CYAN}>{through}</text>
+                        <text x={LEFT + 330.0} y={y + 40.0} font-family={MONO} font-weight={WEIGHT} font-size="21" fill={MUTED}>{samples}</text>
                     </g>
                 )
             })
             .collect();
-        let y = 240.0 + self.facts.packages.len() as f32 * 88.0;
-        let at = 0.4 + self.facts.packages.len() as f32 * 0.2;
-        rows.push(fframes::svgr!(
-            <g opacity={enter(&frame, at)} transform={Transform::translate(rise(&frame, at, -40.0), 0.0)}>
-                <text x={LEFT} y={y} font-family={MONO} font-weight={WEIGHT} font-size="34" fill={CYAN}>"axionomy mcp"</text>
-                <text x={LEFT + 330.0} y={y} font-family={SANS} font-weight={WEIGHT} font-size="32" fill={TEXT}>"LLM agents, through the MCP server"</text>
-            </g>
-        ));
         fframes::svgr!(
             <g opacity={outro(&frame, HARNESS_SECONDS + CROSS)}>
-                {source(&frame, "sample packages \u{b7} at their showcase starts".to_owned(), 0.0)}
-                {rows}
-                {caption(&frame, &["Game AIs, planners, learners and LLM agents", "propose exchanges; the kernel checks each one."], 0.8, HARNESS_SECONDS + 1.0)}
+                {heading(&frame, "engine and adapters", "Who proposes exchanges", vec!["the samples' strategies, by kind".to_owned()])}
+                {drawn}
+                {caption(&frame, &["Planners, game AIs, learners, LLM agents and people", "propose exchanges; the kernel checks each one."], 0.8, HARNESS_SECONDS + 1.0)}
             </g>
         )
     }
@@ -1095,53 +1565,62 @@ impl Scene for TrustScene<'_> {
     }
 
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let replay = &self.facts.replay;
         let typed = |text: String, at: f32, seconds: f32| {
             let count = text.chars().count();
             let shown =
                 (((frame.seconds() - at) / seconds).clamp(0.0, 1.0) * count as f32) as usize;
             text.chars().take(shown).collect::<String>()
         };
-        let x = LEFT + 260.0;
-        // The replay steps through the route's exchanges, one dot each.
-        let steps: Vec<Svgr> = (0..replay.exchanges)
-            .map(|step| {
-                let at = 1.2 + step as f32 * 0.09;
-                let dx = x + step as f32 * 40.0;
-                fframes::svgr!(<circle cx={dx} cy="372" r={4.0 + 3.0 * enter(&frame, at)} fill={if frame.seconds() >= at { GOLD } else { LINE }} />)
+        let (exchanges_x, recorded_x, replayed_x, same_x) =
+            (LEFT + 720.0, LEFT + 780.0, LEFT + 1120.0, LEFT + 1460.0);
+        let runs: Vec<Svgr> = self
+            .facts
+            .replays
+            .iter()
+            .enumerate()
+            .map(|(index, replay)| {
+                let y = 250.0 + index as f32 * 52.0;
+                let at = 0.4 + index as f32 * 0.22;
+                let replayed_at = at + 0.9;
+                let same = replay.recorded == replay.replayed;
+                fframes::svgr!(
+                    <g font-family={MONO} font-weight={WEIGHT} font-size="26">
+                        <text x={LEFT} y={y} fill={CYAN} opacity={enter(&frame, at)}>{replay.run.clone()}</text>
+                        <text x={exchanges_x} y={y} text-anchor="end" fill={MUTED} opacity={enter(&frame, at)}>{replay.exchanges.to_string()}</text>
+                        <text x={recorded_x} y={y} fill={TEXT}>{typed(format!("{:016x}", replay.recorded), at + 0.2, 0.5)}</text>
+                        <text x={replayed_x} y={y} fill={TEXT}>{typed(format!("{:016x}", replay.replayed), replayed_at, 0.5)}</text>
+                        <text x={same_x} y={y} fill={if same { PRODUCE } else { CONSUME }} opacity={enter(&frame, replayed_at + 0.6)}>{if same { "same state" } else { "differs" }}</text>
+                    </g>
+                )
             })
             .collect();
-        let replayed_at = 1.2 + replay.exchanges as f32 * 0.09 + 0.2;
-        let same = replay.recorded == replay.replayed;
         let theorems: Vec<Svgr> = self
             .facts
             .theorems
             .iter()
             .enumerate()
             .map(|(index, theorem)| {
-                let y = 620.0 + index as f32 * 52.0;
-                let at = 3.6 + index as f32 * 0.35;
+                let y = 668.0 + index as f32 * 46.0;
+                let at = 3.8 + index as f32 * 0.35;
                 fframes::svgr!(
-                    <g font-family={MONO} font-weight={WEIGHT} font-size="30">
+                    <g font-family={MONO} font-weight={WEIGHT} font-size="28">
                         <text x={LEFT} y={y} fill={MUTED} opacity={enter(&frame, at)}>{theorem.file}</text>
-                        <text x={x} y={y} fill={TEXT}>{typed(format!("theorem {}", theorem.name), at, 0.5)}</text>
+                        <text x={LEFT + 260.0} y={y} fill={TEXT}>{typed(format!("theorem {}", theorem.name), at, 0.5)}</text>
                     </g>
                 )
             })
             .collect();
         fframes::svgr!(
             <g opacity={outro(&frame, TRUST_SECONDS + CROSS)}>
-                {source(&frame, format!("maze/showcase \u{b7} {}'s route, {} exchanges, recorded and replayed", replay.run, replay.exchanges), 0.0)}
-                <g font-family={MONO} font-weight={WEIGHT}>
-                    <text x={LEFT} y="300" font-size="30" fill={MUTED} opacity={enter(&frame, 0.3)}>"recorded"</text>
-                    <text x={x} y="300" font-size="44" fill={TEXT}>{typed(format!("{:016x}", replay.recorded), 0.4, 0.6)}</text>
-                    {steps}
-                    <text x={LEFT} y="460" font-size="30" fill={MUTED} opacity={enter(&frame, replayed_at)}>"replayed"</text>
-                    <text x={x} y="460" font-size="44" fill={TEXT}>{typed(format!("{:016x}", replay.replayed), replayed_at, 0.6)}</text>
-                    <text x={x + mono_width("0000000000000000", 44.0) + 40.0} y="460" font-size="34" fill={if same { PRODUCE } else { CONSUME }}
-                        opacity={enter(&frame, replayed_at + 0.8)}>{if same { "the same state" } else { "a different state" }}</text>
-                    <text x={LEFT} y="560" font-size="26" fill={MUTED} opacity={enter(&frame, 3.4)}>"verification/lean/Axionomy"</text>
+                {heading(&frame, "kernel", "Replay and proof", vec!["samples \u{b7} each showcase's longest run".to_owned(), "verification/lean/Axionomy".to_owned()])}
+                <g font-family={MONO} font-weight={WEIGHT} font-size="22" fill={MUTED} opacity={enter(&frame, 0.2)}>
+                    <text x={LEFT} y="200">"run"</text>
+                    <text x={exchanges_x} y="200" text-anchor="end">"exchanges"</text>
+                    <text x={recorded_x} y="200">"recorded state"</text>
+                    <text x={replayed_x} y="200">"replayed state"</text>
                 </g>
+                {runs}
+                <text x={LEFT} y="612" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED} opacity={enter(&frame, 3.6)}>{format!("{} theorems proved, among them", self.facts.proved)}</text>
                 {theorems}
                 {caption(&frame, &["Every run replays to the same state.", "The kernel's rules are specified in Lean."], 0.6, TRUST_SECONDS + 1.0)}
             </g>
@@ -1192,9 +1671,12 @@ impl Scene for EndScene {
 // ---------------------------------------------------------------------------
 
 pub struct AxionomyVideo<'a> {
+    intro: IntroScene<'a>,
     model: ModelScene<'a>,
     value: ValueScene<'a>,
     utility: UtilityScene<'a>,
+    counterfactual: CounterfactualScene<'a>,
+    rollouts: RolloutScene<'a>,
     forks: ForkScene<'a>,
     training: TrainingScene<'a>,
     harness: HarnessScene<'a>,
@@ -1205,9 +1687,12 @@ pub struct AxionomyVideo<'a> {
 impl<'a> AxionomyVideo<'a> {
     pub fn new(facts: &'a Facts) -> Self {
         Self {
+            intro: IntroScene { facts },
             model: ModelScene { facts },
             value: ValueScene { facts },
             utility: UtilityScene { facts },
+            counterfactual: CounterfactualScene { facts },
+            rollouts: RolloutScene { facts },
             forks: ForkScene { facts },
             training: TrainingScene { facts },
             harness: HarnessScene { facts },
@@ -1239,9 +1724,12 @@ impl Video for AxionomyVideo<'_> {
 
     fn define_scenes(&self) -> Scenes<'_> {
         Scenes::from(vec![
-            &self.model as &dyn Scene,
+            &self.intro as &dyn Scene,
+            &self.model,
             &self.value,
             &self.utility,
+            &self.counterfactual,
+            &self.rollouts,
             &self.forks,
             &self.training,
             &self.harness,
