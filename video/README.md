@@ -3,21 +3,23 @@
 A silent video, about 110 seconds at 1920x1080 and 30 fps, made with
 [fframes](https://github.com/dmtrKovalenko/fframes). It opens with what
 Axionomy ships (the kernel, the engine and the adapters) and then gives each a
-scene or more: the kernel's accounts, rates and exchanges and the value they
-set; the engine's objectives, counterfactuals, rollouts and search; training
+scene or more: an ontology, the exchanges the kernel applies and the value
+they set; the engine's objectives, counterfactuals, rollouts and search; training
 through `axionomy-rl`; who proposes exchanges; replay and the Lean
 specification. Each scene is headed by the part of Axionomy it shows. The
-sample packages are examples: the one a scene's numbers come from is named in
-its corner.
+samples are examples: ontologies and the experiments run on them. The one a
+scene's numbers come from is named in its corner.
 
 No number on screen is typed in. `src/facts.rs` writes every sample package
 into a store in memory when the video starts and reads what it shows from the
 engine:
 
-- the samples' names, and how many theorems `verification/lean/Axionomy`
-  proves;
-- the maze Micro's balances, its first move's rate, the move applied, and the
-  shortfall the kernel reports for unlocking the door without the key;
+- the samples' names, the ontologies their refs' runs are of, and how many
+  theorems `verification/lean/Axionomy` proves;
+- the maze Micro's ontology and what its start names of each of its kinds
+  (accounts, assets, rates and roles), its balances, its first move's rate,
+  the move applied, and the shortfall the kernel reports for unlocking the
+  door without the key;
 - the AMM Showcase's pool reserves over a season its strategy played;
 - where the maze Showcase experiment's searches end and how many points each
   forked, the points its start forks into, and the plan A* commits;
@@ -49,7 +51,7 @@ learned route ends on one of them.
 ```text
 cargo run --release -- timeline     # scenes and their times
 cargo run --release -- inspect      # missing fonts, clipped text, bad SVG
-cargo run --release -- strip ModelScene -n 12
+cargo run --release -- strip OntologyScene -n 12
 cargo run --release -- frame "TrainingScene@8.5s"
 cargo run --release -- preview      # a window, for watching
 cargo run --release -- render -o axionomy.mp4

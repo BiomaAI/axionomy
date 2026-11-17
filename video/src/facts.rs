@@ -1,5 +1,6 @@
 //! What the video shows, read from the engine when the video is made: the
-//! samples' packages written into a store in memory, their refs reached,
+//! samples' packages written into a store in memory, their refs reached and
+//! the ontologies their runs are of,
 //! their experiments run, forks of a start played on, and the routes a DQN
 //! learned (`data/learned`) replayed. No number on screen is typed in by
 //! hand.
@@ -54,11 +55,25 @@ pub struct Short {
     pub missing: u64,
 }
 
-/// The key-door maze's Micro: its start, the first move's rate, the move
-/// applied, and an exchange the kernel refuses where the move leads.
+/// What an economy names of each of its ontology's four kinds: its
+/// accounts, the assets they hold or its rates name, its rates, and the
+/// rates' roles. Each in order.
 #[derive(Debug, Clone)]
-pub struct Model {
+pub struct Members {
+    pub accounts: Vec<String>,
+    pub assets: Vec<String>,
+    pub rates: Vec<String>,
+    pub roles: Vec<String>,
+}
+
+/// The key-door maze's Micro: the ontology its run is of and what its start
+/// names in it, the first move's rate, the move applied, and an exchange the
+/// kernel refuses where the move leads.
+#[derive(Debug, Clone)]
+pub struct Ontology {
     pub point: String,
+    pub name: String,
+    pub members: Members,
     pub before: Vec<Holding>,
     pub rate: Law,
     pub after: Vec<Holding>,
@@ -250,9 +265,11 @@ fn proved() -> usize {
 pub struct Facts {
     /// The sample packages, by name.
     pub samples: Vec<String>,
+    /// The ontologies the samples' refs are of: each package's, in order.
+    pub ontologies: Vec<String>,
     /// How many theorems the specification proves.
     pub proved: usize,
-    pub model: Model,
+    pub ontology: Ontology,
     pub reserves: Reserves,
     pub searched: Vec<Outcome>,
     pub counterfactual: Counterfactual,
@@ -346,7 +363,39 @@ fn exchange(economy: &paths::Economy, rate: &str) -> paths::Exchange {
         .expect("an instance of the economy")
 }
 
-fn model(engine: &Engine) -> Model {
+/// What `economy` names of each kind.
+fn members(economy: &paths::Economy) -> Members {
+    let mut assets = BTreeSet::new();
+    let mut roles = BTreeSet::new();
+    for (_, account) in economy.accounts() {
+        for (asset, _) in account.balances().iter_sorted() {
+            assets.insert(asset.to_string());
+        }
+    }
+    for (_, rate) in economy.rates() {
+        for role in rate.roles() {
+            roles.insert(role.to_string());
+            for basket in [
+                rate.consumed(role),
+                rate.preserved(role),
+                rate.produced(role),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                assets.extend(balances(basket.iter()).into_iter().map(|b| b.asset));
+            }
+        }
+    }
+    Members {
+        accounts: economy.accounts().map(|(id, _)| id.to_string()).collect(),
+        assets: assets.into_iter().collect(),
+        rates: economy.rate_ids().map(ToString::to_string).collect(),
+        roles: roles.into_iter().collect(),
+    }
+}
+
+fn ontology(engine: &Engine) -> Ontology {
     let start = engine.referred(&path!("maze/micro")).expect("maze/micro");
     let economy = engine.reach(start).expect("reached").state.economy.clone();
     let accounts: Vec<AccountPath> = economy.accounts().map(|(id, _)| id.clone()).collect();
@@ -370,8 +419,13 @@ fn model(engine: &Engine) -> Model {
                 })
         })
         .collect();
-    Model {
+    Ontology {
         point: "maze/micro".into(),
+        name: engine
+            .ontology(start)
+            .expect("the run's ontology")
+            .to_string(),
+        members: members(&economy),
         before: accounts.iter().map(|id| holding(&economy, id)).collect(),
         rate,
         after: accounts.iter().map(|id| holding(&moved, id)).collect(),
@@ -755,8 +809,20 @@ impl Facts {
     pub fn read() -> Self {
         let engine = Engine::new(Store::memory().expect("a store")).expect("an engine");
         let mut samples = Vec::new();
+        let mut ontologies = Vec::new();
         for (name, write) in packages() {
             write(&engine).expect("a sample package writes");
+            let mut of = BTreeSet::new();
+            for reference in engine.named_under(&name).expect("its refs").refs {
+                let point = engine.referred(&reference).expect("a ref's point");
+                of.insert(
+                    engine
+                        .ontology(point)
+                        .expect("its run's ontology")
+                        .to_string(),
+                );
+            }
+            ontologies.extend(of);
             samples.push(name.to_string());
         }
         // Each arm's search reports the points it has generated as it goes.
@@ -770,8 +836,9 @@ impl Facts {
             .expect("the maze's showcase runs");
         Self {
             samples,
+            ontologies,
             proved: proved(),
-            model: model(&engine),
+            ontology: ontology(&engine),
             reserves: reserves(&engine),
             searched: searched(&engine, &maze, &forked),
             counterfactual: counterfactual(&engine),

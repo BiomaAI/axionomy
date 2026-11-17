@@ -1,5 +1,5 @@
 //! Axionomy, explained without sound: what it ships (a kernel, an engine
-//! and adapters), the kernel's accounts, rates and exchanges, what the
+//! and adapters), an ontology and the exchanges the kernel applies, what the
 //! engine gives an agent (value, objectives, counterfactuals, rollouts,
 //! search), training through the adapters, who can drive it, and why its
 //! runs can be trusted. Each scene is headed by the part of Axionomy it
@@ -11,7 +11,7 @@
 
 pub mod facts;
 
-use facts::{Ending, Facts, Holding, Law, Outcome};
+use facts::{Ending, Facts, Holding, Law, Members, Outcome};
 use fframes::{
     AnimateRuntimeInput, AudioMap, Color, Duration, FFramesContext, Frame, Overlap, Scene, Scenes,
     Svgr, Transform, Video,
@@ -221,14 +221,14 @@ impl Scene for IntroScene<'_> {
             (
                 "kernel",
                 "axionomy",
-                "accounts, assets, rates and atomic exchanges".to_owned(),
+                "ontologies, economies and atomic exchanges".to_owned(),
                 format!("specified in Lean, {} theorems proved", self.facts.proved),
             ),
             (
                 "engine",
                 "axionomy-engine",
                 "points and forks, objectives, searches, games and experiments".to_owned(),
-                "packages store a model's rates, strategies and experiments".to_owned(),
+                "packages store economies, strategies and experiments".to_owned(),
             ),
             (
                 "adapters",
@@ -255,7 +255,7 @@ impl Scene for IntroScene<'_> {
                 )
             })
             .collect();
-        let samples: Vec<Svgr> = wrap(self.facts.samples.iter().cloned(), 72)
+        let samples: Vec<Svgr> = wrap(self.facts.ontologies.iter().cloned(), 72)
             .into_iter()
             .enumerate()
             .map(|(index, line)| {
@@ -268,11 +268,12 @@ impl Scene for IntroScene<'_> {
                 {bands}
                 <g opacity={enter(&frame, SAMPLES_AT + 0.3)}>
                     <line x1={LEFT} y1="652" x2={RIGHT} y2="652" stroke={LINE} stroke-width="2" stroke-dasharray="10 8" />
-                    <text x={LEFT + 32.0} y="698" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{format!("{} sample packages", self.facts.samples.len())}</text>
+                    <text x={LEFT + 32.0} y="698" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{format!("{} sample packages,", self.facts.samples.len())}</text>
+                    <text x={LEFT + 32.0} y="734" font-family={MONO} font-weight={WEIGHT} font-size="24" fill={MUTED}>{format!("{} ontologies", self.facts.ontologies.len())}</text>
                     {samples}
                 </g>
                 {caption(&frame, &["Axionomy is an economy engine: a kernel that applies", "exchanges, and an engine that simulates them."], 0.4, SAMPLES_AT)}
-                {caption(&frame, &["The sample packages are models built with it,", "used in this video to show what it can do."], SAMPLES_AT + 0.3, INTRO_SECONDS + 1.0)}
+                {caption(&frame, &["The samples define ontologies and experiments", "run on them, used in this video as examples."], SAMPLES_AT + 0.3, INTRO_SECONDS + 1.0)}
             </g>
         )
     }
@@ -303,13 +304,13 @@ fn tag<'a>(
 }
 
 // ---------------------------------------------------------------------------
-// The model: accounts, a rate, an exchange, a refusal.
+// An ontology: accounts, assets, a rate and its roles; an exchange; a refusal.
 
-/// The times the model scene's phases start at.
-const RATE_AT: f32 = 4.0;
-const APPLY_AT: f32 = 8.2;
-const REFUSE_AT: f32 = 12.4;
-const MODEL_SECONDS: f32 = 16.8;
+/// The times the ontology scene's phases start at.
+const RATE_AT: f32 = 5.0;
+const APPLY_AT: f32 = 9.2;
+const REFUSE_AT: f32 = 13.4;
+const ONTOLOGY_SECONDS: f32 = 17.8;
 
 /// When the exchange's amounts land, and when the refusal's row comes in.
 fn applied(frame: &Frame) -> f32 {
@@ -596,14 +597,73 @@ fn card<'a>(
     )
 }
 
+/// `items` joined by commas, as many as fit in `width` characters, and an
+/// ellipsis for the rest.
+fn fit(items: &[String], width: usize) -> String {
+    let mut line = String::new();
+    for (index, item) in items.iter().enumerate() {
+        let joined = if line.is_empty() { 0 } else { 2 };
+        let more = if index + 1 < items.len() { 3 } else { 0 };
+        if line.chars().count() + joined + item.chars().count() + more > width {
+            line.push_str(if line.is_empty() {
+                "\u{2026}"
+            } else {
+                ", \u{2026}"
+            });
+            break;
+        }
+        if joined > 0 {
+            line.push_str(", ");
+        }
+        line.push_str(item);
+    }
+    line
+}
+
+/// The ontology's card: what the economy names of each of its four kinds,
+/// how many, and the first that fit.
+fn kinds<'a>(frame: &Frame, name: &str, members: &Members, from: f32, to: f32) -> Svgr<'a> {
+    let size = 24.0;
+    let width = ((CARD_WIDTH - 56.0) / (size * ADVANCE)) as usize;
+    let rows: Vec<Svgr> = [
+        ("accounts", &members.accounts),
+        ("assets", &members.assets),
+        ("rates", &members.rates),
+        ("roles", &members.roles),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (kind, names))| {
+        let y = PANEL_TOP + 118.0 + index as f32 * 92.0;
+        fframes::svgr!(
+            <g opacity={enter(frame, from + 0.3 + index as f32 * 0.25)}>
+                <text x={CARD_X + 28.0} y={y} font-family={MONO} font-weight={WEIGHT} font-size={size} fill={MUTED}>{kind}</text>
+                <text x={CARD_X + CARD_WIDTH - 28.0} y={y} text-anchor="end" font-family={MONO} font-weight={WEIGHT} font-size={size} fill={MUTED}>{names.len().to_string()}</text>
+                <text x={CARD_X + 28.0} y={y + 36.0} font-family={MONO} font-weight={WEIGHT} font-size={size} fill={TEXT}>{fit(names, width)}</text>
+            </g>
+        )
+    })
+    .collect();
+    let label = "ontology ";
+    fframes::svgr!(
+        <g opacity={shown(frame, from, to)} transform={Transform::translate(0.0, rise(frame, from, 30.0))}>
+            <rect x={CARD_X} y={PANEL_TOP} width={CARD_WIDTH} height="458" rx="14" fill={SURFACE} stroke={LINE} stroke-width="2" />
+            <text x={CARD_X + 28.0} y={PANEL_TOP + 52.0} font-family={MONO} font-weight={WEIGHT} font-size="28" fill={MUTED}>{label}</text>
+            <text x={CARD_X + 28.0 + mono_width(label, 28.0)} y={PANEL_TOP + 52.0} font-family={MONO} font-weight={WEIGHT} font-size="28" fill={TEXT}>{name.to_owned()}</text>
+            <line x1={CARD_X + 28.0} y1={PANEL_TOP + 70.0} x2={CARD_X + CARD_WIDTH - 28.0} y2={PANEL_TOP + 70.0} stroke={LINE} stroke-width="2" />
+            {rows}
+        </g>
+    )
+}
+
 #[derive(Debug)]
-struct ModelScene<'a> {
+struct OntologyScene<'a> {
     facts: &'a Facts,
 }
 
-impl Scene for ModelScene<'_> {
+impl Scene for OntologyScene<'_> {
     fn duration(&self) -> Duration<'_> {
-        Duration::Seconds(MODEL_SECONDS)
+        Duration::Seconds(ONTOLOGY_SECONDS)
     }
 
     fn overlap(&self) -> Overlap {
@@ -611,11 +671,11 @@ impl Scene for ModelScene<'_> {
     }
 
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let model = &self.facts.model;
-        let panels: Vec<(f32, &str, Vec<Row>)> = model
+        let ontology = &self.facts.ontology;
+        let panels: Vec<(f32, &str, Vec<Row>)> = ontology
             .before
             .iter()
-            .zip(&model.after)
+            .zip(&ontology.after)
             .enumerate()
             .map(|(index, (before, after))| {
                 let x = if index == 0 {
@@ -626,7 +686,7 @@ impl Scene for ModelScene<'_> {
                 (
                     x,
                     before.account.as_str(),
-                    rows(before, after, &model.shortfalls),
+                    rows(before, after, &ontology.shortfalls),
                 )
             })
             .collect();
@@ -639,7 +699,7 @@ impl Scene for ModelScene<'_> {
             .enumerate()
             .map(|(index, (x, name, rows))| panel(&frame, *x, name, rows, 0.3 + index as f32 * 0.4))
             .collect();
-        let refusal = model
+        let refusal = ontology
             .shortfalls
             .iter()
             .map(|short| {
@@ -653,20 +713,21 @@ impl Scene for ModelScene<'_> {
         let point = if frame.seconds() < APPLY_AT + 0.6 {
             "at its start".to_owned()
         } else {
-            format!("after {}", model.rate.rate)
+            format!("after {}", ontology.rate.rate)
         };
         fframes::svgr!(
-            <g opacity={outro(&frame, MODEL_SECONDS + CROSS)}>
-                {heading(&frame, "kernel", "Accounts, rates and exchanges", vec![format!("sample \u{b7} {}", model.point), point])}
+            <g opacity={outro(&frame, ONTOLOGY_SECONDS + CROSS)}>
+                {heading(&frame, "kernel", "An ontology and its exchanges", vec![format!("sample \u{b7} {}", ontology.point), point])}
                 {drawn}
-                {card(&frame, &model.rate, RATE_AT, REFUSE_AT, &linked, Some((APPLY_AT, APPLY_AT + 2.4)))}
-                {card(&frame, &model.refused, REFUSE_AT + 0.3, MODEL_SECONDS + 1.0, &linked, None)}
+                {kinds(&frame, &ontology.name, &ontology.members, 1.0, RATE_AT)}
+                {card(&frame, &ontology.rate, RATE_AT, REFUSE_AT, &linked, Some((APPLY_AT, APPLY_AT + 2.4)))}
+                {card(&frame, &ontology.refused, REFUSE_AT + 0.3, ONTOLOGY_SECONDS + 1.0, &linked, None)}
                 <text x={CARD_X} y="860" font-family={MONO} font-weight={WEIGHT} font-size="30" fill={CONSUME}
                     opacity={enter(&frame, REFUSE_AT + 1.6)}>{refusal}</text>
-                {caption(&frame, &["An Axionomy economy is accounts", "and the assets they hold."], 0.5, RATE_AT)}
+                {caption(&frame, &["An ontology defines the accounts, assets, rates", "and roles an economy can have."], 0.5, RATE_AT)}
                 {caption(&frame, &["A rate says what each role consumes,", "preserves and produces."], RATE_AT + 0.3, APPLY_AT)}
                 {caption(&frame, &["An exchange applies the rate to accounts", "as one atomic transaction."], APPLY_AT + 0.3, REFUSE_AT)}
-                {caption(&frame, &["When an exchange can't apply,", "the kernel reports the shortfall."], REFUSE_AT + 0.3, MODEL_SECONDS + 1.0)}
+                {caption(&frame, &["When an exchange can't apply,", "the kernel reports the shortfall."], REFUSE_AT + 0.3, ONTOLOGY_SECONDS + 1.0)}
             </g>
         )
     }
@@ -1666,7 +1727,7 @@ impl Scene for EndScene {
 
 pub struct AxionomyVideo<'a> {
     intro: IntroScene<'a>,
-    model: ModelScene<'a>,
+    ontology: OntologyScene<'a>,
     value: ValueScene<'a>,
     utility: UtilityScene<'a>,
     counterfactual: CounterfactualScene<'a>,
@@ -1682,7 +1743,7 @@ impl<'a> AxionomyVideo<'a> {
     pub fn new(facts: &'a Facts) -> Self {
         Self {
             intro: IntroScene { facts },
-            model: ModelScene { facts },
+            ontology: OntologyScene { facts },
             value: ValueScene { facts },
             utility: UtilityScene { facts },
             counterfactual: CounterfactualScene { facts },
@@ -1719,7 +1780,7 @@ impl Video for AxionomyVideo<'_> {
     fn define_scenes(&self) -> Scenes<'_> {
         Scenes::from(vec![
             &self.intro as &dyn Scene,
-            &self.model,
+            &self.ontology,
             &self.value,
             &self.utility,
             &self.counterfactual,
