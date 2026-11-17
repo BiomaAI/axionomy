@@ -28,7 +28,7 @@ gives them the simulation and the utility:
 - objectives, to reward;
 - an RL environment over any experiment.
 
-<video src="https://github.com/user-attachments/assets/e4520403-426c-4d78-9285-d7fdb45520c9" controls muted playsinline width="100%"></video>
+<https://github.com/user-attachments/assets/e4520403-426c-4d78-9285-d7fdb45520c9>
 
 <p align="center"><sub>Axionomy in under two minutes, silent and captioned. Every number on screen is read from the engine when the video is made; <a href="video/README.md">video/</a> renders it.</sub></p>
 
