@@ -124,6 +124,7 @@ models into one-way workspace dependencies:
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
 | `axionomy-engine` | The work every front end shares: economies as points of runs recorded in a store, refs, scripts, strategies, experiments, views and packages |
+| `axionomy-rl` | An experiment as an environment a learner acts in: a fixed list of exchanges, which of them apply, balances to observe and rewards read from the objectives; Burn's `Environment` and a masked DQN are in `crates/axionomy-burn`, outside the workspace |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 transport over the engine, with stored, steppable, diffable economies, refs, packages and experiments, and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts, and the labels, formats, scene helpers and Pareto front views problems present themselves with |
 | `axionomy-studio-api` | What Studio asks of an engine, written once over `axionomy-engine` with its wire types |
@@ -140,6 +141,7 @@ axionomy-tree          (no workspace dependencies)
 axionomy-store ───────→ axionomy-tree + axionomy
 axionomy-view ────────→ axionomy-search + axionomy
 axionomy-engine ──────→ axionomy-view + axionomy-store + axionomy-search
+axionomy-rl ──────────→ axionomy-engine
 axionomy-problems ────→ axionomy-search (+ axionomy-engine for its packages)
 axionomy-studio-api ──→ axionomy-engine
 axionomy-mcp ─────────→ axionomy-engine + axionomy-search

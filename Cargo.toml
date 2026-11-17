@@ -9,6 +9,7 @@ members = [
     "crates/axionomy-tree",
     "crates/axionomy-store",
     "crates/axionomy-engine",
+    "crates/axionomy-rl",
     "crates/axionomy-mcp",
     "crates/axionomy-view",
     "crates/axionomy-cli",
@@ -16,6 +17,8 @@ members = [
     "crates/axionomy-studio-server",
     "crates/axionomy-studio-wasm",
 ]
+# Builds Burn, so it is its own workspace: nothing here pays for it.
+exclude = ["crates/axionomy-burn"]
 resolver = "3"
 
 [workspace.package]

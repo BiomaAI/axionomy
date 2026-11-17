@@ -13,7 +13,7 @@ mod view;
 
 pub use definitions::{
     CandidateSet, CandidatesPath, ExperimentPath, GoalPath, Measure, Objective, ObjectivePath,
-    ScriptCall, ScriptFunction, StrategyPath, offered,
+    ScriptCall, ScriptFunction, StrategyPath, instances, offered,
 };
 pub use divergence::{AccountDifference, Aligned, BalanceDifference, Divergence, Side, Tip};
 pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Playing, Results, Trial};

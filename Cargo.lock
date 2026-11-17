@@ -524,6 +524,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-rl"
+version = "0.3.0"
+dependencies = [
+ "axionomy",
+ "axionomy-engine",
+ "axionomy-problems",
+ "axionomy-search",
+ "axionomy-store",
+ "thiserror",
+]
+
+[[package]]
 name = "axionomy-search"
 version = "0.3.0"
 dependencies = [

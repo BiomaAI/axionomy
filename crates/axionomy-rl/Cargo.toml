@@ -1,0 +1,20 @@
+[package]
+name = "axionomy-rl"
+description = "An Axionomy experiment as an environment a learner acts in: a fixed list of exchanges, which of them apply, balances to observe and rewards read from the economy"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axionomy.workspace = true
+axionomy-engine.workspace = true
+axionomy-search.workspace = true
+axionomy-store.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+axionomy-problems = { workspace = true, features = ["packages"] }

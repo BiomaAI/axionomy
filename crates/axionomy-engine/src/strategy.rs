@@ -682,7 +682,8 @@ impl Engine {
         }
     }
 
-    fn candidate_set(&self, path: &CandidatesPath) -> Result<CandidateSet, EngineError> {
+    /// The candidate set kept at `path`.
+    pub fn candidate_set(&self, path: &CandidatesPath) -> Result<CandidateSet, EngineError> {
         self.defined(path)
     }
 

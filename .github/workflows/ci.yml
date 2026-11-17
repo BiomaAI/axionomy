@@ -72,6 +72,28 @@ jobs:
           UV_PYTHON_PREFERENCE: only-system
         run: uv run --locked pytest
 
+  # Burn is built only here: the learning adapter is its own workspace, so
+  # the rust job and everyone else never pay for it.
+  burn:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/axionomy-burn
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/axionomy-burn
+      - run: cargo fmt -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # Burn trains far faster in a release build.
+      - run: cargo test --release
+      - run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+
   studio:
     runs-on: ubuntu-latest
     steps:

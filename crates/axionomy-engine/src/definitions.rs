@@ -207,7 +207,7 @@ pub(crate) fn applying(economy: &paths::Economy, under: Option<&RatePath>) -> Ve
 
 /// Every instance of the rates written under `under`, or of every rate, in
 /// the rates' order and each rate's instances in theirs.
-pub(crate) fn instances<'a>(
+pub fn instances<'a>(
     economy: &'a paths::Economy,
     under: Option<&'a RatePath>,
 ) -> impl Iterator<Item = RatePath> + 'a {

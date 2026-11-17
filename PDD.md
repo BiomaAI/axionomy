@@ -1103,11 +1103,16 @@ changes terminal truth, payment, resource accounting, or transition validity,
 it must be represented in the economy rather than supplied only by the
 adapter.
 
-Today an external learner gets transitions by replaying a trace
-(`rl::replay_transitions`). Planned (D-046): each step a ref is moved over is
-delivered as a frame with the point it led to, the problem's objectives there
-and whether its goal holds, which is what `RlTransition` carries, so a learner
-receives transitions as they happen.
+`axionomy-rl` is that adapter (D-062). A task fixes an experiment's
+start, goal and a candidate set's exchanges as a learner's actions; an
+observation is the balances those exchanges and the start touch, and which
+actions the candidate set offers; a step's reward is the change in the
+objectives the learner weighs, in each objective's direction, and a reward
+for reaching the goal. Every step is an `apply` at the episode's point, so
+an episode is a recorded run like any other, and a learner never holds a
+mutable economy of its own. `crates/axionomy-burn` puts a task behind Burn's
+`Environment` and trains a masked DQN on it; it is its own workspace, so
+nothing else builds Burn.
 
 ### 7.6 Stateless remote execution
 
@@ -2512,6 +2517,23 @@ What each instance fixes and each free role takes is listed once per rate
 book. The marketplace's Micro settlements are the engine's list, and its
 market's script keeps only what it chooses: a dispatch or delivery first,
 alone, and the clock advanced only to the next event.
+
+### D-062: A learner acts in an experiment through the engine
+
+Decided with the user. Learning stays with the frameworks that do it; what
+Axionomy owes them is an environment whose actions, observations and
+rewards are the economy's. `axionomy-rl` reads them from an experiment: its
+start and goal, a candidate set's exchanges as a fixed list of actions (a
+listed set's exchanges, or one per instance of rates that fix every role; a
+scripted set has no fixed list and is refused), the balances the start and
+those exchanges touch as observations, as `f32` beside the exact
+quantities, and which actions the set offers as the mask. The reward is the
+change in the objectives the learner weighs, in each one's direction, and a
+reward for the step that reaches the goal: the weights are the learner's
+policy, the balances they read are not. Each step is an `apply`, so an
+episode is a recorded run. The crate depends on no learning framework; the
+Burn adapter and its DQN live in `crates/axionomy-burn`, excluded from the
+workspace so Burn is built only where it is used.
 
 ## 16. Success criteria
 

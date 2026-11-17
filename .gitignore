@@ -12,3 +12,4 @@ studio/openapi.json
 studio/src/generated/api.d.ts
 studio/public/packages/
 verification/lean/.lake/
+/crates/axionomy-burn/target

@@ -1,0 +1,27 @@
+# Burn takes minutes and hundreds of crates to build, so this crate is its
+# own workspace: the root workspace excludes it, and only its own CI job and
+# whoever trains with it build Burn.
+[workspace]
+
+[package]
+name = "axionomy-burn"
+description = "Axionomy experiments as Burn reinforcement-learning environments, and a DQN that only chooses offered exchanges"
+readme = "README.md"
+version = "0.3.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.99"
+publish = false
+
+[dependencies]
+axionomy-rl = { path = "../axionomy-rl" }
+axionomy-store = { path = "../axionomy-store" }
+burn = { version = "=0.22.1", default-features = false, features = ["std", "train", "rl", "flex", "autodiff"] }
+rand = { version = "0.10.4", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+axionomy = { path = "../.." }
+axionomy-engine = { path = "../axionomy-engine" }
+axionomy-problems = { path = "../axionomy-problems", features = ["packages"] }
