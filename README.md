@@ -28,13 +28,9 @@ gives them the simulation and the utility:
 - objectives, to reward;
 - an RL environment over any experiment.
 
-[![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments)
+<video src="https://github.com/user-attachments/assets/e4520403-426c-4d78-9285-d7fdb45520c9" controls muted playsinline width="100%"></video>
 
-<p align="center"><sub>The Autonomous Work League's season, replayed in Studio. <a href="https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments">Open it in the live Studio</a>.</sub></p>
-
-A silent, captioned video tells this story in under two minutes. Every number
-on screen is read from the engine when the video is made. [video/](video/README.md)
-renders it.
+<p align="center"><sub>Axionomy in under two minutes, silent and captioned. Every number on screen is read from the engine when the video is made; <a href="video/README.md">video/</a> renders it.</sub></p>
 
 ## What Axionomy ships
 
