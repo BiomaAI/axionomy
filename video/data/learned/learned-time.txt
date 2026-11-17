@@ -1,0 +1,4 @@
+take-protection/start
+move/start/detour/8/false
+protected-move/detour/exit/7
+finish

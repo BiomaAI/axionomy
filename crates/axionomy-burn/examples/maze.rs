@@ -3,6 +3,10 @@
 //! experiment's searches find.
 //!
 //! `cargo run --release --example maze`, a few minutes for each weighing.
+//! Given a directory, `-- <dir>`, it also writes there what each weighing
+//! learned: `learned-<weighing>.txt`, the route's exchanges by rate, one a
+//! line, and `rewards-<weighing>.txt`, what each training episode earned, one
+//! a line, in order.
 
 use axionomy::path;
 use axionomy_burn::{Settings, play, train};
@@ -17,6 +21,7 @@ use std::sync::Arc;
 const MAX_STEPS: usize = 40;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let out = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     let engine = Engine::new(Store::memory()?)?;
     maze::package::write(&engine)?;
     let experiment: ExperimentPath = path!("maze/showcase");
@@ -50,6 +55,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             reward,
         )?);
         let artifacts = std::env::temp_dir().join(format!("axionomy-burn-maze-{name}"));
+        // Burn adds to the logs it finds, so each run starts without them.
+        if artifacts.exists() {
+            std::fs::remove_dir_all(&artifacts)?;
+        }
         let settings = Settings {
             steps: 150_000,
             epsilon_decay: 50_000.0,
@@ -80,6 +89,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ""
             },
         );
+        if let Some(out) = &out {
+            let route: String = played
+                .actions
+                .iter()
+                .map(|&action| format!("{}\n", task.actions()[action].rate()))
+                .collect();
+            std::fs::write(out.join(format!("learned-{name}.txt")), route)?;
+            // Burn logs each episode as `reward,epoch`.
+            let log = std::fs::read_to_string(artifacts.join("train/epoch-1/Cum._Reward.log"))?;
+            let rewards: String = log
+                .lines()
+                .filter_map(|line| line.split(',').next())
+                .map(|reward| format!("{reward}\n"))
+                .collect();
+            std::fs::write(out.join(format!("rewards-{name}.txt")), rewards)?;
+        }
     }
     Ok(())
 }

@@ -21,6 +21,10 @@ each learned route beside the routes the experiment's searches find:
 cargo run --release --example maze
 ```
 
+Given a directory (`-- <dir>`), it also writes each learned route, one rate a
+line, and each training episode's reward there; the video in `video/` draws
+them.
+
 What it found, at 150,000 steps for each weighing and four seeds, against
 the searches' routes (energy, time): weighing time, the learner took the
 (15, 4) route the Pareto search ranked by time finds, every time. Weighing

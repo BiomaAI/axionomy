@@ -17,8 +17,9 @@ members = [
     "crates/axionomy-studio-server",
     "crates/axionomy-studio-wasm",
 ]
-# Builds Burn, so it is its own workspace: nothing here pays for it.
-exclude = ["crates/axionomy-burn"]
+# Each builds a heavy toolkit (Burn; Skia and ffmpeg), so each is its own
+# workspace: nothing here pays for them.
+exclude = ["crates/axionomy-burn", "video"]
 resolver = "3"
 
 [workspace.package]

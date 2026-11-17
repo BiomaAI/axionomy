@@ -1,0 +1,12 @@
+move/start/atrium/1/false
+move/atrium/library/1/false
+move/library/key-room/1/false
+take-key/key-room
+move/key-room/library/1/false
+divert-power/library/true
+move/library/gallery/1/false
+move/gallery/gate/1/false
+unlock-door/gate
+move/gate/vault/1/true
+move/vault/exit/1/false
+finish
