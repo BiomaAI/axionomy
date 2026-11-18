@@ -470,6 +470,7 @@ def models : Array Json := #[
   model "derived-from-listed-values" [law "go/{to}" { blank with
     variables := [values "to" ["x"]], derived := [⟨"next", .binary .add (.var "to") (.constant 1)⟩] }],
   model "repeated-variable" [law "swap/{a}/{a}" { blank with variables := [values "a" ["x", "y"]] }],
+  model "repeated-declaration" [law "move/{x}" { blank with variables := [range "x" 1 2, range "x" 1 2] }],
   model "undeclared-variable" [law "move/{to}" { blank with
     variables := [values "to" ["x"]], produce := [(0, entries [("at/{from}", 1)])] }],
   model "unread-variable" [law "move/{to}" { blank with variables := [values "to" ["x"], values "from" ["y"]] }],

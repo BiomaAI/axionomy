@@ -557,12 +557,14 @@ fn rate_issues<O: Ontology>(
         let declared: Vec<&VariablePath> = rate.variables().iter().map(Variable::name).collect();
         let issue = |make: fn(Pattern<O::Rate>, VariablePath) -> ModelIssue<O>,
                      name: &VariablePath| { make(key.clone(), name.clone()) };
-        for (index, name) in read.iter().enumerate() {
-            if read[..index].contains(name) {
-                issues.push(issue(
-                    |rate, variable| ModelIssue::RepeatedVariable { rate, variable },
-                    name,
-                ));
+        for names in [&read, &declared] {
+            for (index, name) in names.iter().enumerate() {
+                if names[..index].contains(name) {
+                    issues.push(issue(
+                        |rate, variable| ModelIssue::RepeatedVariable { rate, variable },
+                        name,
+                    ));
+                }
             }
         }
         // A value a relation gives and a derived value are each named

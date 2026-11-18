@@ -437,8 +437,9 @@ def Law.issues (constants : Arguments) (law : Law Role) : List ModelIssue :=
   let given := law.schema.relations.flatMap (·.gives)
   let derived := law.schema.derived.map (·.name)
   let fixed := constants.map Prod.fst
-  let repeated := (read.zipIdx.filter fun (name, index) => name ∈ read.take index).map
-    fun (name, _) => ModelIssue.repeatedVariable law.id name
+  let repeated := [read, declared].flatMap fun names =>
+    (names.zipIdx.filter fun (name, index) => name ∈ names.take index).map
+      fun (name, _) => ModelIssue.repeatedVariable law.id name
   -- A value a relation gives and a derived value are each named once, and
   -- never as a variable is; no variable, value given or derived value is
   -- named as a constant.
