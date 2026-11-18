@@ -38,6 +38,10 @@ implementation itself is tested, not proved.
 | History | `Execution`, `Replay`, `Observations`, `Inspection` | Ordered execution and replay compose deterministically; a replay applies its whole trace or none of it and names the action that failed; read-only queries cannot mutate |
 | Divergence | `Divergence`, `DivergenceKernel`, `DivergenceLifecycle` | Two successful public replays, including opening, closing and reopening accounts, differ in per-asset supply exactly by what their receipts made, produced less consumed; shared steps make none of the difference |
 
+For named rate instances, `DivergenceParametric` proves that resolving the law
+preserves its opening roles, and that actual supply changes exactly by the
+receipt deltas for both a single exchange and a successful replay.
+
 Lifecycle accounting starts from `DivergenceLifecycle.Sound`: canonical
 baskets, distinct account identifiers, and distinct opening roles in each
 rate. These are representation invariants enforced by Rust's baskets, account

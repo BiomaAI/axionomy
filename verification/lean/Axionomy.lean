@@ -31,6 +31,7 @@ import Axionomy.Replay
 import Axionomy.Divergence
 import Axionomy.DivergenceKernel
 import Axionomy.DivergenceLifecycle
+import Axionomy.DivergenceParametric
 import Axionomy.RoundingDiscipline
 import Axionomy.State
 import Axionomy.Transaction
