@@ -927,9 +927,16 @@ impl Engine {
         if failure.borrow().is_some() {
             return Vec::new();
         }
-        let proposed = match set.offer(seen.view.economy()) {
-            Offer::Listed(exchanges) | Offer::Applying(exchanges) => Ok(exchanges),
-            Offer::Script(call) => self
+        let proposed = match set {
+            CandidateSet::Listed(exchanges) => Ok(exchanges.clone()),
+            // Bind free roles from observed holdings. A fixed role may refer
+            // to a hidden account; only the sampled world decides legality.
+            CandidateSet::Instances { under } => {
+                Ok(crate::offered(seen.view.economy(), under.as_ref())
+                    .map(std::borrow::Cow::into_owned)
+                    .collect())
+            }
+            CandidateSet::Script(call) => self
                 .call(&call.script, call.function.as_str(), (seen.view.clone(),))
                 .and_then(crate::exchanges_of),
         };
@@ -1776,4 +1783,56 @@ fn proposal(proposed: rhai::Dynamic) -> Result<Option<paths::Exchange>, EngineEr
             expected: "an exchange or nothing",
             found: found.to_owned(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axionomy::{Pattern, basket, path};
+    use axionomy_store::Store;
+
+    #[test]
+    fn indistinguishable_holdings_propose_the_same_instances() {
+        let engine = Engine::new(Store::memory().unwrap()).unwrap();
+        let script = path!("observer");
+        engine
+            .keep_script(
+                &script,
+                r#"
+            fn see(state, player) { state.view(["player"]).view(["player", "nature"]) }
+        "#,
+            )
+            .unwrap();
+        let observe = ScriptCall::new(script, "see".parse().unwrap());
+        let mut candidates = Vec::new();
+        for hidden in [0, 1] {
+            let pay = paths::Rate::new().consume(path!("from"), basket([(path!("coin"), 1)]));
+            let economy = paths::EconomyBuilder::new()
+                .account(path!("player"), basket([(path!("coin"), 1)]).into())
+                .account(path!("nature"), basket([(path!("coin"), hidden)]).into())
+                .rate(path!("spend"), pay.clone())
+                .rate(
+                    path!("draw"),
+                    pay.account(path!("from"), Pattern::literal(path!("nature"))),
+                )
+                .build()
+                .unwrap();
+            let seen = engine.seen_by(&observe, &economy, 0).unwrap();
+            assert!(seen.view.economy().account(&path!("nature")).is_none());
+            let proposed = engine.proposed(
+                &CandidateSet::Instances { under: None },
+                &seen,
+                &RefCell::new(None),
+            );
+            assert_eq!(proposed.len(), 2);
+            assert_eq!(proposed[0].rate(), &path!("draw"));
+            assert_eq!(economy.is_applicable(&proposed[0]), hidden == 1);
+            assert_eq!(
+                proposed[1].bindings().get(&path!("from")),
+                Some(&path!("player"))
+            );
+            candidates.push(proposed);
+        }
+        assert_eq!(candidates[0], candidates[1]);
+    }
 }

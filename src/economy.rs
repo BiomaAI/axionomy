@@ -2180,6 +2180,20 @@ impl<O: Ontology> ObservationKey<O> {
 }
 
 impl<O: Ontology> EconomicView<'_, O> {
+    /// An independent economy containing the visible accounts and the shared
+    /// rate book and invariants. Applicability here describes this projection.
+    pub fn snapshot(&self) -> Economy<O> {
+        let accounts = self
+            .visible
+            .iter()
+            .filter_map(|id| Some((id.clone(), Arc::clone(self.economy.accounts.get(id)?))));
+        Economy {
+            accounts: Accounts::new(accounts),
+            rates: Arc::clone(&self.economy.rates),
+            invariants: Arc::clone(&self.economy.invariants),
+        }
+    }
+
     pub fn account(&self, id: &O::Account) -> Option<&Account<O::Asset>> {
         if self.visible.contains(id) {
             self.economy.account(id)

@@ -785,12 +785,13 @@ fn states(rhai: &mut rhai::Engine) {
         .register_fn(
             "view",
             |state: &mut ScriptState, accounts: Array| -> Result<ScriptState, Failure> {
-                let visible = accounts
+                let mut visible = accounts
                     .into_iter()
                     .map(|account| parsed(&text(account)?))
                     .collect::<Result<BTreeSet<_>, _>>()?;
+                visible.retain(|account| state.sees(account));
                 Ok(ScriptState {
-                    economy: state.economy.clone(),
+                    economy: state.economy.view(visible.iter().cloned()).snapshot(),
                     visible: Some(Arc::new(visible)),
                 })
             },
