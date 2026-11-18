@@ -139,6 +139,18 @@ pub enum Domain {
 }
 
 impl Domain {
+    // A complete u64 domain has 2^64 elements; the index one past its
+    // last element must also be representable.
+    pub(crate) fn at(&self, index: u128) -> Option<Segment> {
+        match self {
+            Self::Range { first, last } => {
+                let value = first.checked_add(u64::try_from(index).ok()?)?;
+                (value <= *last).then(|| value.into())
+            }
+            Self::Values(values) => values.get(usize::try_from(index).ok()?).cloned(),
+        }
+    }
+
     pub fn contains(&self, value: &Segment) -> bool {
         match self {
             Self::Range { first, last } => value

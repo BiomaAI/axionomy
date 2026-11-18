@@ -59,23 +59,18 @@ where
     {
         let mut schema = Self::new();
         for asset in assets {
-            match schema.definitions.get(asset.id()) {
-                None => {
-                    schema
-                        .definitions
-                        .insert(asset.id().clone(), asset.definition().clone());
-                }
-                Some(existing) if existing == asset.definition() => {}
-                Some(existing) => {
-                    return Err(AssetSchemaError::ConflictingDefinition {
-                        id: asset.id().clone(),
-                        existing: existing.clone(),
-                        proposed: asset.definition().clone(),
-                    });
-                }
-            }
+            schema.include(asset)?;
         }
         Ok(schema)
+    }
+
+    fn include(&mut self, asset: &UnitAsset<Id>) -> Result<(), AssetSchemaError<Id>> {
+        if self.definitions.contains_key(asset.id()) {
+            return self.validate_asset(asset);
+        }
+        self.definitions
+            .insert(asset.id().clone(), asset.definition().clone());
+        Ok(())
     }
 
     /// Declares a countable asset with no physical dimension.
@@ -193,10 +188,7 @@ where
     where
         Id: Ord,
     {
-        for asset in economy.asset_keys() {
-            self.validate_asset(asset)?;
-        }
-        Ok(())
+        economy.try_visit_assets(|asset| self.validate_asset(asset))
     }
 
     /// Reconstructs and validates the complete schema embedded in an economy.
@@ -206,7 +198,9 @@ where
     where
         Id: Ord,
     {
-        Self::from_assets(economy.asset_keys())
+        let mut schema = Self::new();
+        economy.try_visit_assets(|asset| schema.include(asset))?;
+        Ok(schema)
     }
 
     pub fn build_economy<O: Ontology<Asset = UnitAsset<Id>>>(

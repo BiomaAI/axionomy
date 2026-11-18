@@ -971,12 +971,40 @@ impl<O: Ontology> Rate<O> {
     /// Every asset the rate touches or reads written out: those its
     /// variables name are its instances'.
     pub(crate) fn asset_keys(&self) -> BTreeSet<&O::Asset> {
+        self.asset_patterns()
+            .filter_map(Pattern::as_literal)
+            .collect()
+    }
+
+    pub(crate) fn asset_patterns(&self) -> impl Iterator<Item = &Pattern<O::Asset>> {
         [&self.consume, &self.produce, &self.preserve]
             .into_iter()
             .flat_map(BTreeMap::values)
             .flat_map(|basket| basket.iter().map(|(asset, _)| asset))
             .chain(self.computed_asset_keys())
-            .filter_map(Pattern::as_literal)
+    }
+
+    /// The identifier variables that determine this asset, tracing derived
+    /// values back through earlier derivations and relation keys.
+    pub(crate) fn asset_inputs<'a>(
+        &'a self,
+        asset: &'a Pattern<O::Asset>,
+    ) -> BTreeSet<&'a VariablePath> {
+        let mut names: BTreeSet<_> = asset.variables().collect();
+        for derived in self.derived.iter().rev() {
+            if names.remove(derived.name()) {
+                names.extend(derived.value().variables());
+            }
+        }
+        for relation in &self.relations {
+            if relation.gives().iter().any(|name| names.contains(name)) {
+                names.extend(relation.variables());
+            }
+        }
+        self.variables()
+            .iter()
+            .map(Variable::name)
+            .filter(|name| names.contains(name))
             .collect()
     }
 

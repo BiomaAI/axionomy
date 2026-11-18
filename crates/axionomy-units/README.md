@@ -73,7 +73,10 @@ kilogram, in whichever compatible unit the reader asks for.
 Use `define_discrete` for permissions, facts, and other atomically counted
 assets so measured and discrete values can share one `UnitAsset<Id>` basket.
 Use `AssetSchema::build_economy` and `validate_goal` to reject unknown or
-conflicting keys across the complete model.
+conflicting keys across the complete model. Validation resolves assets named
+by rate variables, relation rows, derived values and constants, including
+balances read in quantity expressions. Rates that vary only the participants
+or quantities need a single valid instance for each distinct asset assignment.
 
 `uom` stores values as exact `Rational64`, so one physical value lowers to at
 most `i64::MAX` atoms; decimal assets parse any amount below `2²⁵⁶` atoms. The

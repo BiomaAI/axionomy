@@ -758,10 +758,11 @@ fn rate_issues<O: Ontology>(
 /// A rate's variables' values in turn, the first declared outermost, never
 /// going on from values a relation or a distinct pair already refuses.
 struct Values<'a> {
-    domains: Vec<(VariablePath, Vec<crate::Segment>)>,
+    domains: Vec<&'a Variable>,
     /// What to check once the variable at each position has a value.
     checks: Vec<Vec<Check<'a>>>,
-    indices: Vec<usize>,
+    indices: Vec<u128>,
+    current: Vec<Segment>,
     depth: usize,
     done: bool,
 }
@@ -775,11 +776,8 @@ enum Check<'a> {
 }
 
 impl<'a> Values<'a> {
-    fn new<O: Ontology>(
-        rate: Option<&'a Rate<O>>,
-        domains: Vec<(VariablePath, Vec<crate::Segment>)>,
-    ) -> Self {
-        let position = |name: &VariablePath| domains.iter().position(|(other, _)| other == name);
+    fn new<O: Ontology>(rate: Option<&'a Rate<O>>, domains: Vec<&'a Variable>) -> Self {
+        let position = |name: &VariablePath| domains.iter().position(|v| v.name() == name);
         let mut checks: Vec<Vec<Check<'a>>> = domains.iter().map(|_| Vec::new()).collect();
         // A relation is checked at each of its variables, in declared order:
         // the values so far must begin one of its rows.
@@ -815,9 +813,10 @@ impl<'a> Values<'a> {
                 checks[left.max(right)].push(Check::Distinct(left, right));
             }
         }
-        let done = rate.is_none() || domains.iter().any(|(_, values)| values.is_empty());
+        let done = rate.is_none() || domains.iter().any(|v| v.domain().at(0).is_none());
         Self {
             indices: vec![0; domains.len()],
+            current: Vec::with_capacity(domains.len()),
             domains,
             checks,
             depth: 0,
@@ -825,8 +824,15 @@ impl<'a> Values<'a> {
         }
     }
 
-    fn value(&self, position: usize) -> &crate::Segment {
-        &self.domains[position].1[self.indices[position]]
+    /// After finding a witness, skip the other completions of this prefix.
+    fn skip_completions(&mut self, prefix: usize) {
+        if prefix == 0 {
+            self.done = true;
+        } else if prefix < self.domains.len() {
+            self.indices[prefix..].fill(0);
+            self.depth = prefix - 1;
+            self.indices[self.depth] += 1;
+        }
     }
 
     /// Whether the values up to `depth` pass what is checked there.
@@ -835,22 +841,19 @@ impl<'a> Values<'a> {
             Check::Related(positions, rows) => {
                 let values: Vec<&crate::Segment> = positions
                     .iter()
-                    .map(|&position| self.value(position))
+                    .map(|&position| &self.current[position])
                     .collect();
                 rows.contains(&values)
             }
-            Check::Distinct(left, right) => self.value(*left) != self.value(*right),
+            Check::Distinct(left, right) => self.current[*left] != self.current[*right],
         })
     }
 
     fn arguments(&self) -> Arguments {
-        (0..self.domains.len())
-            .map(|position| {
-                (
-                    self.domains[position].0.clone(),
-                    self.value(position).clone(),
-                )
-            })
+        self.domains
+            .iter()
+            .zip(&self.current)
+            .map(|(variable, value)| (variable.name().clone(), value.clone()))
             .collect()
     }
 }
@@ -868,7 +871,7 @@ impl Iterator for Values<'_> {
         }
         loop {
             let depth = self.depth;
-            if self.indices[depth] == self.domains[depth].1.len() {
+            let Some(value) = self.domains[depth].domain().at(self.indices[depth]) else {
                 if depth == 0 {
                     self.done = true;
                     return None;
@@ -876,7 +879,11 @@ impl Iterator for Values<'_> {
                 self.indices[depth] = 0;
                 self.depth -= 1;
                 self.indices[self.depth] += 1;
-            } else if !self.holds(depth) {
+                continue;
+            };
+            self.current.truncate(depth);
+            self.current.push(value);
+            if !self.holds(depth) {
                 self.indices[depth] += 1;
             } else if depth + 1 == self.domains.len() {
                 let found = self.arguments();
@@ -1165,14 +1172,7 @@ impl<O: Ontology> Economy<O> {
         key: &'a Pattern<O::Rate>,
     ) -> impl Iterator<Item = O::Rate> + 'a {
         let rate = self.rates.entries.get(key);
-        let domains: Vec<(VariablePath, Vec<crate::Segment>)> = rate
-            .map(|rate| {
-                rate.variables()
-                    .iter()
-                    .map(|variable| (variable.name().clone(), variable.domain().values()))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let domains = rate.into_iter().flat_map(Rate::variables).collect();
         let mut values = Values::new(rate, domains);
         std::iter::from_fn(move || {
             loop {
@@ -1464,6 +1464,49 @@ impl<O: Ontology> Economy<O> {
             .iter()
             .flat_map(|invariant| invariant.weights().map(|(asset, _)| asset));
         balances.chain(rates).chain(invariants).collect()
+    }
+
+    /// Visits every written asset and every asset a valid rate instance can
+    /// touch or read. Stops at the first visitor error. For each parameterized
+    /// asset, one valid instance per assignment of its inputs suffices; other
+    /// role, account and quantity parameters need only supply a witness.
+    /// Assets used in several places may be visited more than once.
+    pub fn try_visit_assets<E>(
+        &self,
+        mut visit: impl FnMut(&O::Asset) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for asset in self.asset_keys() {
+            visit(asset)?;
+        }
+        for (key, rate) in self.rates() {
+            let groups: BTreeSet<_> = rate
+                .asset_patterns()
+                .filter(|pattern| pattern.as_literal().is_none())
+                .map(|pattern| rate.asset_inputs(pattern))
+                .collect();
+            for inputs in groups {
+                let (mut prefix, rest): (Vec<_>, Vec<_>) = rate
+                    .variables()
+                    .iter()
+                    .partition(|variable| inputs.contains(variable.name()));
+                let count = prefix.len();
+                prefix.extend(rest);
+                let mut values = Values::new(Some(rate), prefix);
+                while let Some(arguments) = values.next() {
+                    let Ok(id) = key.instantiate(&arguments) else {
+                        continue;
+                    };
+                    let Ok(instance) = self.made_instance(&id, rate, arguments) else {
+                        continue;
+                    };
+                    for asset in instance.asset_keys() {
+                        visit(asset)?;
+                    }
+                    values.skip_completions(count);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Whether every required account exists and holds its required assets.

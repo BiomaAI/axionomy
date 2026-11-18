@@ -38,6 +38,7 @@ enum AccountId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
 enum RateId {
     Store,
+    Transfer(u64, u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, axionomy::Segments)]
@@ -54,6 +55,91 @@ impl axionomy::Ontology for Depot {
     type Asset = UnitAsset<AssetId>;
     type Rate = RateId;
     type Role = Role;
+}
+
+#[test]
+fn schema_checks_resolved_assets_in_effects_and_balance_reads() {
+    use axionomy::{QuantityExpression as Q, Relation, Variable};
+    let mut schema = AssetSchema::new();
+    let cents = schema.define_decimal(AssetId::Cargo, 2).unwrap();
+    let base = || {
+        EconomyBuilder::<Depot>::new()
+            .account(
+                AccountId::Depot,
+                Account::from(Basket::try_from_amounts([cents.asset().atoms(1)]).unwrap()),
+            )
+            .constant_value(path!("item"), "cargo".parse().unwrap())
+    };
+    let mint = Rate::new().produce_at(
+        Role::Depot,
+        [("decimal/3/{item}".parse().unwrap(), Quantity::new(1))],
+    );
+    let only_mint = EconomyBuilder::<Depot>::new()
+        .constant_value(path!("item"), "cargo".parse().unwrap())
+        .rate(RateId::Store, mint.clone())
+        .build()
+        .unwrap();
+    assert!(matches!(
+        AssetSchema::new().validate_economy(&only_mint),
+        Err(AssetSchemaError::UnknownAsset { id: AssetId::Cargo })
+    ));
+    assert_eq!(
+        AssetSchema::from_economy(&only_mint)
+            .unwrap()
+            .decimal(&AssetId::Cargo)
+            .unwrap()
+            .precision()
+            .decimals(),
+        3
+    );
+    assert!(matches!(
+        schema.build_economy(base().rate(RateId::Store, mint)),
+        Err(UnitModelBuildError::Schema(
+            AssetSchemaError::ConflictingDefinition {
+                id: AssetId::Cargo,
+                ..
+            }
+        ))
+    ));
+
+    // A relation gives a scale and a derived value shifts it. The unrelated
+    // serial number spans the whole u64 range, including its last value.
+    let family = |last| {
+        let rate = Rate::new()
+            .variable(Variable::range(path!("serial"), 0, u64::MAX))
+            .variable(Variable::range(path!("kind"), 0, last))
+            .distinct_variables(path!("serial"), path!("kind"))
+            .relation(Relation::giving(
+                [path!("kind")],
+                [path!("scale")],
+                [[0u64.into(), 1u64.into()], [1u64.into(), 2u64.into()]],
+            ))
+            .derive(
+                path!("precision"),
+                Q::variable(path!("scale")) + Q::constant(1),
+            )
+            .produce_computed(
+                Role::Depot,
+                cents.asset().clone(),
+                Q::balance_at(Role::Depot, "decimal/{precision}/{item}".parse().unwrap()),
+            );
+        base().rate_at("transfer/{serial}/{kind}".parse().unwrap(), rate)
+    };
+    let good = schema.build_economy(family(0)).unwrap();
+    assert_eq!(AssetSchema::from_economy(&good).unwrap().len(), 1);
+    let mixed = family(1).build().unwrap();
+    for result in [
+        schema.validate_economy(&mixed),
+        AssetSchema::from_economy(&mixed).map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(AssetSchemaError::ConflictingDefinition {
+                id: AssetId::Cargo,
+                ..
+            })
+        ));
+    }
 }
 
 #[test]
