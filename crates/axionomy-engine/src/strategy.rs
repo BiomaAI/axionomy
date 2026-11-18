@@ -177,8 +177,9 @@ pub enum Chooser {
     /// itself where it sees everything. States a player sees alike are one
     /// node of the tree, and the candidate set, `fn(view)`, and `rollout`,
     /// `fn(view, candidates, random)`, read only that view, the rollout's
-    /// random drawing the search's own tickets; the candidates that apply
-    /// are reconsidered in each world searched, and the one chosen is
+    /// random drawing the search's own tickets. A rollout ends at its cutoff
+    /// estimate if the sampled world refuses its choice. Applicable tree
+    /// edges are reconsidered in each world searched, and the one chosen is
     /// checked against the real economy. `chance`, `fn(state)`, gives
     /// Nature's weighted outcomes, `[exchange, weight]` pairs, where Nature
     /// draws, which the tree draws by weight.

@@ -123,7 +123,7 @@ pub type IsmctsAdvanceResult<O> =
     Result<AdvanceReport<IsmctsProgress, TreeStatus>, TreeSearchError<O>>;
 
 /// Random rollout selection that can inspect only the information state and
-/// the already filtered concrete actions.
+/// the concrete actions proposed from that observation.
 pub fn random_action<Key, Action>(
     _: &InformationState<Key>,
     actions: &[Action],
@@ -529,23 +529,27 @@ where
         }
 
         let outcomes = chance(&world);
-        let action = if outcomes.is_empty() {
+        if outcomes.is_empty() {
             let current = information(&world);
             validate_actor(current.actor(), players)?;
-            let actions = applicable_actions(source, &current, &world);
+            let actions = unique_actions(collect_actions(source, &current));
             if actions.is_empty() {
                 return validate_values(cutoff(&world), players);
             }
             let Some(action) = rollout_policy(&current, &actions, random) else {
                 return validate_values(cutoff(&world), players);
             };
-            action
+            // A policy gets the same menu in indistinguishable worlds. If
+            // this sampled world refuses its choice, value the current state.
+            if world.apply(action).is_err() {
+                return validate_values(cutoff(&world), players);
+            }
         } else {
-            sample(&outcomes, random)
+            let action = sample(&outcomes, random)
                 .map_err(TreeSearchError::Sampling)?
-                .clone()
-        };
-        world.apply(action).map_err(TreeSearchError::Rejected)?;
+                .clone();
+            world.apply(action).map_err(TreeSearchError::Rejected)?;
+        }
         depth += 1;
     }
 }
@@ -985,6 +989,35 @@ mod tests {
         assert_eq!(decision.action().rate(), &RateId::Inspect);
         assert_eq!(decision.iterations(), 512);
         assert!(actual.is_applicable(decision.action()));
+    }
+
+    #[test]
+    fn rollouts_choose_before_the_sampled_world_checks_the_move() {
+        let choices = [action(RateId::RevealHeads), action(RateId::RevealTails)];
+        for heads in [false, true] {
+            let mut world = hidden_world(heads);
+            world.apply(action(RateId::Inspect)).unwrap();
+            let result = simulate(
+                &world,
+                0,
+                1,
+                1,
+                &mut information,
+                &mut crate::action_source::eager_actions(|_: &InformationState<Observation>| {
+                    choices.to_vec()
+                }),
+                &mut |_| Vec::new(),
+                &mut |_| None,
+                &mut |world| vec![f64::from(has(&information(world), Asset::SignalHeads))],
+                &mut |_, offered, _| {
+                    assert_eq!(offered, choices);
+                    Some(choices[0].clone())
+                },
+                &mut SeededSampler::new(0),
+            )
+            .unwrap();
+            assert_eq!(result, [f64::from(heads)]);
+        }
     }
 
     #[test]
