@@ -15,6 +15,8 @@ use thiserror::Error;
 /// Why a task could not be made, or an episode could not take a step.
 #[derive(Debug, Clone, Error)]
 pub enum RlError {
+    #[error("the episode has ended; reset it before taking another step")]
+    EpisodeEnded,
     #[error(transparent)]
     Engine(#[from] EngineError),
     /// A script proposes the candidate set's exchanges, so they have no list
@@ -190,24 +192,31 @@ impl Task {
     }
 
     /// What a learner sees at `at`: the observed balances, and the actions
-    /// the candidate set offers there.
+    /// the candidate set offers there. A goal state offers no further actions.
     pub fn observe(&self, at: Point) -> Result<Observation, RlError> {
+        Ok(self.observe_goal(at)?.0)
+    }
+
+    fn observe_goal(&self, at: Point) -> Result<(Observation, bool), RlError> {
         let reached = self.engine.reach(at)?;
         let economy = &reached.state.economy;
+        let goal = economy.matches(&self.engine.goal(&self.goal)?);
         let balances = self
             .observed
             .iter()
             .map(|(account, asset)| f32::from(economy.balance(account, asset).value()))
             .collect();
         let mut offered = vec![false; self.actions.len()];
-        for exchange in self.engine.candidates(at, &self.candidates)? {
-            let action = self.action(&exchange).ok_or_else(|| RlError::Unlisted {
-                set: self.candidates.clone(),
-                rate: exchange.rate().clone(),
-            })?;
-            offered[action] = true;
+        if !goal {
+            for exchange in self.engine.candidates(at, &self.candidates)? {
+                let action = self.action(&exchange).ok_or_else(|| RlError::Unlisted {
+                    set: self.candidates.clone(),
+                    rate: exchange.rate().clone(),
+                })?;
+                offered[action] = true;
+            }
         }
-        Ok(Observation { balances, offered })
+        Ok((Observation { balances, offered }, goal))
     }
 
     /// Each weighed objective's value at `at`.
@@ -353,10 +362,18 @@ impl Episode {
         &self.observation
     }
 
+    /// Whether the goal holds or no action is available, including at reset.
+    pub fn ended(&self) -> bool {
+        !self.observation.offered.contains(&true)
+    }
+
     /// Applies the task's exchange numbered `action`, refused where the
     /// candidate set does not offer it here, and moves the episode to the
     /// point it leads to.
     pub fn step(&mut self, action: usize) -> Result<Step, RlError> {
+        if self.ended() {
+            return Err(RlError::EpisodeEnded);
+        }
         let task = &self.task;
         let exchange = task.actions.get(action).ok_or(RlError::NoSuchAction {
             action,
@@ -372,7 +389,7 @@ impl Episode {
             .engine
             .apply(self.point, std::slice::from_ref(exchange))?;
         let measured = task.measure(point)?;
-        let reached = task.engine.holds(point, &task.goal)?;
+        let (observation, reached) = task.observe_goal(point)?;
         let mut reward = task
             .rewards
             .iter()
@@ -382,7 +399,6 @@ impl Episode {
         if reached {
             reward += task.reached;
         }
-        let observation = task.observe(point)?;
         let stuck = !reached && !observation.offered.contains(&true);
         self.point = point;
         self.measured = measured;

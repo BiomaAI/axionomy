@@ -152,6 +152,58 @@ fn an_episode_earns_the_objectives_change_and_the_goal_as_a_recorded_run() {
 }
 
 #[test]
+fn reaching_an_intermediate_maze_goal_ends_the_episode_once() {
+    use axionomy::{basket, paths};
+    let engine = engine();
+    let mut experiment = engine.experiment(&path!("maze/micro")).unwrap();
+    experiment.goal = path!("key-room");
+    let goal = paths::Goal::new().require(path!("agent"), basket([(path!("at/key-room"), 1)]));
+    engine.keep_goal(&experiment.goal, &goal).unwrap();
+    engine
+        .keep_experiment(&path!("short-maze"), &experiment)
+        .unwrap();
+    let task = Arc::new(
+        Task::new(
+            &engine,
+            &path!("short-maze"),
+            &path!("maze/moves"),
+            reward(),
+        )
+        .unwrap(),
+    );
+    let mut episode = Episode::new(Arc::clone(&task));
+    let step = episode.step(action(&task, KEY_ROUTE[0])).unwrap();
+    assert!(step.reached && episode.ended());
+    assert!(
+        !engine
+            .candidates(step.point, &path!("maze/moves"))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        episode.step(action(&task, KEY_ROUTE[1])),
+        Err(RlError::EpisodeEnded)
+    ));
+    assert_eq!(episode.point(), step.point);
+    episode.reset();
+    assert!(!episode.ended());
+
+    engine.refer(&path!("already-there"), step.point).unwrap();
+    experiment.start = path!("already-there");
+    engine
+        .keep_experiment(&path!("finished-maze"), &experiment)
+        .unwrap();
+    let finished = Task::new(
+        &engine,
+        &path!("finished-maze"),
+        &path!("maze/moves"),
+        reward(),
+    )
+    .unwrap();
+    assert!(Episode::new(Arc::new(finished)).ended());
+}
+
+#[test]
 fn an_action_not_offered_is_refused_and_changes_nothing() {
     let engine = engine();
     let task = task(&engine);
