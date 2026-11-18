@@ -60,9 +60,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     )?;
     engine.keep_candidates(
         &path!("marketplace/settlements"),
-        &CandidateSet::Instances {
-            under: Some(path!("settle-order")),
-        },
+        &CandidateSet::Script(call("settlements")),
     )?;
     engine.keep_candidates(
         &path!("marketplace/fulfillment"),
@@ -112,9 +110,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         depth: DEPTH,
         tie: TIE,
     };
-    // Every allocation on Micro's front gives its buyers 55 and its sellers
-    // 20; of equals the ranking takes the one the search keeps last, which
-    // gives buyer B and seller B the most.
+    // Order A's concession moves seven units of utility from seller to buyer.
     let pareto = |by: [&str; 3]| Strategy::Pareto {
         candidates: path!("marketplace/settlements"),
         objectives: front.to_vec(),
@@ -210,4 +206,70 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axionomy_engine::ScriptState;
+    use axionomy_store::Store;
+    use std::{collections::BTreeSet, ops::ControlFlow};
+
+    #[test]
+    fn clearing_chooses_the_highest_reachable_settled_value() {
+        let engine = Engine::new(Store::memory().unwrap()).unwrap();
+        write(&engine).unwrap();
+        let experiment = engine.experiment(&path!("marketplace/micro")).unwrap();
+        let start = engine.referred(&experiment.start).unwrap();
+        let candidates = path!("marketplace/settlements");
+        let cost = |at| {
+            let reached = engine.reach(at).unwrap();
+            let economy = &reached.state.economy;
+            let value: u64 = economy
+                .accounts()
+                .flat_map(|(_, account)| account.balances().iter())
+                .filter_map(|(asset, count)| {
+                    let price: u64 = asset
+                        .as_str()
+                        .strip_prefix("settled-value/")?
+                        .parse()
+                        .unwrap();
+                    Some(price * count.to_u64())
+                })
+                .sum();
+            let lost: i64 = engine
+                .call(
+                    &path!("marketplace"),
+                    "forgone",
+                    (ScriptState::new(economy.clone()),),
+                )
+                .unwrap();
+            assert_eq!(lost, 190 - i64::try_from(value).unwrap());
+            value
+        };
+        let mut values = BTreeSet::new();
+        for first in engine.candidates(start, &candidates).unwrap() {
+            let open = engine.apply(start, &[first]).unwrap();
+            for second in engine.candidates(open, &candidates).unwrap() {
+                let end = engine.apply(open, &[second]).unwrap();
+                assert!(engine.holds(end, &experiment.goal).unwrap());
+                values.insert(cost(end));
+            }
+        }
+        assert_eq!(values, BTreeSet::from([183, 190]));
+        let strategy = engine
+            .strategy(&path!("marketplace/settlement/market-clearing"))
+            .unwrap();
+        let best = engine
+            .run_strategy(
+                start,
+                &strategy,
+                &experiment.goal,
+                experiment.effort,
+                &mut |_| ControlFlow::Continue(()),
+            )
+            .unwrap();
+        assert!(engine.holds(best.end, &experiment.goal).unwrap());
+        assert_eq!(cost(best.end), *values.last().unwrap());
+    }
 }

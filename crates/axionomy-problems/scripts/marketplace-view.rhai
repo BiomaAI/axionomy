@@ -80,6 +80,7 @@ fn label(item) {
     }
     switch name {
         "settle-order" => `Agree Order ${letter(parts[2])} at full price`,
+        "discount-order" => `Agree Order ${letter(parts[2])} at a discount`,
         "contract" => `Agree Order ${letter(parts[2])} ${agreed(parts[3])}`,
         "dispatch" => `Dispatch Order ${letter(parts[2])} with Carrier ${letter(parts[3])}`,
         "deliver" => `Deliver ${priced(parts[3])} Order ${letter(parts[2])} ${

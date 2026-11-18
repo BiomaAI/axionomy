@@ -26,7 +26,9 @@ IDs; eligibility comes only from account assets. Order A requests a widget for
 100 and Order B requests a gadget for 90. Buyer A can fund both, Buyer B can
 fund Order A, and Buyer C is 25 short on Order A. Two sellers offer widgets,
 one offers a gadget, Carrier A owns two units of capacity, and Carrier B has no
-capacity.
+capacity. Order A also admits a seven-credit concession through
+`discount-order/a`. The buyer pays 93 and the seller receives 73.
+The concession transfers seven units of utility from the seller to the buyer.
 
 Settling is one rate over every order, `settle-order/{order}`, binding the
 same six distinct roles; for order A, of a widget:
@@ -64,8 +66,8 @@ record a different outcome. Each order's schedule, when it arrives, its
 deadline and the delay its route meets, is another relation's row, and
 each carrier's transit time and exposure to delays another's, so a
 dispatch names the carrier that booked it, `dispatch/{order}/{carrier}`;
-the clock is one rate over every tick, `advance/{to}`. Micro has one rate
-as written, for 2 instances; Showcase and Stress six, for 72 and 92. The
+the clock is one rate over every tick, `advance/{to}`. Micro has two rates
+as written, for three instances. Showcase and Stress have six, for 72 and 92. The
 market has no constants: what the platform holds for the whole market,
 the time and the time it has left, changes as the clock advances. The
 scripts read an order's terms, its item among them, from the instance
@@ -93,7 +95,7 @@ market state.
 
 The unit tests check the laws by applying exchanges:
 
-- Of the 36 settlement bindings the accounts allow, five apply at first, and
+- Of the 36 full-price settlement bindings the accounts allow, five apply at first, and
   assessing them does not mutate the market.
 - One settlement reports buyer, seller, and carrier shortfalls together.
 - A successful exchange settles six accounts atomically, and projected
@@ -106,8 +108,9 @@ The unit tests check the laws by applying exchanges:
 
 The package's experiments find these, pinned in `tests/outcomes`:
 
-- Micro's clearing settles both orders in two exchanges, and its Pareto
-  picks each take an allocation from the exact front of participant utility.
+- Micro can settle both orders for 183 or 190 credits. Its clearing selects
+  190. The buyer-favoring Pareto strategy takes the concession, and the
+  seller-favoring strategy settles at full price.
 - Showcase and Stress fulfil every order, planned for volume or toward buyers
   or sellers.
 

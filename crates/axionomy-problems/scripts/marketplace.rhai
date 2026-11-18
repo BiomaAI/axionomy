@@ -10,6 +10,17 @@ fn id(account) { account.split("/")[1] }
 // The market's orders, in identifier order: each has an account of its own.
 fn order_ids(state) { state.accounts("order/").map(|account| id(account)) }
 
+fn settlements(state) { state.moves("discount-order") + state.moves("settle-order") }
+
+fn recorded_value(held, kind) {
+    let value = 0;
+    for asset in held.keys() {
+        let parts = asset.split("/");
+        if parts[0] == kind { value += parse_int(parts[1]) * held[asset].to_int(); }
+    }
+    value
+}
+
 // The instance agreeing to each order at its price, by order: Micro's
 // settlement, `settle-order/<order>`, or a market's contract not conceded,
 // `contract/<order>/false`.
@@ -155,7 +166,7 @@ fn planned(state, preference) {
             let deal = state.values(`contract/${order}/false`);
             let buyer = deal["buyer-utility"].to_int();
             let seller = deal["seller-utility"].to_int();
-            let cut = if `agreed-price/${deal.gross - 10}` in held { 10 } else { 0 };
+            let cut = deal.gross.to_int() - recorded_value(held, "agreed-price");
             value += 40000;
             value += switch preference {
                 "buyers" => (buyer + cut) * 20,
@@ -171,16 +182,9 @@ fn volume(state) { planned(state, "volume") }
 fn favor_buyers(state) { planned(state, "buyers") }
 fn favor_sellers(state) { planned(state, "sellers") }
 
-// What a clearing forgoes of `deal`'s order: its gross price less the value
-// its settlement records, at that price, ten credits less, or twenty less
-// once a concession and a late rebate both apply.
+// The order's full price less its recorded settlement.
 fn forgone_of(state, deal) {
-    let gross = deal.gross.to_int();
-    let value = 0;
-    for price in [gross, gross - 10, gross - 20] {
-        value += state.balance(`order/${deal.order}`, `settled-value/${price}`).to_int() * price;
-    }
-    gross - value
+    deal.gross.to_int() - recorded_value(state.balances(`order/${deal.order}`), "settled-value")
 }
 
 // The gross value a clearing forgoes: what every order would pay at its gross

@@ -155,6 +155,10 @@ pub enum RateId {
     Advance {
         to: u8,
     },
+    /// A seller accepts the standing concession on this order.
+    DiscountOrder {
+        order: OrderId,
+    },
 }
 
 pub type World = Economy<Ontology>;
@@ -350,8 +354,17 @@ fn build(size: MarketSize) -> World {
             order: order().var(),
         }
         .into(),
-        settlement_rate(orders),
+        settlement_rate(orders, 0),
     );
+    if matches!(size, MarketSize::Micro) {
+        builder = builder.rate_at(
+            RateIdPattern::DiscountOrder {
+                order: order().var(),
+            }
+            .into(),
+            settlement_rate(&[OrderId::A], 7),
+        );
+    }
     let buyer_lifecycle = orders.iter().copied().fold(
         LinearInvariant::new(path!("buyer-order-lifecycle")),
         |invariant, order| {
@@ -441,12 +454,12 @@ pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: Car
 /// tax authority the tax and the carrier its shipping fee for a unit of its
 /// capacity, and the order settles at its gross price, the item and each
 /// amount per unit as the order's terms give them.
-fn settlement_rate(orders: &[OrderId]) -> Rate<Ontology> {
+fn settlement_rate(orders: &[OrderId], concession: u64) -> Rate<Ontology> {
     let (order, item) = (order(), item());
     let per_unit = |amount: Param<u64>| amount.quantity() * Q::units();
     among(platform(), AccountIdPattern::Order(order.var()).into())
         .variable(order.values(orders.iter().copied()))
-        .relation(priced(orders))
+        .relation(priced(orders, concession))
         .consume_at(
             Role::Buyer,
             one([AssetPattern::PurchaseIntent(order.var())]),
@@ -579,7 +592,7 @@ fn seller_utility() -> Param<u64> {
 
 /// The item each of `orders` trades and the numbers of its terms: law
 /// structure that never changes, a row for each order.
-fn priced(orders: &[OrderId]) -> Relation {
+fn priced(orders: &[OrderId], concession: u64) -> Relation {
     Relation::giving(
         [order().name().clone()],
         [
@@ -597,13 +610,13 @@ fn priced(orders: &[OrderId]) -> Relation {
             [
                 order.segment(),
                 terms.item.segment(),
-                terms.gross.into(),
-                terms.proceeds.into(),
+                (terms.gross - concession).into(),
+                (terms.proceeds - concession).into(),
                 terms.tax.into(),
                 terms.commission.into(),
                 terms.shipping.into(),
-                terms.buyer_utility.into(),
-                terms.seller_utility.into(),
+                (terms.buyer_utility + concession).into(),
+                (terms.seller_utility - concession).into(),
             ]
         }),
     )

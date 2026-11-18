@@ -121,7 +121,7 @@ fn agreed(rate: Rate<Ontology>, orders: &[OrderId]) -> Rate<Ontology> {
     among(rate, AccountIdPattern::Order(order().var()).into())
         .variable(order().values(orders.iter().copied()))
         .variable(discounted().every())
-        .relation(priced(orders))
+        .relation(priced(orders, 0))
         .relation(scheduled(orders))
         .relation(concession())
         .derive(
