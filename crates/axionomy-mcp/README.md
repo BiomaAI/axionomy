@@ -1,5 +1,7 @@
 # axionomy-mcp
 
+Use `axionomy_package_source` to read editable files and `axionomy_package_build` to validate, test, export or install a complete release. [Package authoring guide](../../docs/PACKAGE_SOURCE.md)
+
 `axionomy-mcp` is Axionomy's stateless MCP `2026-07-28` reference server. It
 lets a remote client build economies of any size, apply exchanges to them, and
 read everything they hold, without putting HTTP, Tokio or task lifecycle into

@@ -325,11 +325,14 @@ is tested against it. See [verification/README.md](verification/README.md).
 
 ## Samples
 
-Each sample is an ontology, the builders of its economies, and a package.
-Its strategies, policies and games run only as the package's strategies,
-through the engine. Its oracle is the package's pinned outcomes, not a second
-implementation in Rust. Each sample has **Micro**, **Showcase** and
-**Stress** instances:
+The gallery contains 15 packages across 19 ontologies. Each package has editable
+laws, opening economies, goals, strategies, views and economic tests. The Rust
+problem API reads those laws into the sample's own account, asset, rate and
+role types. The engine runs the package's strategies and compares their
+results with pinned outcomes. [Author a package](docs/PACKAGE_SOURCE.md)
+
+Each sample has **Micro**, **Showcase** and **Stress** instances.
+
 - Micro keeps exact fixtures fast.
 - Showcase is what Studio opens first.
 - Stress raises a dimension that matters to the domain: sampling, topology,
@@ -607,7 +610,8 @@ the same before and after. A failure leaves the economy unchanged.
 | `axionomy-store` | Runs, stored states, replay verification, refs and definitions, on redb |
 | `axionomy-view` | Presentation contracts, and the labels, formats and scenes a sample's view draws with |
 | `axionomy-engine` | The work every front end shares: points, refs, scripts, strategies, experiments, views and packages |
-| `axionomy-problems` | The samples: ontologies, economy builders and, with `packages`, the builders of their packages |
+| `axionomy-authoring` | Shared typed law declarations and instance construction |
+| `axionomy-problems` | Gallery sources, typed Rust problem APIs and independent economic checks |
 | `axionomy-rl` | An experiment as an RL environment |
 | `axionomy-mcp` | The stateless MCP server over the engine |
 | `axionomy-studio-api` | What Studio asks of an engine, written once, with its wire types |

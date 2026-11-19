@@ -1,5 +1,7 @@
 # axionomy-engine
 
+The `source` module compiles, tests and compares editable packages in isolated stores. [Package authoring guide](../../docs/PACKAGE_SOURCE.md)
+
 `axionomy-engine` is the work every Axionomy front end shares. An `Engine`
 holds a `Store` and nothing registered, and works on points: a point is one
 saved state of an economy, the economy after a given step of a recorded run,

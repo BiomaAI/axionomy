@@ -184,7 +184,7 @@ static site. It requires no application server, database, WebSocket, or
 
 ## One source of browser types
 
-Rust DTOs in `axionomy-view` and `axionomy-studio-api` derive Serde and Schemars. The server turns them into OpenAPI 3.1, then `openapi-typescript` generates `src/generated/api.d.ts`. `pnpm generate` writes that contract, its TypeScript declarations and every sample's package, zipped, in `public/packages` from the Rust source; `pnpm dev`, `pnpm test` and `pnpm build` run it first. None of it is committed, so it can never be stale.
+Rust DTOs in `axionomy-view` and `axionomy-studio-api` derive Serde and Schemars. The server turns them into OpenAPI 3.1, then `openapi-typescript` generates `src/generated/api.d.ts`. `pnpm generate` writes that contract, its TypeScript declarations and every sample's package, zipped, in `public/packages` from the checked-in package sources; `pnpm dev`, `pnpm test` and `pnpm build` run it first. None of it is committed, so it can never be stale.
 
 ```sh
 pnpm generate
@@ -253,3 +253,5 @@ time, since every run is a search and too many at once starve each other.
 Each run must end saying what it came to, a goal reached or a caution,
 never a failure, and the page must throw nothing, log no error, and draw
 every line React Flow is given.
+
+Studio exposes each compiled package’s source files and compares uploaded builds on the same experiment and trial seeds. [Package authoring](../docs/PACKAGE_SOURCE.md)

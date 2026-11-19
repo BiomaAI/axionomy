@@ -366,7 +366,7 @@ packages (P8), the Studio server for points and refs (P10, P12).
 above, exact quantities, seeded randomness, and scripts kept in the store as
 definitions (`script/<path>`), a new store table merged like refs. Maze's A*
 heuristic, sokoban's candidates and incident's Nature, view and triage
-(`crates/axionomy-problems/scripts`) give exactly what their Rust code gives
+(`crates/axionomy-problems/packages/<sample>/scripts`) give exactly what their Rust code gives
 on every state checked, and the scripted incident runs the same trace. Per
 call, in release, scripts take 3 to 5 times the Rust code's time (maze's
 heuristic 3.6 µs against 1.4 µs, sokoban's candidates 283 µs against 87 µs,
@@ -552,9 +552,9 @@ loaded packages, and Pages ships the sample packages, built in CI and never
 committed. Studio played studies until it ran on packages (P12), so the
 study machinery retired last, once nothing read it.
 
-Built: each sample's builder (`<sample>::package::write`, behind
-`axionomy-problems`' `packages` feature) writes its package into an engine's
-store, and `axionomy package samples <directory>` writes every one, zipped.
+The gallery now builds from each sample's JSON and Rhai source. The
+`<sample>::package::write` entry points install the compiled sources, and
+`axionomy package samples <directory>` writes the archives. [Package authoring](PACKAGE_SOURCE.md)
 Maze's package (its three instances as maze runs, its search and view
 scripts, goal, candidates, energy and time objectives, five strategies and an
 experiment per instance) reproduces every document of every maze study

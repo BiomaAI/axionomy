@@ -1,5 +1,7 @@
 # axionomy-cli
 
+Build, validate, test, run and compare source directories with the `package` commands. [Package authoring guide](../../docs/PACKAGE_SOURCE.md)
+
 The `axionomy` application. It makes, loads and looks into packages, redb
 files holding economies, refs, goals, scripts, strategies, experiments and
 views, and serves the packages a store holds: over MCP with `axionomy mcp`,

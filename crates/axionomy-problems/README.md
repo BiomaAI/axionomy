@@ -25,38 +25,23 @@ Every model's `World` has an `Ontology` naming its identifier types, such as
 serializes, so `axionomy-store` can record its runs (`tests/storage.rs`
 stores every model's economies and reads them back).
 
-## One folder per problem
+## Package sources and typed APIs
 
-Each problem lives in one folder of `src`, named as its module (`maze`,
-`work_league`):
+Each folder in `packages/` contains a complete editable package. The shipped
+CLI embeds these files so an installed binary can rebuild the gallery.
+`axionomy package samples DIR` builds the 15 archives and their Studio index.
+[Package source and commands](../../docs/PACKAGE_SOURCE.md)
 
-- `README.md` explains the problem: its specification, the results its tests
-  require, and the pressure it puts on the API. It is also the module's
-  documentation.
-- `mod.rs` is the model, with the model's own submodules beside it
-  (`maze/dynamics.rs`): its ontology, economy builders, goals, typed
-  exchange builders, and the constants its package reads.
-- `package.rs` writes the problem's package into an engine's store, behind
-  the `packages` feature: its economies as runs under refs, its goals, its
-  Rhai scripts (`scripts/`), its strategies, its experiments and its view.
-  The package's strategies are the problem's only solvers, policies and
-  games; they run through the engine.
-
-Sub-ontologies such as `logistics/fleet` follow the same layout inside their
-problem's folder. A model uses neither its package nor its view, so it remains
-a pure domain encoding usable without the engine or Studio, and no viewer
-becomes part of a problem's semantics.
-
-`packages()` lists every sample's package builder, in the order Studio lists
-them; `axionomy package samples` writes them all, zipped, with the
-`index.json` Studio lists them by. The suite's index, with its conformance
-matrix and instance profiles, is
-[`PROBLEMS.md`](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
+Each folder in `src/` exposes the problem's Rust ontology, typed actions,
+goals and constructors. The constructors read canonical laws into concrete
+Rust types. Seeded constructors supply their scenario's private holdings or
+calendar rows. The native problem tests can change those inputs and directly
+bind roles to test the economic laws. The optional `packages` feature exposes
+the gallery installer through the engine.
 
 ## The samples as packages
 
-A package is checked against what it found when it was pinned, never
-against another implementation of it. `tests/outcomes` exports each package,
+Every package has economic assertions under its own `tests/`. The gallery also pins starting economies and ordered histories for every ref. `tests/outcomes` exports each package,
 loads it alone into a fresh store, runs its experiments and requires what
 `tests/outcomes/pins.rs` records: for each arm, how its trials ended, their
 steps, each objective summed over them and a digest of what they did; for
