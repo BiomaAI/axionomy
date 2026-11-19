@@ -100,14 +100,27 @@ pub(super) fn parse<T: serde::de::DeserializeOwned>(
     file: &SourceFile,
     text: &str,
 ) -> Result<T, Diagnostic> {
+    let diagnostic = |error: serde_path_to_error::Error<serde_json::Error>| {
+        let mut d = Diagnostic::new(file, error.inner());
+        d.field = error.path().to_string();
+        d.line = Some(error.inner().line());
+        d.column = Some(error.inner().column());
+        d
+    };
+    let mut check = serde_json::Deserializer::from_str(text);
+    serde_path_to_error::deserialize::<_, UniqueKeys>(&mut check).map_err(diagnostic)?;
     let mut reader = serde_json::Deserializer::from_str(text);
-    let value = serde_path_to_error::deserialize(&mut reader).map_err(|error| {
-        let mut diagnostic = Diagnostic::new(file, error.inner());
-        diagnostic.field = error.path().to_string();
-        diagnostic.line = Some(error.inner().line());
-        diagnostic.column = Some(error.inner().column());
-        diagnostic
-    })?;
+    let mut unknown = None;
+    let mut ignored = |path: serde_ignored::Path<'_>| {
+        unknown.get_or_insert_with(|| path.to_string());
+    };
+    let strict = serde_ignored::Deserializer::new(&mut reader, &mut ignored);
+    let value = serde_path_to_error::deserialize(strict).map_err(diagnostic)?;
+    if let Some(field) = unknown {
+        let mut d = Diagnostic::new(file, format!("unknown source field {field}"));
+        d.field = field;
+        return Err(d);
+    }
     reader.end().map_err(|error| Diagnostic::new(file, error))?;
     Ok(value)
 }
@@ -126,4 +139,61 @@ impl schemars::JsonSchema for SourceFile {
 #[serde(deny_unknown_fields)]
 pub struct SourceTree {
     pub files: SourceFiles,
+}
+
+/// JSON maps otherwise accept a second spelling of a definition or ref and
+/// silently keep the last value. Visit keys before lowering to typed maps.
+struct UniqueKeys;
+impl<'de> Deserialize<'de> for UniqueKeys {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Check;
+        impl<'de> serde::de::Visitor<'de> for Check {
+            type Value = UniqueKeys;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a JSON value with unique object keys")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<UniqueKeys, A::Error> {
+                let mut seen = BTreeSet::new();
+                while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
+                    if seen.contains(&key) {
+                        return Err(serde::de::Error::custom(format!(
+                            "duplicate source field `{key}`"
+                        )));
+                    }
+                    seen.insert(key);
+                    map.next_value::<UniqueKeys>()?;
+                }
+                Ok(UniqueKeys)
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<UniqueKeys, A::Error> {
+                while seq.next_element::<UniqueKeys>()?.is_some() {}
+                Ok(UniqueKeys)
+            }
+            fn visit_bool<E>(self, _: bool) -> Result<UniqueKeys, E> {
+                Ok(UniqueKeys)
+            }
+            fn visit_i64<E>(self, _: i64) -> Result<UniqueKeys, E> {
+                Ok(UniqueKeys)
+            }
+            fn visit_u64<E>(self, _: u64) -> Result<UniqueKeys, E> {
+                Ok(UniqueKeys)
+            }
+            fn visit_f64<E>(self, _: f64) -> Result<UniqueKeys, E> {
+                Ok(UniqueKeys)
+            }
+            fn visit_str<E>(self, _: &str) -> Result<UniqueKeys, E> {
+                Ok(UniqueKeys)
+            }
+            fn visit_unit<E>(self) -> Result<UniqueKeys, E> {
+                Ok(UniqueKeys)
+            }
+        }
+        d.deserialize_any(Check)
+    }
 }

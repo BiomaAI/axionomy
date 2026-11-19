@@ -670,6 +670,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-authoring"
+version = "0.3.0"
+dependencies = [
+ "axionomy",
+ "serde",
+]
+
+[[package]]
 name = "axionomy-burn"
 version = "0.3.0"
 dependencies = [
@@ -696,12 +704,18 @@ name = "axionomy-engine"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "axionomy-authoring",
  "axionomy-search",
  "axionomy-store",
+ "axionomy-units",
  "axionomy-view",
  "postcard",
  "rhai",
+ "schemars 1.2.3",
  "serde",
+ "serde_ignored",
+ "serde_json",
+ "serde_path_to_error",
  "thiserror 2.0.21",
  "zip 9.6.1",
 ]
@@ -711,11 +725,13 @@ name = "axionomy-problems"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "axionomy-authoring",
  "axionomy-engine",
  "axionomy-search",
  "axionomy-store",
  "postcard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -761,6 +777,19 @@ version = "0.3.0"
 dependencies = [
  "blake3",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "axionomy-units"
+version = "0.3.0"
+dependencies = [
+ "axionomy",
+ "indexmap 2.14.2",
+ "num-rational",
+ "num-traits",
+ "serde",
+ "thiserror 2.0.21",
+ "uom",
 ]
 
 [[package]]
@@ -4850,6 +4879,7 @@ checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
 dependencies = [
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -4860,6 +4890,7 @@ checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "bytemuck",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -4897,6 +4928,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -6432,6 +6464,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_ignored"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115dffd5f3853e06e746965a20dcbae6ee747ae30b543d91b0e089668bb07798"
+dependencies = [
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_json"
 version = "1.0.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6442,6 +6484,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -7510,6 +7563,20 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
+name = "uom"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a739f83872836c82a4f2527d4e54b37007b3de68cafe7edde95fd695968bf4b9"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "serde_core",
+ "typenum",
+]
 
 [[package]]
 name = "ureq"

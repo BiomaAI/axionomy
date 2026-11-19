@@ -333,7 +333,7 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
                 {
                     load = *scripts.get_key_value(import).expect("present").0;
                 }
-                Err(e) => return Err(Diagnostic::new(SourceFile::Script(load.clone()), e)),
+                Err(e) => return Err(scripts::diagnose(&engine, load, scripts[load], e)),
             }
         }
     }
@@ -403,6 +403,14 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
         }
         engine.keep_goal(&id, &authored.goal).map_err(err)?;
     }
+    for (id, ontology) in &definitions.candidate_ontologies {
+        if !definitions.candidates.contains_key(id) || !vocabularies.contains_key(ontology) {
+            return Err(Diagnostic::new(
+                &file,
+                format!("unknown candidate set or ontology in {id} -> {ontology}"),
+            ));
+        }
+    }
     for (id, set) in definitions.candidates {
         if let CandidateSet::Listed(exchanges) = &set {
             let ontology = match definitions.candidate_ontologies.get(&id) {
@@ -427,6 +435,39 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
     for (id, strategy) in definitions.strategies {
         engine.keep_strategy(&id, &strategy).map_err(err)?;
     }
+    let check_interface = |root: axionomy_store::DefinitionPath,
+                           ontology: &OntologyPath|
+     -> Result<(), Diagnostic> {
+        if header.script_ontologies.is_empty() && definitions.candidate_ontologies.is_empty() {
+            return Ok(());
+        }
+        for dependency in engine.dependencies(root.clone()).map_err(err)? {
+            let restricted = if let Some(path) = dependency.as_str().strip_prefix("script/") {
+                header
+                    .script_ontologies
+                    .get(&path.parse::<ScriptPath>().expect("stored script path"))
+                    .is_some_and(|allowed| !allowed.contains(ontology))
+            } else if let Some(path) = dependency.as_str().strip_prefix("candidates/") {
+                definitions
+                    .candidate_ontologies
+                    .get(
+                        &path
+                            .parse::<CandidatesPath>()
+                            .expect("stored candidate path"),
+                    )
+                    .is_some_and(|allowed| allowed != ontology)
+            } else {
+                false
+            };
+            if restricted {
+                return Err(Diagnostic::new(
+                    &file,
+                    format!("{root} uses {dependency} outside its declared ontology {ontology}"),
+                ));
+            }
+        }
+        Ok(())
+    };
     for (id, view) in definitions.views {
         if !vocabularies.contains_key(&id) {
             return Err(Diagnostic::new(
@@ -435,6 +476,10 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             ));
         }
         engine.keep_view(&id, &view).map_err(err)?;
+        check_interface(
+            crate::definitions::definition(&crate::view::view_path(&id)),
+            &id,
+        )?;
     }
     for (id, experiment) in definitions.experiments {
         for start in std::iter::once(&experiment.start)
@@ -454,6 +499,10 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             }
         }
         engine.keep_experiment(&id, &experiment).map_err(err)?;
+        check_interface(
+            crate::definitions::definition(&id),
+            &goal_types[&experiment.goal],
+        )?;
     }
     for (id, test) in &tests {
         test.run(&engine, &vocabularies)

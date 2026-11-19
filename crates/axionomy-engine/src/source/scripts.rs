@@ -2,7 +2,29 @@
 //! of each ontology it advertises. Computed identifiers are resolved when
 //! the engine runs the script.
 use super::*;
-use rhai::{ASTNode, Expr};
+use rhai::{ASTNode, Expr, Position};
+#[derive(Clone, Copy)]
+enum Kind {
+    Account,
+    Asset,
+    Rate,
+    Role,
+    Parameter,
+}
+impl Kind {
+    fn check(self, vocab: &Vocabulary, text: &str) -> Result<(), String> {
+        let bad = |e: axionomy::PathError| e.to_string();
+        match self {
+            Self::Account => vocab.account(&text.parse().map_err(bad)?),
+            Self::Asset => vocab.asset(&text.parse().map_err(bad)?),
+            Self::Rate => vocab.rate(text),
+            Self::Role => declared(&vocab.roles, "role", &text.parse().map_err(bad)?),
+            Self::Parameter => {
+                declared(&vocab.parameters, "parameter", &text.parse().map_err(bad)?)
+            }
+        }
+    }
+}
 
 impl Vocabulary {
     fn rate(&self, text: &str) -> Result<(), String> {
@@ -31,40 +53,27 @@ impl Vocabulary {
         ast.walk(&mut |nodes| {
             let (call, offset) = match nodes.last() {
                 Some(ASTNode::Expr(Expr::MethodCall(call, _))) => (call, 0),
-                Some(ASTNode::Expr(Expr::FnCall(call, _))) if call.namespace.is_empty() => {
+                Some(ASTNode::Expr(Expr::FnCall(call, _)))
+                | Some(ASTNode::Stmt(rhai::Stmt::FnCall(call, _)))
+                    if call.namespace.is_empty() =>
+                {
                     (call, usize::from(call.name != "exchange"))
                 }
                 _ => return true,
             };
             let args = call.args.get(offset..).unwrap_or_default();
-            let kinds: &[&str] = match (call.name.as_str(), args.len()) {
-                ("balance", 2) => &["account", "asset"],
-                ("has_account" | "balances", 1) => &["account"],
-                ("consumed" | "produced" | "preserved", 2) => &["rate", "role"],
-                ("exchange_of" | "values" | "roles", 1) => &["rate"],
-                ("exchange", 3 | 4) => &["rate"],
+            use Kind::*;
+            let kinds: &[Kind] = match (call.name.as_str(), args.len()) {
+                ("balance", 2) => &[Account, Asset],
+                ("has_account" | "balances", 1) => &[Account],
+                ("consumed" | "produced" | "preserved", 2) => &[Rate, Role],
+                ("exchange_of" | "values" | "roles", 1) | ("exchange", 3) => &[Rate],
+                ("account", 1) => &[Role],
+                ("parameter", 2) => &[Parameter],
                 _ => return true,
             };
-            for (arg, kind) in args.iter().zip(kinds) {
-                let Expr::StringConstant(text, pos) = arg else {
-                    continue;
-                };
-                let known = match *kind {
-                    "account" => text
-                        .parse()
-                        .map_err(|e: axionomy::PathError| e.to_string())
-                        .and_then(|id| self.account(&id)),
-                    "asset" => text
-                        .parse()
-                        .map_err(|e: axionomy::PathError| e.to_string())
-                        .and_then(|id| self.asset(&id)),
-                    "role" => text
-                        .parse()
-                        .map_err(|e: axionomy::PathError| e.to_string())
-                        .and_then(|id| declared(&self.roles, kind, &id)),
-                    _ => self.rate(text),
-                };
-                if let Err(reason) = known {
+            let mut check = |kind: Kind, text: &str, pos: Position| {
+                if let Err(reason) = kind.check(self, text) {
                     let mut d = Diagnostic::new(file, reason);
                     d.line = pos.line();
                     d.column = pos.position();
@@ -72,9 +81,96 @@ impl Vocabulary {
                     error = Some(d);
                     return false;
                 }
+                true
+            };
+            for (arg, &kind) in args.iter().zip(kinds) {
+                if let Expr::StringConstant(text, pos) = arg
+                    && !check(kind, text, *pos)
+                {
+                    return false;
+                }
+            }
+            if call.name == "exchange" {
+                let bindings = &args[1];
+                // Rhai folds an entirely literal map to a constant. A mixed
+                // map retains its individual key and expression locations.
+                match bindings {
+                    Expr::Map(map, _) => {
+                        for (key, value) in &map.0 {
+                            if !check(Role, &key.name, key.pos) {
+                                return false;
+                            }
+                            if let Expr::StringConstant(text, pos) = value
+                                && !check(Account, text, *pos)
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    Expr::DynamicConstant(value, pos) => {
+                        if let Some(map) = value.clone().try_cast::<rhai::Map>() {
+                            for (role, value) in map {
+                                if !check(Role, role.as_str(), *pos) {
+                                    return false;
+                                }
+                                if let Some(text) = value.try_cast::<rhai::ImmutableString>()
+                                    && !check(Account, &text, *pos)
+                                {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
             true
         });
         error.map_or(Ok(()), Err)
     }
+}
+
+/// Recover the location from Rhai itself on the error path. Successful
+/// scripts use the engine's cached compilation.
+pub(super) fn diagnose(
+    engine: &Engine,
+    id: &ScriptPath,
+    source: &str,
+    error: EngineError,
+) -> Diagnostic {
+    let mut d = Diagnostic::new(SourceFile::Script(id.clone()), &error);
+    let pos = match engine.host.compile(source) {
+        Err(parse) => Some(parse.position()),
+        Ok(ast) => {
+            let mut at = None;
+            ast.walk(&mut |nodes| {
+                if let Some(ASTNode::Stmt(rhai::Stmt::Import(import, pos))) = nodes.last() {
+                    let matches = match (&error, &import.0) {
+                        (
+                            EngineError::UnknownImport {
+                                import: missing, ..
+                            },
+                            Expr::StringConstant(text, _),
+                        ) => text.as_str() == missing.as_str(),
+                        (EngineError::Script { .. }, Expr::StringConstant(text, _)) => {
+                            text.parse::<ScriptPath>().is_err()
+                        }
+                        (EngineError::Script { .. }, _) => true,
+                        _ => false,
+                    };
+                    if matches {
+                        at = Some(*pos);
+                        return false;
+                    }
+                }
+                true
+            });
+            at
+        }
+    };
+    if let Some(pos) = pos {
+        d.line = pos.line();
+        d.column = pos.position();
+    }
+    d
 }

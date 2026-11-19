@@ -16,19 +16,64 @@ pub type LawSet<O> = Vec<(Pattern<<O as Ontology>::Rate>, Rate<O>)>;
 
 /// A written rate stays a template in the economy. An expanded declaration
 /// materializes its finite instances as individual, concrete rates in order.
-#[derive(Deserialize)]
-#[serde(
-    untagged,
-    bound(
-        deserialize = "O::Account:Deserialize<'de>, O::Asset:Deserialize<'de>, O::Rate:Deserialize<'de>, O::Role:Deserialize<'de>"
-    )
-)]
 pub enum Law<O: Ontology> {
     Written((Pattern<O::Rate>, Rate<O>)),
     Family {
         expand: Pattern<O::Rate>,
         rate: Rate<O>,
     },
+}
+impl<'de, O: Ontology> Deserialize<'de> for Law<O>
+where
+    O::Account: Deserialize<'de>,
+    O::Asset: Deserialize<'de>,
+    O::Rate: Deserialize<'de>,
+    O::Role: Deserialize<'de>,
+{
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        // Select by the JSON shape so nested errors retain their original
+        // field and location, including inside a written kernel rate.
+        struct Entry<O>(std::marker::PhantomData<O>);
+        impl<'de, O: Ontology> serde::de::Visitor<'de> for Entry<O>
+        where
+            O::Account: Deserialize<'de>,
+            O::Asset: Deserialize<'de>,
+            O::Rate: Deserialize<'de>,
+            O::Role: Deserialize<'de>,
+        {
+            type Value = Law<O>;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a [rate identifier, law] pair or an expanded rate family")
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))
+                    .map(Law::Written)
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                map: A,
+            ) -> Result<Self::Value, A::Error> {
+                #[derive(Deserialize)]
+                #[serde(
+                    deny_unknown_fields,
+                    bound(
+                        deserialize = "O::Account:Deserialize<'de>, O::Asset:Deserialize<'de>, O::Rate:Deserialize<'de>, O::Role:Deserialize<'de>"
+                    )
+                )]
+                struct Family<O: Ontology> {
+                    expand: Pattern<O::Rate>,
+                    rate: Rate<O>,
+                }
+                let Family { expand, rate } =
+                    Family::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(Law::Family { expand, rate })
+            }
+        }
+        d.deserialize_any(Entry(std::marker::PhantomData))
+    }
 }
 pub fn expand<O: Ontology>(declarations: Vec<Law<O>>) -> Result<LawSet<O>, String> {
     let mut output = Vec::new();

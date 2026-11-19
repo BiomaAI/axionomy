@@ -209,11 +209,7 @@ impl Engine {
         closure.refs.extend(contents.refs);
         closure.queue.extend(contents.definitions);
         loop {
-            while let Some(definition) = closure.queue.pop() {
-                if closure.definitions.insert(definition.clone()) {
-                    self.reaches(&definition, &mut closure)?;
-                }
-            }
+            self.follow_definitions(&mut closure)?;
             // The views of every run's ontology come with the runs.
             let mut views = Vec::new();
             for ontology in self.ontologies(&closure)? {
@@ -359,6 +355,27 @@ impl Engine {
             })
             .collect();
         Ok(Contents { refs, definitions })
+    }
+
+    /// Definitions this root and its imports need, independent of stored runs.
+    pub(crate) fn dependencies(
+        &self,
+        root: DefinitionPath,
+    ) -> Result<BTreeSet<DefinitionPath>, EngineError> {
+        let mut closure = Closure {
+            queue: vec![root],
+            ..Closure::default()
+        };
+        self.follow_definitions(&mut closure)?;
+        Ok(closure.definitions)
+    }
+    fn follow_definitions(&self, closure: &mut Closure) -> Result<(), EngineError> {
+        while let Some(definition) = closure.queue.pop() {
+            if closure.definitions.insert(definition.clone()) {
+                self.reaches(&definition, closure)?;
+            }
+        }
+        Ok(())
     }
 
     /// Adds what `definition` refers to to `closure`.
