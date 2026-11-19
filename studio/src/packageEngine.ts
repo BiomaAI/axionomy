@@ -10,6 +10,8 @@ import { api, type ViewDocument } from "./api";
 type Schemas = components["schemas"];
 
 export type PointId = Schemas["PointId"];
+export type SourceTree = Schemas["SourceTree"];
+export type BuildComparison = Schemas["BuildComparison"];
 export type PackageList = Schemas["PackageList"];
 export type PackageView = Schemas["PackageView"];
 export type ExperimentView = Schemas["ExperimentView"];
@@ -92,6 +94,8 @@ export interface PackageEngine {
   readonly kind: "native" | "browser";
   store(): Promise<StoreKept>;
   packages(): Promise<PackageList>;
+  sourceTree(name: string): Promise<SourceTree>;
+  compareBuild(name: string, experiment: string, file: Blob): Promise<BuildComparison>;
   /** Loads a package file the visitor picked. */
   loadFile(file: Blob): Promise<LoadedFrom>;
   /** Loads the package at a URL. */
@@ -250,6 +254,16 @@ export const nativePackages: PackageEngine = {
   kind: "native",
   async store() { return { persistent: true }; },
   async packages() { return answered(await api.GET("/api/packages")); },
+  async sourceTree(name) {
+    return answered(await api.GET("/api/packages/{name}/source", { params: { path: { name } } }));
+  },
+  async compareBuild(name, experiment, file) {
+    const path = `/api/packages/${encodeURIComponent(name)}/compare/${encodeURIComponent(experiment)}`;
+    const response = await fetch(path, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (!response.ok) throw new EngineRefusal(response.status, body);
+    return body as BuildComparison;
+  },
   async loadFile(file) {
     const response = await fetch(new URL("/api/packages", window.location.origin), {
       method: "POST",

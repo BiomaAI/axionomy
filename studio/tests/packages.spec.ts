@@ -353,3 +353,14 @@ test("keeps Studio within a narrow viewport", async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("a release exposes its source and compares an uploaded build on matching seeds", async ({ page }) => {
+  await openSample(page, "maze");
+  await page.getByRole("button", { name: "Source", exact: true }).click();
+  const source = page.getByRole("region", { name: "Package source" });
+  await source.getByLabel("Source file").selectOption("scripts/maze.rhai");
+  await expect(source.locator("pre").first()).toContainText("fn heuristic");
+  await source.getByLabel("Experiment", { exact: true }).selectOption("maze/micro");
+  await source.getByLabel("Compare build").setInputFiles("public/packages/maze.zip");
+  await expect(source.getByRole("heading", { name: "Matching trials" })).toBeVisible({ timeout: 30_000 });
+});

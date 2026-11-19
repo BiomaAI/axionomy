@@ -2,6 +2,8 @@ import type { ViewDocument } from "./api";
 import {
   EngineRefusal,
   type Applied,
+  type BuildComparison,
+  type SourceTree,
   type Balances,
   type Candidate,
   type Candidates,
@@ -43,6 +45,8 @@ export type StoreRequest =
   | { kind: "load_url"; url: string }
   | { kind: "load_bytes"; bytes: ArrayBuffer }
   | { kind: "packages" }
+  | { kind: "source_tree"; name: string }
+  | { kind: "compare_build"; name: string; experiment: string; bytes: ArrayBuffer }
   | { kind: "experiments" }
   | { kind: "draw"; point: PointId }
   | { kind: "ancestor"; point: PointId; step: number }
@@ -120,6 +124,14 @@ export class BrowserPackages implements PackageEngine {
     // Copied to the Worker, not transferred, so the next one can be asked again.
     const bytes = await file.arrayBuffer();
     return this.request({ kind: "load_bytes", bytes }) as Promise<LoadedFrom>;
+  }
+
+  sourceTree(name: string): Promise<SourceTree> {
+    return this.request({ kind: "source_tree", name }) as Promise<SourceTree>;
+  }
+
+  async compareBuild(name: string, experiment: string, file: Blob): Promise<BuildComparison> {
+    return this.request({ kind: "compare_build", name, experiment, bytes: await file.arrayBuffer() }) as Promise<BuildComparison>;
   }
 
   packages(): Promise<PackageList> {

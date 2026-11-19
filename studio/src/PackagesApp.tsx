@@ -4,6 +4,7 @@ import { IconChevronDown, IconChevronRight, IconMaximize } from "@tabler/icons-r
 import { ActivityStrip, type Activity, type Said } from "./Activity";
 import type { AccountData, ModelData, ViewDocument } from "./api";
 import { BrowserPackages } from "./browserPackages";
+import { PackageSource } from "./PackageSource";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
 import { ExchangeEditor } from "./ExchangeEditor";
@@ -260,6 +261,7 @@ export function PackagesApp() {
   const pin = useCallback((subject: Subject) => setPinned((current) => [...current.filter((each) => subjectKey(each) !== subjectKey(subject)), subject]), []);
   const unpin = useCallback((subject: Subject) => setPinned((current) => current.filter((each) => subjectKey(each) !== subjectKey(subject))), []);
   useEffect(() => setPinned([]), [packageName]);
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const rulesPanel = useRef<HTMLElement>(null);
   useEffect(() => { if (rulesOpen) rulesPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [rulesOpen]);
@@ -670,9 +672,12 @@ export function PackagesApp() {
         void load(file.name, () => engine.loadFile(file));
       }} /></label>
       <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
+      <button type="button" aria-expanded={sourceOpen} onClick={() => setSourceOpen(!sourceOpen)} disabled={!pkg}>Source</button>
       <button type="button" aria-expanded={rulesOpen} onClick={() => setRulesOpen(!rulesOpen)} disabled={!model}>Rules</button>
     </section>
 
+
+    {sourceOpen && engine && pkg && <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />}
 
     {!engine || !listing.data ? <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />

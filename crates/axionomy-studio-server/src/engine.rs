@@ -58,6 +58,35 @@ pub struct PackageName {
     pub name: PackagePath,
 }
 
+#[derive(Deserialize, JsonSchema)]
+pub struct BuildNames {
+    pub name: PackagePath,
+    pub experiment: ExperimentPath,
+}
+
+pub(crate) async fn source_tree(
+    State(state): State<StudioState>,
+    Path(PackageName { name }): Path<PackageName>,
+) -> Result<Json<axionomy_engine::source::SourceTree>, ApiError> {
+    blocking(&state.engine, move |e| {
+        axionomy_studio_api::source_tree(e, &name)
+    })
+    .await
+    .map(Json)
+}
+
+pub(crate) async fn compare_build(
+    State(state): State<StudioState>,
+    Path(BuildNames { name, experiment }): Path<BuildNames>,
+    bytes: Bytes,
+) -> Result<Json<axionomy_engine::source::BuildComparison>, ApiError> {
+    blocking(&state.engine, move |e| {
+        axionomy_studio_api::compare_build(e, &name, &experiment, &bytes)
+    })
+    .await
+    .map(Json)
+}
+
 pub(crate) async fn histories(
     State(state): State<StudioState>,
     Path(PackageName { name }): Path<PackageName>,

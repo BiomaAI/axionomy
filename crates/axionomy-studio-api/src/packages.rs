@@ -264,3 +264,33 @@ fn carried<K: PathKind>(definitions: &[DefinitionPath]) -> Vec<Path<K>> {
         })
         .collect()
 }
+
+/// Read a package's original files for inspection and editing.
+pub fn source_tree(
+    engine: &Engine,
+    name: &PackagePath,
+) -> Result<axionomy_engine::source::SourceTree, Refusal> {
+    Ok(axionomy_engine::source::SourceTree {
+        files: engine.package_source(name)?,
+    })
+}
+
+/// Compare an uploaded build with the installed release in isolated stores.
+/// Running the comparison creates no branches in the visitor's store.
+pub fn compare_build(
+    engine: &Engine,
+    name: &PackagePath,
+    id: &ExperimentPath,
+    bytes: &[u8],
+) -> Result<axionomy_engine::source::BuildComparison, Refusal> {
+    use axionomy_engine::source;
+    let left = source::build(&engine.package_source(name)?)
+        .map_err(|e| Refusal::BadRequest(e.to_string()))?;
+    let right = Engine::new(axionomy_engine::package(bytes)?)?;
+    if !right.manifests()?.iter().any(|m| &m.name == name) {
+        return Err(Refusal::BadRequest(format!(
+            "the uploaded build does not contain package {name}"
+        )));
+    }
+    source::compare(&left.engine, &right, id, None).map_err(|e| Refusal::BadRequest(e.to_string()))
+}

@@ -181,6 +181,25 @@ impl WorkerEngine {
         }
     }
 
+    #[wasm_bindgen(js_name = sourceTree)]
+    pub fn source_tree(&self, name: &str) -> Result<String, JsValue> {
+        answer(path_of(name).and_then(|name| api::source_tree(&self.engine, &name)))
+    }
+
+    #[wasm_bindgen(js_name = compareBuild)]
+    pub fn compare_build(
+        &self,
+        name: &str,
+        experiment: &str,
+        bytes: &[u8],
+    ) -> Result<String, JsValue> {
+        answer(
+            path_of(name).and_then(|name| {
+                api::compare_build(&self.engine, &name, &path_of(experiment)?, bytes)
+            }),
+        )
+    }
+
     /// The history tree of the package `name`: a `HistoriesView`.
     pub fn histories(&self, name: &str) -> Result<String, JsValue> {
         answer(path_of(name).and_then(|name| api::histories(&self.engine, &name)))

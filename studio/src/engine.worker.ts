@@ -81,6 +81,10 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       const loaded = read(engine.load(new Uint8Array(request.bytes), undefined, undefined, undefined)) as LoadedView;
       return { got: "loaded", loaded } satisfies LoadedFrom;
     }
+    case "source_tree":
+      return read(engine.sourceTree(request.name));
+    case "compare_build":
+      return read(engine.compareBuild(request.name, request.experiment, new Uint8Array(request.bytes)));
     case "packages":
       return read(engine.packages());
     case "experiments":

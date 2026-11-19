@@ -121,6 +121,11 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         )
         .bytes_body("A package file: a store file, or a zip holding one")
         .fallible(),
+        Endpoint::new::<axionomy_engine::source::SourceTree>("get","/api/packages/{name}/source",get(engine::source_tree))
+            .describe("getPackageSource","Read the editable files of this release","packages").path_parameters::<PackageName>().fallible(),
+        Endpoint::new::<axionomy_engine::source::BuildComparison>("post","/api/packages/{name}/compare/{experiment}",post(engine::compare_build).layer(DefaultBodyLimit::max(MAX_PACKAGE_BYTES)))
+            .describe("comparePackageBuild","Compare the installed release and an uploaded build on the same experiment","packages")
+            .path_parameters::<engine::BuildNames>().bytes_body("A package file to compare").fallible(),
         Endpoint::new::<HistoriesView>(
             "get",
             "/api/packages/{name}/histories",

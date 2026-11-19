@@ -691,3 +691,11 @@ input[type="search"] { min-height: 32px; padding: 0 10px; border: 1px solid var(
   .effect-gives .holding > .id-link { color: #96423b; }
 }
 .compare-scroll .differs { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+
+.package-source { margin: 1rem; padding: 1rem; min-width: 0; }
+.package-source h2 { margin: 0 0 .8rem; }
+.package-source select { max-width: 100%; }
+.package-source pre { overflow: auto; max-height: 24rem; padding: .75rem; border: 1px solid currentColor; }
+.source-comparison { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.source-results { flex-basis: 100%; }
+.source-results details { margin: .4rem 0; }
