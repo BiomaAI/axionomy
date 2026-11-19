@@ -1,0 +1,88 @@
+{
+  "ontology": "workshop",
+  "laws": ["workshop/showcase-and-stress", "workshop/stress"],
+  "accounts": [
+    ["customer/0", {"balances": [["credit", "8"]]}],
+    ["customer/1", {"balances": [["credit", "21"]]}],
+    ["customer/2", {"balances": [["credit", "14"]]}],
+    ["customer/3", {"balances": [["credit", "27"]]}],
+    ["customer/4", {"balances": [["credit", "20"]]}],
+    [
+      "workshop",
+      {
+        "balances": [
+          ["active", "1"],
+          ["contract/0", "1"],
+          ["contract/1", "1"],
+          ["contract/2", "1"],
+          ["contract/3", "1"],
+          ["contract/4", "1"],
+          ["durability", "3"],
+          ["idle", "1"],
+          ["labor", "14"],
+          ["repair-kit", "2"],
+          ["time", "22"],
+          ["tool", "1"],
+          ["tool-potential", "2"],
+          ["upgrade-kit", "1"],
+          ["wood", "16"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {
+      "name": "contract-lifecycle/0",
+      "weights": [["contract/0", 1], ["raw/0", 1], ["prepared/0", 1], ["assembled/0", 1], ["fulfilled/0", 1]]
+    },
+    {
+      "name": "contract-lifecycle/1",
+      "weights": [["contract/1", 1], ["raw/1", 1], ["prepared/1", 1], ["assembled/1", 1], ["fulfilled/1", 1]]
+    },
+    {
+      "name": "contract-lifecycle/2",
+      "weights": [["contract/2", 1], ["raw/2", 1], ["prepared/2", 1], ["assembled/2", 1], ["fulfilled/2", 1]]
+    },
+    {
+      "name": "contract-lifecycle/3",
+      "weights": [["contract/3", 1], ["raw/3", 1], ["prepared/3", 1], ["assembled/3", 1], ["fulfilled/3", 1]]
+    },
+    {
+      "name": "contract-lifecycle/4",
+      "weights": [["contract/4", 1], ["raw/4", 1], ["prepared/4", 1], ["assembled/4", 1], ["fulfilled/4", 1]]
+    },
+    {
+      "name": "one-workbench",
+      "weights": [
+        ["idle", 1],
+        ["solved", 1],
+        ["raw/0", 1],
+        ["prepared/0", 1],
+        ["assembled/0", 1],
+        ["raw/1", 1],
+        ["prepared/1", 1],
+        ["assembled/1", 1],
+        ["raw/2", 1],
+        ["prepared/2", 1],
+        ["assembled/2", 1],
+        ["raw/3", 1],
+        ["prepared/3", 1],
+        ["assembled/3", 1],
+        ["raw/4", 1],
+        ["prepared/4", 1],
+        ["assembled/4", 1]
+      ]
+    },
+    {
+      "name": "material-mass",
+      "weights": [["wood", 1], ["frame", 1], ["panel", 1], ["chair", 3], ["table", 5], ["offcut", 1], ["waste", 1]]
+    },
+    {"name": "tool-capacity", "weights": [["durability", 1], ["wear", 1], ["tool-potential", 1]]},
+    {"name": "repair-supplies", "weights": [["repair-kit", 1], ["used-repair-kit", 1]]},
+    {"name": "upgrade-opportunity", "weights": [["upgrade-kit", 1], ["upgraded", 1]]},
+    {"name": "closed-customer-funds", "weights": [["credit", 1]]},
+    {"name": "labor-accounting", "weights": [["labor", 1], ["spent-labor", 1]]},
+    {"name": "time-accounting", "weights": [["time", 1], ["spent-time", 1]]},
+    {"name": "workshop-lifecycle", "weights": [["active", 1], ["solved", 1]]}
+  ]
+}

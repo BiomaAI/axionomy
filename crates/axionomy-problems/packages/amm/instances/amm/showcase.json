@@ -1,0 +1,223 @@
+{
+  "ontology": "amm",
+  "laws": ["amm/showcase", "amm/showcase-and-stress"],
+  "tables": {
+    "advance-day/{day}": {
+      "variables": [{"name": "day", "range": ["0", "6"]}],
+      "relations": [
+        {
+          "gives": ["sunlight", "shortage"],
+          "rows": [
+            ["0", "40", "0"],
+            ["1", "100", "0"],
+            ["2", "100", "1"],
+            ["3", "40", "0"],
+            ["4", "100", "1"],
+            ["5", "40", "0"],
+            ["6", "100", "0"]
+          ],
+          "variables": ["day"]
+        }
+      ]
+    }
+  },
+  "constants": {
+    "batch": "100",
+    "daily-decisions": "6",
+    "fee-denominator": "1000",
+    "fee-numerator": "997",
+    "project-capacity": "400",
+    "scale": "1",
+    "season-length": "8",
+    "share-limit": "1000000"
+  },
+  "accounts": [
+    [
+      "actor/adaptive-lp",
+      {
+        "balances": [
+          ["credit", "20000"],
+          ["decisions", "6"],
+          ["energy", "2000"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "3000"],
+          ["trading", "1"]
+        ]
+      }
+    ],
+    [
+      "actor/arbitrageur",
+      {
+        "balances": [
+          ["credit", "10000"],
+          ["decisions", "6"],
+          ["energy", "2500"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "3000"],
+          ["trading", "1"]
+        ]
+      }
+    ],
+    [
+      "actor/factory",
+      {
+        "balances": [
+          ["credit", "40000"],
+          ["decisions", "6"],
+          ["future-need/factory", "7"],
+          ["future-obligation/factory", "7"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["need/factory", "1"],
+          ["obligation/factory", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "2500"],
+          ["trading", "1"],
+          ["unmade-goods", "800"]
+        ]
+      }
+    ],
+    [
+      "actor/founder",
+      {
+        "balances": [
+          ["credit", "5000"],
+          ["decisions", "6"],
+          ["liquidity-decision", "1"],
+          ["lp-share", "10000"],
+          ["market-open", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "20000"],
+          ["trading", "1"]
+        ]
+      }
+    ],
+    [
+      "actor/generator",
+      {
+        "balances": [
+          ["credit", "5000"],
+          ["decisions", "6"],
+          ["energy", "3000"],
+          ["future-capacity", "800"],
+          ["future-obligation/generator", "7"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["obligation/generator", "1"],
+          ["production-allowance", "320"],
+          ["production-capacity", "800"],
+          ["reference-price", "10000"],
+          ["solar-potential", "24000"],
+          ["storage-capacity", "3500"],
+          ["trading", "1"]
+        ]
+      }
+    ],
+    [
+      "actor/household",
+      {
+        "balances": [
+          ["credit", "20000"],
+          ["decisions", "6"],
+          ["future-income", "7"],
+          ["future-need/household", "7"],
+          ["income-due", "1"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["need/household", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "1200"],
+          ["trading", "1"]
+        ]
+      }
+    ],
+    [
+      "actor/speculator",
+      {
+        "balances": [
+          ["credit", "25000"],
+          ["decisions", "6"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "3000"],
+          ["trading", "1"],
+          ["uninformed/speculator", "1"]
+        ]
+      }
+    ],
+    [
+      "actor/whale",
+      {
+        "balances": [
+          ["credit", "80000"],
+          ["decisions", "6"],
+          ["liquidity-decision", "1"],
+          ["market-open", "1"],
+          ["reference-price", "10000"],
+          ["storage-capacity", "8000"],
+          ["trading", "1"]
+        ]
+      }
+    ],
+    ["information", {"balances": [["shortage-signal", "1"]]}],
+    [
+      "pool",
+      {
+        "balances": [["credit", "100000"], ["energy", "10000"], ["market-open", "1"], ["unissued-lp-share", "990000"]]
+      }
+    ],
+    ["treasury", {"balances": [["credit", "100000"]]}],
+    ["world", {"balances": [["at-day/0", "1"], ["current-sunlight", "40"], ["market-active", "1"]]}]
+  ],
+  "invariants": [
+    {
+      "name": "closed-energy-accounting",
+      "weights": [["energy", 1], ["solar-potential", 1], ["spent-energy", 1]]
+    },
+    {"name": "closed-credit-accounting", "weights": [["credit", 1]]},
+    {"name": "liquidity-share-accounting", "weights": [["lp-share", 1], ["unissued-lp-share", 1]]},
+    {
+      "name": "actor-goal-lifecycle",
+      "weights": [
+        ["need/factory", 1],
+        ["satisfied-need/factory", 1],
+        ["need/household", 1],
+        ["satisfied-need/household", 1],
+        ["obligation/generator", 1],
+        ["settled-obligation/generator", 1],
+        ["obligation/factory", 1],
+        ["settled-obligation/factory", 1],
+        ["future-need/factory", 1],
+        ["missed-need/factory", 1],
+        ["future-need/household", 1],
+        ["missed-need/household", 1],
+        ["future-obligation/factory", 1],
+        ["defaulted-obligation/factory", 1],
+        ["future-obligation/generator", 1],
+        ["defaulted-obligation/generator", 1]
+      ]
+    },
+    {
+      "name": "shortage-knowledge-lifecycle",
+      "weights": [["uninformed/speculator", 1], ["informed/speculator", 1]]
+    },
+    {"name": "market-lifecycle", "weights": [["market-active", 1], ["market-ended", 1]]},
+    {
+      "name": "production-capacity-lifecycle",
+      "weights": [["production-capacity", 1], ["future-capacity", 1], ["pending-capacity", 1]]
+    },
+    {
+      "name": "manufactured-goods-lifecycle",
+      "weights": [["unmade-goods", 1], ["goods", 1], ["delivered-goods", 1]]
+    },
+    {
+      "name": "income-entitlement-lifecycle",
+      "weights": [["future-income", 1], ["income-due", 1], ["received-income", 1], ["missed-income", 1]]
+    }
+  ]
+}

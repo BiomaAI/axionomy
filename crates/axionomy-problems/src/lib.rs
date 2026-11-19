@@ -18,6 +18,8 @@ pub mod workshop;
 
 #[cfg(feature = "packages")]
 mod package;
+#[cfg(feature = "packages")]
+pub use package::source;
 
 /// What writes a sample's package into an engine's store, everything named
 /// under the sample's name.

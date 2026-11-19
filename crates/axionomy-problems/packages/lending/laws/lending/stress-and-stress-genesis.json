@@ -1,0 +1,24 @@
+[
+  [
+    "pay-bill",
+    {
+      "accounts": [["borrower", "borrower"], ["clock", "clock"], ["supplier", "supplier"]],
+      "conditions": [
+        {
+          "comparison": "less_than_or_equal",
+          "left": {
+            "kind": "add",
+            "left": {"asset": "elapsed-period", "kind": "balance", "role": "clock"},
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "name": "paid-before-the-deadline",
+          "right": {"kind": "constant", "value": "4"}
+        }
+      ],
+      "consume": [["borrower", [["cash", "32000"]]], ["supplier", [["invoice", "1"]]]],
+      "distinct": [],
+      "preserve": [],
+      "produce": [["borrower", [["bill-paid", "1"]]], ["supplier", [["cash", "32000"]]]]
+    }
+  ]
+]

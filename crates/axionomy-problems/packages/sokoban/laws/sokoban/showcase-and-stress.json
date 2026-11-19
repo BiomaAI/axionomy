@@ -1,0 +1,12 @@
+[
+  [
+    "latch/{circuit}/{at}",
+    {
+      "accounts": [["from", "cell/{at}"], ["puzzle", "success"]],
+      "consume": [["puzzle", [["latch-ready/{circuit}", "1"]]]],
+      "distinct": [],
+      "preserve": [["from", [["player", "1"]]], ["puzzle", [["active", "1"]]]],
+      "produce": [["puzzle", [["latched/{circuit}", "1"]]]]
+    }
+  ]
+]

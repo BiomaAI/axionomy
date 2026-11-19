@@ -1,0 +1,89 @@
+{
+  "ontology": "perishables",
+  "laws": ["perishables/common"],
+  "accounts": [
+    [
+      "cohort/ambient",
+      {"balances": [["cohort-identity/ambient", "1"], ["fresh/ambient/ambient/ambient-expiry", "1"]]}
+    ],
+    [
+      "cohort/refrigerated",
+      {"balances": [["cohort-identity/refrigerated", "1"], ["fresh/refrigerated/cold/cold-expiry", "1"]]}
+    ],
+    [
+      "storage/fridge",
+      {
+        "balances": [
+          ["claim/refrigerated", "30"],
+          ["cold", "1"],
+          ["cooling-energy", "70"],
+          ["location-identity/fridge", "1"],
+          ["powered", "1"]
+        ]
+      }
+    ],
+    [
+      "storage/warehouse",
+      {"balances": [["ambient", "1"], ["claim/ambient", "70"], ["location-identity/warehouse", "1"]]}
+    ],
+    [
+      "world",
+      {
+        "balances": [
+          ["active", "1"],
+          ["before/ambient-expiry", "1"],
+          ["before/cold-expiry", "1"],
+          ["before/warmed-expiry", "1"],
+          ["now/harvest", "1"],
+          ["planning", "1"],
+          ["reached/harvest", "1"],
+          ["world-identity", "1"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {
+      "name": "fruit-claims",
+      "weights": [
+        ["claim/ambient", 1],
+        ["consumed/ambient", 1],
+        ["claim/refrigerated", 1],
+        ["consumed/refrigerated", 1]
+      ]
+    },
+    {
+      "name": "cohort-condition/ambient",
+      "weights": [["rotten/ambient", 1], ["fresh/ambient/ambient/ambient-expiry", 1]]
+    },
+    {
+      "name": "cohort-condition/refrigerated",
+      "weights": [
+        ["rotten/refrigerated", 1],
+        ["fresh/refrigerated/warmed-after-outage/warmed-expiry", 1],
+        ["fresh/refrigerated/cold/cold-expiry", 1]
+      ]
+    },
+    {"name": "storage-environment", "weights": [["ambient", 1], ["cold", 1]]},
+    {"name": "fridge-power", "weights": [["powered", 1], ["unpowered", 1]]},
+    {"name": "cooling-energy", "weights": [["cooling-energy", 1], ["spent-cooling-energy", 1]]},
+    {
+      "name": "one-current-time",
+      "weights": [["now/harvest", 1], ["now/ambient-expiry", 1], ["now/warmed-expiry", 1], ["now/cold-expiry", 1]]
+    },
+    {
+      "name": "deadline-phase/ambient-expiry",
+      "weights": [["before/ambient-expiry", 1], ["reached/ambient-expiry", 1]]
+    },
+    {
+      "name": "deadline-phase/warmed-expiry",
+      "weights": [["before/warmed-expiry", 1], ["reached/warmed-expiry", 1]]
+    },
+    {
+      "name": "deadline-phase/cold-expiry",
+      "weights": [["before/cold-expiry", 1], ["reached/cold-expiry", 1]]
+    },
+    {"name": "scenario-lifecycle", "weights": [["active", 1], ["solved", 1]]},
+    {"name": "storage-planning-lifecycle", "weights": [["planning", 1], ["plan-solved", 1]]}
+  ]
+}

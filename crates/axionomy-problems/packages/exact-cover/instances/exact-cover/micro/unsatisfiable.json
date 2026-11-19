@@ -1,0 +1,49 @@
+{
+  "ontology": "exact-cover",
+  "laws": [
+    "exact-cover/common",
+    "exact-cover/micro-and-micro-unsatisfiable",
+    "exact-cover/micro-and-micro-unsatisfiable-and-showcase-unsatisfiable-and-stress-unsatisfiable"
+  ],
+  "accounts": [
+    [
+      "problem",
+      {
+        "balances": [
+          ["active", "1"],
+          ["available/ab", "1"],
+          ["available/ac", "1"],
+          ["progress/0", "1"],
+          ["uncovered/a", "1"],
+          ["uncovered/b", "1"],
+          ["uncovered/c", "1"],
+          ["uncovered/d", "1"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {
+      "name": "each-universe-element-persists",
+      "weights": [
+        ["uncovered/a", 1],
+        ["covered/a", 1],
+        ["uncovered/b", 1],
+        ["covered/b", 1],
+        ["uncovered/c", 1],
+        ["covered/c", 1],
+        ["uncovered/d", 1],
+        ["covered/d", 1]
+      ]
+    },
+    {
+      "name": "set-choice-is-single-use",
+      "weights": [["available/ab", 1], ["selected/ab", 1], ["available/ac", 1], ["selected/ac", 1]]
+    },
+    {
+      "name": "one-progress-token",
+      "weights": [["progress/0", 1], ["progress/1", 1], ["progress/2", 1], ["progress/3", 1], ["progress/4", 1]]
+    },
+    {"name": "exact-cover-lifecycle", "weights": [["active", 1], ["solved", 1]]}
+  ]
+}

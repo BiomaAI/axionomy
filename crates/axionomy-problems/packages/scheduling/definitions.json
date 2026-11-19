@@ -1,0 +1,129 @@
+{
+  "candidates": {"scheduling/events": {"Script": {"function": "candidates", "script": "scheduling"}}},
+  "experiments": {
+    "scheduling/micro": {
+      "arms": [
+        {"start": null, "strategy": "scheduling/best-first"},
+        {"start": null, "strategy": "scheduling/bounded-optimizer"},
+        {"start": null, "strategy": "scheduling/pareto-job-one"},
+        {"start": null, "strategy": "scheduling/pareto-job-two"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "scheduling/solved",
+      "objectives": ["scheduling/job-one", "scheduling/job-two", "scheduling/makespan"],
+      "start": "scheduling/micro",
+      "trials": 1
+    },
+    "scheduling/micro/infeasible-horizon": {
+      "arms": [
+        {"start": null, "strategy": "scheduling/best-first"},
+        {"start": null, "strategy": "scheduling/bounded-optimizer"},
+        {"start": null, "strategy": "scheduling/pareto-job-one"},
+        {"start": null, "strategy": "scheduling/pareto-job-two"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "scheduling/solved",
+      "objectives": ["scheduling/job-one", "scheduling/job-two", "scheduling/makespan"],
+      "start": "scheduling/micro/infeasible-horizon",
+      "trials": 1
+    },
+    "scheduling/showcase": {
+      "arms": [
+        {"start": null, "strategy": "scheduling/best-first"},
+        {"start": null, "strategy": "scheduling/bounded-optimizer"},
+        {"start": null, "strategy": "scheduling/pareto-job-one"},
+        {"start": null, "strategy": "scheduling/pareto-job-two"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "scheduling/solved",
+      "objectives": ["scheduling/job-one", "scheduling/job-two", "scheduling/makespan"],
+      "start": "scheduling/showcase",
+      "trials": 1
+    },
+    "scheduling/showcase/infeasible-horizon": {
+      "arms": [
+        {"start": null, "strategy": "scheduling/best-first"},
+        {"start": null, "strategy": "scheduling/bounded-optimizer"},
+        {"start": null, "strategy": "scheduling/pareto-job-one"},
+        {"start": null, "strategy": "scheduling/pareto-job-two"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "scheduling/solved",
+      "objectives": ["scheduling/job-one", "scheduling/job-two", "scheduling/makespan"],
+      "start": "scheduling/showcase/infeasible-horizon",
+      "trials": 1
+    },
+    "scheduling/stress": {
+      "arms": [
+        {"start": null, "strategy": "scheduling/best-first"},
+        {"start": null, "strategy": "scheduling/bounded-optimizer"},
+        {"start": null, "strategy": "scheduling/pareto-job-one"},
+        {"start": null, "strategy": "scheduling/pareto-job-two"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "scheduling/solved",
+      "objectives": ["scheduling/job-one", "scheduling/job-two", "scheduling/makespan"],
+      "start": "scheduling/stress",
+      "trials": 1
+    },
+    "scheduling/stress/infeasible-horizon": {
+      "arms": [
+        {"start": null, "strategy": "scheduling/best-first"},
+        {"start": null, "strategy": "scheduling/bounded-optimizer"},
+        {"start": null, "strategy": "scheduling/pareto-job-one"},
+        {"start": null, "strategy": "scheduling/pareto-job-two"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "scheduling/solved",
+      "objectives": ["scheduling/job-one", "scheduling/job-two", "scheduling/makespan"],
+      "start": "scheduling/stress/infeasible-horizon",
+      "trials": 1
+    }
+  },
+  "goals": {"scheduling/solved": {"ontology": "scheduling", "goal": {"required": {"success": [["solved", "1"]]}}}},
+  "objectives": {
+    "scheduling/job-one": {"direction": "minimize", "measure": {"State": {"function": "job_one", "script": "scheduling"}}},
+    "scheduling/job-two": {"direction": "minimize", "measure": {"State": {"function": "job_two", "script": "scheduling"}}},
+    "scheduling/makespan": {"direction": "minimize", "measure": {"State": {"function": "makespan", "script": "scheduling"}}}
+  },
+  "strategies": {
+    "scheduling/best-first": {
+      "BestFirst": {
+        "candidates": "scheduling/events",
+        "cost": {"function": "makespan", "script": "scheduling"},
+        "heuristic": null
+      }
+    },
+    "scheduling/bounded-optimizer": {
+      "BranchAndBound": {
+        "bound": {"function": "makespan", "script": "scheduling"},
+        "candidates": "scheduling/events",
+        "cost": {"function": "makespan", "script": "scheduling"}
+      }
+    },
+    "scheduling/pareto-job-one": {
+      "Pareto": {
+        "by": ["scheduling/job-one", "scheduling/job-two"],
+        "candidates": "scheduling/events",
+        "objectives": ["scheduling/job-one", "scheduling/job-two"]
+      }
+    },
+    "scheduling/pareto-job-two": {
+      "Pareto": {
+        "by": ["scheduling/job-two", "scheduling/job-one"],
+        "candidates": "scheduling/events",
+        "objectives": ["scheduling/job-one", "scheduling/job-two"]
+      }
+    }
+  },
+  "views": {
+    "scheduling": {
+      "carry": null,
+      "formats": {"function": "format", "script": "scheduling/view"},
+      "labels": {"function": "label", "script": "scheduling/view"},
+      "leaderboards": null,
+      "scene": {"function": "scene", "script": "scheduling/view"},
+      "title": "Job-shop scheduling"
+    }
+  }
+}

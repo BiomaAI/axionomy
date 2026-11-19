@@ -1,0 +1,79 @@
+{
+  "experiments": {
+    "amm/micro": {
+      "arms": [
+        {"start": null, "strategy": "amm/day/market-day"},
+        {"start": null, "strategy": "amm/day/no-whale"},
+        {"start": null, "strategy": "amm/day/thin-liquidity"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 0},
+      "goal": "amm/day/met",
+      "objectives": ["amm/needs", "amm/utility", "amm/depth", "amm/unmet", "amm/defaults"],
+      "start": "amm/micro",
+      "trials": 1
+    },
+    "amm/showcase": {
+      "arms": [
+        {"start": null, "strategy": "amm/market-day"},
+        {"start": null, "strategy": "amm/no-whale"},
+        {"start": null, "strategy": "amm/thin-liquidity"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 697},
+      "goal": "amm/closed",
+      "objectives": ["amm/needs", "amm/utility", "amm/depth", "amm/unmet", "amm/defaults"],
+      "start": "amm/showcase",
+      "trials": 1
+    },
+    "amm/stress": {
+      "arms": [
+        {"start": null, "strategy": "amm/market-day"},
+        {"start": null, "strategy": "amm/no-whale"},
+        {"start": null, "strategy": "amm/thin-liquidity"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 697},
+      "goal": "amm/closed",
+      "objectives": ["amm/needs", "amm/utility", "amm/depth", "amm/unmet", "amm/defaults"],
+      "start": "amm/stress",
+      "trials": 1
+    }
+  },
+  "goals": {
+    "amm/closed": {"ontology": "amm", "goal": {"required": {"world": [["market-ended", "1"]]}}},
+    "amm/day/met": {
+      "ontology": "amm",
+      "goal": {
+        "required": {
+          "actor/factory": [["satisfied-need/factory", "1"], ["settled-obligation/factory", "1"]],
+          "actor/generator": [["settled-obligation/generator", "1"]],
+          "actor/household": [["satisfied-need/household", "1"]],
+          "actor/speculator": [["informed/speculator", "1"]]
+        }
+      }
+    }
+  },
+  "objectives": {
+    "amm/defaults": {"direction": "minimize", "measure": {"State": {"function": "defaulted", "script": "amm"}}},
+    "amm/depth": {"direction": "maximize", "measure": {"State": {"function": "depth", "script": "amm"}}},
+    "amm/needs": {"direction": "maximize", "measure": {"State": {"function": "needs", "script": "amm"}}},
+    "amm/unmet": {"direction": "minimize", "measure": {"State": {"function": "unmet", "script": "amm"}}},
+    "amm/utility": {"direction": "maximize", "measure": {"State": {"function": "utility", "script": "amm"}}}
+  },
+  "strategies": {
+    "amm/day/market-day": {"Plan": {"plan": {"function": "market_day_plan", "script": "amm"}}},
+    "amm/day/no-whale": {"Plan": {"plan": {"function": "no_whale_plan", "script": "amm"}}},
+    "amm/day/thin-liquidity": {"Plan": {"plan": {"function": "thin_liquidity_plan", "script": "amm"}}},
+    "amm/market-day": {"Policy": {"policy": {"function": "market_day", "script": "amm"}}},
+    "amm/no-whale": {"Policy": {"policy": {"function": "no_whale", "script": "amm"}}},
+    "amm/thin-liquidity": {"Policy": {"policy": {"function": "thin_liquidity", "script": "amm"}}}
+  },
+  "views": {
+    "amm": {
+      "carry": {"function": "carry", "script": "amm/view"},
+      "formats": {"function": "format", "script": "amm/view"},
+      "labels": {"function": "label", "script": "amm/view"},
+      "leaderboards": {"function": "leaderboards", "script": "amm/view"},
+      "scene": {"function": "scene", "script": "amm/view"},
+      "title": "Closed endogenous market"
+    }
+  }
+}

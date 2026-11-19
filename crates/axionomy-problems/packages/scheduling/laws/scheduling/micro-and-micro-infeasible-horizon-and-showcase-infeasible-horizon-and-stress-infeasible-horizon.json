@@ -1,0 +1,84 @@
+[
+  [
+    "schedule/one-a/{ready}/{start}",
+    {
+      "accounts": [
+        ["primary-job", "job/one"],
+        ["schedule", "success"],
+        ["slot0", "slot/one/{start}"],
+        ["slot1", "slot/one/{second}"]
+      ],
+      "consume": [
+        ["primary-job", [["ready-at/one-a/{ready}", "1"]]],
+        ["slot0", [["available", "1"]]],
+        ["slot1", [["available", "1"]]]
+      ],
+      "derived": [
+        {
+          "name": "end",
+          "value": {
+            "kind": "add",
+            "left": {"kind": "variable", "name": "start"},
+            "right": {"kind": "constant", "value": "2"}
+          }
+        },
+        {
+          "name": "second",
+          "value": {
+            "kind": "add",
+            "left": {"kind": "variable", "name": "start"},
+            "right": {"kind": "constant", "value": "1"}
+          }
+        }
+      ],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [
+        ["primary-job", [["ready-at/one-b/{end}", "1"]]],
+        ["slot0", [["reserved/one-a", "1"]]],
+        ["slot1", [["reserved/one-a", "1"]]]
+      ]
+    }
+  ],
+  [
+    "schedule/two-a/{ready}/{start}",
+    {
+      "accounts": [
+        ["primary-job", "job/two"],
+        ["schedule", "success"],
+        ["slot0", "slot/one/{start}"],
+        ["slot1", "slot/one/{second}"]
+      ],
+      "consume": [
+        ["primary-job", [["ready-at/two-a/{ready}", "1"]]],
+        ["slot0", [["available", "1"]]],
+        ["slot1", [["available", "1"]]]
+      ],
+      "derived": [
+        {
+          "name": "end",
+          "value": {
+            "kind": "add",
+            "left": {"kind": "variable", "name": "start"},
+            "right": {"kind": "constant", "value": "2"}
+          }
+        },
+        {
+          "name": "second",
+          "value": {
+            "kind": "add",
+            "left": {"kind": "variable", "name": "start"},
+            "right": {"kind": "constant", "value": "1"}
+          }
+        }
+      ],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [
+        ["primary-job", [["ready-at/two-b/{end}", "1"]]],
+        ["slot0", [["reserved/two-a", "1"]]],
+        ["slot1", [["reserved/two-a", "1"]]]
+      ]
+    }
+  ]
+]

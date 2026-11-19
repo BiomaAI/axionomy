@@ -1,0 +1,1685 @@
+[
+  [
+    "cancel-queue/one-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["queue-ticket/one-a", "1"]]], ["primary-job", [["queued/one-a/{machine}", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/one-a", "1"]]]],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "cancel-queue/one-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["queue-ticket/one-b", "1"]]], ["primary-job", [["queued/one-b/{machine}", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/one-b", "1"]]]],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "cancel-queue/one-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["queue-ticket/one-c", "1"]]], ["primary-job", [["queued/one-c/{machine}", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/one-c", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "cancel-queue/two-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["queue-ticket/two-a", "1"]]], ["primary-job", [["queued/two-a/{machine}", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/two-a", "1"]]]],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "cancel-queue/two-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["queue-ticket/two-b", "1"]]], ["primary-job", [["queued/two-b/{machine}", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/two-b", "1"]]]],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "cancel-queue/two-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["queue-ticket/two-c", "1"]]], ["primary-job", [["queued/two-c/{machine}", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/two-c", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "close",
+    {
+      "accounts": [["primary-job", "job/one"], ["schedule", "success"], ["secondary-job", "job/two"]],
+      "consume": [["schedule", [["active", "1"]]]],
+      "distinct": [],
+      "preserve": [["primary-job", [["done", "1"]]], ["secondary-job", [["done", "1"]]]],
+      "produce": [["schedule", [["solved", "1"]]]]
+    }
+  ],
+  [
+    "complete/one-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "end-time/one-a",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "execution-has-finished",
+          "right": {"asset": "due", "kind": "balance", "role": "primary-job"}
+        }
+      ],
+      "consume": [
+        ["machine", [["busy", "1"]]],
+        ["primary-job", [["running/one-a/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["idle", "1"]]],
+        ["primary-job", [["ready/one-b", "1"]]],
+        ["schedule", [["labor", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "complete/one-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "end-time/one-b",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "execution-has-finished",
+          "right": {"asset": "due", "kind": "balance", "role": "primary-job"}
+        }
+      ],
+      "consume": [
+        ["machine", [["busy", "1"]]],
+        ["primary-job", [["running/one-b/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["idle", "1"]]],
+        ["primary-job", [["ready/one-c", "1"]]],
+        ["schedule", [["labor", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "complete/one-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "end-time/one-c",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        },
+        {
+          "asset": "completion-time",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "execution-has-finished",
+          "right": {"asset": "due", "kind": "balance", "role": "primary-job"}
+        }
+      ],
+      "consume": [
+        ["machine", [["busy", "1"]]],
+        ["primary-job", [["running/one-c/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["idle", "1"]]], ["primary-job", [["done", "1"]]], ["schedule", [["labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "complete/two-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "end-time/two-a",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "execution-has-finished",
+          "right": {"asset": "due", "kind": "balance", "role": "primary-job"}
+        }
+      ],
+      "consume": [
+        ["machine", [["busy", "1"]]],
+        ["primary-job", [["running/two-a/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["idle", "1"]]],
+        ["primary-job", [["ready/two-b", "1"]]],
+        ["schedule", [["labor", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "complete/two-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "end-time/two-b",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "execution-has-finished",
+          "right": {"asset": "due", "kind": "balance", "role": "primary-job"}
+        }
+      ],
+      "consume": [
+        ["machine", [["busy", "1"]]],
+        ["primary-job", [["running/two-b/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["idle", "1"]]],
+        ["primary-job", [["ready/two-c", "1"]]],
+        ["schedule", [["labor", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "complete/two-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "end-time/two-c",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        },
+        {
+          "asset": "completion-time",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "execution-has-finished",
+          "right": {"asset": "due", "kind": "balance", "role": "primary-job"}
+        }
+      ],
+      "consume": [
+        ["machine", [["busy", "1"]]],
+        ["primary-job", [["running/two-c/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["idle", "1"]]], ["primary-job", [["done", "1"]]], ["schedule", [["labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "complete-repair",
+    {
+      "accounts": [["machine", "machine/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "machine"},
+          "role": "machine"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "repair-duration-elapsed",
+          "right": {"asset": "due", "kind": "balance", "role": "machine"}
+        }
+      ],
+      "consume": [["machine", [["repairing", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["online", "1"]]], ["schedule", [["labor", "1"]]]]
+    }
+  ],
+  [
+    "fault/none",
+    {
+      "accounts": [["machine", "machine/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "disruption-is-due",
+          "right": {"kind": "variable", "name": "fault-at"}
+        }
+      ],
+      "consume": [["machine", [["online", "1"]]], ["schedule", [["fault-pending", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["idle", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["broken", "1"]]], ["schedule", [["fault-occurred", "1"]]]]
+    }
+  ],
+  [
+    "fault/some/one-a",
+    {
+      "accounts": [["machine", "machine/two"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "work-remaining",
+          "quantity": {
+            "kind": "subtract",
+            "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+            "right": {"asset": "now", "kind": "balance", "role": "schedule"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "disruption-is-due",
+          "right": {"kind": "variable", "name": "fault-at"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "name": "unfinished-work-remains",
+          "right": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"kind": "constant", "value": "1"}
+          }
+        }
+      ],
+      "consume": [
+        ["machine", [["online", "1"]]],
+        ["primary-job", [["running/one-a/two", "1"]]],
+        ["schedule", [["fault-pending", "1"], ["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["broken", "1"]]],
+        ["primary-job", [["paused/one-a/two", "1"]]],
+        ["schedule", [["fault-occurred", "1"], ["labor", "1"], ["interrupted/one-a", "1"]]]
+      ]
+    }
+  ],
+  [
+    "fault/some/one-b",
+    {
+      "accounts": [["machine", "machine/two"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "work-remaining",
+          "quantity": {
+            "kind": "subtract",
+            "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+            "right": {"asset": "now", "kind": "balance", "role": "schedule"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "disruption-is-due",
+          "right": {"kind": "variable", "name": "fault-at"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "name": "unfinished-work-remains",
+          "right": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"kind": "constant", "value": "1"}
+          }
+        }
+      ],
+      "consume": [
+        ["machine", [["online", "1"]]],
+        ["primary-job", [["running/one-b/two", "1"]]],
+        ["schedule", [["fault-pending", "1"], ["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["broken", "1"]]],
+        ["primary-job", [["paused/one-b/two", "1"]]],
+        ["schedule", [["fault-occurred", "1"], ["labor", "1"], ["interrupted/one-b", "1"]]]
+      ]
+    }
+  ],
+  [
+    "fault/some/two-a",
+    {
+      "accounts": [["machine", "machine/two"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "work-remaining",
+          "quantity": {
+            "kind": "subtract",
+            "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+            "right": {"asset": "now", "kind": "balance", "role": "schedule"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "disruption-is-due",
+          "right": {"kind": "variable", "name": "fault-at"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "name": "unfinished-work-remains",
+          "right": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"kind": "constant", "value": "1"}
+          }
+        }
+      ],
+      "consume": [
+        ["machine", [["online", "1"]]],
+        ["primary-job", [["running/two-a/two", "1"]]],
+        ["schedule", [["fault-pending", "1"], ["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["broken", "1"]]],
+        ["primary-job", [["paused/two-a/two", "1"]]],
+        ["schedule", [["fault-occurred", "1"], ["labor", "1"], ["interrupted/two-a", "1"]]]
+      ]
+    }
+  ],
+  [
+    "fault/some/two-b",
+    {
+      "accounts": [["machine", "machine/two"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "due",
+          "quantity": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "work-remaining",
+          "quantity": {
+            "kind": "subtract",
+            "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+            "right": {"asset": "now", "kind": "balance", "role": "schedule"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "disruption-is-due",
+          "right": {"kind": "variable", "name": "fault-at"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "due", "kind": "balance", "role": "primary-job"},
+          "name": "unfinished-work-remains",
+          "right": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"kind": "constant", "value": "1"}
+          }
+        }
+      ],
+      "consume": [
+        ["machine", [["online", "1"]]],
+        ["primary-job", [["running/two-b/two", "1"]]],
+        ["schedule", [["fault-pending", "1"], ["busy-labor", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["broken", "1"]]],
+        ["primary-job", [["paused/two-b/two", "1"]]],
+        ["schedule", [["fault-occurred", "1"], ["labor", "1"], ["interrupted/two-b", "1"]]]
+      ]
+    }
+  ],
+  [
+    "queue/one-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "job-has-arrived",
+          "right": {"kind": "variable", "name": "arrival"}
+        }
+      ],
+      "consume": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/one-a", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-ticket/one-a", "1"]]], ["primary-job", [["queued/one-a/{machine}", "1"]]]],
+      "variables": [{"name": "machine", "values": ["one", "two"]}],
+      "relations": [{"gives": ["arrival"], "rows": [["one", "0"], ["two", "0"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "queue/one-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "job-has-arrived",
+          "right": {"kind": "variable", "name": "arrival"}
+        }
+      ],
+      "consume": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/one-b", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-ticket/one-b", "1"]]], ["primary-job", [["queued/one-b/{machine}", "1"]]]],
+      "variables": [{"name": "machine", "values": ["two", "three"]}],
+      "relations": [{"gives": ["arrival"], "rows": [["two", "0"], ["three", "0"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "queue/one-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "job-has-arrived",
+          "right": {"kind": "variable", "name": "arrival"}
+        }
+      ],
+      "consume": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/one-c", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-ticket/one-c", "1"]]], ["primary-job", [["queued/one-c/{machine}", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}],
+      "relations": [{"gives": ["arrival"], "rows": [["three", "0"], ["one", "0"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "queue/two-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "job-has-arrived",
+          "right": {"kind": "variable", "name": "arrival"}
+        }
+      ],
+      "consume": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/two-a", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-ticket/two-a", "1"]]], ["primary-job", [["queued/two-a/{machine}", "1"]]]],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "queue/two-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "job-has-arrived",
+          "right": {"kind": "variable", "name": "arrival"}
+        }
+      ],
+      "consume": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/two-b", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-ticket/two-b", "1"]]], ["primary-job", [["queued/two-b/{machine}", "1"]]]],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "queue/two-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        },
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "name": "job-has-arrived",
+          "right": {"kind": "variable", "name": "arrival"}
+        }
+      ],
+      "consume": [["machine", [["queue-free", "1"]]], ["primary-job", [["ready/two-c", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["queue-ticket/two-c", "1"]]], ["primary-job", [["queued/two-c/{machine}", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "repair",
+    {
+      "accounts": [["machine", "machine/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"kind": "variable", "name": "repair-duration"}
+          },
+          "role": "machine"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["machine", [["broken", "1"]]], ["schedule", [["repair-kit", "1"], ["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["schedule", [["active", "1"]]]],
+      "produce": [["machine", [["repairing", "1"]]], ["schedule", [["used-repair-kit", "1"], ["busy-labor", "1"]]]]
+    }
+  ],
+  [
+    "resume/one-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "work-remaining",
+          "quantity": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["primary-job", [["paused/one-a/{machine}", "1"]]], ["schedule", [["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"], ["busy", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["primary-job", [["running/one-a/{machine}", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "resume/one-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "work-remaining",
+          "quantity": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["primary-job", [["paused/one-b/{machine}", "1"]]], ["schedule", [["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"], ["busy", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["primary-job", [["running/one-b/{machine}", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "resume/one-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "work-remaining",
+          "quantity": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["primary-job", [["paused/one-c/{machine}", "1"]]], ["schedule", [["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"], ["busy", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["primary-job", [["running/one-c/{machine}", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "resume/two-a/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "work-remaining",
+          "quantity": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["primary-job", [["paused/two-a/{machine}", "1"]]], ["schedule", [["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"], ["busy", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["primary-job", [["running/two-a/{machine}", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["one", "two"]}]
+    }
+  ],
+  [
+    "resume/two-b/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "work-remaining",
+          "quantity": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["primary-job", [["paused/two-b/{machine}", "1"]]], ["schedule", [["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"], ["busy", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["primary-job", [["running/two-b/{machine}", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["two", "three"]}]
+    }
+  ],
+  [
+    "resume/two-c/{machine}",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_consume": [
+        {
+          "asset": "work-remaining",
+          "quantity": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"},
+          "role": "primary-job"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+            "right": {"asset": "work-remaining", "kind": "balance", "role": "primary-job"}
+          },
+          "role": "primary-job"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["primary-job", [["paused/two-c/{machine}", "1"]]], ["schedule", [["labor", "1"]]]],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"], ["busy", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [["primary-job", [["running/two-c/{machine}", "1"]]], ["schedule", [["busy-labor", "1"]]]],
+      "variables": [{"name": "machine", "values": ["three", "one"]}]
+    }
+  ],
+  [
+    "start/one-a/{machine}/one",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "0"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/one-a",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/one-a", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["queued/one-a/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/one-a", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["running/one-a/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/one-a", "1"], ["executed-on/one-a/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["one", "two"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["one", "2"], ["two", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/one-a/{machine}/two",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/one-a",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/one-a", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["queued/one-a/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/one-a", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["running/one-a/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/one-a", "1"], ["executed-on/one-a/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["one", "two"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["one", "2"], ["two", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/one-b/{machine}/one",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "0"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/one-b",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/one-b", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["queued/one-b/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/one-b", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["running/one-b/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/one-b", "1"], ["executed-on/one-b/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["two", "three"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["two", "1"], ["three", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/one-b/{machine}/two",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/one-b",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/one-b", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["queued/one-b/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/one-b", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["running/one-b/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/one-b", "1"], ["executed-on/one-b/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["two", "three"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["two", "1"], ["three", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/one-c/{machine}/one",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "0"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/one-c",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/one-c", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["queued/one-c/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/one-c", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["running/one-c/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/one-c", "1"], ["executed-on/one-c/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["three", "one"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["three", "1"], ["one", "2"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/one-c/{machine}/two",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/one"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/one-c",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/one-c", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["queued/one-c/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/one-c", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["running/one-c/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/one-c", "1"], ["executed-on/one-c/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["three", "one"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["three", "1"], ["one", "2"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/two-a/{machine}/one",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/two-a",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/two-a", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["queued/two-a/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/two-a", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["running/two-a/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/two-a", "1"], ["executed-on/two-a/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["one", "two"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["one", "2"], ["two", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/two-a/{machine}/two",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "0"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/two-a",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/two-a", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["queued/two-a/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/two-a", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["running/two-a/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/two-a", "1"], ["executed-on/two-a/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["one", "two"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["one", "2"], ["two", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/two-b/{machine}/one",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/two-b",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/two-b", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["queued/two-b/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/two-b", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["running/two-b/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/two-b", "1"], ["executed-on/two-b/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["two", "three"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["two", "1"], ["three", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/two-b/{machine}/two",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "0"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/two-b",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/two-b", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["queued/two-b/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/two-b", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["running/two-b/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/two-b", "1"], ["executed-on/two-b/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["two", "three"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["two", "1"], ["three", "3"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/two-c/{machine}/one",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "1"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/two-c",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/two-c", "1"], ["configured/one", "1"]]],
+        ["primary-job", [["queued/two-c/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/two-c", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["running/two-c/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/two-c", "1"], ["executed-on/two-c/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["three", "one"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["three", "1"], ["one", "2"]], "variables": ["machine"]}]
+    }
+  ],
+  [
+    "start/two-c/{machine}/two",
+    {
+      "accounts": [["machine", "machine/{machine}"], ["primary-job", "job/two"], ["schedule", "success"]],
+      "computed_produce": [
+        {
+          "asset": "due",
+          "quantity": {
+            "kind": "add",
+            "left": {
+              "kind": "add",
+              "left": {"asset": "now", "kind": "balance", "role": "schedule"},
+              "right": {"kind": "variable", "name": "processing-time"}
+            },
+            "right": {"kind": "constant", "value": "0"}
+          },
+          "role": "primary-job"
+        },
+        {
+          "asset": "start-time/two-c",
+          "quantity": {"asset": "now", "kind": "balance", "role": "schedule"},
+          "role": "schedule"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "equal",
+          "left": {"kind": "units"},
+          "name": "one-scheduling-event",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [
+        ["machine", [["idle", "1"], ["queue-ticket/two-c", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["queued/two-c/{machine}", "1"]]],
+        ["schedule", [["labor", "1"], ["not-started/two-c", "1"]]]
+      ],
+      "distinct": [],
+      "preserve": [["machine", [["online", "1"]]], ["schedule", [["active", "1"]]]],
+      "produce": [
+        ["machine", [["busy", "1"], ["queue-free", "1"], ["configured/two", "1"]]],
+        ["primary-job", [["running/two-c/{machine}", "1"]]],
+        ["schedule", [["busy-labor", "1"], ["started/two-c", "1"], ["executed-on/two-c/{machine}", "1"]]]
+      ],
+      "variables": [{"name": "machine", "values": ["three", "one"]}],
+      "relations": [{"gives": ["processing-time"], "rows": [["three", "1"], ["one", "2"]], "variables": ["machine"]}]
+    }
+  ]
+]

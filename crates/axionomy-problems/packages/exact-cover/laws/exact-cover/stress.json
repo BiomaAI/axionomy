@@ -1,0 +1,3642 @@
+[
+  [
+    "select/abef/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abef", "1"],
+            ["progress/5", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abef", "1"],
+            ["progress/9", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abef/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abef", "1"],
+            ["progress/6", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abef", "1"],
+            ["progress/10", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abef/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abef", "1"],
+            ["progress/7", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abef", "1"],
+            ["progress/11", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abef/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abef", "1"],
+            ["progress/8", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abef", "1"],
+            ["progress/12", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/0", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/4", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/1", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/5", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/2", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/6", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/3", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/7", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/4", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/8", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/5", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/9", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/6", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/10", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/7", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/11", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/abij/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/abij", "1"],
+            ["progress/8", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/i", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/abij", "1"],
+            ["progress/12", "1"],
+            ["covered/a", "1"],
+            ["covered/b", "1"],
+            ["covered/i", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/ace/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/ace", "1"],
+            ["progress/6", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/e", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/ace", "1"],
+            ["progress/9", "1"],
+            ["covered/a", "1"],
+            ["covered/c", "1"],
+            ["covered/e", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/ace/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/ace", "1"],
+            ["progress/7", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/e", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/ace", "1"],
+            ["progress/10", "1"],
+            ["covered/a", "1"],
+            ["covered/c", "1"],
+            ["covered/e", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/ace/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/ace", "1"],
+            ["progress/8", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/e", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/ace", "1"],
+            ["progress/11", "1"],
+            ["covered/a", "1"],
+            ["covered/c", "1"],
+            ["covered/e", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/ace/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/ace", "1"],
+            ["progress/9", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/e", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/ace", "1"],
+            ["progress/12", "1"],
+            ["covered/a", "1"],
+            ["covered/c", "1"],
+            ["covered/e", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/adg/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/adg", "1"],
+            ["progress/6", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/adg", "1"],
+            ["progress/9", "1"],
+            ["covered/a", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/adg/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/adg", "1"],
+            ["progress/7", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/adg", "1"],
+            ["progress/10", "1"],
+            ["covered/a", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/adg/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/adg", "1"],
+            ["progress/8", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/adg", "1"],
+            ["progress/11", "1"],
+            ["covered/a", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/adg/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/adg", "1"],
+            ["progress/9", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/adg", "1"],
+            ["progress/12", "1"],
+            ["covered/a", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/0", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/3", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/1", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/4", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/2", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/5", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/3", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/6", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/4", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/7", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/5", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/8", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/6", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/9", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/7", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/10", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/8", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/11", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/aei/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/aei", "1"],
+            ["progress/9", "1"],
+            ["uncovered/a", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/i", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/aei", "1"],
+            ["progress/12", "1"],
+            ["covered/a", "1"],
+            ["covered/e", "1"],
+            ["covered/i", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/beh/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/beh", "1"],
+            ["progress/6", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/beh", "1"],
+            ["progress/9", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/beh/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/beh", "1"],
+            ["progress/7", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/beh", "1"],
+            ["progress/10", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/beh/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/beh", "1"],
+            ["progress/8", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/beh", "1"],
+            ["progress/11", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/beh/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/beh", "1"],
+            ["progress/9", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/beh", "1"],
+            ["progress/12", "1"],
+            ["covered/b", "1"],
+            ["covered/e", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfg/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfg", "1"],
+            ["progress/6", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfg", "1"],
+            ["progress/9", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfg/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfg", "1"],
+            ["progress/7", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfg", "1"],
+            ["progress/10", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfg/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfg", "1"],
+            ["progress/8", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfg", "1"],
+            ["progress/11", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfg/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfg", "1"],
+            ["progress/9", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/g", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfg", "1"],
+            ["progress/12", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/g", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/0", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/3", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/1", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/4", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/2", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/5", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/3", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/6", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/4", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/7", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/5", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/8", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/6", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/9", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/7", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/10", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/8", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/11", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/bfj/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/bfj", "1"],
+            ["progress/9", "1"],
+            ["uncovered/b", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/j", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/bfj", "1"],
+            ["progress/12", "1"],
+            ["covered/b", "1"],
+            ["covered/f", "1"],
+            ["covered/j", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cd/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cd", "1"], ["progress/7", "1"], ["uncovered/c", "1"], ["uncovered/d", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cd", "1"], ["progress/9", "1"], ["covered/c", "1"], ["covered/d", "1"]]]]
+    }
+  ],
+  [
+    "select/cd/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cd", "1"], ["progress/8", "1"], ["uncovered/c", "1"], ["uncovered/d", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cd", "1"], ["progress/10", "1"], ["covered/c", "1"], ["covered/d", "1"]]]]
+    }
+  ],
+  [
+    "select/cd/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cd", "1"], ["progress/9", "1"], ["uncovered/c", "1"], ["uncovered/d", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cd", "1"], ["progress/11", "1"], ["covered/c", "1"], ["covered/d", "1"]]]]
+    }
+  ],
+  [
+    "select/cd/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cd", "1"], ["progress/10", "1"], ["uncovered/c", "1"], ["uncovered/d", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cd", "1"], ["progress/12", "1"], ["covered/c", "1"], ["covered/d", "1"]]]]
+    }
+  ],
+  [
+    "select/cdgh/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdgh", "1"],
+            ["progress/5", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdgh", "1"],
+            ["progress/9", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdgh/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdgh", "1"],
+            ["progress/6", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdgh", "1"],
+            ["progress/10", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdgh/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdgh", "1"],
+            ["progress/7", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdgh", "1"],
+            ["progress/11", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdgh/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdgh", "1"],
+            ["progress/8", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/h", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdgh", "1"],
+            ["progress/12", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/g", "1"],
+            ["covered/h", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/0", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/3", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/1", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/4", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/2", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/5", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/3", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/6", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/4", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/7", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/5", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/8", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/6", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/9", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/7", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/10", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/8", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/11", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cdk/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cdk", "1"],
+            ["progress/9", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cdk", "1"],
+            ["progress/12", "1"],
+            ["covered/c", "1"],
+            ["covered/d", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cf/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cf", "1"], ["progress/7", "1"], ["uncovered/c", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cf", "1"], ["progress/9", "1"], ["covered/c", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/cf/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cf", "1"], ["progress/8", "1"], ["uncovered/c", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cf", "1"], ["progress/10", "1"], ["covered/c", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/cf/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cf", "1"], ["progress/9", "1"], ["uncovered/c", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cf", "1"], ["progress/11", "1"], ["covered/c", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/cf/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/cf", "1"], ["progress/10", "1"], ["uncovered/c", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/cf", "1"], ["progress/12", "1"], ["covered/c", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/cgk/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/0", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/3", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/1", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/4", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/2", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/5", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/3", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/6", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/4", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/7", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/5", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/8", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/6", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/9", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/7", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/10", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/8", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/11", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/cgk/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/cgk", "1"],
+            ["progress/9", "1"],
+            ["uncovered/c", "1"],
+            ["uncovered/g", "1"],
+            ["uncovered/k", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/cgk", "1"],
+            ["progress/12", "1"],
+            ["covered/c", "1"],
+            ["covered/g", "1"],
+            ["covered/k", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dh/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/dh", "1"], ["progress/7", "1"], ["uncovered/d", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/dh", "1"], ["progress/9", "1"], ["covered/d", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/dh/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/dh", "1"], ["progress/8", "1"], ["uncovered/d", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/dh", "1"], ["progress/10", "1"], ["covered/d", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/dh/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/dh", "1"], ["progress/9", "1"], ["uncovered/d", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/dh", "1"], ["progress/11", "1"], ["covered/d", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/dh/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/dh", "1"], ["progress/10", "1"], ["uncovered/d", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/dh", "1"], ["progress/12", "1"], ["covered/d", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/dhl/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/0", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/3", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/1", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/4", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/2", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/5", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/3", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/6", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/4", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/7", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/5", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/8", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/6", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/9", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/7", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/10", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/8", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/11", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/dhl/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/dhl", "1"],
+            ["progress/9", "1"],
+            ["uncovered/d", "1"],
+            ["uncovered/h", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/dhl", "1"],
+            ["progress/12", "1"],
+            ["covered/d", "1"],
+            ["covered/h", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/ef/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ef", "1"], ["progress/7", "1"], ["uncovered/e", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ef", "1"], ["progress/9", "1"], ["covered/e", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/ef/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ef", "1"], ["progress/8", "1"], ["uncovered/e", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ef", "1"], ["progress/10", "1"], ["covered/e", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/ef/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ef", "1"], ["progress/9", "1"], ["uncovered/e", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ef", "1"], ["progress/11", "1"], ["covered/e", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/ef/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ef", "1"], ["progress/10", "1"], ["uncovered/e", "1"], ["uncovered/f", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ef", "1"], ["progress/12", "1"], ["covered/e", "1"], ["covered/f", "1"]]]]
+    }
+  ],
+  [
+    "select/efl/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/0", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/3", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/1", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/4", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/2", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/5", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/3", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/6", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/4", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/7", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/5", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/8", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/6", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/9", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/7", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/10", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/8", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/11", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/efl/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [
+            ["available/efl", "1"],
+            ["progress/9", "1"],
+            ["uncovered/e", "1"],
+            ["uncovered/f", "1"],
+            ["uncovered/l", "1"]
+          ]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [
+        [
+          "problem",
+          [
+            ["selected/efl", "1"],
+            ["progress/12", "1"],
+            ["covered/e", "1"],
+            ["covered/f", "1"],
+            ["covered/l", "1"]
+          ]
+        ]
+      ]
+    }
+  ],
+  [
+    "select/gh/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/gh", "1"], ["progress/7", "1"], ["uncovered/g", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/gh", "1"], ["progress/9", "1"], ["covered/g", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/gh/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/gh", "1"], ["progress/8", "1"], ["uncovered/g", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/gh", "1"], ["progress/10", "1"], ["covered/g", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/gh/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/gh", "1"], ["progress/9", "1"], ["uncovered/g", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/gh", "1"], ["progress/11", "1"], ["covered/g", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/gh/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/gh", "1"], ["progress/10", "1"], ["uncovered/g", "1"], ["uncovered/h", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/gh", "1"], ["progress/12", "1"], ["covered/g", "1"], ["covered/h", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/0", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/2", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/1", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/3", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/2", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/4", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/3", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/5", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/4", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/6", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/5", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/7", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/6", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/8", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/7", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/9", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/8", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/10", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/9", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/11", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/ij/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/ij", "1"], ["progress/10", "1"], ["uncovered/i", "1"], ["uncovered/j", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/ij", "1"], ["progress/12", "1"], ["covered/i", "1"], ["covered/j", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/0",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/0", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/2", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/1",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/1", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/3", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/2",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/2", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/4", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/3",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/3", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/5", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/4",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/4", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/6", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/5",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/5", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/7", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/6",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/6", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/8", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/7",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/7", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/9", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/8",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/8", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/10", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/9",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/9", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/11", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ],
+  [
+    "select/kl/10",
+    {
+      "accounts": [["problem", "problem"]],
+      "consume": [
+        [
+          "problem",
+          [["available/kl", "1"], ["progress/10", "1"], ["uncovered/k", "1"], ["uncovered/l", "1"]]
+        ]
+      ],
+      "distinct": [],
+      "preserve": [["problem", [["active", "1"]]]],
+      "produce": [["problem", [["selected/kl", "1"], ["progress/12", "1"], ["covered/k", "1"], ["covered/l", "1"]]]]
+    }
+  ]
+]

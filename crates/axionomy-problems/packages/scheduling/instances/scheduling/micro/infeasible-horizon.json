@@ -1,0 +1,91 @@
+{
+  "ontology": "scheduling",
+  "laws": [
+    "scheduling/micro-and-micro-infeasible-horizon",
+    "scheduling/micro-and-micro-infeasible-horizon-and-showcase-infeasible-horizon-and-stress-infeasible-horizon"
+  ],
+  "tables": {
+    "finish/{job-one-end}/{job-two-end}/{makespan}": {
+      "variables": [
+        {"name": "job-one-end", "range": ["0", "2"]},
+        {"name": "job-two-end", "range": ["0", "2"]},
+        {"name": "makespan", "range": ["0", "2"]}
+      ],
+      "relations": [
+        {
+          "rows": [
+            ["0", "0", "0"],
+            ["0", "1", "1"],
+            ["0", "2", "2"],
+            ["1", "0", "1"],
+            ["1", "1", "1"],
+            ["1", "2", "2"],
+            ["2", "0", "2"],
+            ["2", "1", "2"],
+            ["2", "2", "2"]
+          ],
+          "variables": ["job-one-end", "job-two-end", "makespan"]
+        }
+      ]
+    },
+    "schedule/one-a/{ready}/{start}": {
+      "variables": [{"name": "ready", "values": ["0"]}, {"name": "start", "range": ["0", "0"]}],
+      "relations": [{"rows": [["0", "0"]], "variables": ["ready", "start"]}]
+    },
+    "schedule/two-a/{ready}/{start}": {
+      "variables": [{"name": "ready", "values": ["0"]}, {"name": "start", "range": ["0", "0"]}],
+      "relations": [{"rows": [["0", "0"]], "variables": ["ready", "start"]}]
+    }
+  },
+  "accounts": [
+    ["job/one", {"balances": [["ready-at/one-a/0", "1"]]}],
+    ["job/two", {"balances": [["ready-at/two-a/0", "1"]]}],
+    ["slot/one/0", {"balances": [["available", "1"]]}],
+    ["slot/one/1", {"balances": [["available", "1"]]}],
+    ["slot/two/0", {"balances": [["available", "1"]]}],
+    ["slot/two/1", {"balances": [["available", "1"]]}],
+    ["success", {"balances": [["active", "1"]]}]
+  ],
+  "invariants": [
+    {
+      "name": "two-job-state-tokens",
+      "weights": [
+        ["ready-at/one-a/0", 1],
+        ["completed-at/one-a/0", 1],
+        ["ready-at/one-a/1", 1],
+        ["completed-at/one-a/1", 1],
+        ["ready-at/one-a/2", 1],
+        ["completed-at/one-a/2", 1],
+        ["ready-at/one-b/0", 1],
+        ["completed-at/one-b/0", 1],
+        ["ready-at/one-b/1", 1],
+        ["completed-at/one-b/1", 1],
+        ["ready-at/one-b/2", 1],
+        ["completed-at/one-b/2", 1],
+        ["ready-at/two-a/0", 1],
+        ["completed-at/two-a/0", 1],
+        ["ready-at/two-a/1", 1],
+        ["completed-at/two-a/1", 1],
+        ["ready-at/two-a/2", 1],
+        ["completed-at/two-a/2", 1],
+        ["ready-at/two-b/0", 1],
+        ["completed-at/two-b/0", 1],
+        ["ready-at/two-b/1", 1],
+        ["completed-at/two-b/1", 1],
+        ["ready-at/two-b/2", 1],
+        ["completed-at/two-b/2", 1]
+      ]
+    },
+    {
+      "name": "machine-slot-capacity",
+      "weights": [
+        ["available", 1],
+        ["reserved/one-a", 1],
+        ["reserved/one-b", 1],
+        ["reserved/two-a", 1],
+        ["reserved/two-b", 1]
+      ]
+    },
+    {"name": "schedule-lifecycle", "weights": [["active", 1], ["solved", 1]]}
+  ]
+}

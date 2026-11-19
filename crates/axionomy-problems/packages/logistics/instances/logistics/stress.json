@@ -1,0 +1,293 @@
+{
+  "ontology": "logistics/fleet",
+  "laws": ["logistics/fleet/common"],
+  "tables": {
+    "deliver/{van}/{order}/false": {
+      "variables": [{"name": "van", "values": ["cold", "freight"]}, {"name": "order", "range": ["0", "5"]}],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "deliver/{van}/{order}/true": {
+      "variables": [{"name": "van", "values": ["cold", "freight"]}, {"name": "order", "values": ["1", "2", "4", "5"]}],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "expire/{order}/none/{at}": {
+      "variables": [{"name": "order", "range": ["0", "5"]}, {"name": "at", "values": ["depot", "hub"]}],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "expire/{order}/some/{van}/depot": {
+      "variables": [{"name": "order", "range": ["0", "5"]}, {"name": "van", "values": ["cold", "freight"]}],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "load/{van}/{order}/{at}": {
+      "variables": [
+        {"name": "van", "values": ["cold", "freight"]},
+        {"name": "order", "range": ["0", "5"]},
+        {"name": "at", "values": ["depot", "hub"]}
+      ],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "release/{order}": {
+      "variables": [{"name": "order", "range": ["0", "5"]}],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "stage/{van}/{order}": {
+      "variables": [{"name": "van", "values": ["cold", "freight"]}, {"name": "order", "range": ["0", "5"]}],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    },
+    "transfer/{from}/{to}/{order}/{at}": {
+      "variables": [
+        {"name": "from", "values": ["cold", "freight"]},
+        {"name": "order", "range": ["0", "5"]},
+        {"name": "to", "values": ["cold", "freight"]},
+        {"name": "at", "values": ["depot", "hub", "north", "south", "east"]}
+      ],
+      "relations": [
+        {
+          "gives": ["destination", "weight", "cold", "price", "arrival", "deadline", "expiry"],
+          "rows": [
+            ["0", "north", "1", "1", "24", "0", "12", "13"],
+            ["1", "south", "3", "0", "28", "0", "18", "52"],
+            ["2", "south", "1", "0", "16", "0", "17", "52"],
+            ["3", "east", "1", "1", "24", "7", "30", "31"],
+            ["4", "east", "3", "0", "28", "10", "40", "52"],
+            ["5", "north", "1", "0", "16", "13", "44", "52"]
+          ],
+          "variables": ["order"]
+        }
+      ]
+    }
+  },
+  "constants": {"horizon": "52", "orders": "6"},
+  "accounts": [
+    [
+      "nature",
+      {
+        "balances": [
+          ["ticket-word/cold/depot/hub", "74766790688833"],
+          ["ticket-word/cold/depot/north", "145139896952916"],
+          ["ticket-word/cold/east/north", "275951718401"],
+          ["ticket-word/cold/east/south", "18338562320"],
+          ["ticket-word/cold/hub/depot", "22012047130704"],
+          ["ticket-word/cold/hub/north", "89147751546944"],
+          ["ticket-word/cold/hub/south", "17185177605"],
+          ["ticket-word/cold/north/depot", "70368752566400"],
+          ["ticket-word/cold/north/east", "292062037012"],
+          ["ticket-word/cold/north/hub", "17609449817089"],
+          ["ticket-word/cold/south/east", "5368729668"],
+          ["ticket-word/cold/south/hub", "71812928001029"],
+          ["ticket-word/freight/depot/hub", "18989212517632"],
+          ["ticket-word/freight/depot/north", "140123341204"],
+          ["ticket-word/freight/east/north", "1444204843009"],
+          ["ticket-word/freight/east/south", "5501854433600"],
+          ["ticket-word/freight/hub/depot", "22334920790080"],
+          ["ticket-word/freight/hub/north", "4398316279044"],
+          ["ticket-word/freight/hub/south", "4741661724676"],
+          ["ticket-word/freight/north/depot", "36283917271680"],
+          ["ticket-word/freight/north/east", "75866320228352"],
+          ["ticket-word/freight/north/hub", "5501925462033"],
+          ["ticket-word/freight/south/east", "17596486259793"],
+          ["ticket-word/freight/south/hub", "71743133978704"]
+        ]
+      }
+    ],
+    ["order/0", {"balances": [["at/depot", "1"], ["money", "24"], ["scheduled", "1"]]}],
+    ["order/1", {"balances": [["at/depot", "1"], ["money", "28"], ["scheduled", "1"]]}],
+    ["order/2", {"balances": [["at/depot", "1"], ["money", "16"], ["scheduled", "1"]]}],
+    ["order/3", {"balances": [["at/depot", "1"], ["money", "24"], ["scheduled", "1"]]}],
+    ["order/4", {"balances": [["at/depot", "1"], ["money", "28"], ["scheduled", "1"]]}],
+    ["order/5", {"balances": [["at/depot", "1"], ["money", "16"], ["scheduled", "1"]]}],
+    [
+      "station",
+      {
+        "balances": [["fuel", "18"], ["fuel-pump", "1"], ["part", "3"], ["repair-bay", "1"], ["tow-truck", "1"]]
+      }
+    ],
+    [
+      "vehicle/cold",
+      {
+        "balances": [
+          ["at/depot", "1"],
+          ["cold-space", "1"],
+          ["fuel", "5"],
+          ["integrity", "1"],
+          ["ready", "1"],
+          ["space", "2"],
+          ["tank-space", "3"],
+          ["ticket-divisor", "1"]
+        ]
+      }
+    ],
+    [
+      "vehicle/freight",
+      {
+        "balances": [
+          ["at/depot", "1"],
+          ["fuel", "5"],
+          ["integrity", "1"],
+          ["ready", "1"],
+          ["space", "3"],
+          ["tank-space", "3"],
+          ["ticket-divisor", "1"]
+        ]
+      }
+    ],
+    [
+      "world",
+      {
+        "balances": [
+          ["active", "1"],
+          ["dock-space", "2"],
+          ["money", "20"],
+          ["permit/cold", "1"],
+          ["permit/freight", "1"],
+          ["road-space", "1"],
+          ["time-remaining", "52"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {"name": "dispatch-permit/cold", "weights": [["permit/cold", 1], ["used-permit/cold", 1]]},
+    {"name": "dispatch-permit/freight", "weights": [["permit/freight", 1], ["used-permit/freight", 1]]},
+    {
+      "name": "physical-vehicle-cargo-capacity",
+      "weights": [
+        ["space", 1],
+        ["cargo/0", 1],
+        ["cargo/1", 3],
+        ["cargo/2", 1],
+        ["cargo/3", 1],
+        ["cargo/4", 3],
+        ["cargo/5", 1]
+      ]
+    },
+    {"name": "one-refrigerated-cargo-slot", "weights": [["cold-space", 1], ["cargo/0", 1], ["cargo/3", 1]]},
+    {
+      "name": "two-vehicle-activities",
+      "weights": [
+        ["ready", 1],
+        ["refueling", 1],
+        ["repairing", 1],
+        ["towing", 1],
+        ["travelling/depot/hub", 1],
+        ["travelling/hub/depot", 1],
+        ["travelling/hub/north", 1],
+        ["travelling/north/hub", 1],
+        ["travelling/hub/south", 1],
+        ["travelling/south/hub", 1],
+        ["travelling/north/east", 1],
+        ["travelling/east/north", 1],
+        ["travelling/south/east", 1],
+        ["travelling/east/south", 1],
+        ["travelling/depot/north", 1],
+        ["travelling/north/depot", 1]
+      ]
+    },
+    {
+      "name": "cargo-lifecycle",
+      "weights": [["scheduled", 1], ["waiting", 1], ["in-transit", 1], ["delivered", 1], ["expired", 1]]
+    },
+    {"name": "one-occupied-trunk-road", "weights": [["road-space", 1], ["on-main-road", 1]]},
+    {"name": "finite-hub-staging-capacity", "weights": [["dock-space", 1], ["dock-used", 1]]},
+    {"name": "fuel-stock", "weights": [["fuel", 1], ["spent-fuel", 1]]},
+    {"name": "funded-delivery-and-service-payments", "weights": [["money", 1]]},
+    {"name": "vehicle-condition", "weights": [["integrity", 1], ["damage", 1]]},
+    {"name": "fuel-pump-occupancy", "weights": [["fuel-pump", 1], ["refueling", 1]]},
+    {"name": "repair-bay-occupancy", "weights": [["repair-bay", 1], ["repairing", 1]]},
+    {"name": "tow-truck-occupancy", "weights": [["tow-truck", 1], ["towing", 1]]},
+    {"name": "finite-repair-parts", "weights": [["part", 1], ["used-part", 1]]},
+    {"name": "bounded-fleet-clock", "weights": [["time", 1], ["time-remaining", 1]]},
+    {"name": "fleet-lifecycle", "weights": [["active", 1], ["closed", 1]]}
+  ]
+}

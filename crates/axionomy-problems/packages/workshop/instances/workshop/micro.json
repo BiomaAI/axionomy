@@ -1,0 +1,16 @@
+{
+  "ontology": "workshop",
+  "laws": ["workshop/micro"],
+  "accounts": [
+    [
+      "workshop",
+      {"balances": [["active", "1"], ["labor", "4"], ["time", "3"], ["tool", "1"], ["wood", "6"]]}
+    ]
+  ],
+  "invariants": [
+    {"name": "material-mass", "weights": [["wood", 1], ["chair", 1], ["waste", 1]]},
+    {"name": "labor-accounting", "weights": [["labor", 1], ["spent-labor", 1]]},
+    {"name": "time-accounting", "weights": [["time", 1], ["spent-time", 1]]},
+    {"name": "workshop-lifecycle", "weights": [["active", 1], ["solved", 1]]}
+  ]
+}

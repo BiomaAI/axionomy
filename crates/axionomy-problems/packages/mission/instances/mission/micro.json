@@ -1,0 +1,39 @@
+{
+  "ontology": "mission",
+  "laws": ["mission/common"],
+  "accounts": [
+    ["agent/medic", {"balances": [["at/base", "1"], ["energy", "2"], ["medical-kit", "1"]]}],
+    ["agent/scout", {"balances": [["at/base", "1"], ["energy", "2"], ["sensor", "1"]]}],
+    ["mission", {"balances": [["planning", "1"], ["time-remaining", "10"]]}],
+    ["nature", {"balances": [["unresolved", "1"]]}],
+    ["success", {"balances": []}]
+  ],
+  "invariants": [
+    {"name": "two-agent-positions", "weights": [["at/base", 1], ["at/north", 1], ["at/south", 1]]},
+    {"name": "energy-accounting", "weights": [["energy", 1], ["spent-energy", 1]]},
+    {"name": "time-accounting", "weights": [["time-remaining", 1], ["elapsed-time", 1]]},
+    {"name": "sensor-accounting", "weights": [["sensor", 1], ["used-sensor", 1]]},
+    {"name": "medical-kit-accounting", "weights": [["medical-kit", 1], ["used-medical-kit", 1]]},
+    {
+      "name": "mission-lifecycle",
+      "weights": [
+        ["planning", 1],
+        ["awaiting-scan", 1],
+        ["awaiting-encounter", 1],
+        ["needs-treatment", 1],
+        ["area-safe", 1],
+        ["rescued", 1],
+        ["solved", 1]
+      ]
+    },
+    {"name": "one-hidden-truth", "weights": [["unresolved", 1], ["truth/north", 1], ["truth/south", 1]]},
+    {
+      "name": "one-hidden-seed",
+      "weights": [["unresolved", 1], ["seed/0", 1], ["seed/1", 1], ["seed/2", 1], ["seed/3", 1]]
+    },
+    {
+      "name": "one-hidden-hazard",
+      "weights": [["unresolved", 1], ["hazard-resolved", 1], ["hazard/safe", 1], ["hazard/injury", 1]]
+    }
+  ]
+}

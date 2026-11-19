@@ -1,0 +1,230 @@
+{
+  "ontology": "rescue/incident",
+  "laws": ["rescue/incident/common"],
+  "tables": {
+    "deteriorate/{patient}": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "discover/{patient}/{location}": {
+      "variables": [
+        {"name": "patient", "range": ["0", "3"]},
+        {"name": "location", "values": ["north", "south", "east", "harbor", "west"]}
+      ]
+    },
+    "drive/{from}/{to}/{fast}": {
+      "variables": [
+        {"name": "from", "values": ["base", "north", "south", "east", "harbor", "west"]},
+        {"name": "to", "values": ["base", "north", "south", "east", "harbor", "west"]},
+        {"name": "fast", "values": ["false", "true"]}
+      ],
+      "relations": [
+        {
+          "gives": ["distance"],
+          "rows": [
+            ["base", "north", "1"],
+            ["base", "south", "1"],
+            ["base", "east", "2"],
+            ["base", "harbor", "1"],
+            ["base", "west", "2"],
+            ["north", "base", "1"],
+            ["north", "south", "2"],
+            ["north", "east", "1"],
+            ["north", "harbor", "2"],
+            ["north", "west", "3"],
+            ["south", "base", "1"],
+            ["south", "north", "2"],
+            ["south", "east", "3"],
+            ["south", "harbor", "2"],
+            ["south", "west", "1"],
+            ["east", "base", "2"],
+            ["east", "north", "1"],
+            ["east", "south", "3"],
+            ["east", "harbor", "1"],
+            ["east", "west", "2"],
+            ["harbor", "base", "1"],
+            ["harbor", "north", "2"],
+            ["harbor", "south", "2"],
+            ["harbor", "east", "1"],
+            ["harbor", "west", "1"],
+            ["west", "base", "2"],
+            ["west", "north", "3"],
+            ["west", "south", "1"],
+            ["west", "east", "2"],
+            ["west", "harbor", "1"]
+          ],
+          "variables": ["from", "to"]
+        },
+        {
+          "gives": ["ticks-per-road", "fuel-per-road"],
+          "rows": [["false", "2", "1"], ["true", "1", "2"]],
+          "variables": ["fast"]
+        }
+      ]
+    },
+    "load/{patient}/{location}": {
+      "variables": [
+        {"name": "patient", "range": ["0", "3"]},
+        {"name": "location", "values": ["north", "south", "east", "harbor", "west"]}
+      ]
+    },
+    "lose/{patient}/found/deadline": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/found/deterioration": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/found/horizon": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/hidden/deadline": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/hidden/deterioration": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/hidden/horizon": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/onboard/deadline": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/onboard/deterioration": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "lose/{patient}/onboard/horizon": {"variables": [{"name": "patient", "range": ["0", "3"]}]},
+    "report/{round}/{location}": {
+      "variables": [
+        {"name": "round", "range": ["0", "1"]},
+        {"name": "location", "values": ["north", "south", "east", "harbor", "west"]}
+      ]
+    },
+    "search/{location}": {"variables": [{"name": "location", "values": ["north", "south", "east", "harbor", "west"]}]},
+    "stabilize/{patient}/{location}/false": {
+      "variables": [
+        {"name": "patient", "range": ["0", "3"]},
+        {"name": "location", "values": ["north", "south", "east", "harbor", "west"]}
+      ]
+    },
+    "stabilize/{patient}/{location}/true": {
+      "variables": [
+        {"name": "patient", "range": ["0", "3"]},
+        {"name": "location", "values": ["north", "south", "east", "harbor", "west"]}
+      ]
+    },
+    "unload/{patient}": {"variables": [{"name": "patient", "range": ["0", "3"]}]}
+  },
+  "constants": {"horizon": "30", "patient-count": "4"},
+  "accounts": [
+    [
+      "nature",
+      {
+        "balances": [
+          ["signal/0/east", "1"],
+          ["signal/1/south", "1"],
+          ["truth/0/east", "1"],
+          ["truth/1/south", "1"],
+          ["truth/2/north", "1"],
+          ["truth/3/west", "1"]
+        ]
+      }
+    ],
+    [
+      "patient/0",
+      {
+        "balances": [
+          ["alive", "1"],
+          ["deadline", "16"],
+          ["hidden", "1"],
+          ["next-decline", "6"],
+          ["treatable", "1"],
+          ["vitality", "3"]
+        ]
+      }
+    ],
+    [
+      "patient/1",
+      {
+        "balances": [
+          ["alive", "1"],
+          ["deadline", "17"],
+          ["hidden", "1"],
+          ["next-decline", "7"],
+          ["treatable", "1"],
+          ["vitality", "3"]
+        ]
+      }
+    ],
+    [
+      "patient/2",
+      {
+        "balances": [
+          ["alive", "1"],
+          ["deadline", "20"],
+          ["hidden", "1"],
+          ["next-decline", "10"],
+          ["treatable", "1"],
+          ["vitality", "3"]
+        ]
+      }
+    ],
+    [
+      "patient/3",
+      {
+        "balances": [
+          ["alive", "1"],
+          ["deadline", "16"],
+          ["hidden", "1"],
+          ["next-decline", "6"],
+          ["treatable", "1"],
+          ["vitality", "3"]
+        ]
+      }
+    ],
+    [
+      "responder",
+      {
+        "balances": [
+          ["at/base", "1"],
+          ["energy", "10"],
+          ["fuel", "7"],
+          ["medical-kit", "2"],
+          ["ready", "1"],
+          ["scan-round/0", "1"],
+          ["seat", "1"],
+          ["sensor", "2"],
+          ["unsearched/east", "1"],
+          ["unsearched/harbor", "1"],
+          ["unsearched/north", "1"],
+          ["unsearched/south", "1"],
+          ["unsearched/west", "1"]
+        ]
+      }
+    ],
+    [
+      "world",
+      {
+        "balances": [
+          ["active", "1"],
+          ["energy", "6"],
+          ["fuel", "4"],
+          ["medical-kit", "1"],
+          ["supply-available", "1"],
+          ["time-remaining", "30"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {
+      "name": "one-evacuation-seat",
+      "weights": [["seat", 1], ["carrying/0", 1], ["carrying/1", 1], ["carrying/2", 1], ["carrying/3", 1]]
+    },
+    {"name": "responder-activity", "weights": [["ready", 1], ["awaiting-scan", 1]]},
+    {
+      "name": "one-survey-per-sector",
+      "weights": [
+        ["unsearched/north", 1],
+        ["surveyed/north", 1],
+        ["unsearched/south", 1],
+        ["surveyed/south", 1],
+        ["unsearched/east", 1],
+        ["surveyed/east", 1],
+        ["unsearched/harbor", 1],
+        ["surveyed/harbor", 1],
+        ["unsearched/west", 1],
+        ["surveyed/west", 1]
+      ]
+    },
+    {"name": "patient-outcomes", "weights": [["alive", 1], ["saved", 1], ["dead", 1], ["left-behind", 1]]},
+    {"name": "clinical-vitality", "weights": [["vitality", 1], ["harm", 1]]},
+    {"name": "finite-medicine", "weights": [["medical-kit", 1], ["used-medical-kit", 1]]},
+    {"name": "finite-fuel", "weights": [["fuel", 1], ["spent-fuel", 1]]},
+    {"name": "finite-effort", "weights": [["energy", 1], ["spent-energy", 1]]},
+    {"name": "sensor-charges", "weights": [["sensor", 1], ["used-sensor", 1]]},
+    {"name": "resupply-opportunity", "weights": [["supply-available", 1], ["supply-used", 1]]},
+    {"name": "bounded-incident-time", "weights": [["time", 1], ["time-remaining", 1]]},
+    {"name": "incident-lifecycle", "weights": [["active", 1], ["closed", 1]]}
+  ]
+}

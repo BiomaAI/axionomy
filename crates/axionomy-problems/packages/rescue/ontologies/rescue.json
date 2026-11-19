@@ -1,0 +1,38 @@
+{
+  "accounts": ["agent", "nature"],
+  "assets": [
+    "at/base",
+    "at/north",
+    "at/south",
+    "awaiting-observation",
+    "belief/east",
+    "belief/north",
+    "belief/south",
+    "committed",
+    "energy",
+    "evacuated",
+    "planning",
+    "rescued",
+    "seed/0",
+    "seed/1",
+    "seed/2",
+    "seed/3",
+    "sensor",
+    "solved",
+    "spent-energy",
+    "truth/north",
+    "truth/south",
+    "unresolved",
+    "used-sensor"
+  ],
+  "parameters": [],
+  "rates": [
+    "begin-observe",
+    "finish",
+    "instantiate/{truth}/{seed}",
+    "move/base/{to}",
+    "rescue/{location}",
+    "resolve-observation/{truth}/{seed}/{report}"
+  ],
+  "roles": ["actor", "nature"]
+}

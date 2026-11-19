@@ -1,0 +1,47 @@
+{
+  "ontology": "logistics",
+  "laws": ["logistics/common"],
+  "constants": {"refuel-amount": "4"},
+  "accounts": [
+    ["fuel-station", {"balances": [["fuel", "12"]]}],
+    ["nature", {"balances": [["weather-ready", "1"]]}],
+    ["order/a", {"balances": [["package/a", "1"], ["waiting", "1"]]}],
+    ["order/b", {"balances": [["delivered", "1"], ["package/b", "1"]]}],
+    ["order/c", {"balances": [["delivered", "1"], ["package/c", "1"]]}],
+    ["order/d", {"balances": [["delivered", "1"], ["package/d", "1"]]}],
+    [
+      "vehicle",
+      {
+        "balances": [
+          ["at/depot", "1"],
+          ["cargo-space", "1"],
+          ["fuel", "4"],
+          ["money", "12"],
+          ["repair-tool", "1"],
+          ["time-remaining", "80"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {
+      "name": "vehicle-position",
+      "weights": [
+        ["traveling/direct-out", 1],
+        ["traveling/direct-back", 1],
+        ["traveling/safe-out-first", 1],
+        ["traveling/safe-out-second", 1],
+        ["traveling/safe-back-first", 1],
+        ["traveling/safe-back-second", 1],
+        ["at/depot", 1],
+        ["at/junction", 1],
+        ["at/customer", 1]
+      ]
+    },
+    {"name": "fuel-accounting", "weights": [["fuel", 1], ["spent-fuel", 1]]},
+    {"name": "money-accounting", "weights": [["money", 1]]},
+    {"name": "time-accounting", "weights": [["time-remaining", 1], ["elapsed-time", 1]]},
+    {"name": "cargo-capacity", "weights": [["cargo-space", 1], ["cargo-occupied", 1]]},
+    {"name": "order-lifecycle", "weights": [["waiting", 1], ["in-transit", 1], ["delivered", 1]]}
+  ]
+}

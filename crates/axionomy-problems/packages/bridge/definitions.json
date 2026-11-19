@@ -1,0 +1,108 @@
+{
+  "candidates": {
+    "bridge/mechanisms": {"Script": {"function": "candidates", "script": "bridge"}},
+    "bridge/routes": {"Script": {"function": "routes", "script": "bridge"}}
+  },
+  "experiments": {
+    "bridge/micro": {
+      "arms": [
+        {"start": null, "strategy": "bridge/breadth-first"},
+        {"start": null, "strategy": "bridge/first-come-a"},
+        {"start": null, "strategy": "bridge/first-come-b"},
+        {"start": null, "strategy": "bridge/auction"},
+        {"start": null, "strategy": "bridge/pareto-a"},
+        {"start": null, "strategy": "bridge/pareto-b"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 150},
+      "goal": "bridge/solved",
+      "objectives": ["bridge/priority/a", "bridge/credit/a", "bridge/priority/b", "bridge/credit/b"],
+      "start": "bridge/micro",
+      "trials": 1
+    },
+    "bridge/showcase": {
+      "arms": [
+        {"start": null, "strategy": "bridge/breadth-first"},
+        {"start": null, "strategy": "bridge/first-come-a"},
+        {"start": null, "strategy": "bridge/first-come-b"},
+        {"start": null, "strategy": "bridge/auction"},
+        {"start": null, "strategy": "bridge/adaptive"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 150},
+      "goal": "bridge/solved",
+      "objectives": [
+        "bridge/priority/a",
+        "bridge/credit/a",
+        "bridge/priority/b",
+        "bridge/credit/b",
+        "bridge/ontime/a",
+        "bridge/ontime/b",
+        "bridge/elapsed"
+      ],
+      "start": "bridge/showcase",
+      "trials": 1
+    },
+    "bridge/stress": {
+      "arms": [
+        {"start": null, "strategy": "bridge/breadth-first"},
+        {"start": null, "strategy": "bridge/first-come-a"},
+        {"start": null, "strategy": "bridge/first-come-b"},
+        {"start": null, "strategy": "bridge/auction"},
+        {"start": null, "strategy": "bridge/adaptive"}
+      ],
+      "effort": {"budget": 10000000, "seed": 17, "turns": 150},
+      "goal": "bridge/solved",
+      "objectives": [
+        "bridge/priority/a",
+        "bridge/credit/a",
+        "bridge/priority/b",
+        "bridge/credit/b",
+        "bridge/ontime/a",
+        "bridge/ontime/b",
+        "bridge/elapsed"
+      ],
+      "start": "bridge/stress",
+      "trials": 1
+    }
+  },
+  "goals": {"bridge/solved": {"ontology": "bridge", "goal": {"required": {"bridge": [["solved", "1"]]}}}},
+  "objectives": {
+    "bridge/credit/a": {"direction": "maximize", "measure": {"State": {"function": "credit_a", "script": "bridge"}}},
+    "bridge/credit/b": {"direction": "maximize", "measure": {"State": {"function": "credit_b", "script": "bridge"}}},
+    "bridge/elapsed": {"direction": "minimize", "measure": {"State": {"function": "elapsed", "script": "bridge"}}},
+    "bridge/ontime/a": {"direction": "maximize", "measure": {"State": {"function": "on_time_a", "script": "bridge"}}},
+    "bridge/ontime/b": {"direction": "maximize", "measure": {"State": {"function": "on_time_b", "script": "bridge"}}},
+    "bridge/priority/a": {"direction": "maximize", "measure": {"State": {"function": "priority_a", "script": "bridge"}}},
+    "bridge/priority/b": {"direction": "maximize", "measure": {"State": {"function": "priority_b", "script": "bridge"}}}
+  },
+  "strategies": {
+    "bridge/adaptive": {"Policy": {"policy": {"function": "adaptive", "script": "bridge"}}},
+    "bridge/auction": {"Policy": {"policy": {"function": "auction", "script": "bridge"}}},
+    "bridge/breadth-first": {"BreadthFirst": {"candidates": "bridge/routes"}},
+    "bridge/first-come-a": {"Policy": {"policy": {"function": "first_come_a", "script": "bridge"}}},
+    "bridge/first-come-b": {"Policy": {"policy": {"function": "first_come_b", "script": "bridge"}}},
+    "bridge/pareto-a": {
+      "Pareto": {
+        "by": ["bridge/priority/a", "bridge/credit/a", "bridge/priority/b", "bridge/credit/b"],
+        "candidates": "bridge/mechanisms",
+        "objectives": ["bridge/priority/a", "bridge/priority/b", "bridge/credit/a", "bridge/credit/b"]
+      }
+    },
+    "bridge/pareto-b": {
+      "Pareto": {
+        "by": ["bridge/priority/b", "bridge/credit/b", "bridge/priority/a", "bridge/credit/a"],
+        "candidates": "bridge/mechanisms",
+        "objectives": ["bridge/priority/a", "bridge/priority/b", "bridge/credit/a", "bridge/credit/b"]
+      }
+    }
+  },
+  "views": {
+    "bridge": {
+      "carry": null,
+      "formats": {"function": "format", "script": "bridge/view"},
+      "labels": {"function": "label", "script": "bridge/view"},
+      "leaderboards": null,
+      "scene": {"function": "scene", "script": "bridge/view"},
+      "title": "Bridge allocation"
+    }
+  }
+}

@@ -1,0 +1,865 @@
+[
+  [
+    "divert-power/library/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "consume": [["actor", [["time", "1"], ["energy", "1"]]], ["environment", [["power-vault", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/library", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["spent-energy", "1"]]], ["environment", [["power-transit", "1"]]]]
+    }
+  ],
+  [
+    "divert-power/library/true",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "consume": [["actor", [["time", "1"], ["energy", "1"]]], ["environment", [["power-transit", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/library", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["spent-energy", "1"]]], ["environment", [["power-vault", "1"]]]]
+    }
+  ],
+  [
+    "divert-power/workshop/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "consume": [["actor", [["time", "1"], ["energy", "1"]]], ["environment", [["power-vault", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/workshop", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["spent-energy", "1"]]], ["environment", [["power-transit", "1"]]]]
+    }
+  ],
+  [
+    "divert-power/workshop/true",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "consume": [["actor", [["time", "1"], ["energy", "1"]]], ["environment", [["power-transit", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/workshop", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["spent-energy", "1"]]], ["environment", [["power-vault", "1"]]]]
+    }
+  ],
+  [
+    "finish",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["active", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/exit", "1"]]], ["environment", [["target/exit", "1"]]]],
+      "produce": [["actor", [["solved", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/atrium/gallery/4/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/atrium", "1"], ["energy", "4"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/atrium/gallery", "1"]]]],
+      "produce": [["actor", [["at/gallery", "1"], ["spent-energy", "4"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/atrium/library/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/atrium", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/atrium/library", "1"]]]],
+      "produce": [["actor", [["at/library", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/bridge/canal/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/bridge", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/bridge/canal", "1"]]]],
+      "produce": [["actor", [["at/canal", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/bridge/exit/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/bridge", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/bridge/exit", "1"]]]],
+      "produce": [["actor", [["at/exit", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/canal/bridge/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/canal", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/canal/bridge", "1"], ["power-transit", "1"]]]],
+      "produce": [["actor", [["at/bridge", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/detour/exit/7/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "health", "kind": "balance", "role": "actor"},
+          "name": "retain-at-least-one-health",
+          "right": {"kind": "constant", "value": "3"}
+        }
+      ],
+      "consume": [["actor", [["at/detour", "1"], ["energy", "7"], ["time", "1"], ["health", "2"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/detour/exit", "1"]]]],
+      "produce": [["actor", [["at/exit", "1"], ["spent-energy", "7"], ["spent-time", "1"], ["injury", "2"]]]]
+    }
+  ],
+  [
+    "move/gallery/gate/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/gallery", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/gallery/gate", "1"]]]],
+      "produce": [["actor", [["at/gate", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/gallery/market/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/gallery", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/gallery/market", "1"]]]],
+      "produce": [["actor", [["at/market", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/garden/market/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/garden", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/garden/market", "1"]]]],
+      "produce": [["actor", [["at/market", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/garden/workshop/3/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/garden", "1"], ["energy", "3"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/garden/workshop", "1"]]]],
+      "produce": [["actor", [["at/workshop", "1"], ["spent-energy", "3"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/gate/vault/1/true",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/gate", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [
+        ["actor", [["active", "1"]]],
+        ["environment", [["edge/gate/vault", "1"], ["open", "1"], ["power-vault", "1"]]]
+      ],
+      "produce": [["actor", [["at/vault", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/key-room/library/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/key-room", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/key-room/library", "1"]]]],
+      "produce": [["actor", [["at/library", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/library/gallery/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/library", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/library/gallery", "1"]]]],
+      "produce": [["actor", [["at/gallery", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/library/key-room/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/library", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/library/key-room", "1"]]]],
+      "produce": [["actor", [["at/key-room", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/market/canal/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/market", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/market/canal", "1"]]]],
+      "produce": [["actor", [["at/canal", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/market/gallery/3/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/market", "1"], ["energy", "3"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/market/gallery", "1"]]]],
+      "produce": [["actor", [["at/gallery", "1"], ["spent-energy", "3"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/start/atrium/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/start", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/start/atrium", "1"]]]],
+      "produce": [["actor", [["at/atrium", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/start/detour/8/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/start", "1"], ["energy", "8"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/start/detour", "1"]]]],
+      "produce": [["actor", [["at/detour", "1"], ["spent-energy", "8"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/start/garden/3/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/start", "1"], ["energy", "3"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/start/garden", "1"]]]],
+      "produce": [["actor", [["at/garden", "1"], ["spent-energy", "3"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/start/tunnel/6/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/start", "1"], ["energy", "6"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/start/tunnel", "1"]]]],
+      "produce": [["actor", [["at/tunnel", "1"], ["spent-energy", "6"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/tunnel/bridge/4/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "health", "kind": "balance", "role": "actor"},
+          "name": "retain-at-least-one-health",
+          "right": {"kind": "constant", "value": "2"}
+        }
+      ],
+      "consume": [["actor", [["at/tunnel", "1"], ["energy", "4"], ["time", "1"], ["health", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/tunnel/bridge", "1"]]]],
+      "produce": [["actor", [["at/bridge", "1"], ["spent-energy", "4"], ["spent-time", "1"], ["injury", "1"]]]]
+    }
+  ],
+  [
+    "move/tunnel/workshop/3/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "health", "kind": "balance", "role": "actor"},
+          "name": "retain-at-least-one-health",
+          "right": {"kind": "constant", "value": "2"}
+        }
+      ],
+      "consume": [["actor", [["at/tunnel", "1"], ["energy", "3"], ["time", "1"], ["health", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/tunnel/workshop", "1"]]]],
+      "produce": [["actor", [["at/workshop", "1"], ["spent-energy", "3"], ["spent-time", "1"], ["injury", "1"]]]]
+    }
+  ],
+  [
+    "move/vault/exit/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/vault", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/vault/exit", "1"]]]],
+      "produce": [["actor", [["at/exit", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/workshop/canal/2/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/workshop", "1"], ["energy", "2"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/workshop/canal", "1"]]]],
+      "produce": [["actor", [["at/canal", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "move/workshop/garden/1/false",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/workshop", "1"], ["energy", "1"], ["time", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/workshop/garden", "1"]]]],
+      "produce": [["actor", [["at/garden", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+    }
+  ],
+  [
+    "protected-move/detour/exit/7",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/detour", "1"], ["energy", "7"], ["time", "1"], ["shield", "2"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/detour/exit", "1"]]]],
+      "produce": [["actor", [["at/exit", "1"], ["spent-energy", "7"], ["spent-time", "1"], ["used-shield", "2"]]]]
+    }
+  ],
+  [
+    "protected-move/tunnel/bridge/4",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/tunnel", "1"], ["energy", "4"], ["time", "1"], ["shield", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/tunnel/bridge", "1"]]]],
+      "produce": [["actor", [["at/bridge", "1"], ["spent-energy", "4"], ["spent-time", "1"], ["used-shield", "1"]]]]
+    }
+  ],
+  [
+    "protected-move/tunnel/workshop/3",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["at/tunnel", "1"], ["energy", "3"], ["time", "1"], ["shield", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["active", "1"]]], ["environment", [["edge/tunnel/workshop", "1"]]]],
+      "produce": [["actor", [["at/workshop", "1"], ["spent-energy", "3"], ["spent-time", "1"], ["used-shield", "1"]]]]
+    }
+  ],
+  [
+    "take-key/key-room",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["time", "1"]]], ["environment", [["key", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/key-room", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["key", "1"]]]]
+    }
+  ],
+  [
+    "take-protection/start",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "consume": [["actor", [["time", "1"]]], ["environment", [["shield", "2"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/start", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["shield", "2"]]]]
+    }
+  ],
+  [
+    "take-protection/workshop",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "consume": [["actor", [["time", "1"]]], ["environment", [["shield", "2"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/workshop", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"], ["shield", "2"]]]]
+    }
+  ],
+  [
+    "treat/garden",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "injury",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "health",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "conditions": [
+        {
+          "comparison": "greater_than_or_equal",
+          "left": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "name": "an-injury-needs-treatment",
+          "right": {"kind": "constant", "value": "1"}
+        }
+      ],
+      "consume": [["actor", [["time", "2"]]], ["environment", [["medicine", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/garden", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "2"]]], ["environment", [["used-medicine", "1"]]]]
+    }
+  ],
+  [
+    "unlock-door/gate",
+    {
+      "accounts": [["actor", "agent"], ["environment", "world"]],
+      "computed_consume": [
+        {
+          "asset": "time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "computed_produce": [
+        {
+          "asset": "spent-time",
+          "quantity": {"asset": "injury", "kind": "balance", "role": "actor"},
+          "role": "actor"
+        }
+      ],
+      "consume": [["actor", [["key", "1"], ["time", "1"]]], ["environment", [["locked", "1"]]]],
+      "distinct": [],
+      "preserve": [["actor", [["at/gate", "1"], ["active", "1"]]]],
+      "produce": [["actor", [["spent-time", "1"]]], ["environment", [["open", "1"]]]]
+    }
+  ]
+]

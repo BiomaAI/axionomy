@@ -99,12 +99,11 @@ impl Step {
                 if self.status != AssessmentStatus::Applicable {
                     return Err("refused assessment applied".into());
                 }
-                if let Some(expected) = &self.receipt {
-                    if postcard::to_allocvec(expected).map_err(|e| e.to_string())?
+                if let Some(expected) = &self.receipt
+                    && postcard::to_allocvec(expected).map_err(|e| e.to_string())?
                         != postcard::to_allocvec(&receipt).map_err(|e| e.to_string())?
-                    {
-                        return Err(format!("receipt differs: {receipt:?}"));
-                    }
+                {
+                    return Err(format!("receipt differs: {receipt:?}"));
                 }
                 trace.push(self.exchange.clone());
             }

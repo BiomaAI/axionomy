@@ -1,0 +1,135 @@
+{
+  "ontology": "scheduling",
+  "laws": ["scheduling/showcase-and-stress", "scheduling/stress"],
+  "tables": {
+    "queue/two-a/{machine}": {"relations": [{"gives": ["arrival"], "rows": [["one", "3"], ["two", "3"]], "variables": ["machine"]}]},
+    "queue/two-b/{machine}": {
+      "relations": [{"gives": ["arrival"], "rows": [["two", "3"], ["three", "3"]], "variables": ["machine"]}]
+    },
+    "queue/two-c/{machine}": {
+      "relations": [{"gives": ["arrival"], "rows": [["three", "3"], ["one", "3"]], "variables": ["machine"]}]
+    }
+  },
+  "constants": {"fault-at": "4", "repair-duration": "3"},
+  "accounts": [
+    ["job/one", {"balances": [["ready/one-a", "1"]]}],
+    ["job/two", {"balances": [["ready/two-a", "1"]]}],
+    [
+      "machine/one",
+      {"balances": [["configured/one", "1"], ["idle", "1"], ["online", "1"], ["queue-free", "1"]]}
+    ],
+    [
+      "machine/three",
+      {"balances": [["configured/one", "1"], ["idle", "1"], ["online", "1"], ["queue-free", "1"]]}
+    ],
+    [
+      "machine/two",
+      {"balances": [["configured/two", "1"], ["idle", "1"], ["online", "1"], ["queue-free", "1"]]}
+    ],
+    [
+      "success",
+      {
+        "balances": [
+          ["active", "1"],
+          ["fault-pending", "1"],
+          ["labor", "1"],
+          ["not-started/one-a", "1"],
+          ["not-started/one-b", "1"],
+          ["not-started/one-c", "1"],
+          ["not-started/two-a", "1"],
+          ["not-started/two-b", "1"],
+          ["not-started/two-c", "1"],
+          ["repair-kit", "1"],
+          ["time-remaining", "24"]
+        ]
+      }
+    ]
+  ],
+  "invariants": [
+    {
+      "name": "job-phase-accounting",
+      "weights": [
+        ["done", 1],
+        ["ready/one-a", 1],
+        ["queued/one-a/one", 1],
+        ["running/one-a/one", 1],
+        ["paused/one-a/one", 1],
+        ["queued/one-a/two", 1],
+        ["running/one-a/two", 1],
+        ["paused/one-a/two", 1],
+        ["ready/one-b", 1],
+        ["queued/one-b/two", 1],
+        ["running/one-b/two", 1],
+        ["paused/one-b/two", 1],
+        ["queued/one-b/three", 1],
+        ["running/one-b/three", 1],
+        ["paused/one-b/three", 1],
+        ["ready/one-c", 1],
+        ["queued/one-c/three", 1],
+        ["running/one-c/three", 1],
+        ["paused/one-c/three", 1],
+        ["queued/one-c/one", 1],
+        ["running/one-c/one", 1],
+        ["paused/one-c/one", 1],
+        ["ready/two-a", 1],
+        ["queued/two-a/one", 1],
+        ["running/two-a/one", 1],
+        ["paused/two-a/one", 1],
+        ["queued/two-a/two", 1],
+        ["running/two-a/two", 1],
+        ["paused/two-a/two", 1],
+        ["ready/two-b", 1],
+        ["queued/two-b/two", 1],
+        ["running/two-b/two", 1],
+        ["paused/two-b/two", 1],
+        ["queued/two-b/three", 1],
+        ["running/two-b/three", 1],
+        ["paused/two-b/three", 1],
+        ["ready/two-c", 1],
+        ["queued/two-c/three", 1],
+        ["running/two-c/three", 1],
+        ["paused/two-c/three", 1],
+        ["queued/two-c/one", 1],
+        ["running/two-c/one", 1],
+        ["paused/two-c/one", 1]
+      ]
+    },
+    {
+      "name": "three-machine-queues",
+      "weights": [
+        ["queue-free", 1],
+        ["queue-ticket/one-a", 1],
+        ["queue-ticket/one-b", 1],
+        ["queue-ticket/one-c", 1],
+        ["queue-ticket/two-a", 1],
+        ["queue-ticket/two-b", 1],
+        ["queue-ticket/two-c", 1]
+      ]
+    },
+    {
+      "name": "each-operation-starts-once",
+      "weights": [
+        ["not-started/one-a", 1],
+        ["started/one-a", 1],
+        ["not-started/one-b", 1],
+        ["started/one-b", 1],
+        ["not-started/one-c", 1],
+        ["started/one-c", 1],
+        ["not-started/two-a", 1],
+        ["started/two-a", 1],
+        ["not-started/two-b", 1],
+        ["started/two-b", 1],
+        ["not-started/two-c", 1],
+        ["started/two-c", 1]
+      ]
+    },
+    {"name": "machine-occupancy", "weights": [["idle", 1], ["busy", 1]]},
+    {"name": "machine-condition", "weights": [["online", 1], ["broken", 1], ["repairing", 1]]},
+    {"name": "setup-configuration", "weights": [["configured/one", 1], ["configured/two", 1]]},
+    {"name": "shared-labor", "weights": [["labor", 1], ["busy-labor", 1]]},
+    {"name": "finite-repair-supply", "weights": [["repair-kit", 1], ["used-repair-kit", 1]]},
+    {"name": "scheduled-disruption", "weights": [["fault-pending", 1], ["fault-occurred", 1]]},
+    {"name": "bounded-workday", "weights": [["now", 1], ["time-remaining", 1]]},
+    {"name": "execution-lifecycle", "weights": [["active", 1], ["solved", 1]]}
+  ]
+}

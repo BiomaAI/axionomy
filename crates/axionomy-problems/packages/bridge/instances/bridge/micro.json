@@ -1,0 +1,21 @@
+{
+  "ontology": "bridge",
+  "laws": ["bridge/micro"],
+  "accounts": [
+    ["agent/a", {"balances": [["at/west", "1"], ["can-bid", "1"], ["credit", "2"], ["energy", "1"]]}],
+    ["agent/b", {"balances": [["at/west", "1"], ["can-bid", "1"], ["credit", "2"], ["energy", "1"]]}],
+    ["bridge", {"balances": [["active", "1"], ["capacity-free", "1"], ["first-turn", "1"]]}]
+  ],
+  "invariants": [
+    {"name": "two-agent-positions", "weights": [["at/west", 1], ["at/east", 1]]},
+    {
+      "name": "two-agent-status-tokens",
+      "weights": [["can-bid", 1], ["submitted", 1], ["crossing-right", 1], ["waiting", 1], ["crossed", 1]]
+    },
+    {"name": "bridge-lifecycle", "weights": [["active", 1], ["solved", 1]]},
+    {"name": "bridge-capacity", "weights": [["capacity-free", 1], ["crossing-right", 1]]},
+    {"name": "crossing-turn", "weights": [["first-turn", 1], ["second-turn", 1], ["crossing-right", 1]]},
+    {"name": "energy-accounting", "weights": [["energy", 1], ["spent-energy", 1]]},
+    {"name": "credit-accounting", "weights": [["credit", 1], ["escrow", 1], ["spent-credit", 1]]}
+  ]
+}

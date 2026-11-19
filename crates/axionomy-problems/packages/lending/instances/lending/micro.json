@@ -1,0 +1,50 @@
+{
+  "ontology": "lending",
+  "laws": ["lending/common", "lending/micro-and-micro-genesis"],
+  "tables": {
+    "collect-revenue/{installment}": {
+      "variables": [{"name": "installment", "range": ["0", "0"]}],
+      "relations": [{"gives": ["amount", "due"], "rows": [["0", "3000", "3"]], "variables": ["installment"]}]
+    }
+  },
+  "constants": {
+    "base-rate": "2000000000000000",
+    "kink": "800000000000000000",
+    "liquidation-bonus": "80000000000000000",
+    "liquidation-threshold": "750000000000000000",
+    "loan-to-value": "600000000000000000",
+    "price-drop": "30",
+    "reserve-factor": "100000000000000000",
+    "shock-after": "2",
+    "slope-above-kink": "500000000000000000",
+    "slope-below-kink": "25000000000000000"
+  },
+  "accounts": [
+    ["borrower", {"balances": [["cash", "500"], ["collateral", "40"]]}],
+    ["clock", {"balances": [["period", "4"]]}],
+    ["customer", {"balances": [["cash", "3000"], ["purchase-order/0", "1"]]}],
+    ["depositor/0", {"balances": [["cash", "2000"], ["share", "3000"]]}],
+    ["depositor/1", {"balances": [["cash", "2000"], ["share", "3000"]]}],
+    ["keeper", {"balances": [["cash", "5000"]]}],
+    [
+      "market",
+      {
+        "balances": [
+          ["borrow-index", "1000000000000000000"],
+          ["cash", "7000"],
+          ["collateral-price", "100"],
+          ["locked-share", "1000"],
+          ["share-supply", "7000"]
+        ]
+      }
+    ],
+    ["oracle", {"balances": [["pending-shock", "1"]]}],
+    ["supplier", {"balances": [["invoice", "1"]]}]
+  ],
+  "invariants": [
+    {"name": "cash", "weights": [["cash", 1]]},
+    {"name": "vault-shares", "weights": [["share", 1], ["locked-share", 1], ["share-supply", -1]]},
+    {"name": "debt-shares", "weights": [["debt-share", 1], ["debt-share-supply", -1]]},
+    {"name": "collateral", "weights": [["collateral", 1], ["posted-collateral", 1]]}
+  ]
+}

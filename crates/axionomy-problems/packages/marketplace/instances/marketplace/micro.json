@@ -1,0 +1,43 @@
+{
+  "ontology": "marketplace",
+  "laws": ["marketplace/micro"],
+  "accounts": [
+    ["buyer/a", {"balances": [["money", "190"], ["purchase-intent/a", "1"], ["purchase-intent/b", "1"]]}],
+    ["buyer/b", {"balances": [["money", "100"], ["purchase-intent/a", "1"]]}],
+    ["buyer/c", {"balances": [["money", "75"], ["purchase-intent/a", "1"]]}],
+    ["carrier/a", {"balances": [["shipping-capacity", "2"]]}],
+    ["carrier/b", {"balances": []}],
+    ["order/a", {"balances": [["open-order/a", "1"]]}],
+    ["order/b", {"balances": [["open-order/b", "1"]]}],
+    ["platform", {"balances": []}],
+    ["seller/a", {"balances": [["item/widget", "1"], ["sale-offer/widget", "1"]]}],
+    ["seller/b", {"balances": [["item/widget", "1"], ["sale-offer/widget", "1"]]}],
+    ["seller/c", {"balances": [["item/gadget", "1"], ["sale-offer/gadget", "1"]]}],
+    ["tax-authority", {"balances": []}]
+  ],
+  "invariants": [
+    {"name": "money-accounting", "weights": [["money", 1]]},
+    {"name": "item-accounting", "weights": [["item/widget", 1], ["item/gadget", 1]]},
+    {
+      "name": "buyer-order-lifecycle",
+      "weights": [
+        ["purchase-intent/a", 1],
+        ["purchase-receipt/a", 1],
+        ["purchase-intent/b", 1],
+        ["purchase-receipt/b", 1]
+      ]
+    },
+    {
+      "name": "seller-order-lifecycle",
+      "weights": [["sale-offer/widget", 1], ["sale-offer/gadget", 1], ["completed-sale/a", 1], ["completed-sale/b", 1]]
+    },
+    {
+      "name": "shipping-capacity-accounting",
+      "weights": [["shipping-capacity", 1], ["used-shipping-capacity", 1]]
+    },
+    {
+      "name": "order-lifecycle",
+      "weights": [["open-order/a", 1], ["settled-order/a", 1], ["open-order/b", 1], ["settled-order/b", 1]]
+    }
+  ]
+}

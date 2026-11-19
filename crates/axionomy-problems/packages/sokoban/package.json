@@ -1,0 +1,77 @@
+{
+  "format": "axionomy.package/1",
+  "name": "sokoban",
+  "version": {"major": 0, "minor": 3, "patch": 0},
+  "branches": {
+    "sokoban/micro/deadlock": {
+      "from": "sokoban/micro",
+      "exchanges": [
+        {
+          "bindings": {"from": "cell/8", "puzzle": "success", "to": "cell/9"},
+          "rate": "move/8/9",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/9", "middle": "cell/10", "puzzle": "success", "to": "cell/11"},
+          "rate": "push/9/10/11/0",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/10", "middle": "cell/11", "puzzle": "success", "to": "cell/12"},
+          "rate": "push/10/11/12/0",
+          "units": "1"
+        }
+      ]
+    },
+    "sokoban/showcase/deadlock": {
+      "from": "sokoban/showcase",
+      "exchanges": [
+        {
+          "bindings": {"from": "cell/38", "middle": "cell/29", "puzzle": "success", "to": "cell/20"},
+          "rate": "push/38/29/20/0",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/29", "puzzle": "success", "to": "cell/30"},
+          "rate": "move/29/30",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/30", "puzzle": "success", "to": "cell/21"},
+          "rate": "move/30/21",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/21", "middle": "cell/20", "puzzle": "success", "to": "cell/19"},
+          "rate": "push/21/20/19/0",
+          "units": "1"
+        }
+      ]
+    },
+    "sokoban/stress/deadlock": {
+      "from": "sokoban/stress",
+      "exchanges": [
+        {
+          "bindings": {"from": "cell/54", "middle": "cell/41", "puzzle": "success", "to": "cell/28"},
+          "rate": "push/54/41/28/0",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/41", "puzzle": "success", "to": "cell/42"},
+          "rate": "move/41/42",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/42", "puzzle": "success", "to": "cell/29"},
+          "rate": "move/42/29",
+          "units": "1"
+        },
+        {
+          "bindings": {"from": "cell/29", "middle": "cell/28", "puzzle": "success", "to": "cell/27"},
+          "rate": "push/29/28/27/0",
+          "units": "1"
+        }
+      ]
+    }
+  }
+}
