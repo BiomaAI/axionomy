@@ -47,6 +47,30 @@ impl Transaction<'_> {
                 });
             }
         }
+        self.insert_run(run, ontology, from, first, state, checkpoints)
+    }
+
+    /// Starts a root run whose ontology was declared in package source.
+    /// Forks still inherit the ontology through `create_run`.
+    pub fn create_authored_root(
+        &mut self,
+        run: RunId,
+        ontology: OntologyPath,
+        state: &Tree,
+        checkpoints: Checkpoints,
+    ) -> Result<(), StoreError> {
+        self.insert_run(run, ontology, None, 0, state, checkpoints)
+    }
+
+    fn insert_run(
+        &mut self,
+        run: RunId,
+        ontology: OntologyPath,
+        from: Option<Point>,
+        first: u64,
+        state: &Tree,
+        checkpoints: Checkpoints,
+    ) -> Result<(), StoreError> {
         if let Some(from) = from {
             self.redb()
                 .open_table(BRANCHES)?

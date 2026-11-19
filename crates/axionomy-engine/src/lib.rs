@@ -28,7 +28,7 @@ pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
 pub use view::{View, ViewPath};
 
 use axionomy::{
-    PathKind, Quantity,
+    OntologyPath, PathKind, Quantity,
     path::Path,
     paths::{self, Paths},
 };
@@ -594,6 +594,16 @@ impl Engine {
 
     /// Records `economy` as the first point of a run of its own.
     pub fn author(&self, economy: paths::Economy) -> Result<Point, EngineError> {
+        self.author_in(OntologyPath::of::<Paths>(), economy)
+    }
+
+    /// Records a path-authored economy under its declared ontology so its
+    /// history and exported packages use that ontology's view.
+    pub fn author_in(
+        &self,
+        ontology: OntologyPath,
+        economy: paths::Economy,
+    ) -> Result<Point, EngineError> {
         let state = State::new(economy);
         let point = Point {
             run: self.store.mint_run(),
@@ -602,7 +612,7 @@ impl Engine {
         let tree = state.tree.clone();
         self.store
             .transact(Durability::Immediate, move |txn| {
-                txn.create_run::<Paths>(point.run, None, 0, &tree, Checkpoints::Ends)?;
+                txn.create_authored_root(point.run, ontology, &tree, Checkpoints::Ends)?;
                 txn.pin(point, None)
             })
             .wait()?;

@@ -239,3 +239,46 @@ fn exchanges_are_presented_assessed_in_the_views_words() {
     // Presenting records nothing: the point is where it was.
     assert_eq!(engine.reach(end).unwrap().receipts.len(), 3);
 }
+
+#[test]
+fn a_source_ontology_selects_its_view_after_fork_and_export() {
+    let (engine, paid) = paid();
+    let (economy, exchanges) = engine.history(paid).unwrap();
+    for (name, title) in [("market", "Spot market"), ("market/futures", "Futures")] {
+        let ontology = path(name);
+        engine
+            .keep_view(
+                &ontology,
+                &View {
+                    title: title.into(),
+                    labels: None,
+                    formats: None,
+                    carry: None,
+                    scene: None,
+                    leaderboards: None,
+                },
+            )
+            .unwrap();
+        let root = engine.author_in(ontology.clone(), economy.clone()).unwrap();
+        let tip = engine.apply(root, &exchanges).unwrap();
+        assert_eq!(engine.ontology(tip).unwrap(), ontology);
+        engine.refer(&path(name), tip).unwrap();
+    }
+    let exported = Store::memory().unwrap();
+    let name = path("market");
+    engine
+        .export(
+            &name,
+            "1.0.0".parse().unwrap(),
+            engine.named_under(&name).unwrap(),
+            &exported,
+        )
+        .unwrap();
+    let fresh = Engine::new(Store::memory().unwrap()).unwrap();
+    fresh.load(&exported).unwrap();
+    for (name, title) in [("market", "Spot market"), ("market/futures", "Futures")] {
+        let tip = fresh.referred(&path(name)).unwrap();
+        assert_eq!(fresh.ontology(tip).unwrap(), path(name));
+        assert_eq!(fresh.draw(tip).unwrap().title, title);
+    }
+}
