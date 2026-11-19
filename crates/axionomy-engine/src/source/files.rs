@@ -4,15 +4,10 @@ use super::*;
 use serde::{Deserializer, Serializer};
 use std::{fmt, str::FromStr};
 
-pub enum Laws {}
-impl PathKind for Laws {
-    const SCHEMA: &'static str = "LawSetPath";
-}
 pub enum Test {}
 impl PathKind for Test {
     const SCHEMA: &'static str = "PackageTestPath";
 }
-pub type LawSetPath = Path<Laws>;
 pub type TestPath = Path<Test>;
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]

@@ -168,11 +168,7 @@ fn uniform(size: RescueSize) -> Vec<(Location, u8, u64)> {
 }
 
 pub fn uniform_uncertain() -> World {
-    uncertain(
-        [Location::North, Location::South]
-            .into_iter()
-            .flat_map(|truth| (0..4).map(move |seed| (truth, seed, 1))),
-    )
+    crate::fixtures::initial(axionomy::path!("rescue/micro"))
 }
 
 /// Four possible sites, twice as many sensor states, and a required return

@@ -1,0 +1,13 @@
+[package]
+name = "axionomy-authoring"
+description = "Typed package instance and law documents lowered into Axionomy economies"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axionomy.workspace = true
+serde.workspace = true

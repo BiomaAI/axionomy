@@ -12,10 +12,10 @@ use crate::{
 };
 use axionomy::{
     AccountPath, AssetPath, OntologyPath, ParameterPath, PathKind, Pattern, RatePath, RolePath,
-    Segment, VariablePath, path::Path, paths,
+    path::Path, paths,
 };
 use axionomy_store::{RefPath, Store};
-pub use files::{Diagnostic, LawSetPath, SourceFile, SourceFiles, SourceTree, TestPath};
+pub use files::{Diagnostic, SourceFile, SourceFiles, SourceTree, TestPath};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -44,36 +44,62 @@ struct Branch {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Instance {
-    ontology: OntologyPath,
-    laws: Vec<LawSetPath>,
-    /// Per-instance domains and relation rows supplied to shared rate laws.
-    #[serde(default)]
-    tables: BTreeMap<Pattern<RatePath>, Tables>,
-    accounts: Vec<(AccountPath, paths::Account)>,
-    #[serde(default)]
-    constants: BTreeMap<VariablePath, Segment>,
-    #[serde(default)]
-    invariants: Vec<paths::LinearInvariant>,
-}
-
-#[derive(Deserialize)]
-#[serde(default, deny_unknown_fields)]
-#[derive(Default)]
-struct Tables {
-    variables: Vec<axionomy::Variable>,
-    relations: Vec<axionomy::Relation>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct Vocabulary {
     accounts: BTreeSet<AccountPath>,
     assets: BTreeSet<AssetPath>,
+    #[serde(default)]
+    account_families: Vec<Family<AccountPath>>,
+    #[serde(default)]
+    asset_families: Vec<Family<AssetPath>>,
+    #[serde(default)]
+    asset_schema: Option<axionomy_units::AssetSchema<AssetPath>>,
     roles: BTreeSet<RolePath>,
     rates: BTreeSet<Pattern<RatePath>>,
     #[serde(default)]
     parameters: BTreeSet<ParameterPath>,
+}
+#[derive(Deserialize)]
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "T: axionomy::Identifier + serde::de::DeserializeOwned")
+)]
+struct Family<T> {
+    pattern: Pattern<T>,
+    variables: Vec<axionomy::Variable>,
+}
+impl<T: axionomy::Identifier> Family<T> {
+    fn validate(&self) -> Result<(), String> {
+        let used: BTreeSet<_> = self.pattern.variables().collect();
+        let names: BTreeSet<_> = self
+            .variables
+            .iter()
+            .map(axionomy::Variable::name)
+            .collect();
+        if used != names || names.is_empty() || names.len() != self.variables.len() {
+            return Err(format!(
+                "each variable of {} must have exactly one domain",
+                self.pattern
+            ));
+        }
+        for variable in &self.variables {
+            let empty = match variable.domain() {
+                axionomy::Domain::Range { first, last } => first > last,
+                axionomy::Domain::Values(values) => values.is_empty(),
+            };
+            if empty {
+                return Err(format!("empty domain for {}", variable.name()));
+            }
+        }
+        Ok(())
+    }
+    fn matches(&self, parts: &[&str]) -> bool {
+        self.pattern.read(parts).is_some_and(|args| {
+            self.variables.iter().all(|v| {
+                args.get(v.name())
+                    .is_some_and(|value| v.domain().contains(value))
+            })
+        })
+    }
 }
 fn declared<T: Ord + std::fmt::Display>(
     ids: &BTreeSet<T>,
@@ -87,9 +113,38 @@ fn declared<T: Ord + std::fmt::Display>(
     }
 }
 impl Vocabulary {
+    fn account(&self, id: &AccountPath) -> Result<(), String> {
+        if self.accounts.contains(id)
+            || self
+                .account_families
+                .iter()
+                .any(|f| f.matches(&id.segments().collect::<Vec<_>>()))
+        {
+            return Ok(());
+        }
+        Err(format!("undeclared account `{id}`"))
+    }
+    fn asset(&self, id: &AssetPath) -> Result<(), String> {
+        if !self.assets.contains(id)
+            && !self
+                .asset_families
+                .iter()
+                .any(|f| f.matches(&id.segments().collect::<Vec<_>>()))
+        {
+            return Err(format!("undeclared asset `{id}`"));
+        }
+        if let Some(schema) = &self.asset_schema {
+            let asset: axionomy_units::UnitAsset<AssetPath> =
+                axionomy::path::read(id).map_err(|e| format!("asset {id}: {e}"))?;
+            schema
+                .validate_asset(&asset)
+                .map_err(|e| format!("asset {id}: {e}"))?;
+        }
+        Ok(())
+    }
     fn validate(&self, economy: &paths::Economy) -> Result<(), String> {
-        economy.try_visit_accounts(|id| declared(&self.accounts, "account", id))?;
-        economy.try_visit_assets(|id| declared(&self.assets, "asset", id))?;
+        economy.try_visit_accounts(|id| self.account(id))?;
+        economy.try_visit_assets(|id| self.asset(id))?;
         for (key, rate) in economy.rates() {
             declared(&self.rates, "rate", key)?;
             for role in rate.roles() {
@@ -108,6 +163,7 @@ impl Vocabulary {
 struct Definitions {
     goals: BTreeMap<GoalPath, AuthoredGoal>,
     candidates: BTreeMap<CandidatesPath, CandidateSet>,
+    candidate_ontologies: BTreeMap<CandidatesPath, OntologyPath>,
     objectives: BTreeMap<ObjectivePath, Objective>,
     strategies: BTreeMap<StrategyPath, Strategy>,
     experiments: BTreeMap<ExperimentPath, Experiment>,
@@ -137,7 +193,9 @@ impl BuiltPackage {
     }
 }
 
-type LawSet = Vec<(Pattern<RatePath>, paths::Rate)>;
+pub use axionomy_authoring::LawSetPath;
+type LawSet = axionomy_authoring::LawSet<paths::Paths>;
+type Instance = axionomy_authoring::Instance<paths::Paths>;
 
 /// Parses and checks all files, then builds the source into a fresh store.
 pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
@@ -162,10 +220,25 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             SourceFile::Package => {}
             SourceFile::Definitions => definitions = files::parse(file, text)?,
             SourceFile::Ontology(id) => {
-                vocabularies.insert(id, files::parse(file, text)?);
+                let vocab: Vocabulary = files::parse(file, text)?;
+                for f in &vocab.account_families {
+                    f.validate().map_err(|e| Diagnostic::new(file, e))?;
+                }
+                for f in &vocab.asset_families {
+                    f.validate().map_err(|e| Diagnostic::new(file, e))?;
+                }
+                for id in &vocab.assets {
+                    vocab.asset(id).map_err(|e| Diagnostic::new(file, e))?;
+                }
+                vocabularies.insert(id, vocab);
             }
             SourceFile::Laws(id) => {
-                law_sets.insert(id, files::parse(file, text)?);
+                let declarations = files::parse(file, text)?;
+                law_sets.insert(
+                    id,
+                    axionomy_authoring::expand(declarations)
+                        .map_err(|e| Diagnostic::new(file, e))?,
+                );
             }
             SourceFile::Instance(id) => {
                 instances.insert(id, files::parse(file, text)?);
@@ -197,48 +270,15 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
         let vocabulary = vocabularies.get(&instance.ontology).ok_or_else(|| {
             Diagnostic::new(&file, format!("unknown ontology `{}`", instance.ontology))
         })?;
-        let mut builder = paths::EconomyBuilder::new();
-        for (name, value) in instance.constants {
-            builder = builder.constant_value(name, value);
-        }
-        for (account, initial) in instance.accounts {
-            builder = builder.account(account, initial);
-        }
-        let mut tables = instance.tables;
-        for set in instance.laws {
-            let rates = law_sets
-                .get(&set)
-                .ok_or_else(|| Diagnostic::new(&file, format!("unknown law set `{set}`")))?;
-            for (key, rate) in rates {
-                let mut rate = rate.clone();
-                if let Some(table) = tables.remove(key) {
-                    for variable in table.variables {
-                        rate = rate.variable(variable);
-                    }
-                    for relation in table.relations {
-                        rate = rate.relation(relation);
-                    }
-                }
-                builder = builder.rate_at(key.clone(), rate);
-            }
-        }
-        if let Some((key, _)) = tables.first_key_value() {
-            return Err(Diagnostic::new(
-                &file,
-                format!("tables for unknown rate `{key}`"),
-            ));
-        }
-        for invariant in instance.invariants {
-            builder = builder.invariant(invariant);
-        }
-        let economy = builder
-            .build()
-            .map_err(|e| Diagnostic::new(&file, format!("{:?}", e.issues())))?;
+        let ontology = instance.ontology.clone();
+        let economy = instance
+            .build(|set| law_sets.get(set))
+            .map_err(|e| Diagnostic::new(&file, e))?;
         vocabulary
             .validate(&economy)
             .map_err(|e| Diagnostic::new(&file, e))?;
         let at = engine
-            .author_in(instance.ontology, economy)
+            .author_in(ontology, economy)
             .and_then(|at| engine.refer(id, at));
         at.map_err(|e| Diagnostic::new(&file, e))?;
     }
@@ -250,6 +290,12 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             .map(|(id, _)| id.clone())
             .ok_or_else(|| Diagnostic::new(manifest, "cycle in branch refs"))?;
         scoped(&header.name, next.as_str()).map_err(|e| Diagnostic::new(manifest, e))?;
+        if engine.referred(&next).is_ok() {
+            return Err(Diagnostic::new(
+                manifest,
+                format!("branch {next} shadows an instance"),
+            ));
+        }
         let branch = branches.remove(&next).expect("selected from branches");
         let start = engine
             .referred(&branch.from)
@@ -333,6 +379,11 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
         scoped(&header.name, name).map_err(|e| Diagnostic::new(&file, e))?;
     }
     let err = |e: EngineError| Diagnostic::new(&file, e);
+    let goal_types: BTreeMap<_, _> = definitions
+        .goals
+        .iter()
+        .map(|(id, g)| (id.clone(), g.ontology.clone()))
+        .collect();
     for (id, authored) in definitions.goals {
         let vocabulary = vocabularies.get(&authored.ontology).ok_or_else(|| {
             Diagnostic::new(
@@ -341,16 +392,33 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             )
         })?;
         for (account, assets) in authored.goal.requirements() {
-            declared(&vocabulary.accounts, "account", account)
+            vocabulary
+                .account(account)
                 .map_err(|e| Diagnostic::new(&file, format!("goal {id}: {e}")))?;
             for (asset, _) in assets.iter() {
-                declared(&vocabulary.assets, "asset", asset)
+                vocabulary
+                    .asset(asset)
                     .map_err(|e| Diagnostic::new(&file, format!("goal {id}: {e}")))?;
             }
         }
         engine.keep_goal(&id, &authored.goal).map_err(err)?;
     }
     for (id, set) in definitions.candidates {
+        if let CandidateSet::Listed(exchanges) = &set {
+            let ontology = match definitions.candidate_ontologies.get(&id) {
+                Some(ontology) => vocabularies.get(ontology),
+                None if vocabularies.len() == 1 => vocabularies.values().next(),
+                None => None,
+            }
+            .ok_or_else(|| {
+                Diagnostic::new(&file, format!("declare a candidate ontology for {id}"))
+            })?;
+            for exchange in exchanges {
+                ontology
+                    .exchange(exchange)
+                    .map_err(|e| Diagnostic::new(&file, format!("candidates {id}: {e}")))?;
+            }
+        }
         engine.keep_candidates(&id, &set).map_err(err)?;
     }
     for (id, objective) in definitions.objectives {
@@ -369,9 +437,21 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
         engine.keep_view(&id, &view).map_err(err)?;
     }
     for (id, experiment) in definitions.experiments {
-        engine.referred(&experiment.start).map_err(err)?;
-        for start in experiment.arms.iter().filter_map(|a| a.start.as_ref()) {
-            engine.referred(start).map_err(err)?;
+        for start in std::iter::once(&experiment.start)
+            .chain(experiment.arms.iter().filter_map(|a| a.start.as_ref()))
+        {
+            let ontology = engine
+                .ontology(engine.referred(start).map_err(err)?)
+                .map_err(err)?;
+            if goal_types.get(&experiment.goal) != Some(&ontology) {
+                return Err(Diagnostic::new(
+                    &file,
+                    format!(
+                        "experiment {id}: goal {} must belong to the ontology {ontology} of {start}",
+                        experiment.goal
+                    ),
+                ));
+            }
         }
         engine.keep_experiment(&id, &experiment).map_err(err)?;
     }

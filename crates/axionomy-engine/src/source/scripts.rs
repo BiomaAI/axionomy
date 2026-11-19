@@ -18,7 +18,7 @@ impl Vocabulary {
         self.rate(e.rate().as_str())?;
         for (role, account) in e.bindings() {
             declared(&self.roles, "role", role)?;
-            declared(&self.accounts, "account", account)?;
+            self.account(account)?;
         }
         for param in e.parameters().keys() {
             declared(&self.parameters, "parameter", param)?;
@@ -53,11 +53,11 @@ impl Vocabulary {
                     "account" => text
                         .parse()
                         .map_err(|e: axionomy::PathError| e.to_string())
-                        .and_then(|id| declared(&self.accounts, kind, &id)),
+                        .and_then(|id| self.account(&id)),
                     "asset" => text
                         .parse()
                         .map_err(|e: axionomy::PathError| e.to_string())
-                        .and_then(|id| declared(&self.assets, kind, &id)),
+                        .and_then(|id| self.asset(&id)),
                     "role" => text
                         .parse()
                         .map_err(|e: axionomy::PathError| e.to_string())

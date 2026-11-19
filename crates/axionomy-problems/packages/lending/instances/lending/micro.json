@@ -1,6 +1,6 @@
 {
   "ontology": "lending",
-  "laws": ["lending/common", "lending/micro-and-micro-genesis"],
+  "laws": ["lending/common", "lending/micro-bill"],
   "tables": {
     "collect-revenue/{installment}": {
       "variables": [{"name": "installment", "range": ["0", "0"]}],

@@ -80,7 +80,9 @@ impl axionomy::Ontology for Ontology {
 }
 pub type Action = Exchange<Ontology>;
 
+#[cfg(test)]
 const MICRO: &[&str] = &["#######", "#@ $. #", "#######"];
+#[cfg(test)]
 const SHOWCASE: &[&str] = &[
     "#########",
     "##.###.##",
@@ -90,6 +92,7 @@ const SHOWCASE: &[&str] = &[
     "######x##",
     "#########",
 ];
+#[cfg(test)]
 const STRESS: &[&str] = &[
     "#############",
     "##.###.###.##",
@@ -102,7 +105,7 @@ const STRESS: &[&str] = &[
 const DEADLOCKED: &[&str] = &["#######", "#$ @ .#", "#     #", "#######"];
 
 pub fn initial() -> World {
-    build_board(MICRO)
+    crate::fixtures::initial(axionomy::path!("sokoban/micro"))
 }
 
 pub fn deadlocked() -> World {
@@ -112,12 +115,12 @@ pub fn deadlocked() -> World {
 /// A crate must hold the pressure plate while the player crosses the door
 /// and latches it from the other chamber, before retrieving the staged crate.
 pub fn initial_showcase() -> World {
-    build_board(SHOWCASE)
+    crate::fixtures::initial(axionomy::path!("sokoban/showcase"))
 }
 
 /// Two coupled plate/door/panel circuits require ordered staging of three crates.
 pub fn initial_stress() -> World {
-    build_board(STRESS)
+    crate::fixtures::initial(axionomy::path!("sokoban/stress"))
 }
 
 pub fn goal() -> Goal<Ontology> {

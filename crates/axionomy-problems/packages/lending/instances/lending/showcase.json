@@ -1,6 +1,6 @@
 {
   "ontology": "lending",
-  "laws": ["lending/common", "lending/showcase-and-showcase-genesis"],
+  "laws": ["lending/common", "lending/showcase-bill"],
   "tables": {
     "collect-revenue/{installment}": {
       "variables": [{"name": "installment", "range": ["0", "1"]}],

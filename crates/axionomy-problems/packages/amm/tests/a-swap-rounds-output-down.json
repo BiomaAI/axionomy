@@ -1,0 +1,25 @@
+{
+  "start": "amm/micro",
+  "steps": [
+    {
+      "exchange": {
+        "rate": "buy-energy",
+        "units": "1000",
+        "bindings": {"pool": "pool", "trader": "actor/factory"},
+        "parameters": {"minimum-output": "98"}
+      },
+      "status": "Invalid",
+      "balances": [["pool", "energy", "4000"]]
+    },
+    {
+      "exchange": {
+        "rate": "buy-energy",
+        "units": "1000",
+        "bindings": {"pool": "pool", "trader": "actor/factory"},
+        "parameters": {"minimum-output": "97"}
+      },
+      "status": "Applicable",
+      "balances": [["pool", "credit", "41000"], ["pool", "energy", "3903"], ["actor/factory", "energy", "97"]]
+    }
+  ]
+}

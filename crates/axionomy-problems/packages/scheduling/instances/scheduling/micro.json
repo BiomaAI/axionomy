@@ -3,7 +3,7 @@
   "laws": [
     "scheduling/micro",
     "scheduling/micro-and-micro-infeasible-horizon",
-    "scheduling/micro-and-micro-infeasible-horizon-and-showcase-infeasible-horizon-and-stress-infeasible-horizon"
+    "scheduling/short-horizon"
   ],
   "tables": {
     "finish/{job-one-end}/{job-two-end}/{makespan}": {

@@ -1,10 +1,6 @@
 #![doc = include_str!("README.md")]
 
-use axionomy::path;
-use axionomy::{
-    Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern,
-    Quantity, Rate, basket,
-};
+use axionomy::{ApplyError, Economy, Exchange, Goal, Quantity, basket};
 #[cfg(feature = "packages")]
 pub mod package;
 mod production;
@@ -91,115 +87,16 @@ pub type Action = Exchange<Ontology>;
 pub type Failure = ApplyError<Ontology>;
 
 pub fn initial() -> World {
-    build(6, 4, 3, 2)
+    crate::fixtures::initial(axionomy::path!("workshop/micro"))
 }
 
 /// Requires a multi-batch production plan with visible time/waste tradeoffs.
 pub fn initial_showcase() -> World {
-    production::build(false)
+    crate::fixtures::initial(axionomy::path!("workshop/showcase"))
 }
 
 pub fn initial_stress() -> World {
-    production::build(true)
-}
-
-/// A law of the workshop, its shop role fixed to the workshop's account.
-fn law() -> Rate<Ontology> {
-    Rate::new().account(Role::Shop, Pattern::literal(AccountId::Workshop))
-}
-
-fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
-    EconomyBuilder::new()
-        .account(
-            AccountId::Workshop,
-            Account::from(basket([
-                (Asset::Wood, wood),
-                (Asset::Labor, labor),
-                (Asset::Tool, 1),
-                (Asset::Time, time),
-                (Asset::Active, 1),
-            ])),
-        )
-        .rate(
-            RateId::BasicChair,
-            law()
-                .preserve(Role::Shop, basket([(Asset::Active, 1)]))
-                .consume(
-                    Role::Shop,
-                    basket([(Asset::Wood, 2), (Asset::Labor, 1), (Asset::Time, 1)]),
-                )
-                .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
-                .produce(
-                    Role::Shop,
-                    basket([
-                        (Asset::Chair, 1),
-                        (Asset::Waste, 1),
-                        (Asset::SpentLabor, 1),
-                        (Asset::SpentTime, 1),
-                    ]),
-                ),
-        )
-        .rate(
-            RateId::EfficientBatch,
-            law()
-                .preserve(Role::Shop, basket([(Asset::Active, 1)]))
-                .consume(
-                    Role::Shop,
-                    basket([(Asset::Wood, 3), (Asset::Labor, 2), (Asset::Time, 3)]),
-                )
-                .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
-                .produce(
-                    Role::Shop,
-                    basket([
-                        (Asset::Chair, 2),
-                        (Asset::Waste, 1),
-                        (Asset::SpentLabor, 2),
-                        (Asset::SpentTime, 3),
-                    ]),
-                ),
-        )
-        // This deliberately malformed domain proposal is installed to prove
-        // that declared invariants, rather than solver discipline, are final.
-        .rate(
-            RateId::CounterfeitChair,
-            law()
-                .preserve(Role::Shop, basket([(Asset::Active, 1)]))
-                .consume(Role::Shop, basket([(Asset::Wood, 1), (Asset::Time, 1)]))
-                .produce(
-                    Role::Shop,
-                    basket([(Asset::Chair, 2), (Asset::SpentTime, 1)]),
-                ),
-        )
-        .rate(
-            RateId::Finish,
-            law()
-                .preserve(Role::Shop, basket([(Asset::Chair, target)]))
-                .consume(Role::Shop, basket([(Asset::Active, 1)]))
-                .produce(Role::Shop, basket([(Asset::Solved, 1)])),
-        )
-        .invariant(
-            LinearInvariant::new(path!("material-mass"))
-                .weight(Asset::Wood, 1)
-                .weight(Asset::Chair, 1)
-                .weight(Asset::Waste, 1),
-        )
-        .invariant(
-            LinearInvariant::new(path!("labor-accounting"))
-                .weight(Asset::Labor, 1)
-                .weight(Asset::SpentLabor, 1),
-        )
-        .invariant(
-            LinearInvariant::new(path!("time-accounting"))
-                .weight(Asset::Time, 1)
-                .weight(Asset::SpentTime, 1),
-        )
-        .invariant(
-            LinearInvariant::new(path!("workshop-lifecycle"))
-                .weight(Asset::Active, 1)
-                .weight(Asset::Solved, 1),
-        )
-        .build()
-        .expect("workshop model is valid")
+    crate::fixtures::initial(axionomy::path!("workshop/stress"))
 }
 
 pub fn goal() -> Goal<Ontology> {

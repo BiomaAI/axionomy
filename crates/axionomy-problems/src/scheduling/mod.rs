@@ -1,10 +1,11 @@
 #![doc = include_str!("README.md")]
 
-use axionomy::path;
+#[cfg(test)]
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Param, Pattern, Quantity,
-    QuantityExpression as Q, Rate, Relation, Segment, Slot, basket,
+    Account, EconomyBuilder, LinearInvariant, Param, Pattern, QuantityExpression as Q, Rate,
+    Relation, Segment, Slot, path,
 };
+use axionomy::{Economy, Exchange, Goal, Quantity, basket};
 
 pub mod execution;
 #[cfg(feature = "packages")]
@@ -152,30 +153,31 @@ impl axionomy::Ontology for Ontology {
 }
 pub type Action = Exchange<Ontology>;
 pub fn initial() -> World {
-    build(5, false)
+    crate::fixtures::initial(axionomy::path!("scheduling/micro"))
 }
 
 pub fn impossible() -> World {
-    build(2, false)
+    crate::fixtures::initial(axionomy::path!("scheduling/micro/infeasible-horizon"))
 }
 
 /// Two three-operation jobs competing across three discrete-capacity machines.
 pub fn initial_showcase() -> World {
-    execution::build(false)
+    crate::fixtures::initial(axionomy::path!("scheduling/showcase"))
 }
 
 pub fn initial_stress() -> World {
-    execution::build(true)
+    crate::fixtures::initial(axionomy::path!("scheduling/stress"))
 }
 
 pub fn impossible_showcase() -> World {
-    build(3, true)
+    crate::fixtures::initial(axionomy::path!("scheduling/showcase/infeasible-horizon"))
 }
 
 pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
 
+#[cfg(test)]
 fn build(horizon: u8, extended: bool) -> World {
     let operations: &[Operation] = if extended {
         &[
@@ -337,16 +339,19 @@ fn build(horizon: u8, extended: bool) -> World {
 }
 
 /// The time a reservation's operation is ready at, `{ready}`.
+#[cfg(test)]
 fn ready() -> Param<u8> {
     Param::new(path!("ready"))
 }
 
 /// The slot a reservation starts at, `{start}`.
+#[cfg(test)]
 fn start() -> Param<u8> {
     Param::new(path!("start"))
 }
 
 /// One unit of each asset `assets` names.
+#[cfg(test)]
 fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>, Quantity)> {
     assets
         .into_iter()
@@ -355,6 +360,7 @@ fn one(assets: impl IntoIterator<Item = Pattern<Asset>>) -> Vec<(Pattern<Asset>,
 }
 
 /// An event of a planned schedule, its schedule role fixed to the schedule.
+#[cfg(test)]
 fn planned() -> Rate<Ontology> {
     Rate::new().account(Role::Schedule, Pattern::literal(AccountId::Success))
 }
@@ -363,6 +369,7 @@ fn planned() -> Rate<Ontology> {
 /// earlier and no later than `latest`: it takes its machine's slots for its
 /// duration, a constant of the law, and the operation it unlocks, or its
 /// completion, is ready at the end it derives, `{end}`.
+#[cfg(test)]
 fn schedule_rate(
     operation: Operation,
     ready_times: &[u8],
@@ -408,6 +415,7 @@ fn schedule_rate(
     rate
 }
 
+#[cfg(test)]
 fn operation_spec(operation: Operation) -> (Job, Machine, u8, u8) {
     match operation {
         Operation::OneA => (Job::One, Machine::One, 2, 0),
@@ -419,6 +427,7 @@ fn operation_spec(operation: Operation) -> (Job, Machine, u8, u8) {
     }
 }
 
+#[cfg(test)]
 fn successor(operation: Operation) -> Option<Operation> {
     match operation {
         Operation::OneA => Some(Operation::OneB),

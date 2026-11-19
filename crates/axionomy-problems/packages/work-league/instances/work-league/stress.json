@@ -1,7 +1,7 @@
 {
   "ontology": "work-league",
   "laws": [
-    "work-league/showcase-and-showcase-sustainable-field-and-showcase-throughput-field-and-stress-and-stress-sustainable-field-and-stress-throughput-field"
+    "work-league/season"
   ],
   "tables": {
     "begin/{agent}/{job}/lean": {

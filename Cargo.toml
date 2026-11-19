@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "crates/axionomy-authoring",
     "crates/axionomy-derive",
     "crates/axionomy-search",
     "crates/axionomy-problems",
@@ -35,6 +36,7 @@ rust-version = "1.99"
 # by the member that owns the feature, never here.
 [workspace.dependencies]
 axionomy = { version = "0.3.0", path = "." }
+axionomy-authoring = { version = "0.3.0", path = "crates/axionomy-authoring" }
 axionomy-derive = { version = "0.3.0", path = "crates/axionomy-derive" }
 axionomy-engine = { version = "0.3.0", path = "crates/axionomy-engine" }
 axionomy-mcp = { version = "0.3.0", path = "crates/axionomy-mcp" }

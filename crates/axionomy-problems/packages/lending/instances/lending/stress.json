@@ -1,6 +1,6 @@
 {
   "ontology": "lending",
-  "laws": ["lending/common", "lending/stress-and-stress-genesis"],
+  "laws": ["lending/common", "lending/stress-bill"],
   "tables": {
     "collect-revenue/{installment}": {
       "variables": [{"name": "installment", "range": ["0", "2"]}],

@@ -16,9 +16,6 @@ fn collect(dir: &Path, files: &mut Vec<PathBuf>) {
 }
 fn main() {
     println!("cargo:rerun-if-changed=packages");
-    if env::var_os("CARGO_FEATURE_PACKAGES").is_none() {
-        return;
-    }
     let mut files = Vec::new();
     collect(Path::new("packages"), &mut files);
     files.sort();

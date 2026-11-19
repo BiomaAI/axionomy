@@ -10,9 +10,11 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axionomy-authoring.workspace = true
 axionomy.workspace = true
 axionomy-search.workspace = true
 axionomy-store.workspace = true
+axionomy-units.workspace = true
 axionomy-view.workspace = true
 postcard.workspace = true
 rhai.workspace = true

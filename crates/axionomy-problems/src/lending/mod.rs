@@ -380,11 +380,6 @@ fn debt_value() -> Q {
     )
 }
 
-/// Depositors' assets: cash plus debt, less the reserves the market keeps.
-fn total_assets() -> Q {
-    (market(Asset::Cash) + debt_value()) - market(Asset::Reserves)
-}
-
 /// Cash the borrower owes now, rounded up.
 fn owed() -> Q {
     owed_for(Q::balance(Role::Borrower, Asset::DebtShare))
@@ -480,113 +475,6 @@ fn oracle_bound(rate: Rate<Ontology>) -> Rate<Ontology> {
     fixed(rate, Role::Oracle, AccountId::Oracle)
 }
 
-fn deposit_rate() -> Rate<Ontology> {
-    let minted = Q::mul_div(
-        Q::units(),
-        market(Asset::ShareSupply),
-        total_assets(),
-        Rounding::Floor,
-    );
-    market_rate()
-        .consume(Role::Depositor, basket([(Asset::Cash, 1)]))
-        .produce(Role::Market, basket([(Asset::Cash, 1)]))
-        .produce_computed(Role::Depositor, Asset::Share, minted.clone())
-        .produce_computed(Role::Market, Asset::ShareSupply, minted.clone())
-        .condition(
-            path!("mints-at-least-the-minimum-shares"),
-            minted,
-            QuantityComparison::GreaterThanOrEqual,
-            Q::maximum(Q::parameter(path!("min-shares")), Q::constant(1)),
-        )
-        .distinct(Role::Market, Role::Depositor)
-}
-
-fn redeem_rate() -> Rate<Ontology> {
-    let paid = Q::mul_div(
-        Q::units(),
-        total_assets(),
-        market(Asset::ShareSupply),
-        Rounding::Floor,
-    );
-    market_rate()
-        .consume(Role::Depositor, basket([(Asset::Share, 1)]))
-        .consume(Role::Market, basket([(Asset::ShareSupply, 1)]))
-        .consume_computed(Role::Market, Asset::Cash, paid.clone())
-        .produce_computed(Role::Depositor, Asset::Cash, paid.clone())
-        .condition(
-            path!("pays-at-least-the-minimum-cash"),
-            paid,
-            QuantityComparison::GreaterThanOrEqual,
-            Q::parameter(path!("min-cash")),
-        )
-        .distinct(Role::Market, Role::Depositor)
-}
-
-fn donate_rate() -> Rate<Ontology> {
-    market_rate()
-        .consume(Role::Depositor, basket([(Asset::Cash, 1)]))
-        .produce(Role::Market, basket([(Asset::Cash, 1)]))
-        .distinct(Role::Market, Role::Depositor)
-}
-
-fn post_collateral_rate() -> Rate<Ontology> {
-    borrower_rate()
-        .consume(Role::Borrower, basket([(Asset::Collateral, 1)]))
-        .produce(Role::Borrower, basket([(Asset::PostedCollateral, 1)]))
-}
-
-fn withdraw_collateral_rate() -> Rate<Ontology> {
-    borrower_rate()
-        .consume(Role::Borrower, basket([(Asset::PostedCollateral, 1)]))
-        .produce(Role::Borrower, basket([(Asset::Collateral, 1)]))
-        .condition(
-            path!("the-remaining-collateral-covers-the-loan"),
-            owed(),
-            QuantityComparison::LessThanOrEqual,
-            collateral_limit(posted() - Q::units(), Term::LoanToValue),
-        )
-}
-
-fn borrow_rate() -> Rate<Ontology> {
-    let minted = Q::mul_div(Q::units(), wad(), index(), Rounding::Ceil);
-    let owed_after = owed_for(Q::balance(Role::Borrower, Asset::DebtShare) + minted.clone());
-    borrower_rate()
-        .consume(Role::Market, basket([(Asset::Cash, 1)]))
-        .produce(Role::Borrower, basket([(Asset::Cash, 1)]))
-        .produce_computed(Role::Borrower, Asset::DebtShare, minted.clone())
-        .produce_computed(Role::Market, Asset::DebtShareSupply, minted)
-        .condition(
-            path!("within-the-loan-to-value-limit"),
-            owed_after,
-            QuantityComparison::LessThanOrEqual,
-            collateral_limit(posted(), Term::LoanToValue),
-        )
-}
-
-fn repay_rate() -> Rate<Ontology> {
-    let retired = Q::mul_div(Q::units(), wad(), index(), Rounding::Floor);
-    borrower_rate()
-        .consume(Role::Borrower, basket([(Asset::Cash, 1)]))
-        .produce(Role::Market, basket([(Asset::Cash, 1)]))
-        .consume_computed(Role::Borrower, Asset::DebtShare, retired.clone())
-        .consume_computed(Role::Market, Asset::DebtShareSupply, retired.clone())
-        .condition(
-            path!("retires-debt"),
-            retired,
-            QuantityComparison::GreaterThanOrEqual,
-            Q::constant(1),
-        )
-}
-
-fn repay_shares_rate() -> Rate<Ontology> {
-    let paid = owed_for(Q::units());
-    borrower_rate()
-        .consume(Role::Borrower, basket([(Asset::DebtShare, 1)]))
-        .consume(Role::Market, basket([(Asset::DebtShareSupply, 1)]))
-        .consume_computed(Role::Borrower, Asset::Cash, paid.clone())
-        .produce_computed(Role::Market, Asset::Cash, paid)
-}
-
 fn pay_bill_rate(bill: Payment) -> Rate<Ontology> {
     fixed(
         clock_bound(fixed(Rate::new(), Role::Borrower, AccountId::Borrower)),
@@ -673,56 +561,6 @@ fn accrue_rate(shocked: bool) -> Rate<Ontology> {
     one_unit(rate, path!("one-period-at-a-time"))
 }
 
-fn reprice_rate() -> Rate<Ontology> {
-    let rate = oracle_bound(clock_bound(market_rate()))
-        .consume(Role::Oracle, basket([(Asset::PendingShock, 1)]))
-        .consume_computed(
-            Role::Market,
-            Asset::CollateralPrice,
-            price_drop().quantity(),
-        )
-        .condition(
-            path!("at-the-scheduled-period"),
-            elapsed(),
-            QuantityComparison::Equal,
-            shock_after().quantity(),
-        );
-    one_unit(rate, path!("one-price-drop"))
-}
-
-fn liquidate_rate() -> Rate<Ontology> {
-    let seized = Q::minimum(
-        posted(),
-        Q::divide(
-            Q::mul_div(
-                owed(),
-                wad() + term(Term::LiquidationBonus),
-                wad(),
-                Rounding::Floor,
-            ),
-            market(Asset::CollateralPrice),
-            Rounding::Floor,
-        ),
-    );
-    let debt_shares = Q::balance(Role::Borrower, Asset::DebtShare);
-    let rate = borrower_rate()
-        .consume_computed(Role::Keeper, Asset::Cash, owed())
-        .produce_computed(Role::Market, Asset::Cash, owed())
-        .consume_computed(Role::Borrower, Asset::DebtShare, debt_shares.clone())
-        .consume_computed(Role::Market, Asset::DebtShareSupply, debt_shares)
-        .consume_computed(Role::Borrower, Asset::PostedCollateral, seized.clone())
-        .produce_computed(Role::Keeper, Asset::Collateral, seized)
-        .condition(
-            path!("the-loan-is-past-its-liquidation-threshold"),
-            owed(),
-            QuantityComparison::GreaterThanOrEqual,
-            collateral_limit(posted(), Term::LiquidationThreshold) + Q::constant(1),
-        )
-        .distinct(Role::Market, Role::Keeper)
-        .distinct(Role::Borrower, Role::Keeper);
-    one_unit(rate, path!("one-liquidation"))
-}
-
 pub fn world(config: &Config) -> World {
     let deposited: u64 = config.deposits.iter().sum();
     let terms = config.terms;
@@ -782,18 +620,17 @@ pub fn world(config: &Config) -> World {
             ])),
         );
     }
-    builder = builder
-        .rate(RateId::Deposit, deposit_rate())
-        .rate(RateId::Redeem, redeem_rate())
-        .rate(RateId::Donate, donate_rate())
-        .rate(RateId::PostCollateral, post_collateral_rate())
-        .rate(RateId::WithdrawCollateral, withdraw_collateral_rate())
-        .rate(RateId::Borrow, borrow_rate())
-        .rate(RateId::Repay, repay_rate())
-        .rate(RateId::RepayShares, repay_shares_rate())
-        .rate(RateId::PayBill, pay_bill_rate(config.bill))
-        .rate(RateId::Accrue, accrue_rate(config.shock.is_some()))
-        .rate(RateId::Liquidate, liquidate_rate());
+    for (key, rate) in crate::fixtures::laws::<Ontology>(&path!("lending/common")) {
+        match key.as_literal() {
+            Some(RateId::Accrue) if config.shock.is_none() => {
+                builder = builder.rate(RateId::Accrue, accrue_rate(false));
+            }
+            Some(RateId::Reprice) if config.shock.is_none() => {}
+            Some(_) => builder = builder.rate_at(key, rate),
+            None => {} // Installments take their rows from the caller's revenue schedule.
+        }
+    }
+    builder = builder.rate(RateId::PayBill, pay_bill_rate(config.bill));
     // The market's terms and its one scheduled price drop never change:
     // constants, which every rate reads by name.
     for term in Term::ALL {
@@ -802,8 +639,7 @@ pub fn world(config: &Config) -> World {
     if let Some(shock) = config.shock {
         builder = builder
             .constant(&shock_after(), shock.after)
-            .constant(&price_drop(), shock.drop)
-            .rate(RateId::Reprice, reprice_rate());
+            .constant(&price_drop(), shock.drop);
     }
     if !config.revenue.is_empty() {
         let installment = Param::<u8>::new(path!("installment"));
@@ -835,15 +671,15 @@ pub fn world(config: &Config) -> World {
 }
 
 pub fn initial() -> World {
-    world(&Config::micro())
+    crate::fixtures::initial(axionomy::path!("lending/micro"))
 }
 
 pub fn initial_showcase() -> World {
-    world(&Config::showcase())
+    crate::fixtures::initial(axionomy::path!("lending/showcase"))
 }
 
 pub fn initial_stress() -> World {
-    world(&Config::stress())
+    crate::fixtures::initial(axionomy::path!("lending/stress"))
 }
 
 /// A fresh market with only the genesis seed, where depositors hold cash.

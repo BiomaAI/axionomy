@@ -66,14 +66,14 @@ impl Step {
     ) -> Result<(), String> {
         vocabulary.exchange(&self.exchange)?;
         for (account, asset, _) in &self.balances {
-            declared(&vocabulary.accounts, "account", account)?;
-            declared(&vocabulary.assets, "asset", asset)?;
+            vocabulary.account(account)?;
+            vocabulary.asset(asset)?;
         }
         for account in self.exists.keys() {
-            declared(&vocabulary.accounts, "account", account)?;
+            vocabulary.account(account)?;
         }
         for asset in self.supply.keys() {
-            declared(&vocabulary.assets, "asset", asset)?;
+            vocabulary.asset(asset)?;
         }
         let assessment = state.assess(&self.exchange);
         if assessment.status() != self.status {

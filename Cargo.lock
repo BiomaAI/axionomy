@@ -439,6 +439,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-authoring"
+version = "0.3.0"
+dependencies = [
+ "axionomy",
+ "serde",
+]
+
+[[package]]
 name = "axionomy-cli"
 version = "0.3.0"
 dependencies = [
@@ -474,8 +482,10 @@ name = "axionomy-engine"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "axionomy-authoring",
  "axionomy-search",
  "axionomy-store",
+ "axionomy-units",
  "axionomy-view",
  "postcard",
  "rhai",
@@ -519,6 +529,7 @@ name = "axionomy-problems"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "axionomy-authoring",
  "axionomy-engine",
  "axionomy-search",
  "axionomy-store",

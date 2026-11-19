@@ -11,19 +11,20 @@ rust-version.workspace = true
 
 [features]
 # The samples' package builders, which write through the engine.
-packages = ["dep:axionomy-engine", "dep:axionomy-store", "dep:postcard", "dep:serde"]
+packages = ["dep:axionomy-engine", "dep:axionomy-store", "dep:postcard"]
 
 [dependencies]
+axionomy-authoring.workspace = true
 axionomy.workspace = true
 axionomy-engine = { workspace = true, optional = true }
 axionomy-search.workspace = true
 axionomy-store = { workspace = true, optional = true }
 postcard = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 blake3.workspace = true
-serde_json.workspace = true
 axionomy-engine.workspace = true
 axionomy-store.workspace = true
 postcard.workspace = true

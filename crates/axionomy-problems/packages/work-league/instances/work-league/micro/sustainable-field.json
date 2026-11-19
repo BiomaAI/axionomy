@@ -1,6 +1,6 @@
 {
   "ontology": "work-league",
-  "laws": ["work-league/micro-and-micro-sustainable-field-and-micro-throughput-field"],
+  "laws": ["work-league/micro"],
   "accounts": [
     [
       "agent/atlas",

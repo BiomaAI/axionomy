@@ -3,8 +3,7 @@
 /// The UTF-8 source that a shipped sample builds from, also available to
 /// binaries installed outside a checkout and to the Studio worker.
 pub fn source(package: &axionomy_engine::PackagePath) -> axionomy_engine::source::SourceFiles {
-    const GALLERY: &[(&str, &str, &str)] = include!(concat!(env!("OUT_DIR"), "/gallery.rs"));
-    GALLERY
+    crate::fixtures::GALLERY
         .iter()
         .filter(|(name, _, _)| *name == package.as_str())
         .map(|(_, file, text)| {

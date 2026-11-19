@@ -1,7 +1,7 @@
 {
   "ontology": "scheduling",
   "laws": [
-    "scheduling/micro-and-micro-infeasible-horizon-and-showcase-infeasible-horizon-and-stress-infeasible-horizon",
+    "scheduling/short-horizon",
     "scheduling/showcase-infeasible-horizon-and-stress-infeasible-horizon"
   ],
   "tables": {

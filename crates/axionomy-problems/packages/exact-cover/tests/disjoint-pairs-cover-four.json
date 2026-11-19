@@ -1,0 +1,15 @@
+{
+  "start": "exact-cover/micro",
+  "steps": [
+    {
+      "exchange": {"rate": "select/ab/0", "units": "1", "bindings": {"problem": "problem"}},
+      "status": "Applicable",
+      "balances": [["problem", "progress/2", "1"], ["problem", "covered/b", "1"]]
+    },
+    {
+      "exchange": {"rate": "select/cd/2", "units": "1", "bindings": {"problem": "problem"}},
+      "status": "Applicable",
+      "balances": [["problem", "progress/4", "1"], ["problem", "selected/cd", "1"]]
+    }
+  ]
+}

@@ -1,10 +1,8 @@
 #![doc = include_str!("README.md")]
 
-use axionomy::path;
-use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Pattern, Quantity,
-    Rate, basket,
-};
+#[cfg(test)]
+use axionomy::{Account, Basket, EconomyBuilder, LinearInvariant, Pattern, Rate, path};
+use axionomy::{Economy, Exchange, Goal, Quantity, basket};
 
 #[cfg(feature = "packages")]
 pub mod package;
@@ -111,61 +109,11 @@ impl axionomy::Ontology for Ontology {
 }
 pub type Action = Exchange<Ontology>;
 
+#[cfg(test)]
 const MICRO_SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
+#[cfg(test)]
 const MICRO_ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
-const SHOWCASE_SETS: [SetId; 14] = [
-    SetId::Ab,
-    SetId::Cd,
-    SetId::Ef,
-    SetId::Gh,
-    SetId::Ace,
-    SetId::Bfg,
-    SetId::Dh,
-    SetId::Adg,
-    SetId::Beh,
-    SetId::Cf,
-    SetId::Abef,
-    SetId::Cdgh,
-    SetId::Ae,
-    SetId::Fgh,
-];
-const SHOWCASE_ELEMENTS: [Element; 8] = [
-    Element::A,
-    Element::B,
-    Element::C,
-    Element::D,
-    Element::E,
-    Element::F,
-    Element::G,
-    Element::H,
-];
-const STRESS_SETS: [SetId; 25] = [
-    SetId::Ab,
-    SetId::Cd,
-    SetId::Ef,
-    SetId::Gh,
-    SetId::Ij,
-    SetId::Kl,
-    SetId::Ace,
-    SetId::Bfg,
-    SetId::Dh,
-    SetId::Adg,
-    SetId::Beh,
-    SetId::Cf,
-    SetId::Abef,
-    SetId::Cdgh,
-    SetId::Ae,
-    SetId::Fgh,
-    SetId::Aei,
-    SetId::Bfj,
-    SetId::Cgk,
-    SetId::Dhl,
-    SetId::Abij,
-    SetId::Cdk,
-    SetId::Efl,
-    SetId::Ai,
-    SetId::Al,
-];
+#[cfg(test)]
 const STRESS_ELEMENTS: [Element; 12] = [
     Element::A,
     Element::B,
@@ -182,47 +130,30 @@ const STRESS_ELEMENTS: [Element; 12] = [
 ];
 
 pub fn initial() -> World {
-    build(&MICRO_ELEMENTS, &MICRO_SETS)
+    crate::fixtures::initial(axionomy::path!("exact-cover/micro"))
 }
 
 pub fn unsatisfiable() -> World {
-    build(&MICRO_ELEMENTS, &[SetId::Ab, SetId::Ac])
+    crate::fixtures::initial(axionomy::path!("exact-cover/micro/unsatisfiable"))
 }
 
 /// One connected incidence matrix with pairs, triples, and quadruples.
 /// Legal selections can dead-end, and complete covers have different sizes.
 pub fn initial_showcase() -> World {
-    build(&SHOWCASE_ELEMENTS, &SHOWCASE_SETS)
+    crate::fixtures::initial(axionomy::path!("exact-cover/showcase"))
 }
 
 /// Cross-region triples and quadruples couple all twelve elements.
 pub fn initial_stress() -> World {
-    build(&STRESS_ELEMENTS, &STRESS_SETS)
+    crate::fixtures::initial(axionomy::path!("exact-cover/stress"))
 }
 
 pub fn unsatisfiable_showcase() -> World {
-    // Every element occurs, but covering B, C, D, and E would reuse A.
-    build(
-        &SHOWCASE_ELEMENTS,
-        &[SetId::Ab, SetId::Ac, SetId::Ad, SetId::Ae, SetId::Fgh],
-    )
+    crate::fixtures::initial(axionomy::path!("exact-cover/showcase/unsatisfiable"))
 }
 
 pub fn unsatisfiable_stress() -> World {
-    build(
-        &STRESS_ELEMENTS,
-        &[
-            SetId::Ab,
-            SetId::Ac,
-            SetId::Ad,
-            SetId::Ae,
-            SetId::Fgh,
-            SetId::Ai,
-            SetId::Aj,
-            SetId::Ak,
-            SetId::Al,
-        ],
-    )
+    crate::fixtures::initial(axionomy::path!("exact-cover/stress/unsatisfiable"))
 }
 
 pub fn goal() -> Goal<Ontology> {
@@ -230,10 +161,12 @@ pub fn goal() -> Goal<Ontology> {
 }
 
 /// A law of the problem, its one role fixed to the problem's account.
+#[cfg(test)]
 fn law() -> Rate<Ontology> {
     Rate::new().account(Role::Problem, Pattern::literal(AccountId::Problem))
 }
 
+#[cfg(test)]
 fn build(elements: &[Element], available: &[SetId]) -> World {
     let mut problem = Basket::new();
     for element in elements {
@@ -321,6 +254,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
         .expect("exact-cover model is valid")
 }
 
+#[cfg(test)]
 fn declared_members(set: SetId) -> &'static [Element] {
     match set {
         SetId::Ab => &[Element::A, Element::B],
