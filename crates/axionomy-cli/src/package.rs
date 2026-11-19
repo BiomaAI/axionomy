@@ -15,6 +15,17 @@ const INDEX: &str = "index.json";
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Action {
+    /// Validate a source directory and its economic assertions.
+    Validate { directory: PathBuf },
+    /// Report the source package's economic tests.
+    Test { directory: PathBuf },
+    /// Build a source directory into a self-contained store or zip.
+    Build { directory: PathBuf, output: PathBuf },
+    /// Run a named experiment from a source directory.
+    Run {
+        directory: PathBuf,
+        experiment: axionomy_engine::ExperimentPath,
+    },
     /// Copy what a package needs from a store into a new package file:
     /// everything named under the package's name, or the refs and
     /// definitions given, with all they reach.
@@ -51,6 +62,51 @@ pub(crate) enum Action {
 
 pub(crate) fn run(action: Action) -> Result<String, CliError> {
     match action {
+        Action::Validate { directory } => {
+            let built = crate::source::build(&directory)?;
+            let contents = built.engine.named_under(&built.name)?;
+            Ok(format!(
+                "{} {} · {} refs, {} definitions, {} tests passed",
+                built.name,
+                built.version,
+                contents.refs.len(),
+                contents.definitions.len(),
+                built.tests.len()
+            ))
+        }
+        Action::Test { directory } => {
+            let built = crate::source::build(&directory)?;
+            Ok(format!(
+                "{} tests passed\n{}",
+                built.tests.len(),
+                built
+                    .tests
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))
+        }
+        Action::Build { directory, output } => {
+            let built = crate::source::build(&directory)?;
+            written(
+                &built.engine,
+                &built.name,
+                built.version,
+                built.engine.named_under(&built.name)?,
+                &output,
+            )
+        }
+        Action::Run {
+            directory,
+            experiment,
+        } => {
+            let built = crate::source::build(&directory)?;
+            let result = built
+                .engine
+                .run_experiment(&experiment, &mut |_, _| std::ops::ControlFlow::Continue(()))?;
+            Ok(serde_json::to_string_pretty(&result)?)
+        }
         Action::Export {
             store,
             output,
@@ -94,7 +150,15 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
             Ok(lines.join("\n"))
         }
         Action::Inspect { package } => {
-            let engine = Engine::new(read_package(&read(&package)?)?)?;
+            let store = if package.is_dir() {
+                let built = crate::source::build(&package)?;
+                let store = Store::memory()?;
+                built.export(&store)?;
+                store
+            } else {
+                read_package(&read(&package)?)?
+            };
+            let engine = Engine::new(store)?;
             let reader = engine.store().read()?;
             let mut lines = Vec::new();
             for manifest in engine.manifests()? {
@@ -192,21 +256,26 @@ fn written(
     let zip = output
         .extension()
         .is_some_and(|extension| extension == "zip");
-    let file = if zip {
-        output.with_extension("redb.partial")
+    let directory = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    let raw = tempfile::NamedTempFile::new_in(directory)?;
+    let manifest = engine.export(name, version, contents, &Store::open(raw.path())?)?;
+    Store::compact(raw.path())?;
+    let finished = if zip {
+        let mut archive = tempfile::NamedTempFile::new_in(directory)?;
+        std::io::Write::write_all(&mut archive, &zipped(&fs::read(raw.path())?)?)?;
+        archive
     } else {
-        output.clone()
+        raw
     };
-    let manifest = engine.export(name, version, contents, &Store::open(&file)?)?;
-    Store::compact(&file)?;
-    if zip {
-        let bytes = read(&file)?;
-        write(output, &zipped(&bytes)?)?;
-        fs::remove_file(&file).map_err(|source| CliError::Write {
-            path: file.clone(),
-            source,
+    finished
+        .persist_noclobber(output)
+        .map_err(|e| CliError::Write {
+            path: output.clone(),
+            source: e.error,
         })?;
-    }
     let size = fs::metadata(output)
         .map_err(|source| CliError::Write {
             path: output.clone(),

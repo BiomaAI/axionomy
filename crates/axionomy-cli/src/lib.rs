@@ -2,6 +2,7 @@
 
 mod package;
 mod serve;
+mod source;
 
 use axionomy_engine::EngineError;
 use axionomy_store::StoreError;
@@ -67,6 +68,8 @@ enum Command {
 
 #[derive(Debug, Error)]
 pub enum CliError {
+    #[error(transparent)]
+    Source(#[from] axionomy_engine::source::Diagnostic),
     #[error(transparent)]
     Arguments(#[from] clap::Error),
     #[error(transparent)]

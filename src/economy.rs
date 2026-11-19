@@ -1482,28 +1482,70 @@ impl<O: Ontology> Economy<O> {
             let groups: BTreeSet<_> = rate
                 .asset_patterns()
                 .filter(|pattern| pattern.as_literal().is_none())
-                .map(|pattern| rate.asset_inputs(pattern))
+                .map(|pattern| rate.pattern_inputs(pattern))
                 .collect();
-            for inputs in groups {
-                let (mut prefix, rest): (Vec<_>, Vec<_>) = rate
-                    .variables()
-                    .iter()
-                    .partition(|variable| inputs.contains(variable.name()));
-                let count = prefix.len();
-                prefix.extend(rest);
-                let mut values = Values::new(Some(rate), prefix);
-                while let Some(arguments) = values.next() {
-                    let Ok(id) = key.instantiate(&arguments) else {
-                        continue;
-                    };
-                    let Ok(instance) = self.made_instance(&id, rate, arguments) else {
-                        continue;
-                    };
-                    for asset in instance.asset_keys() {
-                        visit(asset)?;
-                    }
-                    values.skip_completions(count);
+            self.visit_projected(key, rate, groups, |instance| {
+                for asset in instance.asset_keys() {
+                    visit(asset)?;
                 }
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Visits every account initially present or fixed to a role by a rate
+    /// instance, including accounts a rate can open later.
+    pub fn try_visit_accounts<E>(
+        &self,
+        mut visit: impl FnMut(&O::Account) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for (account, _) in self.accounts() {
+            visit(account)?;
+        }
+        for (key, rate) in self.rates() {
+            let mut groups = BTreeSet::new();
+            for (_, pattern) in rate.fixed_accounts() {
+                if let Some(account) = pattern.as_literal() {
+                    visit(account)?;
+                } else {
+                    groups.insert(rate.pattern_inputs(pattern));
+                }
+            }
+            self.visit_projected(key, rate, groups, |instance| {
+                for (_, account) in instance.fixed_accounts() {
+                    visit(written(account))?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    fn visit_projected<'a, E>(
+        &self,
+        key: &Pattern<O::Rate>,
+        rate: &'a Rate<O>,
+        groups: BTreeSet<BTreeSet<&'a VariablePath>>,
+        mut visit: impl FnMut(&Rate<O>) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for inputs in groups {
+            let (mut prefix, rest): (Vec<_>, Vec<_>) = rate
+                .variables()
+                .iter()
+                .partition(|variable| inputs.contains(variable.name()));
+            let count = prefix.len();
+            prefix.extend(rest);
+            let mut values = Values::new(Some(rate), prefix);
+            while let Some(arguments) = values.next() {
+                let Ok(id) = key.instantiate(&arguments) else {
+                    continue;
+                };
+                let Ok(instance) = self.made_instance(&id, rate, arguments) else {
+                    continue;
+                };
+                visit(&instance)?;
+                values.skip_completions(count);
             }
         }
         Ok(())

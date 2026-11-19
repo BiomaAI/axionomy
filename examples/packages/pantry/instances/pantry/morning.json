@@ -1,0 +1,6 @@
+{
+  "ontology": "pantry",
+  "laws": ["delivery"],
+  "accounts": [["stockroom", {"balances": [["meal", "3"]]}], ["counter", {"balances": []}]],
+  "invariants": [{"name": "meals", "weights": [["meal", 1]]}]
+}

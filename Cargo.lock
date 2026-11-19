@@ -452,6 +452,7 @@ dependencies = [
  "axum",
  "clap",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -479,6 +480,8 @@ dependencies = [
  "postcard",
  "rhai",
  "serde",
+ "serde_json",
+ "serde_path_to_error",
  "thiserror",
  "zip",
 ]

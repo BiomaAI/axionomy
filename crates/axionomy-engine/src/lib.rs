@@ -8,6 +8,7 @@ mod histories;
 mod package;
 mod refs;
 pub mod script;
+pub mod source;
 mod strategy;
 mod view;
 

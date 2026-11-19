@@ -984,13 +984,13 @@ impl<O: Ontology> Rate<O> {
             .chain(self.computed_asset_keys())
     }
 
-    /// The identifier variables that determine this asset, tracing derived
+    /// The identifier variables that determine this pattern, tracing derived
     /// values back through earlier derivations and relation keys.
-    pub(crate) fn asset_inputs<'a>(
+    pub(crate) fn pattern_inputs<'a, T>(
         &'a self,
-        asset: &'a Pattern<O::Asset>,
+        pattern: &'a Pattern<T>,
     ) -> BTreeSet<&'a VariablePath> {
-        let mut names: BTreeSet<_> = asset.variables().collect();
+        let mut names: BTreeSet<_> = pattern.variables().collect();
         for derived in self.derived.iter().rev() {
             if names.remove(derived.name()) {
                 names.extend(derived.value().variables());

@@ -17,5 +17,7 @@ axionomy-view.workspace = true
 postcard.workspace = true
 rhai.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
 thiserror.workspace = true
 zip.workspace = true
