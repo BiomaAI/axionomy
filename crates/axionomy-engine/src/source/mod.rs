@@ -1,6 +1,9 @@
 //! Builds a package from versioned source documents in an isolated store.
 //! Only a successful build can be exported or installed.
+mod compare;
+pub use compare::{BuildComparison, compare};
 mod files;
+mod scripts;
 mod tests;
 use crate::{
     CandidateSet, CandidatesPath, Engine, EngineError, Experiment, ExperimentPath, GoalPath,
@@ -12,7 +15,7 @@ use axionomy::{
     Segment, VariablePath, path::Path, paths,
 };
 use axionomy_store::{RefPath, Store};
-pub use files::{Diagnostic, LawSetPath, SourceFile, SourceFiles, TestPath};
+pub use files::{Diagnostic, LawSetPath, SourceFile, SourceFiles, SourceTree, TestPath};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,6 +27,8 @@ struct Header {
     version: Version,
     #[serde(default)]
     branches: BTreeMap<RefPath, Branch>,
+    #[serde(default)]
+    script_ontologies: BTreeMap<ScriptPath, BTreeSet<OntologyPath>>,
 }
 #[derive(Deserialize)]
 enum Format {
@@ -173,6 +178,19 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             }
         }
     }
+    for id in header.script_ontologies.keys() {
+        if !scripts.contains_key(id) {
+            return Err(Diagnostic::new(
+                manifest,
+                format!("interface for missing script {id}"),
+            ));
+        }
+    }
+    for id in scripts.keys() {
+        scoped(&header.name, id.as_str())
+            .map_err(|e| Diagnostic::new(SourceFile::Script((*id).clone()), e))?;
+    }
+    let script_ids: Vec<_> = scripts.keys().copied().collect();
     for (id, instance) in instances {
         let file = SourceFile::Instance(id.clone());
         scoped(&header.name, id.as_str()).map_err(|e| Diagnostic::new(&file, e))?;
@@ -233,9 +251,19 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             .ok_or_else(|| Diagnostic::new(manifest, "cycle in branch refs"))?;
         scoped(&header.name, next.as_str()).map_err(|e| Diagnostic::new(manifest, e))?;
         let branch = branches.remove(&next).expect("selected from branches");
-        let result = engine
+        let start = engine
             .referred(&branch.from)
-            .and_then(|at| engine.apply(at, &branch.exchanges))
+            .map_err(|e| Diagnostic::new(manifest, e))?;
+        let ontology = engine
+            .ontology(start)
+            .map_err(|e| Diagnostic::new(manifest, e))?;
+        for exchange in &branch.exchanges {
+            vocabularies[&ontology]
+                .exchange(exchange)
+                .map_err(|e| Diagnostic::new(manifest, e))?;
+        }
+        let result = engine
+            .apply(start, &branch.exchanges)
             .and_then(|end| engine.refer(&next, end));
         result.map_err(|e| Diagnostic::new(manifest, format!("branch {next}: {e}")))?;
     }
@@ -263,7 +291,47 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             }
         }
     }
+    for id in script_ids {
+        let file = SourceFile::Script(id.clone());
+        let compiled = engine.compiled(id).map_err(|e| Diagnostic::new(&file, e))?;
+        let interfaces = if let Some(ids) = header.script_ontologies.get(id) {
+            ids.iter().collect::<Vec<_>>()
+        } else if vocabularies.len() == 1 {
+            vocabularies.keys().copied().collect()
+        } else {
+            return Err(Diagnostic::new(
+                manifest,
+                format!("declare script_ontologies for {id}"),
+            ));
+        };
+        if interfaces.is_empty() {
+            return Err(Diagnostic::new(
+                manifest,
+                format!("script {id} needs an ontology"),
+            ));
+        }
+        for ontology in interfaces {
+            let vocab = vocabularies.get(ontology).ok_or_else(|| {
+                Diagnostic::new(
+                    manifest,
+                    format!("script {id} has unknown ontology {ontology}"),
+                )
+            })?;
+            vocab.script(&file, &compiled.ast)?;
+        }
+    }
     let file = SourceFile::Definitions;
+    let names = definitions
+        .goals
+        .keys()
+        .map(Path::as_str)
+        .chain(definitions.objectives.keys().map(Path::as_str))
+        .chain(definitions.candidates.keys().map(Path::as_str))
+        .chain(definitions.strategies.keys().map(Path::as_str))
+        .chain(definitions.experiments.keys().map(Path::as_str));
+    for name in names {
+        scoped(&header.name, name).map_err(|e| Diagnostic::new(&file, e))?;
+    }
     let err = |e: EngineError| Diagnostic::new(&file, e);
     for (id, authored) in definitions.goals {
         let vocabulary = vocabularies.get(&authored.ontology).ok_or_else(|| {
@@ -311,6 +379,9 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
         test.run(&engine, &vocabularies)
             .map_err(|e| Diagnostic::new(SourceFile::Test(id.clone()), e))?;
     }
+    engine
+        .define(&source_path(&header.name), files)
+        .map_err(|e| Diagnostic::new(manifest, e))?;
     Ok(BuiltPackage {
         tests: tests.into_keys().collect(),
         name: header.name,
@@ -328,5 +399,20 @@ fn scoped(package: &PackagePath, id: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("`{id}` is outside package `{package}`"))
+    }
+}
+
+enum Source {}
+impl PathKind for Source {
+    const SCHEMA: &'static str = "SourcePath";
+}
+fn source_path(name: &PackagePath) -> Path<Source> {
+    name.as_str().parse().expect("a package name is a path")
+}
+
+impl Engine {
+    /// The original UTF-8 files carried by a package compiled from source.
+    pub fn package_source(&self, name: &PackagePath) -> Result<SourceFiles, EngineError> {
+        self.defined(&source_path(name))
     }
 }

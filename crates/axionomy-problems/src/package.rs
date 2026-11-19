@@ -1,21 +1,4 @@
-//! What every sample's package builder shares.
-
-use axionomy_engine::ScriptCall;
-use serde::{Serialize, de::DeserializeOwned};
-
-/// The function `function` of the script at `script`.
-pub(crate) fn call(script: &str, function: &str) -> ScriptCall {
-    ScriptCall::new(
-        script.parse().expect("a script's name is a path"),
-        function.parse().expect("a function name"),
-    )
-}
-
-/// A typed value written as paths, which D-044 makes the same bytes.
-pub(crate) fn written<T: DeserializeOwned>(value: &impl Serialize) -> T {
-    postcard::from_bytes(&postcard::to_allocvec(value).expect("values encode"))
-        .expect("a typed value reads as paths")
-}
+//! Shipped package sources and their compiled store representation.
 
 /// The UTF-8 source that a shipped sample builds from, also available to
 /// binaries installed outside a checkout and to the Studio worker.
@@ -31,4 +14,16 @@ pub fn source(package: &axionomy_engine::PackagePath) -> axionomy_engine::source
             )
         })
         .collect()
+}
+
+pub(crate) fn write(
+    engine: &axionomy_engine::Engine,
+    name: axionomy_engine::PackagePath,
+) -> Result<(), axionomy_engine::EngineError> {
+    let built = axionomy_engine::source::build(&source(&name))
+        .map_err(|e| axionomy_engine::PackageError::Source(Box::new(e)))?;
+    let package = axionomy_store::Store::memory()?;
+    built.export(&package)?;
+    engine.load(&package)?;
+    Ok(())
 }

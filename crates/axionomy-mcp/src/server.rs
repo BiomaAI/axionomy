@@ -10,9 +10,10 @@ use crate::{
         Amounts, ArmResults, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse,
         ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode, FrameReceipt,
-        Issue, LineKind, PackageListRequest, PackageListResponse, PackageRef, PackageSummary,
-        PackageVersion, QuantityLine, RefAdvanceRequest, RefCreateRequest, RefDeleteRequest,
-        RefFrame, RefFramesRequest, RefFramesResponse, RefPosition, RefReadRequest, ReplayRequest,
+        Issue, LineKind, PackageBuildRequest, PackageBuilt, PackageListRequest,
+        PackageListResponse, PackageRef, PackageSourceRequest, PackageSummary, PackageVersion,
+        QuantityLine, RefAdvanceRequest, RefCreateRequest, RefDeleteRequest, RefFrame,
+        RefFramesRequest, RefFramesResponse, RefPosition, RefReadRequest, ReplayRequest,
         SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot, ToolFailure,
         TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse, TrialResult,
     },
@@ -75,6 +76,8 @@ const MAX_WAIT_SECONDS: u64 = 30;
 const MAX_DIFF_STEPS: usize = 100;
 /// Trials over all its arms an experiment may run, or report, in one call.
 const MAX_TRIALS: u64 = 1_000;
+mod package_source;
+
 const SEARCH: &str = "axionomy_search";
 
 const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel. An economy holds accounts with \
@@ -84,6 +87,8 @@ and invariants are named by paths: lowercase segments of a-z, 0-9 and '-', separ
 as 'agents/7/wallet'. Quantities are decimal strings. A handle, economy_id, names an economy that \
 never changes: every call that changes something stores a new economy and returns its handle, so \
 older handles are branches to return to.
+
+Use axionomy_package_source to read editable files and axionomy_package_build to validate, test, export or install a package.
 
 Start here:
 1. axionomy_package_list lists the packages loaded when the server started: each package's refs, \
@@ -151,6 +156,7 @@ pub struct AxionomyMcp {
     pub(crate) archive: Archive,
     tasks: TaskManager,
     task_options: TaskOptions,
+    package_install: Arc<std::sync::Mutex<()>>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -162,6 +168,7 @@ impl AxionomyMcp {
     pub fn new(engine: Engine) -> Result<Self, StoreError> {
         Ok(Self {
             archive: Archive::open(engine)?,
+            package_install: Arc::default(),
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
@@ -547,6 +554,38 @@ impl AxionomyMcp {
         Parameters(_request): Parameters<SearchRequest>,
     ) -> Result<Linked<SearchResponse>, ToolError> {
         Err(tasks_required(SEARCH))
+    }
+
+    #[tool(name="axionomy_package_source",title="Read package source",
+        description="Read the editable source tree of an installed package, including its ontology, laws, instances, definitions, tests and Rhai scripts.",
+        output_schema=schema_for_output::<axionomy_engine::source::SourceTree>(),
+        annotations(read_only_hint=true,open_world_hint=false))]
+    async fn package_source(
+        &self,
+        Parameters(request): Parameters<PackageSourceRequest>,
+    ) -> Result<Linked<axionomy_engine::source::SourceTree>, ToolError> {
+        let files = package_source::read(self.archive.engine(), &request.name)?;
+        Ok(Linked::new(
+            axionomy_engine::source::SourceTree { files },
+            vec![],
+        ))
+    }
+
+    #[tool(name="axionomy_package_build",title="Build a package",
+        description="Submit UTF-8 package files or edit an installed base by path. Build all laws, named definitions and refs, run the economic tests, and optionally export a package zip or install the release. Omitted files of a base are retained, null deletes a file. Invalid source returns the file, field and reason.",
+        output_schema=schema_for_output::<PackageBuilt>(),
+        annotations(destructive_hint=true,idempotent_hint=false,open_world_hint=false))]
+    async fn package_build(
+        &self,
+        Parameters(request): Parameters<PackageBuildRequest>,
+    ) -> Result<Linked<PackageBuilt>, ToolError> {
+        let engine = self.archive.engine().clone();
+        let gate = self.package_install.clone();
+        let result =
+            tokio::task::spawn_blocking(move || package_source::build(&engine, &gate, request))
+                .await
+                .map_err(ToolError::internal)??;
+        Ok(Linked::new(result, vec![]))
     }
 
     #[tool(
@@ -1550,6 +1589,8 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         "axionomy_trace_find" => check::<TraceFindRequest>(arguments),
         "axionomy_trace_diff" => check::<TraceDiffRequest>(arguments),
         SEARCH => check::<SearchRequest>(arguments),
+        "axionomy_package_source" => check::<PackageSourceRequest>(arguments),
+        "axionomy_package_build" => check::<PackageBuildRequest>(arguments),
         "axionomy_package_list" => check::<PackageListRequest>(arguments),
         "axionomy_experiment_run" | "axionomy_experiment_results" => {
             check::<ExperimentRequest>(arguments)

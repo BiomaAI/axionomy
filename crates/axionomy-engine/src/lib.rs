@@ -249,8 +249,10 @@ impl Engine {
         path: &ObjectivePath,
         objective: &Objective,
     ) -> Result<(), EngineError> {
-        let (Measure::State(call) | Measure::Steps(call)) = &objective.measure;
-        self.require_script(&call.script)?;
+        match &objective.measure {
+            Measure::State(call) => self.require_call(call, &[1])?,
+            Measure::Steps(call) => self.require_call(call, &[3])?,
+        }
         self.define(path, objective)
     }
 
@@ -339,7 +341,7 @@ impl Engine {
         set: &CandidateSet,
     ) -> Result<(), EngineError> {
         if let CandidateSet::Script(call) = set {
-            self.require_script(&call.script)?;
+            self.require_call(call, &[1])?;
         }
         self.define(path, set)
     }
@@ -369,10 +371,10 @@ impl Engine {
         strategy: &Strategy,
     ) -> Result<(), EngineError> {
         let mut candidates: Vec<&CandidatesPath> = Vec::new();
-        let mut scripts: Vec<&ScriptCall> = Vec::new();
+        let mut scripts: Vec<(&ScriptCall, &[usize])> = Vec::new();
         match strategy {
-            Strategy::Policy { policy, .. } => scripts.push(policy),
-            Strategy::Plan { plan } => scripts.push(plan),
+            Strategy::Policy { policy, .. } => scripts.push((policy, &[2])),
+            Strategy::Plan { plan } => scripts.push((plan, &[1, 2])),
             Strategy::BreadthFirst { candidates: set } => candidates.push(set),
             Strategy::Cheapest {
                 candidates: set,
@@ -385,8 +387,17 @@ impl Engine {
                 heuristic,
             } => {
                 candidates.push(set);
-                scripts.push(cost);
-                scripts.extend(heuristic);
+                scripts.push((
+                    cost,
+                    if matches!(strategy, Strategy::Cheapest { .. }) {
+                        &[3]
+                    } else {
+                        &[1]
+                    },
+                ));
+                if let Some(call) = heuristic {
+                    scripts.push((call, &[1]));
+                }
             }
             Strategy::BranchAndBound {
                 candidates: set,
@@ -394,7 +405,8 @@ impl Engine {
                 bound,
             } => {
                 candidates.push(set);
-                scripts.extend([cost, bound]);
+                scripts.push((cost, &[1]));
+                scripts.push((bound, &[1]));
             }
             Strategy::Beam {
                 candidates: set,
@@ -402,7 +414,7 @@ impl Engine {
                 ..
             } => {
                 candidates.push(set);
-                scripts.push(score);
+                scripts.push((score, &[1]));
             }
             Strategy::Pareto {
                 candidates: set,
@@ -425,18 +437,20 @@ impl Engine {
                 players,
                 ..
             } => {
-                scripts.push(actor);
-                scripts.extend(nature);
+                scripts.push((actor, &[1]));
+                if let Some(call) = nature {
+                    scripts.push((call, &[2]));
+                }
                 for player in players {
                     match player {
-                        Chooser::Policy(policy) => scripts.push(policy),
+                        Chooser::Policy(policy) => scripts.push((policy, &[2])),
                         Chooser::Minimax {
                             candidates: set,
                             evaluate,
                             ..
                         } => {
                             candidates.push(set);
-                            scripts.push(evaluate);
+                            scripts.push((evaluate, &[1]));
                         }
                         Chooser::Mcts {
                             candidates: set,
@@ -447,8 +461,14 @@ impl Engine {
                             ..
                         } => {
                             candidates.push(set);
-                            scripts.extend([payoffs, estimate]);
-                            scripts.extend(chance.iter().chain(rollout));
+                            scripts.push((payoffs, &[1]));
+                            scripts.push((estimate, &[1]));
+                            if let Some(call) = chance {
+                                scripts.push((call, &[1]));
+                            }
+                            if let Some(call) = rollout {
+                                scripts.push((call, &[3]));
+                            }
                         }
                         Chooser::Ismcts {
                             candidates: set,
@@ -460,8 +480,13 @@ impl Engine {
                             ..
                         } => {
                             candidates.push(set);
-                            scripts.extend([observe, chance, payoffs, estimate]);
-                            scripts.extend(rollout);
+                            scripts.push((observe, &[2]));
+                            scripts.push((chance, &[1]));
+                            scripts.push((payoffs, &[1]));
+                            scripts.push((estimate, &[1]));
+                            if let Some(call) = rollout {
+                                scripts.push((call, &[3]));
+                            }
                         }
                     }
                 }
@@ -470,8 +495,8 @@ impl Engine {
         for set in candidates {
             self.defined::<_, CandidateSet>(set)?;
         }
-        for call in scripts {
-            self.require_script(&call.script)?;
+        for (call, arities) in scripts {
+            self.require_call(call, arities)?;
         }
         self.define(path, strategy)
     }
@@ -531,11 +556,24 @@ impl Engine {
         Ok((economy, exchanges))
     }
 
-    fn require_script(&self, path: &ScriptPath) -> Result<(), EngineError> {
-        match self.script(path)? {
-            Some(_) => Ok(()),
-            None => Err(EngineError::UnknownScript(path.clone())),
+    fn require_call(&self, call: &ScriptCall, arities: &[usize]) -> Result<(), EngineError> {
+        for &arity in arities {
+            if self.defines(&call.script, call.function.as_str(), arity)? {
+                return Ok(());
+            }
         }
+        Err(EngineError::Script {
+            path: call.script.clone(),
+            message: format!(
+                "function {} must accept {} parameters",
+                call.function,
+                arities
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" or ")
+            ),
+        })
     }
 
     /// Keeps `value`, in postcard, as what `path` defines.

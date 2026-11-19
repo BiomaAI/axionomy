@@ -3,6 +3,7 @@ Streamable HTTP: an independent client checking the whole protocol surface a
 real caller uses. Economic rules are tested in Rust; this checks that a
 standard client can reach them."""
 
+import base64
 import json
 import os
 import re
@@ -14,7 +15,7 @@ from typing import Any, Literal
 import anyio
 import httpx
 import pytest
-from conftest import binary, running
+from conftest import REPOSITORY, binary, running
 from mcp import Client
 from mcp.client.extension import ClaimContext, ClientExtension, ResultClaim
 from mcp.shared.exceptions import MCPError
@@ -133,12 +134,12 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 17
+        assert len(tools) == 19
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
-            # Deleting a ref is the one call that takes something away.
-            assert bool(tool.annotations.destructive_hint) == (tool.name == "axionomy_ref_delete"), tool.name
+            # A ref can be deleted or a package release replaced.
+            assert bool(tool.annotations.destructive_hint) == (tool.name in {"axionomy_ref_delete", "axionomy_package_build"}), tool.name
         templates = (await client.list_resource_templates()).resource_templates
         assert len(templates) == 15
         assert BALANCES in {template.uri_template for template in templates}
@@ -1025,3 +1026,35 @@ async def test_snapshots_on_disk_outlive_the_server(tmp_path, samples: Path) -> 
                     kept = await page(client, f"axionomy://economy/{trial['economy_id']}")
                     assert kept["parent_id"] == arm["start_economy_id"]
                     assert kept["origin"] == {"kind": "exchanged", "exchanges": trial["exchanges"]}
+
+async def test_an_author_builds_edits_and_exports_a_complete_package(tmp_path: Path) -> None:
+    directory = REPOSITORY / "examples" / "packages" / "pantry"
+    files = {str(f.relative_to(directory)): f.read_text() for f in directory.rglob("*")
+             if f.is_file() and f.suffix in {".rhai", ".json"}}
+    with running() as base_url:
+        async with Client(f"{base_url}/mcp") as client:
+            built = await client.call_tool("axionomy_package_build", {"files": files, "install": True, "export": True})
+            assert not built.is_error, built.structured_content
+            assert built.structured_content["tests"] == ["delivery"]
+            archive = tmp_path / "pantry.zip"
+            archive.write_bytes(base64.b64decode(built.structured_content["archive"], validate=True))
+            inspected = subprocess.check_output([binary(), "package", "inspect", archive], text=True)
+            assert "experiment/pantry/morning" in inspected
+            source = await client.call_tool("axionomy_package_source", {"name": "pantry"})
+            assert source.structured_content["files"] == files
+
+            bad = {"base": "pantry", "files": {"scripts/pantry.rhai": "fn served(a, b) { 0 }"}, "install": True}
+            result = await client.call_tool("axionomy_package_build", bad)
+            assert result.is_error
+            assert result.structured_content["details"]["file"] == "definitions.json"
+            assert "served" in result.structured_content["message"]
+            kept = await client.call_tool("axionomy_package_source", {"name": "pantry"})
+            assert kept.structured_content["files"] == files
+
+            header = json.loads(files["package.json"])
+            header["version"]["patch"] += 1
+            edited = {"base": "pantry", "files": {"package.json": json.dumps(header)}, "install": True}
+            result = await client.call_tool("axionomy_package_build", edited)
+            assert not result.is_error and result.structured_content["version"] == "1.0.1"
+            played = await client.call_tool("axionomy_experiment_run", {"experiment": "pantry/morning"})
+            assert not played.is_error, played.structured_content

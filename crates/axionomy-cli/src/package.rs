@@ -21,6 +21,14 @@ pub(crate) enum Action {
     Test { directory: PathBuf },
     /// Build a source directory into a self-contained store or zip.
     Build { directory: PathBuf, output: PathBuf },
+    /// Compare two builds on the same experiment and trial seeds.
+    Compare {
+        left: PathBuf,
+        right: PathBuf,
+        experiment: axionomy_engine::ExperimentPath,
+        #[arg(long)]
+        seed: Option<u64>,
+    },
     /// Run a named experiment from a source directory.
     Run {
         directory: PathBuf,
@@ -62,6 +70,28 @@ pub(crate) enum Action {
 
 pub(crate) fn run(action: Action) -> Result<String, CliError> {
     match action {
+        Action::Compare {
+            left,
+            right,
+            experiment,
+            seed,
+        } => {
+            let open = |path: &PathBuf| -> Result<Engine, CliError> {
+                if path.is_dir() {
+                    Ok(crate::source::build(path)?.engine)
+                } else {
+                    Ok(Engine::new(read_package(&read(path)?)?)?)
+                }
+            };
+            Ok(serde_json::to_string_pretty(
+                &axionomy_engine::source::compare(
+                    &open(&left)?,
+                    &open(&right)?,
+                    &experiment,
+                    seed,
+                )?,
+            )?)
+        }
         Action::Validate { directory } => {
             let built = crate::source::build(&directory)?;
             let contents = built.engine.named_under(&built.name)?;
@@ -128,19 +158,21 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
                 path: directory.clone(),
                 source,
             })?;
-            let version: Version = env!("CARGO_PKG_VERSION")
-                .parse()
-                .expect("the crate's version is a version");
             let mut lines = Vec::new();
             let mut index = SamplePackages {
                 packages: Vec::new(),
             };
-            for (name, write_sample) in axionomy_problems::packages() {
-                let engine = Engine::new(Store::memory()?)?;
-                write_sample(&engine)?;
-                let contents = engine.named_under(&name)?;
+            for (name, _) in axionomy_problems::packages() {
+                let built = axionomy_engine::source::build(&axionomy_problems::source(&name))?;
+                let contents = built.engine.named_under(&name)?;
                 let output = directory.join(format!("{name}.zip"));
-                lines.push(written(&engine, &name, version, contents, &output)?);
+                lines.push(written(
+                    &built.engine,
+                    &name,
+                    built.version,
+                    contents,
+                    &output,
+                )?);
                 index.packages.push(name);
             }
             // What a static site lists its samples by: Studio's own contract.

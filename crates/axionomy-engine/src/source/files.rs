@@ -79,7 +79,7 @@ impl<'de> Deserialize<'de> for SourceFile {
 /// transports pass this same tree to the compiler.
 pub type SourceFiles = BTreeMap<SourceFile, String>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 #[error("{file} {field} {reason}")]
 pub struct Diagnostic {
     /// Source location, including rejected file names.
@@ -115,4 +115,20 @@ pub(super) fn parse<T: serde::de::DeserializeOwned>(
     })?;
     reader.end().map_err(|error| Diagnostic::new(file, error))?;
     Ok(value)
+}
+
+impl schemars::JsonSchema for SourceFile {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "PackageSourceFile".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type":"string","description":"package.json, definitions.json, ontologies/<path>.json, laws/<path>.json, instances/<ref>.json, tests/<path>.json or scripts/<path>.rhai"})
+    }
+}
+
+/// Original, editable source documents carried by a compiled package.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SourceTree {
+    pub files: SourceFiles,
 }

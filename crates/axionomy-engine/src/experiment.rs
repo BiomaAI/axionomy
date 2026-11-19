@@ -46,7 +46,7 @@ pub struct Experiment {
 }
 
 /// How a run ended, as an experiment records it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum Ended {
     Reached,
     Stopped,

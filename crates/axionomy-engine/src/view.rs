@@ -57,26 +57,20 @@ pub struct View {
     pub leaderboards: Option<ScriptCall>,
 }
 
-impl View {
-    fn calls(&self) -> impl Iterator<Item = &ScriptCall> {
-        [
-            &self.labels,
-            &self.formats,
-            &self.carry,
-            &self.scene,
-            &self.leaderboards,
-        ]
-        .into_iter()
-        .flatten()
-    }
-}
-
 impl Engine {
     /// Keeps `view` as how people read the runs of `ontology`, refusing one
     /// whose scripts are not kept.
     pub fn keep_view(&self, ontology: &OntologyPath, view: &View) -> Result<(), EngineError> {
-        for call in view.calls() {
-            self.require_script(&call.script)?;
+        for (call, arity) in [
+            (&view.labels, 1),
+            (&view.formats, 1),
+            (&view.carry, 4),
+            (&view.scene, 2),
+            (&view.leaderboards, 2),
+        ] {
+            if let Some(call) = call {
+                self.require_call(call, &[arity])?;
+            }
         }
         self.define(&view_path(ontology), view)
     }

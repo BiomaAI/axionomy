@@ -64,6 +64,7 @@ impl Step {
         state: &mut paths::Economy,
         trace: &mut paths::Trace,
     ) -> Result<(), String> {
+        vocabulary.exchange(&self.exchange)?;
         for (account, asset, _) in &self.balances {
             declared(&vocabulary.accounts, "account", account)?;
             declared(&vocabulary.assets, "asset", asset)?;

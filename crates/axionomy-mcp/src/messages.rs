@@ -941,3 +941,35 @@ pub enum FailureCode {
     TasksRequired,
     Internal,
 }
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PackageSourceRequest {
+    pub name: PackagePath,
+}
+
+/// Build from an empty tree or from the current source of an installed package.
+/// Each entry writes one complete UTF-8 document. Null removes the file.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PackageBuildRequest {
+    pub base: Option<PackagePath>,
+    pub files: BTreeMap<axionomy_engine::source::SourceFile, Option<String>>,
+    #[serde(default)]
+    pub install: bool,
+    #[serde(default)]
+    pub export: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PackageBuilt {
+    pub name: PackagePath,
+    pub version: PackageVersion,
+    pub refs: Vec<RefPath>,
+    pub definitions: Vec<axionomy_store::DefinitionPath>,
+    pub tests: Vec<axionomy_engine::source::TestPath>,
+    pub installed: bool,
+    /// A base64-encoded self-contained package zip when export was requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archive: Option<String>,
+}

@@ -117,6 +117,8 @@ pub struct Loaded {
 /// Why a package cannot be made or loaded.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum PackageError {
+    #[error(transparent)]
+    Source(Box<crate::source::Diagnostic>),
     #[error("ref `{reference}` is not named under the package's name `{package}`")]
     Outside {
         reference: RefPath,
@@ -376,7 +378,7 @@ impl Engine {
             .ok_or_else(|| PackageError::UnknownKind(definition.clone()))?;
         let mut calls = Vec::new();
         match category {
-            "goal" | "package" => {}
+            "goal" | "package" | "source" => {}
             // A script comes with every script it imports, which come with
             // theirs.
             "script" => {

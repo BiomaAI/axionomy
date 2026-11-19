@@ -155,7 +155,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = server().tool_router.list_all();
-    assert_eq!(tools.len(), 17);
+    assert_eq!(tools.len(), 19);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -165,7 +165,7 @@ fn tools_declare_schemas_and_behavior_hints() {
         assert_eq!(hints.open_world_hint, Some(false), "{}", tool.name);
         let read_only = matches!(
             tool.name.as_ref(),
-            "axionomy_exchange_assess" | "axionomy_ref_read"
+            "axionomy_exchange_assess" | "axionomy_ref_read" | "axionomy_package_source"
         );
         assert_eq!(
             hints.read_only_hint.unwrap_or(false),
@@ -174,13 +174,16 @@ fn tools_declare_schemas_and_behavior_hints() {
             tool.name
         );
         if !read_only {
-            // Deleting a ref is the one call that takes something away.
-            let destructive = tool.name == "axionomy_ref_delete";
+            // These calls can remove a ref or replace an installed release.
+            let destructive = matches!(
+                tool.name.as_ref(),
+                "axionomy_ref_delete" | "axionomy_package_build"
+            );
             assert_eq!(hints.destructive_hint, Some(destructive), "{}", tool.name);
             // Every call makes a ref, or records runs, of its own.
             let idempotent = !matches!(
                 tool.name.as_ref(),
-                "axionomy_ref_create" | "axionomy_experiment_run"
+                "axionomy_ref_create" | "axionomy_experiment_run" | "axionomy_package_build"
             );
             assert_eq!(hints.idempotent_hint, Some(idempotent), "{}", tool.name);
         }
