@@ -2535,6 +2535,23 @@ episode is a recorded run. The crate depends on no learning framework; the
 Burn adapter and its DQN live in `crates/axionomy-burn`, excluded from the
 workspace so Burn is built only where it is used.
 
+### D-063: Studio is one screen: the point beside the picture, wide things below
+
+Decided with the user after a review on a laptop screen, where the picture
+began below the fold, the page and the From here panel scrolled separately,
+results sat in a 350px column and pinning an inspector narrowed the picture
+to a third. Studio is now one viewport on a wide window: one bar (package,
+Source, Rules, what is running, where the store is kept); the history tree,
+the transport and the picture in one column; beside them a rail for the
+point on screen with a tab each (Step, Moves, Strategy, Experiments, Ref);
+and a drawer along the bottom for what is too wide for the rail (Results,
+Compare, Rules, Source, Console), whose tabs always show. Pinned inspectors
+float over the picture's edge, so pinning moves nothing. The tree writes
+refs without their package's name and keeps its height as runs add
+branches. A narrow window stacks the same parts, and the page scrolls. The
+samples index names each sample's title and counts, so the empty page
+lists them as cards.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
