@@ -42,7 +42,23 @@ pub fn exchange_source(exchange: &paths::Exchange) -> String {
     source
 }
 
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct RhaiApi {
+    pub authoring: Vec<String>,
+    pub runtime: Vec<String>,
+}
+
 impl Engine {
+    /// The host functions actually registered in this build.
+    pub fn rhai_api(&self) -> RhaiApi {
+        let mut runtime = self.host.gen_fn_signatures(false);
+        runtime.sort();
+        RhaiApi {
+            runtime,
+            authoring: axionomy_authoring::program::Program::new().functions(),
+        }
+    }
+
     pub fn evaluate(
         &self,
         program: &RhaiInput,

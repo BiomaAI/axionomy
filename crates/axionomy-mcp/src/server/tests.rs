@@ -1,4 +1,5 @@
 use super::*;
+use axionomy_engine::{RhaiInput, exchange_source};
 use axionomy_store::Store;
 
 /// A server that keeps its economies in memory.
@@ -36,18 +37,15 @@ fn outcome(result: impl IntoCallToolResult) -> Outcome {
     }
 }
 
-fn fixture() -> Value {
-    json!({
-        "accounts": { "source": { "token": "5" }, "sink": {} },
-        "rates": {
-            "transfer": {
-                "consume": { "giver": { "token": "1" } },
-                "produce": { "receiver": { "token": "1" } },
-                "distinct": [["giver", "receiver"]]
-            }
-        },
-        "invariants": { "supply": { "token": 1 } }
-    })
+fn fixture() -> &'static str {
+    r#"let m = model();
+m.open(account("source"), basket([amount(asset("token"), quantity("5"))]));
+m.open(account("sink"), basket([]));
+m.add(law("transfer", #{"consume": [["giver", [["token", "1"]]]], "produce": [["receiver", [["token", "1"]]]], "distinct": [["giver", "receiver"]], "preserve": []}));
+let rule = invariant("supply");
+rule.weight(asset("token"), 1);
+m.add(rule.finish());
+m"#
 }
 
 fn transfer(units: u64) -> paths::Exchange {
@@ -59,22 +57,22 @@ fn transfer(units: u64) -> paths::Exchange {
     .unwrap()
 }
 
-async fn create(server: &AxionomyMcp, entries: Value) -> Outcome {
+async fn create(server: &AxionomyMcp, program: &str) -> Outcome {
     outcome(
         server
             .economy_create(Parameters(EconomyCreateRequest {
-                entries: serde_json::from_value(entries).unwrap(),
+                program: RhaiInput::Source(program.to_owned()),
             }))
             .await,
     )
 }
 
-async fn extend(server: &AxionomyMcp, economy_id: &EconomyId, entries: Value) -> Outcome {
+async fn extend(server: &AxionomyMcp, economy_id: &EconomyId, program: &str) -> Outcome {
     outcome(
         server
             .economy_extend(Parameters(EconomyExtendRequest {
                 economy_id: economy_id.clone(),
-                entries: serde_json::from_value(entries).unwrap(),
+                program: RhaiInput::Source(program.to_owned()),
             }))
             .await,
     )
@@ -85,7 +83,7 @@ async fn apply(server: &AxionomyMcp, economy_id: &EconomyId, exchange: paths::Ex
         server
             .exchange_apply(Parameters(ExchangeRequest {
                 economy_id: economy_id.clone(),
-                exchange,
+                program: RhaiInput::Source(exchange_source(&exchange)),
             }))
             .await,
     )
@@ -100,7 +98,14 @@ async fn replay(
         server
             .trace_replay(Parameters(ReplayRequest {
                 economy_id: economy_id.clone(),
-                exchanges,
+                program: RhaiInput::Source(format!(
+                    "[{}]",
+                    exchanges
+                        .iter()
+                        .map(exchange_source)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
             }))
             .await,
     )
@@ -155,7 +160,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = server().tool_router.list_all();
-    assert_eq!(tools.len(), 19);
+    assert_eq!(tools.len(), 21);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -165,7 +170,11 @@ fn tools_declare_schemas_and_behavior_hints() {
         assert_eq!(hints.open_world_hint, Some(false), "{}", tool.name);
         let read_only = matches!(
             tool.name.as_ref(),
-            "axionomy_exchange_assess" | "axionomy_ref_read" | "axionomy_package_source"
+            "axionomy_economy_query"
+                | "axionomy_rhai_api"
+                | "axionomy_exchange_assess"
+                | "axionomy_ref_read"
+                | "axionomy_package_source"
         );
         assert_eq!(
             hints.read_only_hint.unwrap_or(false),
@@ -214,11 +223,14 @@ async fn authoring_adds_entries_without_replacing_any() {
     let extended = extend(
         &server,
         &economy_id,
-        json!({
-            "accounts": { "source": { "gem": "2" }, "third": {} },
-            "rates": { "transfer": { "consume": { "giver": { "gem": "1" } } } },
-            "invariants": { "supply": { "gem": 3 } }
-        }),
+        r#"let m = model();
+m.open(account("source"), basket([amount(asset("gem"), quantity("2"))]));
+m.open(account("third"), basket([]));
+m.add(law("transfer", #{"consume": [["giver", [["gem", "1"]]]], "produce": [], "preserve": [], "distinct": []}));
+let rule = invariant("supply");
+rule.weight(asset("gem"), 3);
+m.add(rule.finish());
+m"#,
     )
     .await;
     let extended_id = id(&extended);
@@ -231,7 +243,9 @@ async fn authoring_adds_entries_without_replacing_any() {
     let conflict = extend(
         &server,
         &economy_id,
-        json!({ "accounts": { "source": { "token": "1" } } }),
+        r#"let m = model();
+m.open(account("source"), basket([amount(asset("token"), quantity("1"))]));
+m"#,
     )
     .await;
     assert!(conflict.is_error);
@@ -239,7 +253,11 @@ async fn authoring_adds_entries_without_replacing_any() {
     let conflict = extend(
         &server,
         &extended_id,
-        json!({ "invariants": { "supply": { "gem": 1 } } }),
+        r#"let m = model();
+let rule = invariant("supply");
+rule.weight(asset("gem"), 1);
+m.add(rule.finish());
+m"#,
     )
     .await;
     assert_eq!(conflict.value["error"], "conflict");
@@ -263,17 +281,18 @@ async fn authoring_adds_entries_without_replacing_any() {
     .await;
     assert_eq!(amounts["items"].as_array().unwrap().len(), 3);
 
-    let missing = extend(&server, &missing(), json!({})).await;
+    let missing = extend(&server, &missing(), r#"model()"#).await;
     assert_eq!(missing.value["error"], "not_found");
 }
 
 #[tokio::test]
 async fn one_call_adds_at_most_ten_thousand_entries() {
     let server = server();
-    let assets: serde_json::Map<String, Value> = (0..crate::authoring::MAX_ENTRIES)
-        .map(|index| (format!("a{index}"), json!("1")))
-        .collect();
-    let refused = create(&server, json!({ "accounts": { "holder": assets } })).await;
+    let program = format!(
+        r#"let m = model(); let assets = []; for i in 0..{} {{ assets.push(amount(asset(`a${{i}}`), 1)); }} m.open(account("holder"), basket(assets)); m"#,
+        crate::authoring::MAX_ENTRIES
+    );
+    let refused = create(&server, &program).await;
     assert!(refused.is_error);
     assert_eq!(refused.value["error"], "too_large");
 }
@@ -386,7 +405,7 @@ async fn failures_explain_themselves_and_store_nothing() {
     let assess = |exchange| {
         server.exchange_assess(Parameters(ExchangeRequest {
             economy_id: source_id.clone(),
-            exchange,
+            program: RhaiInput::Source(exchange_source(&exchange)),
         }))
     };
     let assessed = outcome(assess(transfer(2)).await);
@@ -424,28 +443,21 @@ async fn no_result_or_page_grows_with_the_economy() {
     let server = server();
     let mut economy_id = id(&create(
         &server,
-        json!({
-            "accounts": { "store": {} },
-            "rates": {
-                "ship": {
-                    "consume": { "from": { "sku/000000": "1" } },
-                    "produce": { "to": { "sku/000000": "1" } },
-                    "distinct": [["from", "to"]]
-                }
-            }
-        }),
+        r#"let m = model();
+m.open(account("store"), basket([]));
+m.add(law("ship", #{"consume": [["from", [["sku/000000", "1"]]]], "produce": [["to", [["sku/000000", "1"]]]], "distinct": [["from", "to"]], "preserve": []}));
+m"#,
     )
     .await);
     for start in (0..ASSETS).step_by(CHUNK) {
-        let balances: serde_json::Map<String, Value> = (start..(start + CHUNK).min(ASSETS))
-            .map(|index| (format!("sku/{index:06}"), json!("3")))
-            .collect();
-        let extended = extend(
-            &server,
-            &economy_id,
-            json!({ "accounts": { "warehouse": balances } }),
-        )
-        .await;
+        let ids = (start..(start + CHUNK).min(ASSETS))
+            .map(|i| format!(r#""sku/{i:06}""#))
+            .collect::<Vec<_>>()
+            .join(",");
+        let program = format!(
+            r#"let items = []; for id in [{ids}] {{ items.push(amount(asset(id),3)); }} let m=model(); m.open(account("warehouse"),basket(items)); m"#
+        );
+        let extended = extend(&server, &economy_id, &program).await;
         assert!(extended.value.to_string().len() < 512, "{}", extended.value);
         economy_id = id(&extended);
     }
@@ -621,16 +633,13 @@ fn completed(task: rmcp::model::DetailedTask) -> Value {
 async fn search_task(server: &AxionomyMcp, max_expansions: usize) -> (TaskManager, String) {
     let economy_id = id(&create(
         server,
-        json!({
-            "accounts": { "source": { "token": "1" }, "sink": {} },
-            "rates": fixture()["rates"]
-        }),
+        &fixture().replace("quantity(\"5\")", "quantity(\"1\")"),
     )
     .await);
     let request: SearchRequest = serde_json::from_value(json!({
         "economy_id": economy_id,
-        "goal": { "sink": { "token": "1" } },
-        "candidates": [transfer(1)],
+        "goal": r#"goal().require(account("sink"), basket([amount(asset("token"), 1)]))"#,
+        "candidates": format!("[{}]", exchange_source(&transfer(1))),
         "max_expansions": max_expansions,
         "chunk_size": 1
     }))
@@ -643,7 +652,14 @@ async fn search_task(server: &AxionomyMcp, max_expansions: usize) -> (TaskManage
     let tasks = TaskManager::new();
     let archive = server.archive.clone();
     let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(run_search(context, archive, source, request, goal))
+        Box::pin(run_search(
+            context,
+            archive,
+            source,
+            request,
+            goal,
+            Some(vec![transfer(1)]),
+        ))
     });
     (tasks, task.task_id)
 }
@@ -686,22 +702,14 @@ async fn exchanges_open_and_close_accounts_named_by_their_paths() {
     let server = server();
     let economy_id = id(&create(
         &server,
-        json!({
-            "accounts": { "treasury": { "cash": "10" } },
-            "rates": {
-                "agents/spawn": {
-                    "consume": { "treasury": { "cash": "3" } },
-                    "produce": { "agent": { "cash": "3" } },
-                    "opens": ["agent"]
-                },
-                "agents/retire": {
-                    "consume": { "agent": { "cash": "3" } },
-                    "produce": { "treasury": { "cash": "3" } },
-                    "closes": ["agent"]
-                }
-            },
-            "invariants": { "cash": { "cash": 1 } }
-        }),
+        r#"let m = model();
+m.open(account("treasury"), basket([amount(asset("cash"), quantity("10"))]));
+m.add(law("agents/spawn", #{"consume": [["treasury", [["cash", "3"]]]], "produce": [["agent", [["cash", "3"]]]], "opens": ["agent"], "preserve": [], "distinct": []}));
+m.add(law("agents/retire", #{"consume": [["agent", [["cash", "3"]]]], "produce": [["treasury", [["cash", "3"]]]], "closes": ["agent"], "preserve": [], "distinct": []}));
+let rule = invariant("cash");
+rule.weight(asset("cash"), 1);
+m.add(rule.finish());
+m"#,
     )
     .await);
     let exchange = |rate: &str, agent: &str| -> paths::Exchange {
@@ -783,7 +791,9 @@ async fn exchanges_open_and_close_accounts_named_by_their_paths() {
     let rich = id(&extend(
         &server,
         &spawned_id,
-        json!({ "accounts": { "agents/7/wallet": { "gem": "1" } } }),
+        r#"let m = model();
+m.open(account("agents/7/wallet"), basket([amount(asset("gem"), quantity("1"))]));
+m"#,
     )
     .await);
     let stuck = apply(&server, &rich, exchange("agents/retire", "agents/7/wallet")).await;
@@ -959,7 +969,14 @@ async fn two_traces_from_one_economy_compare_step_by_step() {
 
     // Economies authored apart share no trace; an objective no package
     // carries is not found.
-    let apart = id(&extend(&server, &source, json!({ "accounts": { "other": {} } })).await);
+    let apart = id(&extend(
+        &server,
+        &source,
+        r#"let m = model();
+m.open(account("other"), basket([]));
+m"#,
+    )
+    .await);
     let unrelated = diff(
         &server,
         json!({ "left_economy_id": source, "right_economy_id": apart }),
@@ -987,10 +1004,14 @@ async fn find(
         server
             .trace_find(Parameters(TraceFindRequest {
                 economy_id: economy_id.clone(),
-                account: account.parse().unwrap(),
-                asset: "token".parse().unwrap(),
-                comparison,
-                quantity: axionomy::Quantity::new(quantity),
+                program: RhaiInput::Source(format!(
+                    r#"{}(account("{account}"), asset("token"), quantity("{quantity}"))"#,
+                    match comparison {
+                        QuantityComparison::Equal => "balance_equals",
+                        QuantityComparison::GreaterThanOrEqual => "balance_at_least",
+                        QuantityComparison::LessThanOrEqual => "balance_at_most",
+                    }
+                )),
             }))
             .await,
     )
@@ -1055,16 +1076,10 @@ async fn finding_counts_an_account_the_trace_opens() {
     let server = server();
     let economy_id = id(&create(
         &server,
-        json!({
-            "accounts": { "treasury": { "token": "3" } },
-            "rates": {
-                "spawn": {
-                    "consume": { "treasury": { "token": "1" } },
-                    "produce": { "agent": { "token": "1" } },
-                    "opens": ["agent"]
-                }
-            }
-        }),
+        r#"let m = model();
+m.open(account("treasury"), basket([amount(asset("token"), quantity("3"))]));
+m.add(law("spawn", #{"consume": [["treasury", [["token", "1"]]]], "produce": [["agent", [["token", "1"]]]], "opens": ["agent"], "preserve": [], "distinct": []}));
+m"#,
     )
     .await);
     let spawned = id(&apply(
@@ -1104,39 +1119,21 @@ fn malformed_arguments_name_the_argument_at_fault() {
             error.failure.message,
         )
     };
-    let exchange = |exchange: Value| json!({ "economy_id": economy_id, "exchange": exchange });
     for (arguments, pointer) in [
         (
-            exchange(json!({ "rate": "transfer", "bindings": {} })),
-            "/exchange/units",
+            json!({"economy_id":economy_id,"exchange":{"rate":"transfer"}}),
+            "/exchange",
         ),
-        (
-            exchange(json!({ "rate": "Transfer", "bindings": {}, "units": "1" })),
-            "/exchange/rate",
-        ),
-        (
-            exchange(json!({ "rate": "transfer", "bindings": {}, "units": "-1" })),
-            "/exchange/units",
-        ),
-        (
-            exchange(
-                json!({ "rate": "transfer", "bindings": { "giver": "Source" }, "units": "1" }),
-            ),
-            "/exchange/bindings/giver",
-        ),
-        (
-            json!({ "economy_id": "eco-1", "exchange": { "rate": "t", "bindings": {}, "units": "1" } }),
-            "/economy_id",
-        ),
+        (json!({"economy_id":"eco-1","program":"()"}), "/economy_id"),
+        (json!({"economy_id":economy_id,"program":123}), "/program"),
     ] {
         assert_eq!(refused("axionomy_exchange_apply", arguments).0, pointer);
     }
-    let (pointer, message) = refused(
+    let (pointer, _) = refused(
         "axionomy_economy_create",
-        json!({ "entries": { "accounts": { "agents/7/Wallet": {} } } }),
+        json!({"entries":{"accounts":{}}}),
     );
-    assert_eq!(pointer, "/entries/accounts/agents~17~1Wallet");
-    assert!(message.starts_with("argument `/entries/accounts/agents~17~1Wallet` is invalid: `W`"));
+    assert_eq!(pointer, "/entries");
 
     // Every tool reads its arguments before it runs.
     for tool in server().tool_router.list_all() {
@@ -1152,7 +1149,7 @@ fn malformed_arguments_name_the_argument_at_fault() {
 #[tokio::test]
 async fn a_handle_the_store_lacks_says_how_to_make_it_again() {
     let server = server();
-    let missing = extend(&server, &missing(), json!({})).await;
+    let missing = extend(&server, &missing(), r#"model()"#).await;
     assert_eq!(missing.value["error"], "not_found");
     let message = missing.value["message"].as_str().unwrap();
     assert!(message.contains("in memory"), "{message}");
@@ -1418,7 +1415,7 @@ async fn only_the_steps_a_ref_moves_over_are_delivered() {
     let replayed = id(&replay(&server, &first, vec![transfer(1), transfer(2)]).await);
     assert!(!advance(&server, &live, &first, &replayed).await.is_error);
 
-    let goal = json!({ "sink": { "token": "4" } });
+    let goal = json!(r#"goal().require(account("sink"), basket([amount(asset("token"), 4)]))"#);
     let followed = follow(&server, &live, &start, 10, 0, Some(goal.clone())).await;
     let economies = delivered(&followed);
     assert_eq!(id(&followed), replayed);

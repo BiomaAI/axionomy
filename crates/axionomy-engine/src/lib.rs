@@ -10,7 +10,7 @@ mod package;
 mod refs;
 pub mod script;
 pub mod source;
-pub use operation::{RhaiInput, exchange_source};
+pub use operation::{RhaiApi, RhaiInput, exchange_source};
 mod strategy;
 mod view;
 

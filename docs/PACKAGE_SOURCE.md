@@ -16,6 +16,8 @@ axionomy package test examples/packages/pantry
 axionomy package run examples/packages/pantry pantry/morning
 axionomy package build examples/packages/pantry pantry.zip
 axionomy package inspect pantry.zip
+axionomy package query pantry.zip pantry/morning --source 'state.balance(account("stockroom"), asset("meal"))'
+axionomy package assess pantry.zip pantry/morning --source 'exchange("deliver", #{supplier: "stockroom", recipient: "counter"}, 2)'
 axionomy package compare examples/packages/pantry pantry.zip pantry/morning --seed 17
 ```
 

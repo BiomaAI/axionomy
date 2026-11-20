@@ -51,6 +51,92 @@ pub(crate) enum AuthoringError {
     },
 }
 
+impl From<axionomy_authoring::model::Model> for EconomyEntries {
+    fn from(model: axionomy_authoring::model::Model) -> Self {
+        Self {
+            accounts: model
+                .accounts
+                .into_iter()
+                .map(|(account, opening)| {
+                    (
+                        account,
+                        opening
+                            .balances()
+                            .iter()
+                            .map(|(a, q)| (a.clone(), *q))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            constants: model.constants.into_iter().collect(),
+            invariants: model
+                .invariants
+                .into_iter()
+                .map(|(id, rule)| (id, rule.weights().map(|(a, w)| (a.clone(), w)).collect()))
+                .collect(),
+            rates: model
+                .rates
+                .into_iter()
+                .map(|(id, law)| (id, RateEntries::from(law)))
+                .collect(),
+        }
+    }
+}
+
+impl From<paths::Rate> for RateEntries {
+    fn from(law: paths::Rate) -> Self {
+        let amounts = |get: for<'a> fn(
+            &'a paths::Rate,
+            &RolePath,
+        )
+            -> Option<&'a axionomy::Basket<Pattern<AssetPath>>>| {
+            law.roles()
+                .filter_map(|role| {
+                    Some((
+                        role.clone(),
+                        get(&law, role)?
+                            .iter()
+                            .map(|(a, q)| (a.clone(), *q))
+                            .collect(),
+                    ))
+                })
+                .collect()
+        };
+        Self {
+            variables: law.variables().to_vec(),
+            distinct_variables: law.distinct_variable_pairs().cloned().collect(),
+            relations: law.relations().to_vec(),
+            derived: law.derived().to_vec(),
+            accounts: law
+                .fixed_accounts()
+                .map(|(r, a)| (r.clone(), a.clone()))
+                .collect(),
+            consume: amounts(paths::Rate::consumed),
+            produce: amounts(paths::Rate::produced),
+            preserve: amounts(paths::Rate::preserved),
+            distinct: law.distinct_roles().cloned().collect(),
+            computed: [
+                (Direction::Consume, law.computed_consumed()),
+                (Direction::Produce, law.computed_produced()),
+                (Direction::Preserve, law.computed_preserved()),
+            ]
+            .into_iter()
+            .flat_map(|(direction, entries)| {
+                entries.iter().map(move |c| crate::messages::ComputedEntry {
+                    direction,
+                    role: c.role().clone(),
+                    asset: c.asset().clone(),
+                    quantity: c.quantity().clone(),
+                })
+            })
+            .collect(),
+            conditions: law.conditions().to_vec(),
+            opens: law.opened_roles().cloned().collect(),
+            closes: law.closed_roles().cloned().collect(),
+        }
+    }
+}
+
 impl EconomyEntries {
     /// Counts every ID and every amount, condition or role pair, so a call's
     /// size is bounded however its entries are nested.

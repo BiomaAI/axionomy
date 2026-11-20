@@ -148,6 +148,12 @@ impl Program {
         Ok(program)
     }
 
+    pub fn functions(&self) -> Vec<String> {
+        let mut signatures = self.0.gen_fn_signatures(false);
+        signatures.sort();
+        signatures
+    }
+
     pub fn evaluate(&self, source: &str) -> Result<Dynamic, Error> {
         let value = self.0.eval::<Dynamic>(source)?;
         normalize(value).map_err(Into::into)

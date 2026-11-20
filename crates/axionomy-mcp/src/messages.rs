@@ -10,7 +10,7 @@ use axionomy::{
     Quantity, RatePath, Relation, RolePath, Segment, Variable, VariablePath, paths,
 };
 use axionomy_engine::{
-    Ended, ExperimentPath, GoalPath, ObjectivePath, PackagePath, StrategyPath, Version,
+    Ended, ExperimentPath, GoalPath, ObjectivePath, PackagePath, RhaiInput, StrategyPath, Version,
 };
 use axionomy_search::{GraphSearchProgress, pareto::ObjectiveDirection};
 use axionomy_store::RefPath;
@@ -143,18 +143,19 @@ impl std::fmt::Display for Direction {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EconomyCreateRequest {
-    #[serde(default)]
-    pub entries: EconomyEntries,
+    /// Rhai returning a Model. Use model() for an empty economy.
+    pub program: RhaiInput,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EconomyExtendRequest {
     pub economy_id: EconomyId,
-    pub entries: EconomyEntries,
+    /// Rhai returning a Model of additions. The starting economy is available as state.
+    pub program: RhaiInput,
 }
 
 /// A stored economy and what it contains.
@@ -218,7 +219,8 @@ pub struct EconomyCounts {
 #[serde(deny_unknown_fields)]
 pub struct ExchangeRequest {
     pub economy_id: EconomyId,
-    pub exchange: paths::Exchange,
+    /// Rhai returning one native Exchange.
+    pub program: RhaiInput,
 }
 
 /// One quantity an exchange moves or lacks, flattened from its accounts.
@@ -401,22 +403,17 @@ pub struct ExchangedResponse {
 #[serde(deny_unknown_fields)]
 pub struct ReplayRequest {
     pub economy_id: EconomyId,
-    /// At most 1,000 exchanges, applied in order; the first failure stops the
-    /// replay and stores nothing.
-    pub exchanges: Vec<paths::Exchange>,
+    /// Rhai returning up to 1,000 Exchange values in order.
+    pub program: RhaiInput,
 }
 
 /// A balance condition to find among the steps of a trace.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TraceFindRequest {
-    /// An economy made by applying exchanges.
     pub economy_id: EconomyId,
-    pub account: AccountPath,
-    pub asset: AssetPath,
-    /// How the account's balance of the asset compares with `quantity`.
-    pub comparison: axionomy::QuantityComparison,
-    pub quantity: Quantity,
+    /// Rhai returning a balance_equals, balance_at_least or balance_at_most condition.
+    pub program: RhaiInput,
 }
 
 /// The first step of a trace where a balance condition holds.
@@ -462,13 +459,13 @@ pub struct TraceStepRequest {
 pub struct SearchRequest {
     pub economy_id: EconomyId,
     /// Balances each named account must reach.
-    pub goal: BTreeMap<AccountPath, Amounts>,
+    pub goal: RhaiInput,
     /// At most 1,000 concrete exchanges, reconsidered at every state; when
     /// absent, the moves the economy's own rates offer whole (its `moves`
     /// resource): one unit of each instance of a rate that fixes the account
     /// of every role.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub candidates: Option<Vec<paths::Exchange>>,
+    pub candidates: Option<RhaiInput>,
     /// The most states the search may expand before it stops without a
     /// solution.
     pub max_expansions: NonZeroUsize,
@@ -571,7 +568,7 @@ pub struct RefFramesRequest {
     /// Balances each named account must reach, as `axionomy_search` takes
     /// them; each frame then says whether its economy holds them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub goal: Option<BTreeMap<AccountPath, Amounts>>,
+    pub goal: Option<RhaiInput>,
 }
 
 const fn default_frame_limit() -> usize {
@@ -972,4 +969,18 @@ pub struct PackageBuilt {
     /// A base64-encoded self-contained package zip when export was requested.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archive: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryRequest {
+    pub economy_id: EconomyId,
+    pub program: RhaiInput,
+    /// Restrict the script to these accounts. An empty set sees no accounts.
+    pub visible_accounts: Option<std::collections::BTreeSet<AccountPath>>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct QueryResult {
+    pub value: serde_json::Value,
 }

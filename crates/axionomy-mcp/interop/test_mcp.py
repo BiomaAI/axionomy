@@ -33,21 +33,39 @@ pytestmark = pytest.mark.anyio
 
 BALANCES = "axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}"
 
-ECONOMY = {
-    "accounts": {"source": {"token": "5"}, "sink": {}},
-    "rates": {
-        "transfer": {
-            "consume": {"giver": {"token": "1"}},
-            "produce": {"receiver": {"token": "1"}},
-            "distinct": [["giver", "receiver"]],
-        }
-    },
-    "invariants": {"supply": {"token": 1}},
-}
+ECONOMY = """
+let m = model();
+m.open(account("source"), basket([amount(asset("token"), 5)]));
+m.open(account("sink"), basket([]));
+m.add(law("transfer", #{
+    consume: [["giver", [["token", "1"]]]],
+    produce: [["receiver", [["token", "1"]]]],
+    distinct: [["giver", "receiver"]],
+    preserve: []
+}));
+let rule = invariant("supply");
+rule.weight(asset("token"), 1);
+m.add(rule.finish());
+m
+"""
 
 
 def transfer(units: int) -> dict[str, Any]:
     return {"rate": "transfer", "bindings": {"giver": "source", "receiver": "sink"}, "units": str(units)}
+
+
+def exchange_source(value: dict[str, Any]) -> str:
+    """Invoke the typed host constructors for an exchange read from a receipt."""
+    source = f'exchange(rate({json.dumps(value["rate"])}), quantity({json.dumps(value["units"])}))'
+    for role, account in value.get("bindings", {}).items():
+        source += f'.bind(role({json.dumps(role)}), account({json.dumps(account)}))'
+    for parameter, quantity in value.get("parameters", {}).items():
+        source += f'.parameter({json.dumps(parameter)}, quantity({json.dumps(quantity)}))'
+    return source
+
+
+def replay_source(values: list[dict[str, Any]]) -> str:
+    return "[" + ", ".join(map(exchange_source, values)) + "]"
 
 
 class TaskCreated(Result):
@@ -115,8 +133,8 @@ async def page(client: Client, uri: str) -> Any:
     return json.loads(contents.text)
 
 
-async def create(client: Client, entries: dict[str, Any]) -> str:
-    result = await client.call_tool("axionomy_economy_create", {"entries": entries})
+async def create(client: Client, entries: str) -> str:
+    result = await client.call_tool("axionomy_economy_create", {"program": entries})
     assert not result.is_error, result.structured_content
     return result.structured_content["economy_id"]
 
@@ -128,13 +146,13 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert client.instructions and "axionomy_economy_create" in client.instructions
         # A first-time client learns where to start, what an exchange looks
         # like, and which tools need the tasks extension.
-        for words in ("Start here", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"', "axionomy_ref_advance", "axionomy_ref_delete", "axionomy_package_list", "axionomy_experiment_run"):
+        for words in ("Start here", "axionomy_search", "io.modelcontextprotocol/tasks", "exchange(rate(", "axionomy_ref_advance", "axionomy_ref_delete", "axionomy_package_list", "axionomy_experiment_run"):
             assert words in client.instructions, words
         capabilities = client.server_capabilities
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 19
+        assert len(tools) == 21
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
@@ -148,7 +166,7 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
 
 async def test_a_client_authors_applies_and_reads_back_through_links(url: str) -> None:
     async with Client(url) as client:
-        created = await client.call_tool("axionomy_economy_create", {"entries": ECONOMY})
+        created = await client.call_tool("axionomy_economy_create", {"program": ECONOMY})
         economy_id = created.structured_content["economy_id"]
         (summary_uri,) = links(created)
         summary = await page(client, summary_uri)
@@ -156,11 +174,11 @@ async def test_a_client_authors_applies_and_reads_back_through_links(url: str) -
 
         extended = await client.call_tool(
             "axionomy_economy_extend",
-            {"economy_id": economy_id, "entries": {"accounts": {"source": {"gem": "1"}}}},
+            {"economy_id": economy_id, "program": 'let m = model();\nm.open(account("source"), basket([amount(asset("gem"), 1)]));\nm'},
         )
         assert extended.structured_content["parent_id"] == economy_id
 
-        applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
+        applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(transfer(2))})
         assert applied.structured_content["changes"] == 2
         changes_uri = next(uri for uri in links(applied) if uri.endswith("/changes"))
         changes = await page(client, changes_uri)
@@ -169,7 +187,7 @@ async def test_a_client_authors_applies_and_reads_back_through_links(url: str) -
             ("sink", "produced", "2"),
         }
 
-        failed = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(9)})
+        failed = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(transfer(9))})
         assert failed.is_error
         assert failed.structured_content["error"] == "infeasible"
         assert failed.structured_content["message"] == "the exchange is infeasible: `source` lacks 4 `token`; nothing was stored"
@@ -182,7 +200,7 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
         parent_id = await create(client, ECONOMY)
         replayed = await client.call_tool(
             "axionomy_trace_replay",
-            {"economy_id": parent_id, "exchanges": [transfer(1), transfer(2), transfer(1)]},
+            {"economy_id": parent_id, "program": replay_source([transfer(1), transfer(2), transfer(1)])},
         )
         replayed_id = replayed.structured_content["economy_id"]
         steps = []
@@ -211,10 +229,10 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
         assert beyond.is_error and beyond.structured_content["error"] == "invalid_request"
         assert beyond.structured_content["details"] == {"pointer": "/step"}
 
-        def condition(account: str, comparison: str, quantity: str) -> dict[str, Any]:
-            return {"economy_id": replayed_id, "account": account, "asset": "token", "comparison": comparison, "quantity": quantity}
+        def condition(account: str, quantity: str) -> dict[str, Any]:
+            return {"economy_id": replayed_id, "program": f'balance_at_least(account({json.dumps(account)}), asset("token"), quantity({json.dumps(quantity)}))'}
 
-        found = await client.call_tool("axionomy_trace_find", condition("sink", "greater_than_or_equal", "3"))
+        found = await client.call_tool("axionomy_trace_find", condition("sink", "3"))
         assert found.structured_content["step"] == 2
         assert found.structured_content["economy"]["root"] == steps[2]["root"]
         assert any(uri.endswith(steps[2]["economy_id"]) for uri in links(found))
@@ -223,8 +241,8 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
 async def test_two_traces_from_one_economy_compare_step_by_step(url: str) -> None:
     async with Client(url) as client:
         source = await create(client, ECONOMY)
-        replayed = await client.call_tool("axionomy_trace_replay", {"economy_id": source, "exchanges": [transfer(1), transfer(2)]})
-        applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": source, "exchange": transfer(3)})
+        replayed = await client.call_tool("axionomy_trace_replay", {"economy_id": source, "program": replay_source([transfer(1), transfer(2)])})
+        applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": source, "program": exchange_source(transfer(3))})
         left, right = replayed.structured_content["economy_id"], applied.structured_content["economy_id"]
 
         compared = await client.call_tool("axionomy_trace_diff", {"left_economy_id": left, "right_economy_id": right})
@@ -252,7 +270,7 @@ async def test_two_traces_from_one_economy_compare_step_by_step(url: str) -> Non
         assert "next_after_step" not in rest.structured_content
 
         # Economies authored apart share no trace.
-        apart = await create(client, {**ECONOMY, "accounts": {"source": {"token": "7"}, "sink": {}}})
+        apart = await create(client, ECONOMY.replace('asset("token"), 5', 'asset("token"), 7'))
         refused = await client.call_tool("axionomy_trace_diff", {"left_economy_id": source, "right_economy_id": apart})
         assert refused.is_error and refused.structured_content["error"] == "invalid_request"
         assert refused.structured_content["details"] == {"pointer": "/right_economy_id"}
@@ -261,11 +279,11 @@ async def test_two_traces_from_one_economy_compare_step_by_step(url: str) -> Non
 async def test_trace_find_says_when_nothing_matches_and_refuses_unknown_accounts(url: str) -> None:
     async with Client(url) as client:
         parent_id = await create(client, ECONOMY)
-        replayed = await client.call_tool("axionomy_trace_replay", {"economy_id": parent_id, "exchanges": [transfer(1), transfer(2)]})
+        replayed = await client.call_tool("axionomy_trace_replay", {"economy_id": parent_id, "program": replay_source([transfer(1), transfer(2)])})
         replayed_id = replayed.structured_content["economy_id"]
 
         def condition(account: str) -> dict[str, Any]:
-            return {"economy_id": replayed_id, "account": account, "asset": "token", "comparison": "equal", "quantity": "9"}
+            return {"economy_id": replayed_id, "program": f'balance_equals(account({json.dumps(account)}), asset("token"), quantity(9))'}
 
         never = await client.call_tool("axionomy_trace_find", condition("sink"))
         assert not never.is_error
@@ -283,12 +301,13 @@ async def test_trace_find_says_when_nothing_matches_and_refuses_unknown_accounts
 async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) -> None:
     assets, chunk = 25_000, 9_999
     async with Client(url) as client:
-        economy_id = await create(client, {"accounts": {"store": {}}})
+        economy_id = await create(client, 'let m = model();\nm.open(account("store"), basket([]));\nm')
         for start in range(0, assets, chunk):
-            balances = {f"sku/{index:06}": "3" for index in range(start, min(start + chunk, assets))}
+            names = [f"sku/{index:06}" for index in range(start, min(start + chunk, assets))]
+            program = f'let items = []; for name in {json.dumps(names)} {{ items.push(amount(asset(name), 3)); }} let m = model(); m.open(account("warehouse"), basket(items)); m'
             result = await client.call_tool(
                 "axionomy_economy_extend",
-                {"economy_id": economy_id, "entries": {"accounts": {"warehouse": balances}}},
+                {"economy_id": economy_id, "program": program},
             )
             assert len(json.dumps(result.structured_content)) < 512
             economy_id = result.structured_content["economy_id"]
@@ -319,38 +338,42 @@ async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) ->
 
 async def test_account_paths_compose_into_resource_uris(url: str) -> None:
     async with Client(url) as client:
-        economy_id = await create(client, {"accounts": {"agents/7/wallet": {"cash": "5"}, "agents/8/wallet": {}}})
+        economy_id = await create(client, 'let m = model();\nm.open(account("agents/7/wallet"), basket([amount(asset("cash"), 5)]));\nm.open(account("agents/8/wallet"), basket([]));\nm')
         listing = await page(client, f"axionomy://economy/{economy_id}/accounts?prefix=agents/7/")
         assert [item["account"] for item in listing["items"]] == ["agents/7/wallet"]
         wallet = await page(client, f"axionomy://economy/{economy_id}/accounts/agents/7/wallet")
         assert wallet["items"] == [{"asset": "cash", "quantity": "5"}]
-        refused = await client.call_tool("axionomy_economy_create", {"entries": {"accounts": {"Agents_7": {}}}})
+        refused = await client.call_tool("axionomy_economy_create", {"program": 'let m = model();\nm.open(account("Agents_7"), basket([]));\nm'})
         assert refused.is_error
 
 
 async def test_exchanges_open_and_close_accounts(url: str) -> None:
-    spawn_and_retire = {
-        "accounts": {"treasury": {"cash": "10"}},
-        "rates": {
-            "agents/spawn": {
-                "consume": {"treasury": {"cash": "3"}},
-                "produce": {"agent": {"cash": "3"}},
-                "opens": ["agent"],
-            },
-            "agents/retire": {
-                "consume": {"agent": {"cash": "3"}},
-                "produce": {"treasury": {"cash": "3"}},
-                "closes": ["agent"],
-            },
-        },
-    }
+    spawn_and_retire = """
+let m = model();
+m.open(account("treasury"), basket([amount(asset("cash"), 10)]));
+m.add(law("agents/spawn", #{
+    consume: [["treasury", [["cash", "3"]]]],
+    produce: [["agent", [["cash", "3"]]]],
+    opens: ["agent"],
+    preserve: [],
+    distinct: []
+}));
+m.add(law("agents/retire", #{
+    consume: [["agent", [["cash", "3"]]]],
+    produce: [["treasury", [["cash", "3"]]]],
+    closes: ["agent"],
+    preserve: [],
+    distinct: []
+}));
+m
+"""
 
     def exchange(rate: str) -> dict[str, Any]:
         return {"rate": rate, "bindings": {"treasury": "treasury", "agent": "agents/7/wallet"}, "units": "1"}
 
     async with Client(url) as client:
         economy_id = await create(client, spawn_and_retire)
-        spawned = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": exchange("agents/spawn")})
+        spawned = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(exchange('agents/spawn'))})
         assert spawned.structured_content["opened"] == ["agents/7/wallet"]
         spawned_id = spawned.structured_content["economy_id"]
         wallet = await page(client, f"axionomy://economy/{spawned_id}/accounts/agents/7/wallet")
@@ -358,7 +381,7 @@ async def test_exchanges_open_and_close_accounts(url: str) -> None:
         rate = await page(client, f"axionomy://economy/{spawned_id}/rates/agents/spawn")
         assert rate["opens"] == ["agent"]
 
-        retired = await client.call_tool("axionomy_exchange_apply", {"economy_id": spawned_id, "exchange": exchange("agents/retire")})
+        retired = await client.call_tool("axionomy_exchange_apply", {"economy_id": spawned_id, "program": exchange_source(exchange('agents/retire'))})
         assert retired.structured_content["closed"] == ["agents/7/wallet"]
         accounts = await page(client, f"axionomy://economy/{retired.structured_content['economy_id']}/accounts")
         assert [item["account"] for item in accounts["items"]] == ["treasury"]
@@ -366,21 +389,20 @@ async def test_exchanges_open_and_close_accounts(url: str) -> None:
 
 # One rate for every road between two places: its ID names its variables, a
 # relation says which places a road joins, and it fixes the driver's account.
-ROADS = {
-    "accounts": {"driver": {"at/east": "1", "fuel": "5"}},
-    "rates": {
-        "drive/{from}/{to}": {
-            "variables": [
-                {"name": "from", "values": ["east", "north", "west"]},
-                {"name": "to", "values": ["east", "north", "west"]},
-            ],
-            "relations": [{"variables": ["from", "to"], "rows": [["east", "north"], ["north", "west"]]}],
-            "accounts": {"driver": "driver"},
-            "consume": {"driver": {"at/{from}": "1", "fuel": "1"}},
-            "produce": {"driver": {"at/{to}": "1"}},
-        }
-    },
-}
+ROADS = """
+let m = model();
+m.open(account("driver"), basket([amount(asset("at/east"), 1), amount(asset("fuel"), 5)]));
+m.add(law("drive/{from}/{to}", #{
+    variables: [#{name: "from", values: ["east", "north", "west"]}, #{name: "to", values: ["east", "north", "west"]}],
+    relations: [#{variables: ["from", "to"], rows: [["east", "north"], ["north", "west"]]}],
+    accounts: [["driver", "driver"]],
+    consume: [["driver", [["at/{from}", "1"], ["fuel", "1"]]]],
+    produce: [["driver", [["at/{to}", "1"]]]],
+    preserve: [],
+    distinct: []
+}));
+m
+"""
 
 
 async def test_a_rate_with_variables_is_authored_and_an_instance_applied(url: str) -> None:
@@ -398,18 +420,18 @@ async def test_a_rate_with_variables_is_authored_and_an_instance_applied(url: st
         assert instance["law"] == "drive/{from}/{to}"
         assert instance["arguments"] == [["from", "east"], ["to", "north"]]
 
-        driven = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": drive("drive/east/north")})
+        driven = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(drive('drive/east/north'))})
         assert not driven.is_error, driven.structured_content
         there = await page(client, f"axionomy://economy/{driven.structured_content['economy_id']}/accounts/driver")
         assert there["items"] == [{"asset": "at/north", "quantity": "1"}, {"asset": "fuel", "quantity": "4"}]
 
-        no_road = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": drive("drive/east/west")})
+        no_road = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(drive('drive/east/west'))})
         assert no_road.structured_content["error"] == "invalid"
         assert "no row of its relation is keyed by" in no_road.structured_content["message"]
 
         refused = await client.call_tool(
             "axionomy_economy_create",
-            {"entries": {"rates": {"drive/{to}": {"produce": {"driver": {"at/{from}": "1"}}}}}},
+            {"program": 'let m = model();\nm.add(law("drive/{to}", #{\n    produce: [["driver", [["at/{from}", "1"]]]],\n    consume: [],\n    preserve: [],\n    distinct: []\n}));\nm'},
         )
         assert refused.is_error
         assert refused.structured_content["error"] == "invalid_request"
@@ -419,34 +441,32 @@ async def test_a_rate_with_variables_is_authored_and_an_instance_applied(url: st
 # parcel's destination, a word, and its weight, a number, which it burns in
 # fuel; where every drive starts and the fuel a drive burns are the
 # economy's constants.
-PARCELS = {
-    "accounts": {"courier": {"at/depot": "1", "fuel": "9", "parcel/1": "1", "parcel/2": "1"}},
-    "constants": {"home": "depot", "leg": "2"},
-    "rates": {
-        "drive/{to}": {
-            "variables": [{"name": "to", "values": ["lisbon", "porto"]}],
-            "accounts": {"courier": "courier"},
-            "consume": {"courier": {"at/{home}": "1"}},
-            "produce": {"courier": {"at/{to}": "1"}},
-            "computed": [
-                {"direction": "consume", "role": "courier", "asset": "fuel", "quantity": {"kind": "variable", "name": "leg"}}
-            ],
-        },
-        "deliver/{parcel}": {
-            "variables": [{"name": "parcel", "range": ["1", "2"]}],
-            "relations": [
-                {"variables": ["parcel"], "gives": ["destination", "weight"], "rows": [["1", "lisbon", "3"], ["2", "porto", "1"]]}
-            ],
-            "accounts": {"courier": "courier"},
-            "consume": {"courier": {"parcel/{parcel}": "1"}},
-            "preserve": {"courier": {"at/{destination}": "1"}},
-            "produce": {"courier": {"delivered/{parcel}": "1"}},
-            "computed": [
-                {"direction": "consume", "role": "courier", "asset": "fuel", "quantity": {"kind": "variable", "name": "weight"}}
-            ],
-        },
-    },
-}
+PARCELS = """
+let m = model();
+m.open(account("courier"), basket([amount(asset("at/depot"), 1), amount(asset("fuel"), 9), amount(asset("parcel/1"), 1), amount(asset("parcel/2"), 1)]));
+m.constant("home", "depot");
+m.constant("leg", "2");
+m.add(law("drive/{to}", #{
+    variables: [#{name: "to", values: ["lisbon", "porto"]}],
+    accounts: [["courier", "courier"]],
+    consume: [["courier", [["at/{home}", "1"]]]],
+    produce: [["courier", [["at/{to}", "1"]]]],
+    preserve: [],
+    distinct: [],
+    computed_consume: [#{role: "courier", asset: "fuel", quantity: #{kind: "variable", name: "leg"}}]
+}));
+m.add(law("deliver/{parcel}", #{
+    variables: [#{name: "parcel", range: ["1", "2"]}],
+    relations: [#{variables: ["parcel"], gives: ["destination", "weight"], rows: [["1", "lisbon", "3"], ["2", "porto", "1"]]}],
+    accounts: [["courier", "courier"]],
+    consume: [["courier", [["parcel/{parcel}", "1"]]]],
+    preserve: [["courier", [["at/{destination}", "1"]]]],
+    produce: [["courier", [["delivered/{parcel}", "1"]]]],
+    distinct: [],
+    computed_consume: [#{role: "courier", asset: "fuel", quantity: #{kind: "variable", name: "weight"}}]
+}));
+m
+"""
 
 
 async def test_rows_give_words_constants_are_law_and_an_economy_lists_its_moves(url: str) -> None:
@@ -467,51 +487,59 @@ async def test_rows_give_words_constants_are_law_and_an_economy_lists_its_moves(
 
         # A delivery from home lacks the parcel's destination, and would take
         # the parcel and its weight in fuel.
-        assessed = await client.call_tool("axionomy_exchange_assess", {"economy_id": economy_id, "exchange": courier("deliver/1")})
+        assessed = await client.call_tool("axionomy_exchange_assess", {"economy_id": economy_id, "program": exchange_source(courier('deliver/1'))})
         assert assessed.structured_content["status"] == "infeasible"
         lines = [(line["kind"], line["asset"], line["quantity"]) for line in assessed.structured_content["preview"]]
         assert lines[0] == ("missing", "at/lisbon", "1")
         assert ("consumed", "fuel", "3") in lines and ("consumed", "parcel/1", "1") in lines
 
         # Without candidates, a search plays the economy's own moves.
-        search = {"economy_id": economy_id, "goal": {"courier": {"delivered/1": "1"}}, "max_expansions": 16}
+        search = {"economy_id": economy_id, "goal": 'goal().require(account("courier"), basket([amount(asset("delivered/1"), 1)]))', "max_expansions": 16}
         result = await client.call_tool("axionomy_search", search)
         assert result.structured_content["outcome"] == "solved"
         trace = await page(client, f"axionomy://economy/{result.structured_content['solution']['economy_id']}/exchanges")
         assert [item["rate"] for item in trace["items"]] == ["drive/lisbon", "deliver/1"]
 
         # A quantity reads only numbers: a destination is a word.
-        wordy = {**PARCELS["rates"]["deliver/{parcel}"], "computed": [
-            {"direction": "consume", "role": "courier", "asset": "fuel", "quantity": {"kind": "variable", "name": "destination"}}
-        ]}
-        refused = await client.call_tool("axionomy_economy_create", {"entries": {"rates": {"deliver/{parcel}": wordy}}})
+        wordy = PARCELS.replace('kind: "variable", name: "weight"', 'kind: "variable", name: "destination"')
+        refused = await client.call_tool("axionomy_economy_create", {"program": wordy})
         assert refused.is_error and refused.structured_content["error"] == "invalid_request"
 
 
 # Work done outside the economy (a robot, a model, a person) is modelled, not
 # orchestrated: asking produces a `requested` token, the outside party's result
 # is an exchange that consumes it, and a deadline is a condition on a clock.
-OUTSIDE_WORK = {
-    "accounts": {"agent": {"budget": "1"}, "clock": {}},
-    "rates": {
-        "request": {"consume": {"asker": {"budget": "1"}}, "produce": {"asker": {"requested": "1"}}},
-        "report": {"consume": {"asker": {"requested": "1"}}, "produce": {"asker": {"report": "1"}}},
-        "tick": {"produce": {"clock": {"tick": "1"}}},
-        "lapse": {
-            "consume": {"asker": {"requested": "1"}},
-            "produce": {"asker": {"lapsed": "1"}},
-            "preserve": {"clock": {"tick": "1"}},
-            "conditions": [
-                {
-                    "name": "deadline-passed",
-                    "left": {"kind": "balance", "role": "clock", "asset": "tick"},
-                    "comparison": "greater_than_or_equal",
-                    "right": {"kind": "constant", "value": "3"},
-                }
-            ],
-        },
-    },
-}
+OUTSIDE_WORK = """
+let m = model();
+m.open(account("agent"), basket([amount(asset("budget"), 1)]));
+m.open(account("clock"), basket([]));
+m.add(law("request", #{
+    consume: [["asker", [["budget", "1"]]]],
+    produce: [["asker", [["requested", "1"]]]],
+    preserve: [],
+    distinct: []
+}));
+m.add(law("report", #{
+    consume: [["asker", [["requested", "1"]]]],
+    produce: [["asker", [["report", "1"]]]],
+    preserve: [],
+    distinct: []
+}));
+m.add(law("tick", #{
+    produce: [["clock", [["tick", "1"]]]],
+    consume: [],
+    preserve: [],
+    distinct: []
+}));
+m.add(law("lapse", #{
+    consume: [["asker", [["requested", "1"]]]],
+    produce: [["asker", [["lapsed", "1"]]]],
+    preserve: [["clock", [["tick", "1"]]]],
+    conditions: [#{name: "deadline-passed", left: #{kind: "balance", role: "clock", asset: "tick"}, comparison: "greater_than_or_equal", right: #{kind: "constant", value: "3"}}],
+    distinct: []
+}));
+m
+"""
 
 
 def outside(rate: str) -> dict[str, Any]:
@@ -520,7 +548,7 @@ def outside(rate: str) -> dict[str, Any]:
 
 
 async def apply(client: Client, economy_id: str, rate: str) -> CallToolResult:
-    return await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": outside(rate)})
+    return await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(outside(rate))})
 
 
 async def test_outside_work_is_a_request_the_economy_holds(url: str) -> None:
@@ -548,7 +576,7 @@ async def test_outside_work_is_a_request_the_economy_holds(url: str) -> None:
         assert issue["message"].endswith(f"axionomy://economy/{asked_id}/rate-conditions/lapse")
         waited = await client.call_tool(
             "axionomy_trace_replay",
-            {"economy_id": asked_id, "exchanges": [outside("tick")] * 3},
+            {"economy_id": asked_id, "program": replay_source([outside('tick')] * 3)},
         )
         assert not waited.is_error, waited.structured_content
         lapsed = await apply(client, waited.structured_content["economy_id"], "lapse")
@@ -565,8 +593,8 @@ async def test_a_search_runs_as_a_task_and_its_solution_is_a_snapshot(url: str) 
         economy_id = await create(plain, ECONOMY)
         search = {
             "economy_id": economy_id,
-            "goal": {"sink": {"token": "1"}},
-            "candidates": [transfer(1)],
+            "goal": 'goal().require(account("sink"), basket([amount(asset("token"), 1)]))',
+            "candidates": replay_source([transfer(1)]),
             "max_expansions": 8,
         }
         refused = await plain.call_tool("axionomy_search", search)
@@ -587,8 +615,8 @@ async def test_a_task_can_be_cancelled(url: str) -> None:
     async with Client(url, extensions=[tasks]) as client:
         search = {
             "economy_id": economy_id,
-            "goal": {"sink": {"token": "100"}},
-            "candidates": [transfer(1)],
+            "goal": 'goal().require(account("sink"), basket([amount(asset("token"), 100)]))',
+            "candidates": replay_source([transfer(1)]),
             "max_expansions": 100_000,
             "chunk_size": 1,
         }
@@ -623,7 +651,7 @@ async def test_a_client_steps_into_a_trial_and_tries_another_exchange(logistics_
 
         # From the reliable run's state at step N, take the direct run's
         # exchange instead, and compare with the reliable run's step N + 1.
-        tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": state["economy_id"], "exchange": alternative[n]})
+        tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": state["economy_id"], "program": exchange_source(alternative[n])})
         assert not tried.is_error, tried.structured_content
         assert tried.structured_content["source_economy_id"] == state["economy_id"]
         followed = await step(client, reliable, n + 1)
@@ -704,7 +732,7 @@ async def test_an_experiment_runs_and_a_client_steps_through_a_trial(maze_url: s
         assert origin["root"] == (await page(client, f"axionomy://economy/{start['economy_id']}"))["root"]
         for i, exchange in enumerate(trace):
             before = await step(client, end, i)
-            tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": before["economy_id"], "exchange": exchange})
+            tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": before["economy_id"], "program": exchange_source(exchange)})
             assert not tried.is_error, tried.structured_content
             after = await step(client, end, i + 1)
             assert tried.structured_content["root"] == after["root"]
@@ -772,7 +800,7 @@ def test_a_package_that_fails_its_checks_stops_the_server(tmp_path) -> None:
 
 
 async def applied(client: Client, economy_id: str, exchange: dict[str, Any]) -> str:
-    applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": exchange})
+    applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(exchange)})
     assert not applied.is_error, applied.structured_content
     return applied.structured_content["economy_id"]
 
@@ -901,7 +929,7 @@ async def test_a_follower_receives_only_the_steps_a_ref_moves_over(url: str) -> 
 
         followed = await follower.call_tool(
             "axionomy_ref_frames",
-            {"ref_id": ref_id, "after_economy_id": start, "goal": {"sink": {"token": "3"}}},
+            {"ref_id": ref_id, "after_economy_id": start, "goal": 'goal().require(account("sink"), basket([amount(asset("token"), 3)]))' },
         )
         assert delivered(followed) == [first, second]
         assert tried not in delivered(followed)
@@ -944,22 +972,18 @@ async def test_a_follower_receives_only_the_steps_a_ref_moves_over(url: str) -> 
 async def test_malformed_arguments_are_structured_errors_naming_the_argument(url: str) -> None:
     async with Client(url) as client:
         economy_id = await create(client, ECONOMY)
-        missing_units = {"rate": "transfer", "bindings": {"giver": "source", "receiver": "sink"}}
         for arguments, pointer in (
-            ({"economy_id": economy_id, "exchange": missing_units}, "/exchange/units"),
-            ({"economy_id": economy_id, "exchange": {**transfer(1), "rate": "Transfer"}}, "/exchange/rate"),
-            ({"economy_id": economy_id, "exchange": {**transfer(1), "units": "-1"}}, "/exchange/units"),
-            ({"economy_id": "eco-1", "exchange": transfer(1)}, "/economy_id"),
+            ({"economy_id": economy_id, "exchange": transfer(1)}, "/exchange"),
+            ({"economy_id": economy_id, "program": 'exchange(rate("Transfer"), 1)'}, "/program"),
+            ({"economy_id": economy_id, "program": 'exchange(rate("transfer"), -1)'}, "/program"),
+            ({"economy_id": "eco-1", "program": exchange_source(transfer(1))}, "/economy_id"),
         ):
             refused = await client.call_tool("axionomy_exchange_apply", arguments)
-            assert refused.is_error
-            assert refused.structured_content["error"] == "invalid_request", refused.structured_content
-            assert refused.structured_content["details"] == {"pointer": pointer}
-            assert refused.structured_content["message"].startswith(f"argument `{pointer}` is invalid: ")
+            assert refused.is_error and refused.structured_content["error"] == "invalid_request"
+            assert refused.structured_content["details"]["pointer"] == pointer
 
-        # A path that is a key is named by its JSON pointer, `/` escaped as `~1`.
-        refused = await client.call_tool("axionomy_economy_create", {"entries": {"accounts": {"agents/7/Wallet": {}}}})
-        assert refused.structured_content["details"] == {"pointer": "/entries/accounts/agents~17~1Wallet"}
+        refused = await client.call_tool("axionomy_economy_create", {"entries": {}})
+        assert refused.is_error and refused.structured_content["details"]["pointer"] == "/entries"
 
         # The schema states the bounds the server keeps.
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
@@ -1004,7 +1028,7 @@ async def test_snapshots_on_disk_outlive_the_server(tmp_path, samples: Path) -> 
     with running(store, packages=[samples / "maze.zip"]) as base_url:
         async with Client(f"{base_url}/mcp") as client:
             economy_id = await create(client, ECONOMY)
-            applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
+            applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(transfer(2))})
             applied_id = applied.structured_content["economy_id"]
             ran = await client.call_tool("axionomy_experiment_run", {"experiment": "maze/micro"})
             assert not ran.is_error, ran.structured_content
@@ -1014,7 +1038,7 @@ async def test_snapshots_on_disk_outlive_the_server(tmp_path, samples: Path) -> 
             summary = await page(client, f"axionomy://economy/{applied_id}")
             assert summary["parent_id"] == economy_id
             assert summary["root"] == applied.structured_content["root"]
-            again = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
+            again = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "program": exchange_source(transfer(2))})
             assert again.structured_content["economy_id"] == applied_id
             assert again.structured_content["deduplicated"] is True
             # The store keeps an experiment's results, and every trial's end
@@ -1057,3 +1081,16 @@ async def test_an_author_builds_edits_and_exports_a_complete_package(tmp_path: P
             assert not result.is_error and result.structured_content["version"] == "1.0.1"
             played = await client.call_tool("axionomy_experiment_run", {"experiment": "pantry/morning"})
             assert not played.is_error, played.structured_content
+
+async def test_rhai_discovery_queries_and_observations(url: str) -> None:
+    async with Client(url) as client:
+        found = await client.call_tool("axionomy_rhai_api", {})
+        assert any("balance(" in fn for fn in found.structured_content["runtime"])
+        economy = await create(client, ECONOMY)
+        request = {"economy_id": economy, "program": 'state.balance(account("source"), asset("token"))'}
+        result = await client.call_tool("axionomy_economy_query", request)
+        assert result.structured_content == {"value": "5"}
+        hidden = await client.call_tool("axionomy_economy_query", {**request, "visible_accounts": ["sink"]})
+        assert hidden.structured_content == {"value": "0"}
+        wrong = await client.call_tool("axionomy_exchange_apply", request)
+        assert wrong.is_error and "Exchange" in wrong.structured_content["message"]

@@ -15,6 +15,14 @@ const INDEX: &str = "index.json";
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Action {
+    /// Inspect the Rhai functions registered for authoring and runtime.
+    RhaiApi,
+    /// Query a point with Rhai without recording a change.
+    Query(crate::operation::Operation),
+    /// Assess a Rhai decision returning an Exchange.
+    Assess(crate::operation::Operation),
+    /// Apply a Rhai decision to a writable store and print its new point.
+    Apply(crate::operation::Operation),
     /// Validate a source directory and its economic assertions.
     Validate { directory: PathBuf },
     /// Report the source package's economic tests.
@@ -70,6 +78,12 @@ pub(crate) enum Action {
 
 pub(crate) fn run(action: Action) -> Result<String, CliError> {
     match action {
+        Action::RhaiApi => Ok(serde_json::to_string_pretty(
+            &Engine::new(Store::memory()?)?.rhai_api(),
+        )?),
+        Action::Query(op) => op.run(crate::operation::Mode::Query),
+        Action::Assess(op) => op.run(crate::operation::Mode::Assess),
+        Action::Apply(op) => op.run(crate::operation::Mode::Apply),
         Action::Compare {
             left,
             right,

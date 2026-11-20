@@ -24,8 +24,8 @@ The server has no current economy. Every operation names an economy by its
 handle, an economy never changes, and every change stores a new one:
 
 ```text
-entries ─────────────── economy_create ──> economy_id
-economy_id + entries ── economy_extend ──> new economy_id
+Rhai Model ──────────── economy_create ──> economy_id
+economy_id + Rhai Model ── economy_extend ──> new economy_id
 economy_id + exchange ─ exchange_assess ─> explanation, nothing stored
 economy_id + exchange ─ exchange_apply ──> new economy_id
 economy_id + exchanges  trace_replay ────> new economy_id
@@ -78,92 +78,45 @@ The server's instructions walk a first-time client through an experiment:
 
 See [Packages and experiments](#packages-and-experiments).
 
-An exchange names a rate, an account for each of its roles, and how many units
-to apply:
+## Authoring and interacting with Rhai
 
-```json
-{ "rate": "transfer", "bindings": { "giver": "source", "receiver": "sink" }, "units": "2" }
+Call `axionomy_rhai_api` to inspect the installed build and runtime signatures. Read a shipped ontology with `axionomy_package_source`. Every package document is a Rhai program. [Package guide](../../docs/PACKAGE_SOURCE.md)
+
+Asset-facing tools accept a `program` field containing inline Rhai or a named function, for example `{"script":"pantry","function":"served"}`. A named operation receives the same state as an inline program. Economy creation invokes a zero-argument function.
+
+For `axionomy_economy_create`, return a model:
+
+```rhai
+let m = model();
+let token = asset("token");
+m.open(account("source"), basket([amount(token, 5)]));
+m.open(account("sink"), basket([]));
+m.add(law("transfer", #{
+    consume: [["giver", [["token", "1"]]]],
+    produce: [["receiver", [["token", "1"]]]],
+    preserve: [], distinct: [["giver", "receiver"]]
+}));
+let supply = invariant("supply");
+supply.weight(token, 1);
+m.add(supply.finish());
+m
 ```
 
-A role the rate opens binds the path of the account the exchange creates,
-which must not exist yet. `axionomy_search` runs only as an MCP task;
-every other tool works without the tasks extension. Given no `candidates`,
-it searches over the economy's own moves, as its `moves` resource lists
-them.
-An application that moves through economies, such as a game, keeps a ref on
-the economy it is at; see [Refs](#refs).
+`axionomy_economy_extend` takes a model containing additions and checks for conflicts. Both tools accept up to 10,000 entries per call. `axionomy_economy_query` can inspect an exact balance or return a Rhai object. Use `visible_accounts` to restrict a query to a player's observation.
 
-## Authoring
-
-`axionomy_economy_create` and `axionomy_economy_extend` take the same entries,
-keyed by ID, with every collection optional. Accounts, assets, rates, roles and
-invariants are identified by paths: lowercase segments of `a`–`z`, `0`–`9` and
-`-`, separated by `/`, such as `loans/42` or `agents/7/wallet`. Each kind is
-its own Rust type (`AccountPath`, `AssetPath`, `RatePath`, `RolePath`,
-`InvariantPath`), and a malformed path is refused before anything runs. The
-hierarchy is for people and tools, such as prefix queries; it never decides
-whether an exchange is valid.
-
-```json
-{
-  "accounts": { "source": { "token": "5" }, "sink": {} },
-  "rates": {
-    "transfer": {
-      "consume": { "giver": { "token": "1" } },
-      "produce": { "receiver": { "token": "1" } },
-      "distinct": [["giver", "receiver"]]
-    }
-  },
-  "invariants": { "supply": { "token": 1 } }
-}
+```rhai
+state.balance(account("source"), asset("token"))
 ```
 
-Quantities are decimal strings, exact up to `2²⁵⁶ − 1`. A rate may also list
-`preserve` amounts, `computed` amounts evaluated from balances and parameters,
-`conditions`, and the roles whose account it `opens` or `closes`. An exchange
-names each account it opens, which must not exist, and may close an account
-only once its own effects leave it empty; results list the accounts opened and
-closed, and a closed path may be opened again. Extending adds: a new ID adds an
-account, rate or invariant, and an existing one gains balances, amounts or
-weights. An entry that would replace something already present is a
-`conflict`, so an economy too large for one call is built by chaining calls,
-each of which stores a valid economy. The kernel's `EconomyBuilder` builds
-every economy, so the kernel alone decides what a valid economy is.
+`axionomy_exchange_assess` and `axionomy_exchange_apply` expect one native exchange. `axionomy_trace_replay` expects an array of up to 1,000 exchanges, applied atomically.
 
-A rate's ID may name **variables**, one segment each, so one rate stands for
-every case it covers. Its assets, the accounts it fixes for roles, and its
-quantities name them the same way; an exchange names an instance,
-`drive/east/north`, and applies the rate with those values:
-
-```json
-{
-  "rates": {
-    "drive/{from}/{to}": {
-      "variables": [
-        { "name": "from", "values": ["east", "north", "west"] },
-        { "name": "to", "values": ["east", "north", "west"] }
-      ],
-      "relations": [{ "variables": ["from", "to"], "rows": [["east", "north"], ["north", "west"]] }],
-      "accounts": { "driver": "driver" },
-      "consume": { "driver": { "at/{from}": "1", "fuel": "1" } },
-      "produce": { "driver": { "at/{to}": "1" } }
-    }
-  }
-}
+```rhai
+exchange(rate("transfer"), 2)
+    .bind(role("giver"), account("source"))
+    .bind(role("receiver"), account("sink"))
 ```
 
-A variable takes a `range` of whole numbers or the `values` listed; a
-`relation` lists the rows some variables may take together, keyed by their
-values, each followed by the values named in its `gives`, if any, whole
-numbers or words (`["p17", "lisbon", "12"]` gives a parcel's destination and
-weight; only numbers are read in quantities);
-`distinct_variables` pairs must differ; `derived` values are whole numbers
-computed from the variables, usable as `{name}` after them; `accounts` fixes
-the account a role must be bound to. An economy's `constants`, such as
-`{"season-length": "12", "home": "depot"}`, are read by every rate as its
-variables are, and no exchange changes them. A rate whose variables are
-undeclared, unread or overlap another rate makes no economy:
-`invalid_request`.
+Search takes a `goal` program returning a native goal and an optional `candidates` program returning exchanges. For example, `goal().require(account("sink"), basket([amount(asset("token"), 2)]))`. Trace search accepts a balance condition such as `balance_at_least(account("sink"), asset("token"), quantity(2))`. A failed script or invalid economic model reports an error before any result is committed.
 
 ## Resources
 
@@ -212,6 +165,8 @@ the reason it is malformed.
 
 | Tool | Result | Hints |
 | --- | --- | --- |
+| `axionomy_rhai_api` | Registered function signatures for authoring and runtime | read only |
+| `axionomy_economy_query` | Rhai result at an immutable economy, optionally restricted to visible accounts | read only |
 | `axionomy_economy_create` | `economy_id`, counts | additive, idempotent |
 | `axionomy_economy_extend` | new `economy_id`, counts | additive, idempotent |
 | `axionomy_exchange_assess` | status, issues, line count and preview | read-only |
@@ -242,7 +197,7 @@ A failure is a result with `isError` and structured content
 malformed path, quantity or handle, or a missing field, is an
 `invalid_request` whose `details.pointer` is the JSON pointer (RFC 6901) of the
 argument at fault, such as `/exchange/units` or
-`/entries/accounts/agents~17~1Wallet`. An infeasible or invalid exchange says
+`/program` for a Rhai input. An infeasible or invalid exchange says
 which exchange failed (`details.exchange_index`), names what each account
 lacks or lists its `issues`, each with a snake_case `kind`, the paths
 involved and a `message` that points to the resource listing what it could

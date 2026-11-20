@@ -10,6 +10,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axionomy-authoring.workspace = true
 axionomy.workspace = true
 axionomy-engine.workspace = true
 axionomy-search.workspace = true

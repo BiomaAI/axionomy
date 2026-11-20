@@ -5,7 +5,7 @@ use axionomy::{
     Rounding, path::Path, paths,
 };
 use indexmap::{IndexMap, map::Entry};
-use rhai::{Array, Engine, EvalAltResult, ImmutableString};
+use rhai::{Array, Engine, EvalAltResult, ImmutableString, Map};
 
 type Failure = Box<EvalAltResult>;
 
@@ -56,6 +56,30 @@ impl Invariant {
             }
         }
     }
+}
+
+fn exchange_with_bindings(
+    rate: &str,
+    bindings: Map,
+    units: Quantity,
+) -> Result<paths::Exchange, Failure> {
+    let mut exchange = paths::Exchange::new(
+        rate.parse().map_err(|e| format!("rate `{rate}`: {e}"))?,
+        units,
+    );
+    for (role, account) in bindings {
+        let role = role.parse().map_err(|e| format!("role `{role}`: {e}"))?;
+        let account = if account.is::<AccountPath>() {
+            account.cast::<AccountPath>()
+        } else {
+            let name = account
+                .into_immutable_string()
+                .map_err(|kind| format!("expected account path, found {kind}"))?;
+            name.parse().map_err(|e| format!("account `{name}`: {e}"))?
+        };
+        exchange = exchange.bind(role, account);
+    }
+    Ok(exchange)
 }
 
 pub fn register(engine: &mut Engine) {
@@ -146,6 +170,20 @@ pub fn register(engine: &mut Engine) {
             },
         )
         .register_type_with_name::<paths::Exchange>("Exchange")
+        .register_fn("exchange", exchange_with_bindings)
+        .register_fn("exchange", |rate: &str, bindings: Map, units: i64| {
+            exchange_with_bindings(rate, bindings, quantity(units)?)
+        })
+        .register_fn(
+            "parameter",
+            |exchange: paths::Exchange, name: &str, value: Quantity| -> Result<_, Failure> {
+                Ok(exchange.parameter(
+                    name.parse()
+                        .map_err(|e| format!("parameter `{name}`: {e}"))?,
+                    value,
+                ))
+            },
+        )
         .register_fn("exchange", |rate: RatePath, units: Quantity| {
             paths::Exchange::new(rate, units)
         })

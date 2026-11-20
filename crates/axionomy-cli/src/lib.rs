@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod operation;
 mod package;
 mod serve;
 mod source;

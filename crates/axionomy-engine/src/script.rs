@@ -618,8 +618,6 @@ fn imports(ast: &rhai::AST) -> Result<Vec<ScriptPath>, String> {
     refused.map_or(Ok(imports), Err)
 }
 
-use axionomy_authoring::script::quantity as quantity_of;
-
 fn parsed<K: PathKind>(text: &str) -> Result<Path<K>, Failure> {
     text.parse()
         .map_err(|_| format!("`{text}` is not a {}", K::SCHEMA).into())
@@ -879,44 +877,25 @@ fn text(value: Dynamic) -> Result<String, Failure> {
 }
 
 fn exchanges(rhai: &mut rhai::Engine) {
-    fn exchange(rate: &str, bindings: Map, units: Quantity) -> Result<paths::Exchange, Failure> {
-        let mut exchange = paths::Exchange::new(parsed(rate)?, units);
-        for (role, account) in bindings {
-            let role: RolePath = parsed(role.as_str())?;
-            exchange = exchange.bind(role, parsed(&text(account)?)?);
-        }
-        Ok(exchange)
-    }
-    rhai.register_type_with_name::<paths::Exchange>("Exchange")
-        .register_fn("exchange", exchange)
-        .register_fn("exchange", |rate: &str, bindings: Map, units: i64| {
-            exchange(rate, bindings, quantity_of(units)?)
-        })
-        .register_fn(
-            "parameter",
-            |exchange: paths::Exchange, name: &str, value: Quantity| -> Result<_, Failure> {
-                Ok(exchange.parameter(parsed(name)?, value))
-            },
-        )
-        .register_fn("rate", |exchange: &mut paths::Exchange| {
-            ImmutableString::from(exchange.rate().as_str())
-        })
-        .register_fn("units", |exchange: &mut paths::Exchange| exchange.units())
-        .register_fn(
-            "account",
-            |exchange: &mut paths::Exchange, role: &str| -> Result<Dynamic, Failure> {
-                let role: RolePath = parsed(role)?;
-                Ok(exchange
-                    .bindings()
-                    .get(&role)
-                    .map_or(Dynamic::UNIT, |account| account.to_string().into()))
-            },
-        )
-        .register_fn("to_string", |exchange: &mut paths::Exchange| {
-            exchange.rate().to_string()
-        })
-        .register_fn("==", |a: paths::Exchange, b: paths::Exchange| a == b)
-        .register_fn("!=", |a: paths::Exchange, b: paths::Exchange| a != b);
+    rhai.register_fn("rate", |exchange: &mut paths::Exchange| {
+        ImmutableString::from(exchange.rate().as_str())
+    })
+    .register_fn("units", |exchange: &mut paths::Exchange| exchange.units())
+    .register_fn(
+        "account",
+        |exchange: &mut paths::Exchange, role: &str| -> Result<Dynamic, Failure> {
+            let role: RolePath = parsed(role)?;
+            Ok(exchange
+                .bindings()
+                .get(&role)
+                .map_or(Dynamic::UNIT, |account| account.to_string().into()))
+        },
+    )
+    .register_fn("to_string", |exchange: &mut paths::Exchange| {
+        exchange.rate().to_string()
+    })
+    .register_fn("==", |a: paths::Exchange, b: paths::Exchange| a == b)
+    .register_fn("!=", |a: paths::Exchange, b: paths::Exchange| a != b);
 }
 
 /// The fewest edges from `from` to every node it reaches, over undirected

@@ -7,22 +7,21 @@ use crate::{
         TraceDiffResponse, TraceDiffStep,
     },
     messages::{
-        Amounts, ArmResults, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
+        ArmResults, AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries,
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse,
         ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode, FrameReceipt,
         Issue, LineKind, PackageBuildRequest, PackageBuilt, PackageListRequest,
         PackageListResponse, PackageRef, PackageSourceRequest, PackageSummary, PackageVersion,
-        QuantityLine, RefAdvanceRequest, RefCreateRequest, RefDeleteRequest, RefFrame,
-        RefFramesRequest, RefFramesResponse, RefPosition, RefReadRequest, ReplayRequest,
-        SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot, ToolFailure,
-        TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse, TrialResult,
+        QuantityLine, QueryRequest, QueryResult, RefAdvanceRequest, RefCreateRequest,
+        RefDeleteRequest, RefFrame, RefFramesRequest, RefFramesResponse, RefPosition,
+        RefReadRequest, ReplayRequest, SearchOutcome, SearchRequest, SearchResponse, SearchSolved,
+        StateRoot, ToolFailure, TraceFindRequest, TraceFindResponse, TraceStepRequest,
+        TraceStepResponse, TrialResult,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
     store::{self, Archive, Assessed, Loaded, Origin, content_name},
 };
-use axionomy::{
-    AccountPath, AssessmentStatus, PathKind, Quantity, QuantityComparison, path::Path, paths,
-};
+use axionomy::{AssessmentStatus, PathKind, Quantity, QuantityComparison, path::Path, paths};
 use axionomy_engine::{
     CandidateSet, Effort, Engine, EngineError, Experiment, ExperimentPath, Outcome, Results,
     Strategy,
@@ -50,13 +49,7 @@ use rmcp::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_path_to_error::Segment;
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
-    ops::ControlFlow,
-    sync::Arc,
-    time::Duration,
-};
+use std::{borrow::Cow, collections::BTreeSet, ops::ControlFlow, sync::Arc, time::Duration};
 
 #[cfg(test)]
 mod tests;
@@ -104,10 +97,12 @@ axionomy_exchange_apply applies it and returns your economy.
 6. The diff resource (axionomy://economy/{economy_id}/diff/{other_id}) compares your economy \
 with the run's next step.
 
-An exchange looks like {\"rate\": \"transfer\", \"bindings\": {\"giver\": \"source\", \
-\"receiver\": \"sink\"}, \"units\": \"2\"}. Bind an account to every role of the rate. A role the \
-rate opens binds the path of the account the exchange creates, which must not exist yet; a role \
-it closes binds an account its effects leave empty.
+Use axionomy_rhai_api to discover registered host functions. Asset operations take Rhai in program. Pass inline source or a stored function named by script and function. \
+Create an economy by returning model(); use m.open(account(\"source\"), basket([amount(asset(\"token\"), 5)])) \
+and m.add(law(\"transfer\", terms)) to build it. Query with axionomy_economy_query and state.balance(account(\"source\"), asset(\"token\")); \
+visible_accounts limits a query to a player observation. Assess or apply an Exchange returned by \
+exchange(rate(\"transfer\"), 2).bind(role(\"giver\"), account(\"source\")).bind(role(\"receiver\"), account(\"sink\")). \
+A search goal is goal().require(account(\"sink\"), basket([amount(asset(\"token\"), 2)])); candidates and replay return arrays of exchanges.
 
 Steps: step N of a trace is the economy after its first N exchanges, and step 0 the economy they \
 were applied to. Positions of exchanges count from 0 (exchange_index): the exchange at index i \
@@ -186,7 +181,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_economy_create",
         title = "Create an economy",
-        description = "Store a new economy with up to 10,000 entries: accounts with their balances, rates, and conservation invariants, each keyed by its path, such as `agents/7/wallet`. Grow it past that with axionomy_economy_extend. Returns the economy's economy_id and root, its content hash; repeating the same call returns the same economy_id.",
+        description = "Run inline or named Rhai returning a Model and store the checked economy. Example: let m = model(); m.open(account(\"bank\"), basket([amount(asset(\"cash\"), 5)])); m. Accepts up to 10,000 entries.",
         output_schema = schema_for_output::<EconomyStored>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -194,7 +189,12 @@ impl AxionomyMcp {
         &self,
         Parameters(request): Parameters<EconomyCreateRequest>,
     ) -> Result<Linked<EconomyStored>, ToolError> {
-        self.author(None, request.entries).await
+        let model = self
+            .archive
+            .engine()
+            .evaluate_model(&request.program, None)
+            .map_err(script_error)?;
+        self.author(None, model.into()).await
     }
 
     #[tool(
@@ -209,8 +209,47 @@ impl AxionomyMcp {
         Parameters(request): Parameters<EconomyExtendRequest>,
     ) -> Result<Linked<EconomyStored>, ToolError> {
         let parent = self.economy(&request.economy_id).await?;
-        self.author(Some((request.economy_id, parent)), request.entries)
+        let model = self
+            .archive
+            .engine()
+            .evaluate_model(&request.program, Some(parent.script_state()))
+            .map_err(script_error)?;
+        self.author(Some((request.economy_id, parent)), model.into())
             .await
+    }
+
+    #[tool(name = "axionomy_rhai_api", title = "Inspect the Rhai API",
+        description = "Discover actual typed host function signatures for package authoring and live state queries and decisions. Read a package's ontology program with axionomy_package_source.",
+        output_schema = schema_for_output::<axionomy_engine::RhaiApi>(),
+        annotations(read_only_hint = true, open_world_hint = false))]
+    async fn rhai_api(
+        &self,
+        Parameters(_): Parameters<PackageListRequest>,
+    ) -> Result<Linked<axionomy_engine::RhaiApi>, ToolError> {
+        Ok(Linked::new(self.archive.engine().rhai_api(), vec![]))
+    }
+
+    #[tool(
+        name = "axionomy_economy_query", title = "Query an economy with Rhai",
+        description = "Run a read-only Rhai expression or named function with state. Return exact quantities, typed paths, arrays or objects. For example: state.balance(account(\"source\"), asset(\"token\")). Supply visible_accounts for a player observation.",
+        output_schema = schema_for_output::<QueryResult>(),
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn economy_query(
+        &self,
+        Parameters(request): Parameters<QueryRequest>,
+    ) -> Result<Linked<QueryResult>, ToolError> {
+        let loaded = self.economy(&request.economy_id).await?;
+        let mut state = loaded.script_state();
+        if let Some(accounts) = request.visible_accounts {
+            state = state.observing(accounts);
+        }
+        let value = self
+            .archive
+            .engine()
+            .query(&request.program, state)
+            .map_err(script_error)?;
+        Ok(Linked::new(QueryResult { value }, vec![]))
     }
 
     #[tool(
@@ -225,17 +264,22 @@ impl AxionomyMcp {
         Parameters(request): Parameters<ExchangeRequest>,
     ) -> Result<Linked<AssessResponse>, ToolError> {
         let source = self.economy(&request.economy_id).await?;
+        let exchange = self
+            .archive
+            .engine()
+            .evaluate_exchange(&request.program, source.script_state())
+            .map_err(script_error)?;
         let assessment = self
             .archive
-            .assess(&source, &request.exchange)
+            .assess(&source, &exchange)
             .await
             .map_err(ToolError::internal)?;
         let (assessment_id, stored) = self
-            .keep_assessment(&request.economy_id, &[], &request.exchange, assessment)
+            .keep_assessment(&request.economy_id, &[], &exchange, assessment)
             .await?;
         let lines = assessment_lines(&stored.assessment).count();
         let response = AssessResponse {
-            issues: issues::of(&stored.assessment, &request.exchange, &request.economy_id),
+            issues: issues::of(&stored.assessment, &exchange, &request.economy_id),
             economy_id: request.economy_id,
             assessment_id: assessment_id.clone(),
             status: stored.assessment.status().into(),
@@ -253,7 +297,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_exchange_apply",
         title = "Apply an exchange",
-        description = "Apply one exchange atomically and store the economy it makes under a new economy_id; the economy it was applied to is unchanged. A failure stores nothing and explains itself like axionomy_exchange_assess.",
+        description = "Evaluate a Rhai program returning Exchange, apply it atomically and store the economy it makes under a new economy_id; the economy it was applied to is unchanged. A failure stores nothing and explains itself like axionomy_exchange_assess.",
         output_schema = schema_for_output::<ExchangedResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -261,8 +305,13 @@ impl AxionomyMcp {
         &self,
         Parameters(request): Parameters<ExchangeRequest>,
     ) -> Result<Linked<ExchangedResponse>, ToolError> {
-        self.exchange(request.economy_id, vec![request.exchange])
-            .await
+        let source = self.economy(&request.economy_id).await?;
+        let exchange = self
+            .archive
+            .engine()
+            .evaluate_exchange(&request.program, source.script_state())
+            .map_err(script_error)?;
+        self.exchange(request.economy_id, vec![exchange]).await
     }
 
     #[tool(
@@ -276,16 +325,22 @@ impl AxionomyMcp {
         &self,
         Parameters(request): Parameters<ReplayRequest>,
     ) -> Result<Linked<ExchangedResponse>, ToolError> {
-        if request.exchanges.is_empty() {
+        let source = self.economy(&request.economy_id).await?;
+        let exchanges = self
+            .archive
+            .engine()
+            .evaluate_exchanges(&request.program, source.script_state())
+            .map_err(script_error)?;
+        if exchanges.is_empty() {
             return Err(ToolError::argument(
-                "/exchanges",
+                "/program",
                 "a replay needs at least one exchange",
             ));
         }
-        if request.exchanges.len() > MAX_EXCHANGES {
-            return Err(too_many_exchanges(request.exchanges.len()));
+        if exchanges.len() > MAX_EXCHANGES {
+            return Err(too_many_exchanges(exchanges.len()));
         }
-        self.exchange(request.economy_id, request.exchanges).await
+        self.exchange(request.economy_id, exchanges).await
     }
 
     #[tool(
@@ -326,6 +381,11 @@ impl AxionomyMcp {
         Parameters(request): Parameters<TraceFindRequest>,
     ) -> Result<Linked<TraceFindResponse>, ToolError> {
         let loaded = self.economy(&request.economy_id).await?;
+        let condition = self
+            .archive
+            .engine()
+            .evaluate_balance_condition(&request.program, loaded.script_state())
+            .map_err(script_error)?;
         let (source_id, _) = traced(&request.economy_id, &loaded)?;
         let source = self.economy(&source_id).await?;
         let opened = || {
@@ -333,15 +393,15 @@ impl AxionomyMcp {
                 .receipts()
                 .iter()
                 .flat_map(|receipt| receipt.opened())
-                .any(|account| account == &request.account)
+                .any(|account| account == &condition.account)
         };
-        if source.state().economy.account(&request.account).is_none() && !opened() {
+        if source.state().economy.account(&condition.account).is_none() && !opened() {
             return Err(ToolError::new(
                 FailureCode::NotFound,
                 format!(
                     "no economy of the trace that made `{}` has an account `{}`; the accounts of its source are listed at {}",
                     request.economy_id,
-                    request.account,
+                    condition.account,
                     Target::Accounts {
                         economy_id: source_id,
                         prefix: None,
@@ -351,28 +411,28 @@ impl AxionomyMcp {
             )
             .at("/account"));
         }
-        let holds = |balance: Quantity| match request.comparison {
-            QuantityComparison::Equal => balance == request.quantity,
-            QuantityComparison::GreaterThanOrEqual => balance >= request.quantity,
-            QuantityComparison::LessThanOrEqual => balance <= request.quantity,
+        let holds = |balance: Quantity| match condition.comparison {
+            QuantityComparison::Equal => balance == condition.quantity,
+            QuantityComparison::GreaterThanOrEqual => balance >= condition.quantity,
+            QuantityComparison::LessThanOrEqual => balance <= condition.quantity,
         };
         // The receipts say what each exchange moved, so the balance after
         // every step follows from the source's without rebuilding a state.
         let mut balance = source
             .state()
             .economy
-            .balance(&request.account, &request.asset);
+            .balance(&condition.account, &condition.asset);
         let mut found = holds(balance).then_some(0);
         for (index, receipt) in loaded.receipts().iter().enumerate() {
             if found.is_some() {
                 break;
             }
             for delta in receipt.deltas() {
-                if delta.account() == &request.account {
+                if delta.account() == &condition.account {
                     balance = balance
-                        .checked_sub(delta.consumed().quantity(&request.asset))
+                        .checked_sub(delta.consumed().quantity(&condition.asset))
                         .and_then(|left| {
-                            left.checked_add(delta.produced().quantity(&request.asset))
+                            left.checked_add(delta.produced().quantity(&condition.asset))
                         })
                         .ok_or_else(|| {
                             ToolError::internal("a receipt does not follow its state")
@@ -382,7 +442,7 @@ impl AxionomyMcp {
             found = holds(balance).then_some(index + 1);
         }
         let Some(step) = found else {
-            let comparison = match request.comparison {
+            let comparison = match condition.comparison {
                 QuantityComparison::Equal => "equal to",
                 QuantityComparison::GreaterThanOrEqual => "at least",
                 QuantityComparison::LessThanOrEqual => "at most",
@@ -393,9 +453,9 @@ impl AxionomyMcp {
                     economy: None,
                     message: Some(format!(
                         "`{}`'s balance of `{}` is {comparison} {} at none of the {} steps of the trace that made `{}`",
-                        request.account,
-                        request.asset,
-                        request.quantity,
+                        condition.account,
+                        condition.asset,
+                        condition.quantity,
                         loaded.receipts().len() + 1,
                         request.economy_id
                     )),
@@ -876,8 +936,13 @@ impl AxionomyMcp {
                 ),
             ));
         }
-        let goal = request.goal.as_ref().map(goal_of).transpose()?;
         let after = self.economy(&request.after_economy_id).await?;
+        let goal = request
+            .goal
+            .as_ref()
+            .map(|p| self.archive.engine().evaluate_goal(p, after.script_state()))
+            .transpose()
+            .map_err(script_error)?;
         let followed = self
             .archive
             .frames(
@@ -1190,16 +1255,32 @@ impl AxionomyMcp {
                 ),
             ));
         }
-        if let Some(candidates) = &request.candidates
-            && candidates.len() > MAX_EXCHANGES
-        {
-            return Err(too_many_exchanges(candidates.len()).at("/candidates"));
-        }
-        let goal = goal_of(&request.goal)?;
         let source = self.economy(&request.economy_id).await?;
+        let candidates = request
+            .candidates
+            .as_ref()
+            .map(|p| {
+                self.archive
+                    .engine()
+                    .evaluate_exchanges(p, source.script_state())
+            })
+            .transpose()
+            .map_err(script_error)?;
+        if let Some(list) = &candidates
+            && list.len() > MAX_EXCHANGES
+        {
+            return Err(too_many_exchanges(list.len()).at("/candidates"));
+        }
+        let goal = self
+            .archive
+            .engine()
+            .evaluate_goal(&request.goal, source.script_state())
+            .map_err(script_error)?;
         let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(run_search(context, archive, source, request, goal))
+            Box::pin(run_search(
+                context, archive, source, request, goal, candidates,
+            ))
         });
         Ok(CreateTaskResult::new(task).into())
     }
@@ -1454,23 +1535,8 @@ struct MovedDetails<'a> {
     current_economy_id: &'a EconomyId,
 }
 
-/// The goal a request names: balances each account must reach. Amounts that
-/// are not a basket are refused at the argument at fault.
-fn goal_of(goal: &BTreeMap<AccountPath, Amounts>) -> Result<paths::Goal, ToolError> {
-    goal.iter()
-        .try_fold(paths::Goal::new(), |goal, (account, amounts)| {
-            let basket = paths::Basket::try_from_entries(
-                amounts
-                    .iter()
-                    .map(|(asset, quantity)| (asset.clone(), *quantity)),
-            )
-            .map_err(|error| {
-                let mut pointer = "/goal".to_owned();
-                push_token(&mut pointer, account.as_str());
-                ToolError::argument(&pointer, error.to_string())
-            })?;
-            Ok(goal.require(account.clone(), basket))
-        })
+fn script_error(error: EngineError) -> ToolError {
+    ToolError::argument("/program", error.to_string())
 }
 
 /// The definitions of one kind among a package's, by their paths: the
@@ -1579,6 +1645,7 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         arguments_of::<T>(arguments).map(drop)
     }
     match tool {
+        "axionomy_economy_query" => check::<QueryRequest>(arguments),
         "axionomy_economy_create" => check::<EconomyCreateRequest>(arguments),
         "axionomy_economy_extend" => check::<EconomyExtendRequest>(arguments),
         "axionomy_exchange_assess" | "axionomy_exchange_apply" => {
@@ -1591,7 +1658,7 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         SEARCH => check::<SearchRequest>(arguments),
         "axionomy_package_source" => check::<PackageSourceRequest>(arguments),
         "axionomy_package_build" => check::<PackageBuildRequest>(arguments),
-        "axionomy_package_list" => check::<PackageListRequest>(arguments),
+        "axionomy_package_list" | "axionomy_rhai_api" => check::<PackageListRequest>(arguments),
         "axionomy_experiment_run" | "axionomy_experiment_results" => {
             check::<ExperimentRequest>(arguments)
         }
@@ -1888,10 +1955,10 @@ async fn run_search(
     source: Arc<Loaded>,
     request: SearchRequest,
     goal: paths::Goal,
+    candidates: Option<Vec<paths::Exchange>>,
 ) -> Result<CallToolResult, TaskExit> {
     let SearchRequest {
         economy_id,
-        candidates,
         max_expansions,
         chunk_size,
         ..

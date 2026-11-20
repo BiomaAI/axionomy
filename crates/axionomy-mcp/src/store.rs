@@ -81,6 +81,10 @@ pub(crate) struct Loaded {
 }
 
 impl Loaded {
+    pub fn script_state(&self) -> axionomy_engine::ScriptState {
+        axionomy_engine::ScriptState::new(self.state().economy.clone())
+    }
+
     pub fn state(&self) -> &State {
         &self.reached.state
     }

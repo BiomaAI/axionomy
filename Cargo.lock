@@ -508,6 +508,7 @@ name = "axionomy-mcp"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "axionomy-authoring",
  "axionomy-engine",
  "axionomy-problems",
  "axionomy-search",
@@ -2528,6 +2529,7 @@ dependencies = [
  "once_cell",
  "rhai_codegen",
  "serde",
+ "serde_json",
  "smallvec",
  "smartstring",
  "thin-vec",
