@@ -51,16 +51,22 @@ impl Vocabulary {
     pub(super) fn script(&self, file: &SourceFile, ast: &rhai::AST) -> Result<(), Diagnostic> {
         let mut error = None;
         ast.walk(&mut |nodes| {
-            let (call, offset) = match nodes.last() {
-                Some(ASTNode::Expr(Expr::MethodCall(call, _))) => (call, 0),
+            let (call, method) = match nodes.last() {
+                Some(ASTNode::Expr(Expr::MethodCall(call, _))) => (call, true),
                 Some(ASTNode::Expr(Expr::FnCall(call, _)))
                 | Some(ASTNode::Stmt(rhai::Stmt::FnCall(call, _)))
                     if call.namespace.is_empty() =>
                 {
-                    (call, usize::from(call.name != "exchange"))
+                    (call, false)
                 }
                 _ => return true,
             };
+            let constructor = !method
+                && matches!(
+                    call.name.as_str(),
+                    "asset" | "account" | "rate" | "role" | "exchange"
+                );
+            let offset = usize::from(!method && !constructor);
             let args = call.args.get(offset..).unwrap_or_default();
             use Kind::*;
             let kinds: &[Kind] = match (call.name.as_str(), args.len()) {
@@ -68,6 +74,10 @@ impl Vocabulary {
                 ("has_account" | "balances", 1) => &[Account],
                 ("consumed" | "produced" | "preserved", 2) => &[Rate, Role],
                 ("exchange_of" | "values" | "roles", 1) | ("exchange", 3) => &[Rate],
+                ("account", 1) if constructor => &[Account],
+                ("asset", 1) if constructor => &[Asset],
+                ("rate", 1) if constructor => &[Rate],
+                ("role", 1) if constructor => &[Role],
                 ("account", 1) => &[Role],
                 ("parameter", 2) => &[Parameter],
                 _ => return true,

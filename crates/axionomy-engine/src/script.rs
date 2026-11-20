@@ -315,6 +315,7 @@ pub(crate) fn host(scripts: Scripts) -> rhai::Engine {
     rhai.set_max_call_levels(MAX_CALL_LEVELS);
     rhai.on_print(|_| {});
     rhai.on_debug(|_, _, _| {});
+    axionomy_authoring::script::register(&mut rhai);
     quantities(&mut rhai);
     states(&mut rhai);
     exchanges(&mut rhai);
@@ -615,11 +616,7 @@ fn imports(ast: &rhai::AST) -> Result<Vec<ScriptPath>, String> {
     refused.map_or(Ok(imports), Err)
 }
 
-fn quantity_of(value: i64) -> Result<Quantity, Failure> {
-    u64::try_from(value)
-        .map(Quantity::new)
-        .map_err(|_| format!("{value} is negative, and quantities are not").into())
-}
+use axionomy_authoring::script::quantity as quantity_of;
 
 fn checked(value: Option<Quantity>, what: &str) -> Result<Quantity, Failure> {
     value.ok_or_else(|| format!("{what} is out of range").into())
@@ -634,13 +631,7 @@ fn rounding(name: &str) -> Result<Rounding, Failure> {
 }
 
 fn quantities(rhai: &mut rhai::Engine) {
-    rhai.register_type_with_name::<Quantity>("Quantity")
-        .register_fn("quantity", quantity_of)
-        .register_fn("quantity", |text: &str| -> Result<Quantity, Failure> {
-            text.parse()
-                .map_err(|_| format!("`{text}` is not a quantity").into())
-        })
-        .register_fn("to_string", |q: &mut Quantity| q.to_string())
+    rhai.register_fn("to_string", |q: &mut Quantity| q.to_string())
         .register_fn("to_debug", |q: &mut Quantity| q.to_string())
         .register_fn("is_zero", |q: &mut Quantity| q.is_zero())
         .register_fn("to_int", |q: &mut Quantity| -> Result<i64, Failure> {
@@ -695,18 +686,23 @@ fn parsed<K: PathKind>(text: &str) -> Result<Path<K>, Failure> {
         .map_err(|_| format!("`{text}` is not a {}", K::SCHEMA).into())
 }
 
+fn visible_balance(state: &mut ScriptState, account: AccountPath, asset: AssetPath) -> Quantity {
+    if state.sees(&account) {
+        state.economy.balance(&account, &asset)
+    } else {
+        Quantity::ZERO
+    }
+}
+
 fn states(rhai: &mut rhai::Engine) {
     rhai.register_type_with_name::<ScriptState>("State")
+        .register_fn("balance", visible_balance)
         .register_fn(
             "balance",
             |state: &mut ScriptState, account: &str, asset: &str| -> Result<Quantity, Failure> {
                 let account: AccountPath = parsed(account)?;
                 let asset: AssetPath = parsed(asset)?;
-                Ok(if state.sees(&account) {
-                    state.economy.balance(&account, &asset)
-                } else {
-                    Quantity::ZERO
-                })
+                Ok(visible_balance(state, account, asset))
             },
         )
         .register_fn(

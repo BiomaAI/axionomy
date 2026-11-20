@@ -443,6 +443,8 @@ name = "axionomy-authoring"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "indexmap 2.14.2",
+ "rhai",
  "serde",
 ]
 

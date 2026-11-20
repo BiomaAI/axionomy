@@ -717,3 +717,64 @@ fn scripts_that_import_one_another_are_refused() {
         ["bank/c", "bank/d", "bank/c"]
     );
 }
+
+#[test]
+fn typed_rhai_values_cross_the_engine_boundary() {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let script = path("typed-values");
+    engine
+        .keep_script(
+            &script,
+            r#"
+        fn weights() {
+            let rule = invariant("tokens");
+            for token in ["first", "second"] { rule.weight(asset(token), 1); }
+            rule.finish()
+        }
+        fn duplicate() {
+            let rule = invariant("tokens");
+            rule.weight(asset("first"), 0);
+            rule.weight(asset("first"), 2);
+        }
+        fn target() {
+            goal().require(account("bob"), basket([amount(asset("cash"), 2)]))
+        }
+        fn transfer() {
+            exchange(rate("pay"), 2)
+                .bind(role("from"), account("alice"))
+                .bind(role("to"), account("bob"))
+        }
+        fn funds(state) { state.balance(account("alice"), asset("cash")) }
+        fn wrong_kind() { amount(account("cash"), 1) }
+    "#,
+        )
+        .unwrap();
+    let invariant: paths::LinearInvariant = engine.call(&script, "weights", ()).unwrap();
+    assert_eq!(
+        invariant
+            .weights()
+            .map(|(a, w)| (a.as_str(), w))
+            .collect::<Vec<_>>(),
+        [("first", 1), ("second", 1)]
+    );
+    let goal: paths::Goal = engine.call(&script, "target", ()).unwrap();
+    assert_eq!(
+        goal.requirements()[&path("bob")].get(&path("cash")),
+        Some(&Quantity::new(2))
+    );
+    let exchange: paths::Exchange = engine.call(&script, "transfer", ()).unwrap();
+    let mut state = economy();
+    state.apply(exchange).unwrap();
+    let funds: Quantity = engine
+        .call(&script, "funds", (ScriptState::new(state),))
+        .unwrap();
+    assert_eq!(funds, Quantity::new(3));
+    assert!(
+        engine
+            .call::<()>(&script, "duplicate", ())
+            .unwrap_err()
+            .to_string()
+            .contains("already weights")
+    );
+    assert!(engine.call::<()>(&script, "wrong_kind", ()).is_err());
+}

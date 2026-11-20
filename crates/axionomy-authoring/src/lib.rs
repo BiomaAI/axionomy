@@ -7,6 +7,8 @@ use axionomy::{
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
+pub mod script;
+
 pub enum Laws {}
 impl PathKind for Laws {
     const SCHEMA: &'static str = "LawSetPath";
