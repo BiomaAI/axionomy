@@ -359,8 +359,34 @@ test("a release exposes its source and compares an uploaded build on matching se
   await page.getByRole("button", { name: "Source", exact: true }).click();
   const source = page.getByRole("region", { name: "Package source" });
   await source.getByLabel("Source file").selectOption("scripts/maze.rhai");
-  await expect(source.locator("pre").first()).toContainText("fn heuristic");
+  const editor = source.getByLabel("Rhai source");
+  await expect(editor).toHaveValue(/fn heuristic/);
+  const original = await editor.inputValue();
+  await editor.fill("fn invalid(");
+  await source.getByRole("button", { name: "Build package" }).click();
+  await expect(source.getByRole("alert")).toContainText("scripts/maze.rhai");
+  await editor.fill(original + "\n// An edited release.\n");
+  await source.getByRole("button", { name: "Build package" }).click();
+  const download = page.waitForEvent("download");
+  await source.getByRole("link", { name: "Download package" }).click();
+  const archive = await (await download).path();
+  expect(archive).toBeTruthy();
   await source.getByLabel("Experiment", { exact: true }).selectOption("maze/micro");
-  await source.getByLabel("Compare build").setInputFiles("public/packages/maze.zip");
+  await source.getByLabel("Compare build").setInputFiles(archive!);
   await expect(source.getByRole("heading", { name: "Matching trials" })).toBeVisible({ timeout: 30_000 });
+});
+
+test("Rhai at a point reads a balance and applies the assessed move", async ({ page }) => {
+  await openSample(page, "maze");
+  await openRef(page, "maze/micro");
+  await page.getByText("Rhai console", { exact: true }).click();
+  const console = fromHere(page).locator("details").filter({ has: page.getByText("Rhai console", { exact: true }) });
+  const program = console.getByLabel("Program");
+  await program.fill('state.balance(account("agent"), asset("energy"))');
+  await console.getByRole("button", { name: "Run query" }).click();
+  await expect(console.locator("pre")).toHaveText('"9"');
+  await program.fill('exchange("move/start/key-room/2/false", #{actor: "agent", environment: "world"}, 1)');
+  await console.getByRole("button", { name: "Assess exchange" }).click();
+  await console.getByRole("button", { name: "Apply assessed exchange" }).click();
+  await expect(trace(page)).toHaveAttribute("max", "1");
 });

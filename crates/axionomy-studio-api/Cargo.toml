@@ -15,8 +15,7 @@ axionomy-engine.workspace = true
 axionomy-search.workspace = true
 axionomy-store.workspace = true
 axionomy-view.workspace = true
+base64.workspace = true
 schemars.workspace = true
 serde.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true

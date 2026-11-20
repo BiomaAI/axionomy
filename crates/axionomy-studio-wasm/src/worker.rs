@@ -186,6 +186,11 @@ impl WorkerEngine {
         answer(path_of(name).and_then(|name| api::source_tree(&self.engine, &name)))
     }
 
+    #[wasm_bindgen(js_name = buildSource)]
+    pub fn build_source(&self, json: &str) -> Result<String, JsValue> {
+        answer(parsed(json).and_then(|tree| api::build_source(&tree)))
+    }
+
     #[wasm_bindgen(js_name = compareBuild)]
     pub fn compare_build(
         &self,
@@ -291,6 +296,10 @@ impl WorkerEngine {
         answer(
             point_id(point).and_then(|point| api::candidates(&self.engine, point, parsed(query)?)),
         )
+    }
+
+    pub fn query(&self, point: &str, request: &str) -> Result<String, JsValue> {
+        answer(point_id(point).and_then(|point| api::query(&self.engine, point, parsed(request)?)))
     }
 
     /// An exchange assessed at `point`; `request` is an `AssessRequest`.

@@ -275,6 +275,29 @@ pub fn source_tree(
     })
 }
 
+/// A portable release compiled from the submitted source. Its declared tests passed.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SourceBuild {
+    pub name: PackagePath,
+    pub version: PackageVersion,
+    pub tests: Vec<axionomy_engine::source::TestPath>,
+    /// Base64-encoded package ZIP for a file download.
+    pub archive: String,
+}
+
+pub fn build_source(tree: &axionomy_engine::source::SourceTree) -> Result<SourceBuild, Refusal> {
+    use base64::Engine as _;
+    let built = axionomy_engine::source::build(&tree.files)
+        .map_err(|e| Refusal::BadRequest(e.to_string()))?;
+    let archive = base64::engine::general_purpose::STANDARD.encode(built.archive()?);
+    Ok(SourceBuild {
+        name: built.name,
+        version: PackageVersion(built.version),
+        tests: built.tests,
+        archive,
+    })
+}
+
 /// Compare an uploaded build with the installed release in isolated stores.
 /// Running the comparison creates no branches in the visitor's store.
 pub fn compare_build(

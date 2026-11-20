@@ -75,6 +75,17 @@ pub(crate) async fn source_tree(
     .map(Json)
 }
 
+pub(crate) async fn build_source(
+    State(state): State<StudioState>,
+    Json(tree): Json<axionomy_engine::source::SourceTree>,
+) -> Result<Json<axionomy_studio_api::SourceBuild>, ApiError> {
+    blocking(&state.engine, move |_| {
+        axionomy_studio_api::build_source(&tree)
+    })
+    .await
+    .map(Json)
+}
+
 pub(crate) async fn compare_build(
     State(state): State<StudioState>,
     Path(BuildNames { name, experiment }): Path<BuildNames>,
@@ -174,6 +185,18 @@ pub(crate) async fn candidates(
 ) -> Result<Json<Candidates>, ApiError> {
     blocking(&state.engine, move |engine| {
         axionomy_studio_api::candidates(engine, point, query)
+    })
+    .await
+    .map(Json)
+}
+
+pub(crate) async fn query(
+    State(state): State<StudioState>,
+    Path(PointName { point }): Path<PointName>,
+    Json(request): Json<axionomy_studio_api::QueryRequest>,
+) -> Result<Json<axionomy_studio_api::QueryResult>, ApiError> {
+    blocking(&state.engine, move |engine| {
+        axionomy_studio_api::query(engine, point, request)
     })
     .await
     .map(Json)

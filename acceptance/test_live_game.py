@@ -114,7 +114,14 @@ class Studio:
         return [c["exchange"] for c in offered["candidates"]]
 
     def apply(self, point: str, exchanges: list[Exchange]) -> str:
-        applied = self.ok(self.http.post(f"/api/points/{point}/apply", json={"exchanges": exchanges}))
+        def expression(exchange: Exchange) -> str:
+            value = f'exchange(rate("{exchange["rate"]}"), quantity("{exchange["units"]}"))'
+            for role, account in exchange.get("bindings", {}).items():
+                value += f'.bind(role("{role}"), account("{account}"))'
+            return value
+
+        program = "[" + ", ".join(map(expression, exchanges)) + "]"
+        applied = self.ok(self.http.post(f"/api/points/{point}/apply", json={"program": program}))
         assert applied["from"] == point
         assert step(applied["point"]) == step(point) + len(exchanges)
         return applied["point"]

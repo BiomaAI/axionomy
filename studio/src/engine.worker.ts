@@ -81,6 +81,8 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       const loaded = read(engine.load(new Uint8Array(request.bytes), undefined, undefined, undefined)) as LoadedView;
       return { got: "loaded", loaded } satisfies LoadedFrom;
     }
+    case "build_source":
+      return read(engine.buildSource(JSON.stringify(request.tree)));
     case "source_tree":
       return read(engine.sourceTree(request.name));
     case "compare_build":
@@ -97,10 +99,12 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       return read(engine.balances(request.point));
     case "candidates":
       return read(engine.candidates(request.point, JSON.stringify({ set: request.set })));
+    case "query":
+      return read(engine.query(request.point, JSON.stringify({ program: request.program, visible_accounts: request.visible })));
     case "assess":
-      return read(engine.assess(request.point, JSON.stringify({ exchange: request.exchange })));
+      return read(engine.assess(request.point, JSON.stringify({ program: request.program })));
     case "apply":
-      return read(engine.apply(request.point, JSON.stringify({ exchanges: request.exchanges })));
+      return read(engine.apply(request.point, JSON.stringify({ program: request.program })));
     case "read_ref":
       return read(engine.readRef(request.name));
     case "create_ref":

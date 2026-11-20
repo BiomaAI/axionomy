@@ -69,14 +69,14 @@ test("a follower waits in the Worker for its ref to move, asking nothing in the 
     // The package's ref is fixed: the page follows and moves one of its own there.
     await packages.createRef("maze/followed", micro);
     const offered = await packages.candidates(micro, "maze/moves");
-    const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").exchange;
+    const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").program;
 
     // The ref does not move for a while; then another request moves it.
     const asked = posted.length;
     const waited = performance.now();
     const waiting = packages.frames("maze/followed", { after: micro, wait_seconds: 20 });
     await new Promise((resolve) => setTimeout(resolve, 1_000));
-    const applied = await packages.apply(micro, [exchange]);
+    const applied = await packages.apply(micro, `[${exchange}]`);
     await packages.advanceRef("maze/followed", micro, applied.point);
     const moved = await waiting;
     const movedAfter = performance.now() - waited;
@@ -166,8 +166,8 @@ test("cancelling a run terminates its Worker mid-run, and the next one opens the
     const start: string = refs.find((ref: { name: string }) => ref.name === "connect-four/stress").point;
     const move = async (at: string) => {
       const offered = await packages.candidates(at, "connect-four/moves");
-      const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").exchange;
-      return (await packages.apply(at, [exchange])).point as string;
+      const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").program;
+      return (await packages.apply(at, `[${exchange}]`)).point as string;
     };
     // Committed before the cancel: a drop at the point of a ref the package
     // ships, which is fixed, a ref of the page's own named there and moved

@@ -7,6 +7,7 @@ import { BrowserPackages } from "./browserPackages";
 import { PackageSource } from "./PackageSource";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
+import { RhaiConsole } from "./RhaiConsole";
 import { ExchangeEditor } from "./ExchangeEditor";
 import { ExchangeView, Holding } from "./ExchangeView";
 import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
@@ -19,7 +20,6 @@ import {
   loadedPackages,
   nativePackages,
   samplePackages,
-  type Exchange,
   type ExperimentProgress,
   type ExperimentView as ExperimentData,
   type HistoriesView,
@@ -446,12 +446,12 @@ export function PackagesApp() {
   }, [loadedUrl, packageName, opened, position, document?.id]);
 
   /** Applies `exchange` at the point on screen: at a ref of one's own the ref moves over it; anywhere else it makes a branch. */
-  const act = async (exchange: Exchange, label: string) => {
+  const act = async (program: string, label: string) => {
     if (!engine || !opened || !screenPoint) return;
     const at = screenPoint;
     const ref = onRefPoint ? opened.ref : undefined;
     try {
-      const applied = await engine.apply(at, [exchange]);
+      const applied = await engine.apply(at, `[${program}]`);
       note(applied.point, label, at);
       if (ref) {
         try {
@@ -854,7 +854,7 @@ function FromHere({ engine, pkg, document, accounts, runs, runsKey, at, playing,
   opened: Opened;
   onRefPoint: boolean;
   position: number;
-  onApply: (exchange: Exchange, label: string) => Promise<void>;
+  onApply: (program: string, label: string) => Promise<void>;
   finding: boolean;
   onLetPlay: (strategy: string, asked: Asked) => Promise<void>;
   results: ResultsView[];
@@ -871,6 +871,7 @@ function FromHere({ engine, pkg, document, accounts, runs, runsKey, at, playing,
   if (!at) return <div className="from-here"><p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p></div>;
   return <div className="from-here">
     <Moves engine={engine} pkg={pkg} at={at} onApply={onApply} />
+    <RhaiConsole key={at} engine={engine} at={at} onApply={onApply} />
     <StrategyHere key={runsKey} offered={runs} finding={finding} onLetPlay={onLetPlay} />
     <section className="from-section" aria-label="Experiments">
       <h3><Term name="experiment">Experiments</Term></h3>
@@ -885,13 +886,13 @@ function FromHere({ engine, pkg, document, accounts, runs, runsKey, at, playing,
     </section>
     <RefHere pkg={pkg} document={document} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
     <ExchangeEditor rates={document.model?.rates ?? []} accounts={ids} ontology={document.source.key} point={at}
-      onCheck={(exchange) => engine.assess(at, exchange)} onApply={onApply} />
+      onCheck={(program) => engine.assess(at, program)} onApply={onApply} />
   </div>;
 }
 
 /** The moves the package's rules offer here, each checked, each one click from applied:
  * those of the candidate set picked, or of the first that offers any here. */
-function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: PackageView; at: PointId; onApply: (exchange: Exchange, label: string) => Promise<void> }) {
+function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: PackageView; at: PointId; onApply: (program: string, label: string) => Promise<void> }) {
   const sets = useMemo(() => pkg?.candidates ?? [], [pkg]);
   const [picked, setPicked] = useState<string>();
   useEffect(() => setPicked(undefined), [pkg?.name]);
@@ -924,7 +925,7 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
           <ExchangeView exchange={exchange} assessment={assessment} />
           <div className="move-actions">
             <button type="button" className="move-details" aria-expanded={shown} aria-label="Details" title="Details" onClick={() => setOpen(shown ? undefined : index)}>{shown ? <IconChevronDown size={15} aria-hidden="true" /> : <IconChevronRight size={15} aria-hidden="true" />}</button>
-            <button type="button" className="primary" disabled={!applies || applying} onClick={async () => { setApplying(true); try { await onApply(candidate.exchange, candidate.proposal.label); } finally { setApplying(false); } }}>Apply</button>
+            <button type="button" className="primary" disabled={!applies || applying} onClick={async () => { setApplying(true); try { await onApply(candidate.program, candidate.proposal.label); } finally { setApplying(false); } }}>Apply</button>
           </div>
           {shown && <div className="move-detail"><ExchangeView form="full" exchange={exchange} assessment={assessment} /></div>}
         </li>;

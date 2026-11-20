@@ -4,6 +4,7 @@ import {
   type Applied,
   type BuildComparison,
   type SourceTree,
+  type SourceBuild,
   type Balances,
   type Candidate,
   type Candidates,
@@ -12,7 +13,7 @@ import {
   type ComparisonView,
   type DivergenceQuery,
   type DivergenceView,
-  type Exchange,
+  type RhaiInput,
   type ExperimentProgress,
   type FramesQuery,
   type HistoriesView,
@@ -45,6 +46,7 @@ export type StoreRequest =
   | { kind: "load_url"; url: string }
   | { kind: "load_bytes"; bytes: ArrayBuffer }
   | { kind: "packages" }
+  | { kind: "build_source"; tree: SourceTree }
   | { kind: "source_tree"; name: string }
   | { kind: "compare_build"; name: string; experiment: string; bytes: ArrayBuffer }
   | { kind: "experiments" }
@@ -52,8 +54,9 @@ export type StoreRequest =
   | { kind: "ancestor"; point: PointId; step: number }
   | { kind: "balances"; point: PointId }
   | { kind: "candidates"; point: PointId; set: string }
-  | { kind: "assess"; point: PointId; exchange: Exchange }
-  | { kind: "apply"; point: PointId; exchanges: Exchange[] }
+  | { kind: "query"; point: PointId; program: RhaiInput; visible?: string[] }
+  | { kind: "assess"; point: PointId; program: RhaiInput }
+  | { kind: "apply"; point: PointId; program: RhaiInput }
   | { kind: "read_ref"; name: string }
   | { kind: "create_ref"; name: string; point: PointId }
   | { kind: "advance_ref"; name: string; expected: PointId; to: PointId }
@@ -130,6 +133,10 @@ export class BrowserPackages implements PackageEngine {
     return this.request({ kind: "source_tree", name }) as Promise<SourceTree>;
   }
 
+  buildSource(tree: SourceTree): Promise<SourceBuild> {
+    return this.request({ kind: "build_source", tree }) as Promise<SourceBuild>;
+  }
+
   async compareBuild(name: string, experiment: string, file: Blob): Promise<BuildComparison> {
     return this.request({ kind: "compare_build", name, experiment, bytes: await file.arrayBuffer() }) as Promise<BuildComparison>;
   }
@@ -158,12 +165,17 @@ export class BrowserPackages implements PackageEngine {
     return this.request({ kind: "candidates", point, set }) as Promise<Candidates>;
   }
 
-  assess(point: PointId, exchange: Exchange): Promise<Candidate> {
-    return this.request({ kind: "assess", point, exchange }) as Promise<Candidate>;
+  async query(point: PointId, program: RhaiInput, visible?: string[]): Promise<unknown> {
+    const result = await this.request({ kind: "query", point, program, visible }) as {value: unknown};
+    return result.value;
   }
 
-  apply(point: PointId, exchanges: Exchange[]): Promise<Applied> {
-    return this.request({ kind: "apply", point, exchanges }) as Promise<Applied>;
+  assess(point: PointId, program: RhaiInput): Promise<Candidate> {
+    return this.request({ kind: "assess", point, program }) as Promise<Candidate>;
+  }
+
+  apply(point: PointId, program: RhaiInput): Promise<Applied> {
+    return this.request({ kind: "apply", point, program }) as Promise<Applied>;
   }
 
   readRef(name: string): Promise<RefView> {

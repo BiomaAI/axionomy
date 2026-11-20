@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { RateData } from "./api";
 import { ExchangeEditor, pathUnder, variableChoices, writeExchange, written, type Draft } from "./ExchangeEditor";
-import type { Candidate, Exchange } from "./packageEngine";
+import { exchangeSource, type Candidate, type Exchange } from "./packageEngine";
 
 const role = (path: string, label: string) => ({ role: { key: `paths/role/${path}`, label }, consumed: [], produced: [], preserved: [] });
 
@@ -62,12 +62,11 @@ describe("writing an exchange from a rate", () => {
   });
 
   test("the editor writes the instance, checks it, and applies it only once it applies", async () => {
-    const checked: Exchange[] = [];
+    const exchange: Exchange = { rate: "step/2/3", bindings: { walker: "walker", witness: "bystander" }, units: "1", parameters: { reach: "5" } };
     const applied = vi.fn(async () => undefined);
-    const onCheck = vi.fn(async (exchange: Exchange): Promise<Candidate> => {
-      checked.push(exchange);
+    const onCheck = vi.fn(async (program: string): Promise<Candidate> => {
       return {
-        exchange,
+        exchange, program,
         proposal: {
           id: "exchange/0",
           label: "Step from 2 to 3",
@@ -91,12 +90,12 @@ describe("writing an exchange from a rate", () => {
     expect(apply).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Check" }));
     await waitFor(() => expect(apply).toBeEnabled());
-    expect(checked).toEqual([{ rate: "step/2/3", bindings: { walker: "walker", witness: "bystander" }, units: "1", parameters: { reach: "5" } }]);
+    expect(onCheck).toHaveBeenCalledWith(exchangeSource(exchange));
     // Changed after the check, it is not applied until checked again.
     fireEvent.change(container.querySelector("input[name='exchange-units']")!, { target: { value: "2" } });
     expect(apply).toBeDisabled();
     fireEvent.change(container.querySelector("input[name='exchange-units']")!, { target: { value: "1" } });
     fireEvent.click(apply);
-    await waitFor(() => expect(applied).toHaveBeenCalledWith(checked[0], "Step from 2 to 3"));
+    await waitFor(() => expect(applied).toHaveBeenCalledWith(exchangeSource(exchange), "Step from 2 to 3"));
   });
 });

@@ -42,6 +42,8 @@ pub struct Candidates {
 /// the point's view, assessed against the economy there.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Candidate {
+    /// Rhai returning this exact exchange, ready to assess or apply.
+    pub program: String,
     pub exchange: paths::Exchange,
     pub proposal: ProposalView,
 }
@@ -50,14 +52,47 @@ pub struct Candidate {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AssessRequest {
-    pub exchange: paths::Exchange,
+    pub program: axionomy_engine::RhaiInput,
 }
 
 /// Exchanges to apply at a point, all of them or none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ApplyRequest {
-    pub exchanges: Vec<paths::Exchange>,
+    pub program: axionomy_engine::RhaiInput,
+}
+
+/// Inspect an immutable point using the same Rhai host as agent decisions.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryRequest {
+    pub program: axionomy_engine::RhaiInput,
+    pub visible_accounts: Option<std::collections::BTreeSet<axionomy::AccountPath>>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct QueryResult {
+    pub value: serde_json::Value,
+}
+
+fn state(engine: &Engine, point: PointId) -> Result<axionomy_engine::ScriptState, Refusal> {
+    Ok(axionomy_engine::ScriptState::new(
+        engine.reach(point.point())?.state.economy.clone(),
+    ))
+}
+
+pub fn query(
+    engine: &Engine,
+    point: PointId,
+    request: QueryRequest,
+) -> Result<QueryResult, Refusal> {
+    let mut state = state(engine, point)?;
+    if let Some(visible) = request.visible_accounts {
+        state = state.observing(visible);
+    }
+    Ok(QueryResult {
+        value: engine.query(&request.program, state)?,
+    })
 }
 
 /// A point's accounts, each with what it holds there.
@@ -244,19 +279,21 @@ pub fn assess(
     point: PointId,
     request: AssessRequest,
 ) -> Result<Candidate, Refusal> {
-    let mut presented = presented(engine, point, vec![request.exchange])?;
+    let exchange = engine.evaluate_exchange(&request.program, state(engine, point)?)?;
+    let mut presented = presented(engine, point, vec![exchange])?;
     Ok(presented.remove(0))
 }
 
 /// Exchanges applied at `point`, all of them or none, recorded as a run
 /// forked from it.
 pub fn apply(engine: &Engine, point: PointId, request: ApplyRequest) -> Result<Applied, Refusal> {
-    if request.exchanges.is_empty() {
+    let exchanges = engine.evaluate_exchanges(&request.program, state(engine, point)?)?;
+    if exchanges.is_empty() {
         return Err(Refusal::BadRequest(
             "apply at least one exchange; applying none reaches the point itself".into(),
         ));
     }
-    let reached = engine.apply(point.point(), &request.exchanges)?;
+    let reached = engine.apply(point.point(), &exchanges)?;
     Ok(Applied {
         from: point,
         point: reached.into(),
@@ -317,6 +354,10 @@ fn presented(
     Ok(exchanges
         .into_iter()
         .zip(proposals)
-        .map(|(exchange, proposal)| Candidate { exchange, proposal })
+        .map(|(exchange, proposal)| Candidate {
+            program: axionomy_engine::exchange_source(&exchange),
+            exchange,
+            proposal,
+        })
         .collect())
 }

@@ -11,6 +11,7 @@ type Schemas = components["schemas"];
 
 export type PointId = Schemas["PointId"];
 export type SourceTree = Schemas["SourceTree"];
+export type SourceBuild = Schemas["SourceBuild"];
 export type BuildComparison = Schemas["BuildComparison"];
 export type PackageList = Schemas["PackageList"];
 export type PackageView = Schemas["PackageView"];
@@ -21,6 +22,20 @@ export type ReleaseView = Schemas["ReleaseView"];
 export type Candidates = Schemas["Candidates"];
 export type Candidate = Schemas["Candidate"];
 export type Exchange = Schemas["Exchange"];
+export type RhaiInput = Schemas["RhaiInput"];
+
+export function exchangeSource(exchange: Exchange): string {
+  const literal = (value: string) => JSON.stringify(value);
+  let source = `exchange(rate(${literal(exchange.rate)}), quantity(${literal(exchange.units)}))`;
+  for (const [role, account] of Object.entries(exchange.bindings ?? {})) {
+    source += `.bind(role(${literal(role)}), account(${literal(account)}))`;
+  }
+  for (const [name, value] of Object.entries(exchange.parameters ?? {})) {
+    source += `.parameter(${literal(name)}, quantity(${literal(value)}))`;
+  }
+  return source;
+}
+
 export type Applied = Schemas["Applied"];
 export type Balances = Schemas["Balances"];
 export type StrategyRequest = Schemas["StrategyRequest"];
@@ -94,6 +109,7 @@ export interface PackageEngine {
   readonly kind: "native" | "browser";
   store(): Promise<StoreKept>;
   packages(): Promise<PackageList>;
+  buildSource(tree: SourceTree): Promise<SourceBuild>;
   sourceTree(name: string): Promise<SourceTree>;
   compareBuild(name: string, experiment: string, file: Blob): Promise<BuildComparison>;
   /** Loads a package file the visitor picked. */
@@ -106,8 +122,9 @@ export interface PackageEngine {
   /** Every account at `point` and what it holds there. */
   balances(point: PointId): Promise<Balances>;
   candidates(point: PointId, set: string): Promise<Candidates>;
-  assess(point: PointId, exchange: Exchange): Promise<Candidate>;
-  apply(point: PointId, exchanges: Exchange[]): Promise<Applied>;
+  query(point: PointId, program: RhaiInput, visible?: string[]): Promise<unknown>;
+  assess(point: PointId, program: RhaiInput): Promise<Candidate>;
+  apply(point: PointId, program: RhaiInput): Promise<Applied>;
   readRef(name: string): Promise<RefView>;
   createRef(name: string, point: PointId): Promise<RefView>;
   /**
@@ -257,6 +274,9 @@ export const nativePackages: PackageEngine = {
   async sourceTree(name) {
     return answered(await api.GET("/api/packages/{name}/source", { params: { path: { name } } }));
   },
+  async buildSource(tree) {
+    return answered(await api.POST("/api/packages/build", { body: tree }));
+  },
   async compareBuild(name, experiment, file) {
     const path = `/api/packages/${encodeURIComponent(name)}/compare/${encodeURIComponent(experiment)}`;
     const response = await fetch(path, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file });
@@ -294,11 +314,14 @@ export const nativePackages: PackageEngine = {
   async candidates(point, set) {
     return answered(await api.GET("/api/points/{point}/candidates", { params: { path: { point }, query: { set } } }));
   },
-  async assess(point, exchange) {
-    return answered(await api.POST("/api/points/{point}/assess", { params: { path: { point } }, body: { exchange } }));
+  async query(point, program, visible) {
+    return answered(await api.POST("/api/points/{point}/query", { params: { path: { point } }, body: { program, visible_accounts: visible } })).value;
   },
-  async apply(point, exchanges) {
-    return answered(await api.POST("/api/points/{point}/apply", { params: { path: { point } }, body: { exchanges } }));
+  async assess(point, program) {
+    return answered(await api.POST("/api/points/{point}/assess", { params: { path: { point } }, body: { program } }));
+  },
+  async apply(point, program) {
+    return answered(await api.POST("/api/points/{point}/apply", { params: { path: { point } }, body: { program } }));
   },
   async readRef(name) {
     return answered(await api.GET("/api/refs/{name}", { params: { path: { name } } }));

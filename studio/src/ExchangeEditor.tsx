@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { RateData, ViewId } from "./api";
 import { ExchangeView, Written } from "./ExchangeView";
-import type { Candidate, Exchange } from "./packageEngine";
+import { exchangeSource, type Candidate, type Exchange } from "./packageEngine";
 import { Term } from "./Term";
 
 type Pieces = NonNullable<RateData["pattern"]>;
@@ -159,8 +159,8 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
   ontology: string;
   /** Where the exchange is checked: a check made elsewhere does not hold here. */
   point: string;
-  onCheck: (exchange: Exchange) => Promise<Candidate>;
-  onApply: (exchange: Exchange, label: string) => Promise<void>;
+  onCheck: (program: string) => Promise<Candidate>;
+  onApply: (program: string, label: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("");
   const [draft, setDraft] = useState<Draft>(() => draftOf(rates[0]));
@@ -187,7 +187,7 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
   const check = async () => {
     if (!exchange || !key) return;
     setProblem(undefined);
-    try { setAssessed({ written: key, candidate: await onCheck(exchange) }); } catch (cause) { setProblem(cause instanceof Error ? cause.message : String(cause)); }
+    try { setAssessed({ written: key, candidate: await onCheck(exchangeSource(exchange)) }); } catch (cause) { setProblem(cause instanceof Error ? cause.message : String(cause)); }
   };
   return <section className="from-section exchange-editor" aria-label="Exchange">
     <h3><Term name="exchange">Exchange</Term></h3>
@@ -228,7 +228,7 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
       <button type="button" className="primary" disabled={!ready || applying} onClick={async () => {
         if (!current) return;
         setApplying(true);
-        try { await onApply(current.exchange, current.proposal.label); } finally { setApplying(false); }
+        try { await onApply(current.program, current.proposal.label); } finally { setApplying(false); }
       }}>Apply</button>
     </div>
     {"lacks" in written && <p className="muted">Needs {written.lacks}</p>}

@@ -2,6 +2,7 @@
 //! Only a successful build can be exported or installed.
 mod compare;
 pub use compare::{BuildComparison, compare};
+mod archive;
 mod files;
 mod scripts;
 mod tests;
@@ -255,7 +256,7 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
                 instances.insert(id, files::parse(&host, file, text)?);
             }
             SourceFile::Script(id) | SourceFile::Library(id) => {
-                if scripts.insert(id, text.as_str()).is_some() {
+                if scripts.insert(id, (file, text.as_str())).is_some() {
                     return Err(Diagnostic::new(
                         file,
                         format!("duplicate script module {id}"),
@@ -275,11 +276,10 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
             ));
         }
     }
-    for id in scripts.keys() {
-        scoped(&header.name, id.as_str())
-            .map_err(|e| Diagnostic::new(SourceFile::Script((*id).clone()), e))?;
+    for (id, (file, _)) in &scripts {
+        scoped(&header.name, id.as_str()).map_err(|e| Diagnostic::new(file, e))?;
     }
-    let script_ids: Vec<_> = scripts.keys().copied().collect();
+    let script_files: Vec<_> = scripts.iter().map(|(&id, &(file, _))| (id, file)).collect();
     for (id, instance) in instances {
         let file = SourceFile::Instance(id.clone());
         scoped(&header.name, id.as_str()).map_err(|e| Diagnostic::new(&file, e))?;
@@ -333,13 +333,11 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
         let mut load = id;
         let mut visiting = BTreeSet::new();
         loop {
+            let (file, source) = scripts[load];
             if !visiting.insert(load) {
-                return Err(Diagnostic::new(
-                    SourceFile::Script(load.clone()),
-                    "cyclic script import",
-                ));
+                return Err(Diagnostic::new(file, "cyclic script import"));
             }
-            match engine.keep_script(load, scripts[load]) {
+            match engine.keep_script(load, source) {
                 Ok(()) => {
                     scripts.remove(load);
                     break;
@@ -349,13 +347,12 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
                 {
                     load = *scripts.get_key_value(import).expect("present").0;
                 }
-                Err(e) => return Err(scripts::diagnose(&engine, load, scripts[load], e)),
+                Err(e) => return Err(scripts::diagnose(&engine, file, source, e)),
             }
         }
     }
-    for id in script_ids {
-        let file = SourceFile::Script(id.clone());
-        let compiled = engine.compiled(id).map_err(|e| Diagnostic::new(&file, e))?;
+    for (id, file) in script_files {
+        let compiled = engine.compiled(id).map_err(|e| Diagnostic::new(file, e))?;
         let interfaces = if let Some(ids) = header.script_ontologies.get(id) {
             ids.iter().collect::<Vec<_>>()
         } else if vocabularies.len() == 1 {
@@ -379,7 +376,7 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
                     format!("script {id} has unknown ontology {ontology}"),
                 )
             })?;
-            vocab.script(&file, &compiled.ast)?;
+            vocab.script(file, &compiled.ast)?;
         }
     }
     let file = SourceFile::Definitions;

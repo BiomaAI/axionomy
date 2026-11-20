@@ -695,6 +695,7 @@ input[type="search"] { min-height: 32px; padding: 0 10px; border: 1px solid var(
 .package-source { margin: 1rem; padding: 1rem; min-width: 0; }
 .package-source h2 { margin: 0 0 .8rem; }
 .package-source select { max-width: 100%; }
+.package-source textarea { box-sizing: border-box; width: 100%; resize: vertical; font-family: monospace; }
 .package-source pre { overflow: auto; max-height: 24rem; padding: .75rem; border: 1px solid currentColor; }
 .source-comparison { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
 .source-results { flex-basis: 100%; }

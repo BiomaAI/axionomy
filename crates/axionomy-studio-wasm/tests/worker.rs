@@ -144,7 +144,7 @@ fn from<T: serde::de::DeserializeOwned>(json: &str) -> T {
 }
 
 fn apply_request(candidate: &Value) -> String {
-    json!({ "exchanges": [candidate["exchange"]] }).to_string()
+    json!({ "program": format!("[{}]",candidate["program"].as_str().unwrap()) }).to_string()
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn the_worker_offers_the_operations_the_server_offers() {
         .find(|candidate| candidate["proposal"]["assessment"]["status"] == "applicable")
         .unwrap()
         .clone();
-    let assess = json!({ "exchange": candidate["exchange"] }).to_string();
+    let assess = json!({ "program": candidate["program"] }).to_string();
     let assessed = parsed(&worker.assess(&start, &assess).unwrap());
     assert_eq!(assessed["proposal"]["assessment"]["status"], "applicable");
     let applied = parsed(&worker.apply(&start, &apply_request(&candidate)).unwrap());

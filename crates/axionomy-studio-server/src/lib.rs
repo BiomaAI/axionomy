@@ -121,6 +121,9 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         )
         .bytes_body("A package file: a store file, or a zip holding one")
         .fallible(),
+        Endpoint::new::<axionomy_studio_api::SourceBuild>("post","/api/packages/build",post(engine::build_source).layer(DefaultBodyLimit::max(MAX_PACKAGE_BYTES)))
+            .describe("buildPackageSource","Compile Rhai source, run its economic tests and download the package","packages")
+            .json_body::<axionomy_engine::source::SourceTree>().fallible(),
         Endpoint::new::<axionomy_engine::source::SourceTree>("get","/api/packages/{name}/source",get(engine::source_tree))
             .describe("getPackageSource","Read the editable files of this release","packages").path_parameters::<PackageName>().fallible(),
         Endpoint::new::<axionomy_engine::source::BuildComparison>("post","/api/packages/{name}/compare/{experiment}",post(engine::compare_build).layer(DefaultBodyLimit::max(MAX_PACKAGE_BYTES)))
@@ -187,6 +190,9 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         .path_parameters::<PointName>()
         .query::<CandidatesQuery>()
         .fallible(),
+        Endpoint::new::<axionomy_studio_api::QueryResult>("post", "/api/points/{point}/query", post(engine::query))
+            .describe("queryPoint", "Read a point through a Rhai expression or named function", "points")
+            .path_parameters::<PointName>().json_body::<axionomy_studio_api::QueryRequest>().fallible(),
         Endpoint::new::<Candidate>("post", "/api/points/{point}/assess", post(engine::assess))
             .describe(
                 "assessExchange",

@@ -144,11 +144,11 @@ impl Vocabulary {
 /// scripts use the engine's cached compilation.
 pub(super) fn diagnose(
     engine: &Engine,
-    id: &ScriptPath,
+    file: &SourceFile,
     source: &str,
     error: EngineError,
 ) -> Diagnostic {
-    let mut d = Diagnostic::new(SourceFile::Script(id.clone()), &error);
+    let mut d = Diagnostic::new(file, &error);
     let pos = match engine.host.compile(source) {
         Err(parse) => Some(parse.position()),
         Ok(ast) => {

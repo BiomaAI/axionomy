@@ -119,6 +119,9 @@ impl From<EngineError> for Refusal {
             | EngineError::UnknownPoint(_)
             | EngineError::Undefined(_)
             | EngineError::UnknownScript(_) => Self::NotFound(error.to_string()),
+            EngineError::Operation(_)
+            | EngineError::Returned { .. }
+            | EngineError::Script { .. } => Self::BadRequest(error.to_string()),
             EngineError::Shipped { .. } => Self::Forbidden(error.to_string()),
             EngineError::Backward { .. } => Self::BadRequest(format!(
                 "{error}: a ref moves only forward, to a point whose history passes through where it is"

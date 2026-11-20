@@ -110,6 +110,11 @@ async fn load(router: &Router, bytes: Vec<u8>) -> (StatusCode, Value) {
     send(router, request).await
 }
 
+fn program(exchange: &serde_json::Value) -> String {
+    let exchange = serde_json::from_value(exchange.clone()).unwrap();
+    axionomy_engine::exchange_source(&exchange)
+}
+
 fn point(value: &Value) -> PointId {
     value.as_str().unwrap().parse().unwrap()
 }
@@ -230,14 +235,14 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let assessed = ok(post(
         &router,
         &format!("/api/points/{start}/assess"),
-        json!({ "exchange": first }),
+        json!({ "program": program(&first) }),
     )
     .await);
     assert_eq!(assessed["proposal"]["assessment"]["status"], "applicable");
     let applied = ok(post(
         &router,
         &format!("/api/points/{start}/apply"),
-        json!({ "exchanges": [first] }),
+        json!({ "program": format!("[{}]", program(&first)) }),
     )
     .await);
     assert_eq!(point(&applied["from"]), start);
@@ -294,7 +299,7 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let other = ok(post(
         &router,
         &format!("/api/points/{start}/apply"),
-        json!({ "exchanges": [second] }),
+        json!({ "program": format!("[{}]", program(&second)) }),
     )
     .await);
     let (status, conflict) = post(
@@ -314,7 +319,7 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let branched = ok(post(
         &router,
         &format!("/api/points/{earlier}/apply"),
-        json!({ "exchanges": [second] }),
+        json!({ "program": format!("[{}]", program(&second)) }),
     )
     .await);
     let branch = point(&branched["point"]);
@@ -337,7 +342,7 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     let (status, refused) = post(
         &router,
         &format!("/api/points/{start}/apply"),
-        json!({ "exchanges": [impossible] }),
+        json!({ "program": format!("[{}]", program(&impossible)) }),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
@@ -507,7 +512,7 @@ async fn the_history_tree_grows_with_every_branch_and_each_change_streams_as_it_
     let applied = ok(post(
         &router,
         &format!("/api/points/{start}/apply"),
-        json!({ "exchanges": [first] }),
+        json!({ "program": format!("[{}]", program(&first)) }),
     )
     .await);
     let branch = json!({ "from": start.to_string(), "tip": applied["point"] });
