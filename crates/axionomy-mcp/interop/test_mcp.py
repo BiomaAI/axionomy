@@ -1054,7 +1054,7 @@ async def test_snapshots_on_disk_outlive_the_server(tmp_path, samples: Path) -> 
 async def test_an_author_builds_edits_and_exports_a_complete_package(tmp_path: Path) -> None:
     directory = REPOSITORY / "examples" / "packages" / "pantry"
     files = {str(f.relative_to(directory)): f.read_text() for f in directory.rglob("*")
-             if f.is_file() and f.suffix in {".rhai", ".json"}}
+             if f.is_file() and f.suffix == ".rhai"}
     with running() as base_url:
         async with Client(f"{base_url}/mcp") as client:
             built = await client.call_tool("axionomy_package_build", {"files": files, "install": True, "export": True})

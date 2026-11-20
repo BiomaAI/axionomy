@@ -942,7 +942,7 @@ impl AxionomyMcp {
             .as_ref()
             .map(|p| self.archive.engine().evaluate_goal(p, after.script_state()))
             .transpose()
-            .map_err(script_error)?;
+            .map_err(|e| ToolError::argument("/goal", e.to_string()))?;
         let followed = self
             .archive
             .frames(
@@ -1265,7 +1265,7 @@ impl AxionomyMcp {
                     .evaluate_exchanges(p, source.script_state())
             })
             .transpose()
-            .map_err(script_error)?;
+            .map_err(|e| ToolError::argument("/candidates", e.to_string()))?;
         if let Some(list) = &candidates
             && list.len() > MAX_EXCHANGES
         {
@@ -1275,7 +1275,7 @@ impl AxionomyMcp {
             .archive
             .engine()
             .evaluate_goal(&request.goal, source.script_state())
-            .map_err(script_error)?;
+            .map_err(|e| ToolError::argument("/goal", e.to_string()))?;
         let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
             Box::pin(run_search(

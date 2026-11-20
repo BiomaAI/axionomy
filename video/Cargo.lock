@@ -592,7 +592,12 @@ name = "axionomy-authoring"
 version = "0.3.0"
 dependencies = [
  "axionomy",
+ "indexmap 2.14.2",
+ "rhai",
  "serde",
+ "serde_ignored",
+ "serde_path_to_error",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -615,12 +620,11 @@ dependencies = [
  "axionomy-units",
  "axionomy-view",
  "postcard",
+ "redb",
  "rhai",
  "schemars 1.2.3",
  "serde",
- "serde_ignored",
  "serde_json",
- "serde_path_to_error",
  "thiserror 2.0.21",
  "zip",
 ]
@@ -4052,6 +4056,7 @@ dependencies = [
  "once_cell",
  "rhai_codegen",
  "serde",
+ "serde_json",
  "smallvec",
  "smartstring",
  "thin-vec",
