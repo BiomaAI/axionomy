@@ -103,6 +103,14 @@ impl ScriptState {
         .observation_key()
     }
 
+    pub fn observing(&self, mut visible: BTreeSet<AccountPath>) -> Self {
+        visible.retain(|account| self.sees(account));
+        Self {
+            economy: self.economy.view(visible.iter().cloned()).snapshot(),
+            visible: Some(Arc::new(visible)),
+        }
+    }
+
     fn sees(&self, account: &AccountPath) -> bool {
         self.visible
             .as_ref()
@@ -301,7 +309,10 @@ fn instance<'a>(state: &'a ScriptState, rate: &str) -> Result<Instance<'a, Paths
 pub(crate) fn host(scripts: Scripts) -> rhai::Engine {
     let mut rhai = rhai::Engine::new();
     rhai.set_module_resolver(Imports(scripts));
-    rhai.set_max_operations(MAX_OPERATIONS);
+    rhai.set_max_operations(MAX_OPERATIONS)
+        .set_max_array_size(250_000)
+        .set_max_map_size(100_000)
+        .set_max_string_size(4 * 1024 * 1024);
     // Rhai's defaults reject the nesting an ordinary policy reaches.
     rhai.set_max_expr_depths(MAX_DEPTH, MAX_DEPTH / 2);
     rhai.set_max_call_levels(MAX_CALL_LEVELS);
@@ -709,15 +720,17 @@ fn states(rhai: &mut rhai::Engine) {
         .register_fn(
             "view",
             |state: &mut ScriptState, accounts: Array| -> Result<ScriptState, Failure> {
-                let mut visible = accounts
+                let visible = accounts
                     .into_iter()
-                    .map(|account| parsed(&text(account)?))
-                    .collect::<Result<BTreeSet<_>, _>>()?;
-                visible.retain(|account| state.sees(account));
-                Ok(ScriptState {
-                    economy: state.economy.view(visible.iter().cloned()).snapshot(),
-                    visible: Some(Arc::new(visible)),
-                })
+                    .map(|account| {
+                        if account.is::<AccountPath>() {
+                            Ok(account.cast::<AccountPath>())
+                        } else {
+                            parsed(&text(account)?)
+                        }
+                    })
+                    .collect::<Result<BTreeSet<_>, Failure>>()?;
+                Ok(state.observing(visible))
             },
         )
         .register_fn(

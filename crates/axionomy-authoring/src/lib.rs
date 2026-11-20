@@ -7,6 +7,7 @@ use axionomy::{
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
+pub mod model;
 pub mod program;
 
 pub mod script;
@@ -118,6 +119,8 @@ pub struct Instance<O: Ontology> {
     pub tables: BTreeMap<Pattern<O::Rate>, Tables>,
     pub accounts: Vec<(O::Account, Account<O::Asset>)>,
     #[serde(default)]
+    pub rates: Vec<Law<O>>,
+    #[serde(default)]
     pub constants: BTreeMap<VariablePath, Segment>,
     #[serde(default)]
     pub invariants: Vec<LinearInvariant<O::Asset>>,
@@ -143,20 +146,23 @@ impl<O: Ontology> Instance<O> {
             builder = builder.account(id, account);
         }
         let mut tables = self.tables;
-        for set in self.laws {
-            let rates = resolve(&set).ok_or_else(|| format!("unknown law set {set}"))?;
-            for (key, law) in rates {
-                let mut rate = law.clone();
-                if let Some(table) = tables.remove(key) {
-                    for v in table.variables {
-                        rate = rate.variable(v);
-                    }
-                    for r in table.relations {
-                        rate = rate.relation(r);
-                    }
+        let inline = expand(self.rates)?;
+        let sets = self
+            .laws
+            .iter()
+            .map(|set| resolve(set).ok_or_else(|| format!("unknown law set {set}")))
+            .collect::<Result<Vec<_>, _>>()?;
+        for (key, law) in sets.into_iter().chain(std::iter::once(&inline)).flatten() {
+            let mut rate = law.clone();
+            if let Some(table) = tables.remove(key) {
+                for v in table.variables {
+                    rate = rate.variable(v);
                 }
-                builder = builder.rate_at(key.clone(), rate);
+                for r in table.relations {
+                    rate = rate.relation(r);
+                }
             }
+            builder = builder.rate_at(key.clone(), rate);
         }
         if let Some((key, _)) = tables.first_key_value() {
             return Err(format!("tables for unknown rate {key}"));

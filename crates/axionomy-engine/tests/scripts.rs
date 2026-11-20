@@ -778,3 +778,39 @@ fn typed_rhai_values_cross_the_engine_boundary() {
     );
     assert!(engine.call::<()>(&script, "wrong_kind", ()).is_err());
 }
+
+#[test]
+fn interactive_operations_use_the_same_state_and_values_as_named_scripts() {
+    use axionomy_engine::{RhaiInput, ScriptCall, exchange_source};
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let state = ScriptState::new(economy());
+    let script = path("payments");
+    engine.keep_script(&script, r#"
+        fn decide(s) {
+            let units = s.balance(account("alice"), asset("cash")).min(quantity(2));
+            exchange(rate("pay"), units).bind(role("from"), account("alice")).bind(role("to"), account("bob"))
+        }
+    "#).unwrap();
+    let named = RhaiInput::Function(ScriptCall::new(script, "decide".parse().unwrap()));
+    let proposed = engine.evaluate_exchange(&named, state.clone()).unwrap();
+    let inline = RhaiInput::Source(exchange_source(&proposed));
+    assert_eq!(
+        engine.evaluate_exchange(&inline, state.clone()).unwrap(),
+        proposed
+    );
+    let query = RhaiInput::Source(
+        r#"#{owner:account("alice"), amount:state.balance(account("alice"), asset("cash"))}"#
+            .into(),
+    );
+    assert_eq!(
+        engine.query(&query, state.clone()).unwrap(),
+        serde_json::json!({"owner":"alice","amount":"5"})
+    );
+    let hidden = state.observing([path("bob")].into());
+    assert_eq!(engine.query(&query, hidden).unwrap()["amount"], "0");
+    assert!(engine.evaluate_exchange(&query, state.clone()).is_err());
+    assert_eq!(
+        state.economy().balance(&path("alice"), &path("cash")),
+        Quantity::new(5)
+    );
+}

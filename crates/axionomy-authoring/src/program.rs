@@ -179,6 +179,8 @@ pub fn normalize(value: Dynamic) -> Result<Dynamic, Box<EvalAltResult>> {
             *item = normalize(std::mem::take(item))?;
         }
         return Ok(Dynamic::from(items));
+    } else if value.is::<crate::model::NamedLaw>() {
+        return rhai::serde::to_dynamic(value.cast::<crate::model::NamedLaw>());
     } else if value.is::<crate::vocabulary::Vocabulary>() {
         return rhai::serde::to_dynamic(value.cast::<crate::vocabulary::Vocabulary>());
     } else if value.is::<script::Invariant>() {

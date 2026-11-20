@@ -73,7 +73,8 @@ pub type ExperimentPath = Path<kind::Experiment>;
 
 /// The name of a function a script defines: a Rhai identifier, such as
 /// `heuristic` or `decide_seen`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, schemars::JsonSchema)]
+#[schemars(transparent)]
 pub struct ScriptFunction(Box<str>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -124,7 +125,8 @@ impl<'de> Deserialize<'de> for ScriptFunction {
 }
 
 /// One function of one script.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ScriptCall {
     pub script: ScriptPath,
     pub function: ScriptFunction,

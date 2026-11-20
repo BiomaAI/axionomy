@@ -61,6 +61,29 @@ impl Invariant {
 pub fn register(engine: &mut Engine) {
     use axionomy::path::kind;
     quantities(engine);
+    for (name, comparison) in [
+        ("balance_equals", axionomy::QuantityComparison::Equal),
+        (
+            "balance_at_least",
+            axionomy::QuantityComparison::GreaterThanOrEqual,
+        ),
+        (
+            "balance_at_most",
+            axionomy::QuantityComparison::LessThanOrEqual,
+        ),
+    ] {
+        engine.register_fn(
+            name,
+            move |account: AccountPath, asset: AssetPath, quantity: Quantity| BalanceCondition {
+                account,
+                asset,
+                comparison,
+                quantity,
+            },
+        );
+    }
+    engine.register_type_with_name::<BalanceCondition>("BalanceCondition");
+    crate::model::register(engine);
     identifier::<kind::Account>(engine, "account");
     identifier::<kind::Asset>(engine, "asset");
     identifier::<kind::Rate>(engine, "rate");
@@ -207,4 +230,12 @@ fn quantities(rhai: &mut rhai::Engine) {
         ">" => |a: Quantity, b: Quantity| a > b,
         ">=" => |a: Quantity, b: Quantity| a >= b
     );
+}
+
+#[derive(Clone)]
+pub struct BalanceCondition {
+    pub account: AccountPath,
+    pub asset: AssetPath,
+    pub comparison: axionomy::QuantityComparison,
+    pub quantity: Quantity,
 }

@@ -5,10 +5,12 @@ pub mod definitions;
 mod divergence;
 mod experiment;
 mod histories;
+mod operation;
 mod package;
 mod refs;
 pub mod script;
 pub mod source;
+pub use operation::{RhaiInput, exchange_source};
 mod strategy;
 mod view;
 
@@ -55,6 +57,8 @@ const CACHED: usize = 32;
 
 #[derive(Debug, Clone, Error)]
 pub enum EngineError {
+    #[error("Rhai operation: {0}")]
+    Operation(String),
     #[error(transparent)]
     Store(#[from] StoreError),
     #[error("step {} of run {} is not a point of this store", .0.step, .0.run)]

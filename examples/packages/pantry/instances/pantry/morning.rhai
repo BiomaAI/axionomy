@@ -1,13 +1,9 @@
-let model = #{ontology: "pantry", laws: ["delivery"]};
-let accounts = [];
-accounts.push(opening(account("stockroom"), basket([amount(asset("meal"), 3)])));
-accounts.push(opening(account("counter"), basket([])));
-model.accounts = accounts;
-let rules = [];
-{
-    let rule = invariant("meals");
-    rule.weight(asset("meal"), 1);
-    rules.push(rule.finish());
-}
-model.invariants = rules;
-model
+let pantry = model();
+let meal = asset("meal");
+pantry.open(account("stockroom"), basket([amount(meal, 3)]));
+pantry.open(account("counter"), basket([]));
+
+let meals = invariant("meals");
+meals.weight(meal, 1);
+pantry.add(meals.finish());
+pantry.instance("pantry", ["delivery"])
