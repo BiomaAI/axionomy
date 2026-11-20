@@ -10,12 +10,12 @@ axionomy-engine = { path = "../crates/axionomy-engine" }
 axionomy-problems = { path = "../crates/axionomy-problems", features = ["packages"] }
 axionomy-rl = { path = "../crates/axionomy-rl" }
 axionomy-store = { path = "../crates/axionomy-store" }
-fframes = { version = "=1.4.0", features = ["compile-time-svgtree", "cli"] }
-fframes_skia_renderer = { version = "=1.4.0", features = ["metal"] }
-fframes_native_player = { version = "=1.4.0", default-features = false, features = ["metal", "audio"] }
+fframes = { git = "https://github.com/dmtrKovalenko/fframes", rev = "49b76066abbc95f5c77ce7755f478e0bfcefc9f2", features = ["compile-time-svgtree", "cli"] }
+fframes_skia_renderer = { git = "https://github.com/dmtrKovalenko/fframes", rev = "49b76066abbc95f5c77ce7755f478e0bfcefc9f2", features = ["metal"] }
+fframes_native_player = { git = "https://github.com/dmtrKovalenko/fframes", rev = "49b76066abbc95f5c77ce7755f478e0bfcefc9f2", default-features = false, features = ["metal", "audio"] }
 
 [target.'cfg(not(windows))'.dependencies]
-fframes = { version = "=1.4.0", features = ["h264", "libav-agree-gpl"] }
+fframes = { git = "https://github.com/dmtrKovalenko/fframes", rev = "49b76066abbc95f5c77ce7755f478e0bfcefc9f2", features = ["h264", "libav-agree-gpl"] }
 
 [lib]
 name = "axionomy_video"

@@ -58,9 +58,10 @@ cargo run --release -- render -o axionomy.mp4
 ```
 
 The video is its own workspace: fframes builds Skia and ffmpeg, so the root
-workspace excludes it. `Cargo.lock` keeps `fframes-media` and
-`fframes-media-dir-macro` at 1.4.0, since their 1.4.1 releases do not build
-with fframes 1.4.0.
+workspace excludes it. The renderer, player and media dependencies come from
+the same upstream v1.4.1 tag. Its renderer and SVG parser both use the patched
+`lru` crate. Cargo pins the Git revision because crates.io carries only part of
+that release.
 
 The fonts in `media/`, DM Sans and JetBrains Mono, are under the SIL Open
 Font License; their licenses are in `licenses/`.
