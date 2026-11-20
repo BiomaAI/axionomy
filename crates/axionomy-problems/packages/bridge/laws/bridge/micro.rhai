@@ -1,0 +1,120 @@
+[
+    [
+        "claim-first/{agent}",
+        #{
+            accounts: [["bridge", "bridge"], ["traveler", "agent/{agent}"]],
+            consume: [["bridge", [["capacity-free", "1"], ["first-turn", "1"]]], ["traveler", [["can-bid", "1"]]]],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [["traveler", [["crossing-right", "1"], ["priority-benefit", "1"]]]],
+            variables: [#{name: "agent", values: ["a", "b"]}]
+        }
+    ],
+    [
+        "claim-second/{agent}",
+        #{
+            accounts: [["bridge", "bridge"], ["traveler", "agent/{agent}"]],
+            consume: [["bridge", [["capacity-free", "1"], ["second-turn", "1"]]], ["traveler", [["can-bid", "1"]]]],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [["traveler", [["crossing-right", "1"]]]],
+            variables: [#{name: "agent", values: ["a", "b"]}]
+        }
+    ],
+    [
+        "cross/{agent}",
+        #{
+            accounts: [["bridge", "bridge"], ["traveler", "agent/{agent}"]],
+            consume: [["traveler", [["crossing-right", "1"], ["at/west", "1"], ["energy", "1"]]]],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [
+                ["bridge", [["capacity-free", "1"], ["second-turn", "1"]]],
+                ["traveler", [["crossed", "1"], ["at/east", "1"], ["spent-energy", "1"]]]
+            ],
+            variables: [#{name: "agent", values: ["a", "b"]}]
+        }
+    ],
+    [
+        "finish",
+        #{
+            accounts: [["agent-a", "agent/a"], ["agent-b", "agent/b"], ["bridge", "bridge"]],
+            consume: [["bridge", [["active", "1"]]]],
+            distinct: [],
+            preserve: [["agent-a", [["crossed", "1"]]], ["agent-b", [["crossed", "1"]]]],
+            produce: [["bridge", [["solved", "1"]]]]
+        }
+    ],
+    [
+        "resolve/a/{winning-bid}/{losing-bid}",
+        #{
+            accounts: [["bridge", "bridge"], ["loser", "agent/b"], ["winner", "agent/a"]],
+            computed_consume: [
+                #{asset: "escrow", quantity: #{kind: "variable", name: "winning-bid"}, role: "winner"},
+                #{asset: "escrow", quantity: #{kind: "variable", name: "losing-bid"}, role: "loser"}
+            ],
+            computed_produce: [
+                #{asset: "spent-credit", quantity: #{kind: "variable", name: "winning-bid"}, role: "winner"},
+                #{asset: "credit", quantity: #{kind: "variable", name: "losing-bid"}, role: "loser"}
+            ],
+            consume: [
+                ["bridge", [["capacity-free", "1"], ["first-turn", "1"]]],
+                ["loser", [["submitted", "1"], ["bid/{losing-bid}", "1"]]],
+                ["winner", [["submitted", "1"], ["bid/{winning-bid}", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [["loser", [["waiting", "1"]]], ["winner", [["crossing-right", "1"], ["priority-benefit", "1"]]]],
+            variables: [#{name: "winning-bid", range: ["1", "2"]}, #{name: "losing-bid", range: ["1", "2"]}],
+            relations: [#{rows: [["1", "1"], ["2", "1"], ["2", "2"]], variables: ["winning-bid", "losing-bid"]}]
+        }
+    ],
+    [
+        "resolve/b/{winning-bid}/{losing-bid}",
+        #{
+            accounts: [["bridge", "bridge"], ["loser", "agent/a"], ["winner", "agent/b"]],
+            computed_consume: [
+                #{asset: "escrow", quantity: #{kind: "variable", name: "winning-bid"}, role: "winner"},
+                #{asset: "escrow", quantity: #{kind: "variable", name: "losing-bid"}, role: "loser"}
+            ],
+            computed_produce: [
+                #{asset: "spent-credit", quantity: #{kind: "variable", name: "winning-bid"}, role: "winner"},
+                #{asset: "credit", quantity: #{kind: "variable", name: "losing-bid"}, role: "loser"}
+            ],
+            consume: [
+                ["bridge", [["capacity-free", "1"], ["first-turn", "1"]]],
+                ["loser", [["submitted", "1"], ["bid/{losing-bid}", "1"]]],
+                ["winner", [["submitted", "1"], ["bid/{winning-bid}", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [["loser", [["waiting", "1"]]], ["winner", [["crossing-right", "1"], ["priority-benefit", "1"]]]],
+            variables: [#{name: "winning-bid", range: ["1", "2"]}, #{name: "losing-bid", range: ["1", "2"]}],
+            relations: [#{rows: [["2", "1"]], variables: ["winning-bid", "losing-bid"]}]
+        }
+    ],
+    [
+        "submit-bid/{agent}/{amount}",
+        #{
+            accounts: [["bridge", "bridge"], ["traveler", "agent/{agent}"]],
+            computed_consume: [#{asset: "credit", quantity: #{kind: "variable", name: "amount"}, role: "traveler"}],
+            computed_produce: [#{asset: "escrow", quantity: #{kind: "variable", name: "amount"}, role: "traveler"}],
+            consume: [["traveler", [["can-bid", "1"]]]],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [["traveler", [["submitted", "1"], ["bid/{amount}", "1"]]]],
+            variables: [#{name: "agent", values: ["a", "b"]}, #{name: "amount", range: ["1", "2"]}]
+        }
+    ],
+    [
+        "yield-to-waiting/{agent}",
+        #{
+            accounts: [["bridge", "bridge"], ["traveler", "agent/{agent}"]],
+            consume: [["bridge", [["capacity-free", "1"], ["second-turn", "1"]]], ["traveler", [["waiting", "1"]]]],
+            distinct: [],
+            preserve: [["bridge", [["active", "1"]]]],
+            produce: [["traveler", [["crossing-right", "1"]]]],
+            variables: [#{name: "agent", values: ["a", "b"]}]
+        }
+    ]
+]

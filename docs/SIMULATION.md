@@ -552,7 +552,7 @@ loaded packages, and Pages ships the sample packages, built in CI and never
 committed. Studio played studies until it ran on packages (P12), so the
 study machinery retired last, once nothing read it.
 
-The gallery now builds from each sample's JSON and Rhai source. The
+The gallery now builds from each sample's Rhai source. The
 `<sample>::package::write` entry points install the compiled sources, and
 `axionomy package samples <directory>` writes the archives. [Package authoring](PACKAGE_SOURCE.md)
 Maze's package (its three instances as maze runs, its search and view

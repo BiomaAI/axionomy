@@ -1,0 +1,71 @@
+let world = ontology();
+
+for name in ["fuel-station", "nature", "order/a", "order/b", "order/c", "order/d", "vehicle"] {
+    world.declare(account(name));
+}
+
+for name in [
+    "at/customer",
+    "at/depot",
+    "at/junction",
+    "cargo-occupied",
+    "cargo-space",
+    "delivered",
+    "elapsed-time",
+    "fuel",
+    "in-transit",
+    "money",
+    "outcome/direct-back/breakdown",
+    "outcome/direct-back/clear",
+    "outcome/direct-back/delayed",
+    "outcome/direct-out/breakdown",
+    "outcome/direct-out/clear",
+    "outcome/direct-out/delayed",
+    "outcome/safe-back-first/breakdown",
+    "outcome/safe-back-first/clear",
+    "outcome/safe-back-first/delayed",
+    "outcome/safe-back-second/breakdown",
+    "outcome/safe-back-second/clear",
+    "outcome/safe-back-second/delayed",
+    "outcome/safe-out-first/breakdown",
+    "outcome/safe-out-first/clear",
+    "outcome/safe-out-first/delayed",
+    "outcome/safe-out-second/breakdown",
+    "outcome/safe-out-second/clear",
+    "outcome/safe-out-second/delayed",
+    "package/a",
+    "package/b",
+    "package/c",
+    "package/d",
+    "repair-tool",
+    "spent-fuel",
+    "time-remaining",
+    "traveling/direct-back",
+    "traveling/direct-out",
+    "traveling/safe-back-first",
+    "traveling/safe-back-second",
+    "traveling/safe-out-first",
+    "traveling/safe-out-second",
+    "waiting",
+    "weather-ready"
+] {
+    world.declare(asset(name));
+}
+
+for name in ["fuel-station", "nature", "order", "vehicle"] {
+    world.declare(role(name));
+}
+
+for name in [
+    "arrive/{route}/{outcome}",
+    "deliver/{order}",
+    "depart/{route}",
+    "load/{order}",
+    "refuel",
+    "repair/{route}",
+    "resolve/{route}/{outcome}"
+] {
+    world.rate_pattern(name);
+}
+
+world

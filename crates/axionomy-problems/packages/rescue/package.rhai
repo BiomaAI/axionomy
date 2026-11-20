@@ -1,0 +1,17 @@
+#{
+    format: "axionomy.package/1",
+    name: "rescue",
+    version: #{major: 0, minor: 3, patch: 2},
+    branches: #{
+        "rescue/micro/scenario": #{
+            from: "rescue/micro",
+            exchanges: [#{bindings: #{nature: "nature"}, rate: "instantiate/south/1", units: "1"}]
+        }
+    },
+    script_ontologies: #{
+        "rescue/incident": ["rescue/incident"],
+        "rescue/view": ["rescue"],
+        "rescue/incident/view": ["rescue/incident"],
+        rescue: ["rescue"]
+    }
+}

@@ -1,0 +1,14 @@
+#{
+    start: "scheduling/micro",
+    steps: [
+        #{
+            exchange: #{
+                rate: "schedule/one-a/0/0",
+                units: "1",
+                bindings: #{"primary-job": "job/one", schedule: "success", slot0: "slot/one/0", slot1: "slot/one/1"}
+            },
+            status: "Applicable",
+            balances: [["job/one", "ready-at/one-b/2", "1"], ["slot/one/1", "reserved/one-a", "1"]]
+        }
+    ]
+}

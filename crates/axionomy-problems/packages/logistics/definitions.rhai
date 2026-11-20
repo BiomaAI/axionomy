@@ -1,0 +1,127 @@
+let definitions = #{
+    candidates: #{"logistics/moves": #{Script: #{function: "choices", script: "logistics"}}},
+    experiments: #{
+        "logistics/micro": #{
+            arms: [
+                #{start: (), strategy: "logistics/direct"},
+                #{start: (), strategy: "logistics/reliable"},
+                #{start: (), strategy: "logistics/mcts"}
+            ],
+            effort: #{budget: 10000000, seed: 17, turns: 120},
+            goal: "logistics/all-delivered",
+            objectives: ["logistics/completed", "logistics/delivered", "logistics/time"],
+            start: "logistics/micro",
+            trials: 1
+        },
+        "logistics/showcase": #{
+            arms: [
+                #{start: (), strategy: "logistics/fleet/direct"},
+                #{start: (), strategy: "logistics/fleet/reliable"},
+                #{start: (), strategy: "logistics/fleet/mcts"}
+            ],
+            effort: #{budget: 10000000, seed: 17, turns: 700},
+            goal: "logistics/fleet/closed",
+            objectives: [
+                "logistics/fleet/delivered",
+                "logistics/fleet/on-time",
+                "logistics/fleet/expired",
+                "logistics/fleet/cash",
+                "logistics/fleet/fuel",
+                "logistics/fleet/time"
+            ],
+            start: "logistics/showcase",
+            trials: 1
+        },
+        "logistics/stress": #{
+            arms: [
+                #{start: (), strategy: "logistics/fleet/direct"},
+                #{start: (), strategy: "logistics/fleet/reliable"},
+                #{start: (), strategy: "logistics/fleet/mcts"}
+            ],
+            effort: #{budget: 10000000, seed: 17, turns: 700},
+            goal: "logistics/fleet/closed",
+            objectives: [
+                "logistics/fleet/delivered",
+                "logistics/fleet/on-time",
+                "logistics/fleet/expired",
+                "logistics/fleet/cash",
+                "logistics/fleet/fuel",
+                "logistics/fleet/time"
+            ],
+            start: "logistics/stress",
+            trials: 1
+        }
+    },
+    objectives: #{
+        "logistics/completed": #{direction: "maximize", measure: #{State: #{function: "completed", script: "logistics"}}},
+        "logistics/delivered": #{direction: "maximize", measure: #{State: #{function: "delivered", script: "logistics"}}},
+        "logistics/fleet/cash": #{direction: "maximize", measure: #{State: #{function: "cash", script: "logistics/fleet"}}},
+        "logistics/fleet/delivered": #{direction: "maximize", measure: #{State: #{function: "delivered", script: "logistics/fleet"}}},
+        "logistics/fleet/expired": #{direction: "minimize", measure: #{State: #{function: "expired", script: "logistics/fleet"}}},
+        "logistics/fleet/fuel": #{direction: "minimize", measure: #{State: #{function: "spent_fuel", script: "logistics/fleet"}}},
+        "logistics/fleet/on-time": #{direction: "maximize", measure: #{State: #{function: "on_time", script: "logistics/fleet"}}},
+        "logistics/fleet/time": #{direction: "minimize", measure: #{State: #{function: "elapsed", script: "logistics/fleet"}}},
+        "logistics/time": #{direction: "minimize", measure: #{State: #{function: "elapsed", script: "logistics"}}}
+    },
+    strategies: #{
+        "logistics/direct": #{Policy: #{policy: #{function: "direct", script: "logistics"}}},
+        "logistics/fleet/direct": #{Policy: #{policy: #{function: "fastest", script: "logistics/fleet"}}},
+        "logistics/fleet/mcts": #{Policy: #{policy: #{function: "relay", script: "logistics/fleet"}}},
+        "logistics/fleet/reliable": #{Policy: #{policy: #{function: "reliable", script: "logistics/fleet"}}},
+        "logistics/mcts": #{
+            Game: #{
+                actor: #{function: "dispatcher", script: "logistics"},
+                nature: #{function: "nature", script: "logistics"},
+                players: [
+                    #{
+                        Mcts: #{
+                            candidates: "logistics/moves",
+                            chance: #{function: "weather", script: "logistics"},
+                            depth: 120,
+                            estimate: #{function: "estimated", script: "logistics"},
+                            iterations: 16,
+                            payoffs: #{function: "payoff", script: "logistics"},
+                            rollout: #{function: "simulated", script: "logistics"},
+                            salt: 5498692050298882371
+                        }
+                    }
+                ]
+            }
+        },
+        "logistics/reliable": #{Policy: #{policy: #{function: "reliable", script: "logistics"}}}
+    },
+    views: #{
+        logistics: #{
+            carry: (),
+            formats: #{function: "format", script: "logistics/view"},
+            labels: #{function: "label", script: "logistics/view"},
+            leaderboards: (),
+            scene: #{function: "scene", script: "logistics/view"},
+            title: "Stochastic logistics"
+        },
+        "logistics/fleet": #{
+            carry: (),
+            formats: #{function: "format", script: "logistics/fleet/view"},
+            labels: #{function: "label", script: "logistics/fleet/view"},
+            leaderboards: (),
+            scene: #{function: "scene", script: "logistics/fleet/view"},
+            title: "Heterogeneous delivery fleet"
+        }
+    }
+};
+let goals = #{};
+{
+    let target = goal();
+    target = target.require(account("order/a"), basket([amount(asset("delivered"), 1)]));
+    target = target.require(account("order/b"), basket([amount(asset("delivered"), 1)]));
+    target = target.require(account("order/c"), basket([amount(asset("delivered"), 1)]));
+    target = target.require(account("order/d"), basket([amount(asset("delivered"), 1)]));
+    goals["logistics/all-delivered"] = #{ontology: "logistics", goal: target};
+}
+{
+    let target = goal();
+    target = target.require(account("world"), basket([amount(asset("closed"), 1)]));
+    goals["logistics/fleet/closed"] = #{ontology: "logistics/fleet", goal: target};
+}
+definitions.goals = goals;
+definitions

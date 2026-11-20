@@ -1046,14 +1046,13 @@ async def test_an_author_builds_edits_and_exports_a_complete_package(tmp_path: P
             bad = {"base": "pantry", "files": {"scripts/pantry.rhai": "fn served(a, b) { 0 }"}, "install": True}
             result = await client.call_tool("axionomy_package_build", bad)
             assert result.is_error
-            assert result.structured_content["details"]["file"] == "definitions.json"
+            assert result.structured_content["details"]["file"] == "definitions.rhai"
             assert "served" in result.structured_content["message"]
             kept = await client.call_tool("axionomy_package_source", {"name": "pantry"})
             assert kept.structured_content["files"] == files
 
-            header = json.loads(files["package.json"])
-            header["version"]["patch"] += 1
-            edited = {"base": "pantry", "files": {"package.json": json.dumps(header)}, "install": True}
+            header = "let pkg = {" + files["package.rhai"] + "}; pkg.version.patch += 1; pkg"
+            edited = {"base": "pantry", "files": {"package.rhai": header}, "install": True}
             result = await client.call_tool("axionomy_package_build", edited)
             assert not result.is_error and result.structured_content["version"] == "1.0.1"
             played = await client.call_tool("axionomy_experiment_run", {"experiment": "pantry/morning"})

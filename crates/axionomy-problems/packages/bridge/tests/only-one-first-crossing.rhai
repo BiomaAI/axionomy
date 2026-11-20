@@ -1,0 +1,16 @@
+#{
+    start: "bridge/micro",
+    steps: [
+        #{
+            exchange: #{rate: "claim-first/a", units: "1", bindings: #{bridge: "bridge", traveler: "agent/a"}},
+            status: "Applicable",
+            balances: [["agent/a", "crossing-right", "1"], ["bridge", "capacity-free", "0"]]
+        },
+        #{
+            exchange: #{rate: "claim-first/b", units: "1", bindings: #{bridge: "bridge", traveler: "agent/b"}},
+            status: "Infeasible",
+            balances: [["agent/b", "can-bid", "1"]],
+            shortfalls: #{bridge: [["capacity-free", "1"], ["first-turn", "1"]]}
+        }
+    ]
+}

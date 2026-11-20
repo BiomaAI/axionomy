@@ -1,0 +1,527 @@
+[
+    [
+        "advance/{to}",
+        #{
+            accounts: [["platform", "platform"]],
+            computed_consume: [
+                #{
+                    asset: "time-remaining",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "to"},
+                        right: #{asset: "now", kind: "balance", role: "platform"}
+                    },
+                    role: "platform"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "now",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "to"},
+                        right: #{asset: "now", kind: "balance", role: "platform"}
+                    },
+                    role: "platform"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-market-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "now", kind: "balance", role: "platform"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "clock-moves-forward",
+                    right: #{kind: "variable", name: "to"}
+                }
+            ],
+            consume: [],
+            distinct: [],
+            preserve: [],
+            produce: [],
+            variables: [#{name: "to", range: ["1", "32"]}]
+        }
+    ],
+    [
+        "cancel/{order}/{discounted}",
+        #{
+            accounts: [["order", "order/{order}"], ["platform", "platform"], ["tax-authority", "tax-authority"]],
+            computed_consume: [
+                #{
+                    asset: "lease-until",
+                    quantity: #{asset: "lease-until", kind: "balance", role: "order"},
+                    role: "order"
+                },
+                #{asset: "money", quantity: #{kind: "variable", name: "price"}, role: "order"}
+            ],
+            computed_produce: [#{asset: "money", quantity: #{kind: "variable", name: "price"}, role: "buyer"}],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-market-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "now", kind: "balance", role: "platform"},
+                    name: "unshipped-reservation-expired",
+                    right: #{
+                        kind: "add",
+                        left: #{asset: "lease-until", kind: "balance", role: "order"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [
+                ["buyer", [["purchase-locked/{order}", "1"]]],
+                ["carrier", [["booking/{order}", "1"], ["used-shipping-capacity", "1"]]],
+                ["order", [["contract/{order}", "1"], ["item/{item}", "1"], ["agreed-price/{price}", "1"]]],
+                ["seller", [["sale-reserved/{order}", "1"]]]
+            ],
+            derived: [
+                #{
+                    name: "price",
+                    value: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "gross"},
+                        right: #{kind: "variable", name: "discount"}
+                    }
+                }
+            ],
+            distinct: [
+                ["buyer", "carrier"],
+                ["buyer", "order"],
+                ["buyer", "platform"],
+                ["buyer", "seller"],
+                ["buyer", "tax-authority"],
+                ["carrier", "order"],
+                ["carrier", "platform"],
+                ["carrier", "seller"],
+                ["carrier", "tax-authority"],
+                ["order", "seller"],
+                ["platform", "seller"],
+                ["seller", "tax-authority"]
+            ],
+            preserve: [],
+            produce: [
+                ["buyer", [["purchase-intent/{order}", "1"]]],
+                ["carrier", [["shipping-capacity", "1"]]],
+                ["order", [["open-order/{order}", "1"], ["refunded", "1"]]],
+                ["seller", [["sale-offer/{item}", "1"], ["item/{item}", "1"]]]
+            ]
+        }
+    ],
+    [
+        "contract/{order}/{discounted}",
+        #{
+            accounts: [["order", "order/{order}"], ["platform", "platform"], ["tax-authority", "tax-authority"]],
+            computed_consume: [#{asset: "money", quantity: #{kind: "variable", name: "price"}, role: "buyer"}],
+            computed_produce: [
+                #{asset: "money", quantity: #{kind: "variable", name: "price"}, role: "order"},
+                #{
+                    asset: "lease-until",
+                    quantity: #{
+                        kind: "add",
+                        left: #{asset: "now", kind: "balance", role: "platform"},
+                        right: #{kind: "constant", value: "2"}
+                    },
+                    role: "order"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-market-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "now", kind: "balance", role: "platform"},
+                    name: "order-has-arrived",
+                    right: #{kind: "variable", name: "arrival"}
+                }
+            ],
+            consume: [
+                ["buyer", [["purchase-intent/{order}", "1"]]],
+                ["carrier", [["shipping-capacity", "1"]]],
+                ["order", [["open-order/{order}", "1"]]],
+                ["seller", [["item/{item}", "1"], ["sale-offer/{item}", "1"]]]
+            ],
+            derived: [
+                #{
+                    name: "price",
+                    value: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "gross"},
+                        right: #{kind: "variable", name: "discount"}
+                    }
+                }
+            ],
+            distinct: [
+                ["buyer", "carrier"],
+                ["buyer", "order"],
+                ["buyer", "platform"],
+                ["buyer", "seller"],
+                ["buyer", "tax-authority"],
+                ["carrier", "order"],
+                ["carrier", "platform"],
+                ["carrier", "seller"],
+                ["carrier", "tax-authority"],
+                ["order", "seller"],
+                ["platform", "seller"],
+                ["seller", "tax-authority"]
+            ],
+            preserve: [
+                ["buyer", [["buyer-license", "1"]]],
+                ["carrier", [["carrier-license", "1"]]],
+                ["seller", [["seller-license", "1"]]]
+            ],
+            produce: [
+                ["buyer", [["purchase-locked/{order}", "1"]]],
+                ["carrier", [["used-shipping-capacity", "1"], ["booking/{order}", "1"]]],
+                ["order", [["contract/{order}", "1"], ["item/{item}", "1"], ["agreed-price/{price}", "1"]]],
+                ["seller", [["sale-reserved/{order}", "1"]]]
+            ]
+        }
+    ],
+    [
+        "deliver/{order}/{discounted}/false",
+        #{
+            accounts: [["order", "order/{order}"], ["platform", "platform"], ["tax-authority", "tax-authority"]],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "order"},
+                    role: "order"
+                },
+                #{asset: "money", quantity: #{kind: "variable", name: "price"}, role: "order"}
+            ],
+            computed_produce: [
+                #{
+                    asset: "utility",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "buyer-utility"},
+                            right: #{kind: "variable", name: "discount"}
+                        },
+                        right: #{kind: "constant", value: "0"}
+                    },
+                    role: "buyer"
+                },
+                #{
+                    asset: "money",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "proceeds"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "discount"},
+                            right: #{kind: "constant", value: "0"}
+                        }
+                    },
+                    role: "seller"
+                },
+                #{
+                    asset: "utility",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "seller-utility"},
+                        right: #{
+                            kind: "minimum",
+                            left: #{kind: "variable", name: "seller-utility"},
+                            right: #{
+                                kind: "add",
+                                left: #{kind: "variable", name: "discount"},
+                                right: #{kind: "constant", value: "0"}
+                            }
+                        }
+                    },
+                    role: "seller"
+                },
+                #{asset: "money", quantity: #{kind: "variable", name: "shipping"}, role: "carrier"},
+                #{asset: "money", quantity: #{kind: "variable", name: "commission"}, role: "platform"},
+                #{asset: "money", quantity: #{kind: "variable", name: "tax"}, role: "tax-authority"}
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-market-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "now", kind: "balance", role: "platform"},
+                    name: "delivery-time-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "order"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{kind: "variable", name: "deadline"},
+                    name: "deadline-outcome",
+                    right: #{asset: "now", kind: "balance", role: "platform"}
+                }
+            ],
+            consume: [
+                ["buyer", [["purchase-locked/{order}", "1"]]],
+                ["carrier", [["booking/{order}", "1"], ["used-shipping-capacity", "1"]]],
+                ["order", [["in-shipment/{order}", "1"], ["item/{item}", "1"]]],
+                ["seller", [["sale-reserved/{order}", "1"]]]
+            ],
+            derived: [
+                #{
+                    name: "price",
+                    value: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "gross"},
+                        right: #{kind: "variable", name: "discount"}
+                    }
+                },
+                #{
+                    name: "settled",
+                    value: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "price"},
+                        right: #{kind: "constant", value: "0"}
+                    }
+                }
+            ],
+            distinct: [
+                ["buyer", "carrier"],
+                ["buyer", "order"],
+                ["buyer", "platform"],
+                ["buyer", "seller"],
+                ["buyer", "tax-authority"],
+                ["carrier", "order"],
+                ["carrier", "platform"],
+                ["carrier", "seller"],
+                ["carrier", "tax-authority"],
+                ["order", "seller"],
+                ["platform", "seller"],
+                ["seller", "tax-authority"]
+            ],
+            preserve: [["order", [["agreed-price/{price}", "1"]]]],
+            produce: [
+                ["buyer", [["purchase-receipt/{order}", "1"], ["item/{item}", "1"]]],
+                ["carrier", [["delivered-by/{order}", "1"], ["shipping-capacity", "1"], ["on-time", "1"]]],
+                ["order", [["settled-order/{order}", "1"], ["settled-value/{settled}", "1"], ["on-time", "1"]]],
+                ["seller", [["completed-sale/{order}", "1"]]]
+            ]
+        }
+    ],
+    [
+        "deliver/{order}/{discounted}/true",
+        #{
+            accounts: [["order", "order/{order}"], ["platform", "platform"], ["tax-authority", "tax-authority"]],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "order"},
+                    role: "order"
+                },
+                #{asset: "money", quantity: #{kind: "variable", name: "price"}, role: "order"}
+            ],
+            computed_produce: [
+                #{
+                    asset: "utility",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "buyer-utility"},
+                            right: #{kind: "variable", name: "discount"}
+                        },
+                        right: #{kind: "constant", value: "10"}
+                    },
+                    role: "buyer"
+                },
+                #{
+                    asset: "money",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "proceeds"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "discount"},
+                            right: #{kind: "constant", value: "10"}
+                        }
+                    },
+                    role: "seller"
+                },
+                #{
+                    asset: "utility",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "seller-utility"},
+                        right: #{
+                            kind: "minimum",
+                            left: #{kind: "variable", name: "seller-utility"},
+                            right: #{
+                                kind: "add",
+                                left: #{kind: "variable", name: "discount"},
+                                right: #{kind: "constant", value: "10"}
+                            }
+                        }
+                    },
+                    role: "seller"
+                },
+                #{asset: "money", quantity: #{kind: "variable", name: "shipping"}, role: "carrier"},
+                #{asset: "money", quantity: #{kind: "variable", name: "commission"}, role: "platform"},
+                #{asset: "money", quantity: #{kind: "variable", name: "tax"}, role: "tax-authority"}
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-market-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "now", kind: "balance", role: "platform"},
+                    name: "delivery-time-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "order"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "now", kind: "balance", role: "platform"},
+                    name: "deadline-outcome",
+                    right: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "deadline"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [
+                ["buyer", [["purchase-locked/{order}", "1"]]],
+                ["carrier", [["booking/{order}", "1"], ["used-shipping-capacity", "1"]]],
+                ["order", [["in-shipment/{order}", "1"], ["item/{item}", "1"]]],
+                ["seller", [["sale-reserved/{order}", "1"]]]
+            ],
+            derived: [
+                #{
+                    name: "price",
+                    value: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "gross"},
+                        right: #{kind: "variable", name: "discount"}
+                    }
+                },
+                #{
+                    name: "settled",
+                    value: #{
+                        kind: "subtract",
+                        left: #{kind: "variable", name: "price"},
+                        right: #{kind: "constant", value: "10"}
+                    }
+                }
+            ],
+            distinct: [
+                ["buyer", "carrier"],
+                ["buyer", "order"],
+                ["buyer", "platform"],
+                ["buyer", "seller"],
+                ["buyer", "tax-authority"],
+                ["carrier", "order"],
+                ["carrier", "platform"],
+                ["carrier", "seller"],
+                ["carrier", "tax-authority"],
+                ["order", "seller"],
+                ["platform", "seller"],
+                ["seller", "tax-authority"]
+            ],
+            preserve: [["order", [["agreed-price/{price}", "1"]]]],
+            produce: [
+                ["buyer", [["purchase-receipt/{order}", "1"], ["item/{item}", "1"], ["money", "10"]]],
+                ["carrier", [["delivered-by/{order}", "1"], ["shipping-capacity", "1"], ["late", "1"]]],
+                ["order", [["settled-order/{order}", "1"], ["settled-value/{settled}", "1"], ["late", "1"]]],
+                ["seller", [["completed-sale/{order}", "1"]]]
+            ]
+        }
+    ],
+    [
+        "dispatch/{order}/{carrier}",
+        #{
+            accounts: [
+                ["carrier", "carrier/{carrier}"],
+                ["order", "order/{order}"],
+                ["platform", "platform"],
+                ["tax-authority", "tax-authority"]
+            ],
+            computed_consume: [
+                #{
+                    asset: "lease-until",
+                    quantity: #{asset: "lease-until", kind: "balance", role: "order"},
+                    role: "order"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{
+                        kind: "add",
+                        left: #{
+                            kind: "add",
+                            left: #{asset: "now", kind: "balance", role: "platform"},
+                            right: #{kind: "variable", name: "transit"}
+                        },
+                        right: #{
+                            kind: "multiply",
+                            left: #{kind: "variable", name: "exposure"},
+                            right: #{kind: "variable", name: "route-delay"}
+                        }
+                    },
+                    role: "order"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-market-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{asset: "now", kind: "balance", role: "platform"},
+                    name: "reservation-remains-valid",
+                    right: #{asset: "lease-until", kind: "balance", role: "order"}
+                }
+            ],
+            consume: [["order", [["contract/{order}", "1"]]]],
+            distinct: [
+                ["buyer", "carrier"],
+                ["buyer", "order"],
+                ["buyer", "platform"],
+                ["buyer", "seller"],
+                ["buyer", "tax-authority"],
+                ["carrier", "order"],
+                ["carrier", "platform"],
+                ["carrier", "seller"],
+                ["carrier", "tax-authority"],
+                ["order", "seller"],
+                ["platform", "seller"],
+                ["seller", "tax-authority"]
+            ],
+            preserve: [
+                ["buyer", [["purchase-locked/{order}", "1"]]],
+                ["carrier", [["booking/{order}", "1"]]],
+                ["seller", [["sale-reserved/{order}", "1"]]]
+            ],
+            produce: [["order", [["in-shipment/{order}", "1"]]]]
+        }
+    ]
+]

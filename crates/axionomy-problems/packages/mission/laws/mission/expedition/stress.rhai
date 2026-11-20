@@ -1,0 +1,164 @@
+[
+    [
+        "deliver/2",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/2"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_produce: [
+                #{
+                    asset: "saved-vitality",
+                    quantity: #{asset: "health", kind: "balance", role: "objective"},
+                    role: "world"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "delivery-before-deadline",
+                    right: #{kind: "variable", name: "deadline"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "evacuated-alive",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [
+                ["medic", [["cargo/2", "1"]]],
+                ["objective", [["carried", "1"]]],
+                ["world", [["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/base", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["seat", "1"]]],
+                ["objective", [["complete", "1"]]],
+                ["world", [["used-permit/medic", "1"], ["resolved", "1"], ["completed", "1"]]]
+            ]
+        }
+    ],
+    [
+        "fail/2/carried/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/2"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "deadline-passed",
+                    right: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "deadline"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [["medic", [["cargo/2", "1"]]], ["objective", [["carried", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [
+                ["medic", [["seat", "1"]]],
+                ["objective", [["failed", "1"]]],
+                ["world", [["resolved", "1"], ["failed-count", "1"]]]
+            ]
+        }
+    ],
+    [
+        "finish-clinical/{day}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "clinical-count",
+                    quantity: #{asset: "clinical-count", kind: "balance", role: "world"},
+                    role: "world"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "next-clinical",
+                    quantity: #{kind: "variable", name: "days-to-next-pulse"},
+                    role: "world"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "next-clinical", kind: "balance", role: "world"},
+                    name: "scheduled-pulse",
+                    right: #{kind: "variable", name: "day"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "clinical-count", kind: "balance", role: "world"},
+                    name: "all-casualties-assessed",
+                    right: #{kind: "constant", value: "2"}
+                }
+            ],
+            consume: [],
+            distinct: [],
+            preserve: [["world", [["active", "1"]]]],
+            produce: [],
+            variables: [#{name: "day", range: ["8", "24"]}],
+            relations: [
+                #{
+                    gives: ["days-to-next-pulse"],
+                    rows: [["8", "8"], ["16", "8"], ["24", "100"]],
+                    variables: ["day"]
+                }
+            ]
+        }
+    ]
+]

@@ -1,0 +1,23 @@
+#{
+    start: "pantry/morning",
+    steps: [
+        #{
+            exchange: #{rate: "deliver", units: "2", bindings: #{supplier: "stockroom", recipient: "counter"}},
+            status: "Applicable",
+            balances: [["stockroom", "meal", "1"], ["counter", "meal", "2"]],
+            supply: #{"meal": "3"}
+        },
+        #{
+            exchange: #{rate: "deliver", units: "2", bindings: #{supplier: "stockroom", recipient: "counter"}},
+            status: "Infeasible",
+            shortfalls: #{stockroom: [["meal", "1"]]},
+            balances: [["stockroom", "meal", "1"], ["counter", "meal", "2"]]
+        },
+        #{
+            exchange: #{rate: "deliver", units: "1", bindings: #{supplier: "counter", recipient: "stockroom"}},
+            status: "Invalid",
+            exists: #{stockroom: true, counter: true},
+            supply: #{"meal": "3"}
+        }
+    ]
+}

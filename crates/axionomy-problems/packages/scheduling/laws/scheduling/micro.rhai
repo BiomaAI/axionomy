@@ -1,0 +1,56 @@
+[
+    [
+        "schedule/one-b/{ready}/{start}",
+        #{
+            accounts: [["primary-job", "job/one"], ["schedule", "success"], ["slot0", "slot/two/{start}"]],
+            consume: [["primary-job", [["ready-at/one-b/{ready}", "1"]]], ["slot0", [["available", "1"]]]],
+            derived: [
+                #{
+                    name: "end",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "start"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [["schedule", [["active", "1"]]]],
+            produce: [["primary-job", [["completed-at/one-b/{end}", "1"]]], ["slot0", [["reserved/one-b", "1"]]]],
+            variables: [#{name: "ready", values: ["2", "3", "4"]}, #{name: "start", range: ["2", "4"]}],
+            relations: [
+                #{
+                    rows: [["2", "2"], ["2", "3"], ["2", "4"], ["3", "3"], ["3", "4"], ["4", "4"]],
+                    variables: ["ready", "start"]
+                }
+            ]
+        }
+    ],
+    [
+        "schedule/two-b/{ready}/{start}",
+        #{
+            accounts: [["primary-job", "job/two"], ["schedule", "success"], ["slot0", "slot/two/{start}"]],
+            consume: [["primary-job", [["ready-at/two-b/{ready}", "1"]]], ["slot0", [["available", "1"]]]],
+            derived: [
+                #{
+                    name: "end",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "start"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [["schedule", [["active", "1"]]]],
+            produce: [["primary-job", [["completed-at/two-b/{end}", "1"]]], ["slot0", [["reserved/two-b", "1"]]]],
+            variables: [#{name: "ready", values: ["2", "3", "4"]}, #{name: "start", range: ["2", "4"]}],
+            relations: [
+                #{
+                    rows: [["2", "2"], ["2", "3"], ["2", "4"], ["3", "3"], ["3", "4"], ["4", "4"]],
+                    variables: ["ready", "start"]
+                }
+            ]
+        }
+    ]
+]

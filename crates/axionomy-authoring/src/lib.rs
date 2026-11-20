@@ -7,7 +7,10 @@ use axionomy::{
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
+pub mod program;
+
 pub mod script;
+mod vocabulary;
 
 pub enum Laws {}
 impl PathKind for Laws {

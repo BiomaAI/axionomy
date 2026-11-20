@@ -18,18 +18,20 @@ pub enum SourceFile {
     Laws(LawSetPath),
     Instance(RefPath),
     Script(ScriptPath),
+    Library(axionomy_authoring::program::LibraryPath),
     Test(TestPath),
 }
 impl fmt::Display for SourceFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Package => f.write_str("package.json"),
-            Self::Definitions => f.write_str("definitions.json"),
-            Self::Ontology(p) => write!(f, "ontologies/{p}.json"),
-            Self::Laws(p) => write!(f, "laws/{p}.json"),
-            Self::Instance(p) => write!(f, "instances/{p}.json"),
+            Self::Package => f.write_str("package.rhai"),
+            Self::Definitions => f.write_str("definitions.rhai"),
+            Self::Ontology(p) => write!(f, "ontologies/{p}.rhai"),
+            Self::Laws(p) => write!(f, "laws/{p}.rhai"),
+            Self::Instance(p) => write!(f, "instances/{p}.rhai"),
+            Self::Library(p) => write!(f, "lib/{p}.rhai"),
             Self::Script(p) => write!(f, "scripts/{p}.rhai"),
-            Self::Test(p) => write!(f, "tests/{p}.json"),
+            Self::Test(p) => write!(f, "tests/{p}.rhai"),
         }
     }
 }
@@ -37,14 +39,12 @@ impl FromStr for SourceFile {
     type Err = Diagnostic;
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let parsed = match text {
-            "package.json" => return Ok(Self::Package),
-            "definitions.json" => return Ok(Self::Definitions),
+            "package.rhai" => return Ok(Self::Package),
+            "definitions.rhai" => return Ok(Self::Definitions),
             _ => match text.split_once('/') {
-                Some(("scripts", p)) => p
-                    .strip_suffix(".rhai")
-                    .and_then(|p| p.parse().ok())
-                    .map(Self::Script),
-                Some((kind, p)) => p.strip_suffix(".json").and_then(|p| match kind {
+                Some((kind, p)) => p.strip_suffix(".rhai").and_then(|p| match kind {
+                    "scripts" => p.parse().ok().map(Self::Script),
+                    "lib" => p.parse().ok().map(Self::Library),
                     "ontologies" => p.parse().ok().map(Self::Ontology),
                     "laws" => p.parse().ok().map(Self::Laws),
                     "instances" => p.parse().ok().map(Self::Instance),
@@ -70,7 +70,7 @@ impl<'de> Deserialize<'de> for SourceFile {
     }
 }
 
-/// A JSON object of relative file names and their UTF-8 contents. All
+/// Relative source file names and their UTF-8 Rhai programs. All
 /// transports pass this same tree to the compiler.
 pub type SourceFiles = BTreeMap<SourceFile, String>;
 
@@ -79,7 +79,7 @@ pub type SourceFiles = BTreeMap<SourceFile, String>;
 pub struct Diagnostic {
     /// Source location, including rejected file names.
     pub file: std::path::PathBuf,
-    /// JSON field path reported by the parser, when available.
+    /// Field of a returned value that failed type checking, when available.
     pub field: String,
     pub line: Option<usize>,
     pub column: Option<usize>,
@@ -96,33 +96,22 @@ impl Diagnostic {
         }
     }
 }
+pub(super) fn diagnostic(file: &SourceFile, err: axionomy_authoring::program::Error) -> Diagnostic {
+    Diagnostic {
+        file: file.to_string().into(),
+        field: err.field,
+        line: err.position.line(),
+        column: err.position.position(),
+        reason: err.message,
+    }
+}
+
 pub(super) fn parse<T: serde::de::DeserializeOwned>(
+    host: &axionomy_authoring::program::Program,
     file: &SourceFile,
     text: &str,
 ) -> Result<T, Diagnostic> {
-    let diagnostic = |error: serde_path_to_error::Error<serde_json::Error>| {
-        let mut d = Diagnostic::new(file, error.inner());
-        d.field = error.path().to_string();
-        d.line = Some(error.inner().line());
-        d.column = Some(error.inner().column());
-        d
-    };
-    let mut check = serde_json::Deserializer::from_str(text);
-    serde_path_to_error::deserialize::<_, UniqueKeys>(&mut check).map_err(diagnostic)?;
-    let mut reader = serde_json::Deserializer::from_str(text);
-    let mut unknown = None;
-    let mut ignored = |path: serde_ignored::Path<'_>| {
-        unknown.get_or_insert_with(|| path.to_string());
-    };
-    let strict = serde_ignored::Deserializer::new(&mut reader, &mut ignored);
-    let value = serde_path_to_error::deserialize(strict).map_err(diagnostic)?;
-    if let Some(field) = unknown {
-        let mut d = Diagnostic::new(file, format!("unknown source field {field}"));
-        d.field = field;
-        return Err(d);
-    }
-    reader.end().map_err(|error| Diagnostic::new(file, error))?;
-    Ok(value)
+    host.read(text).map_err(|err| diagnostic(file, err))
 }
 
 impl schemars::JsonSchema for SourceFile {
@@ -130,7 +119,7 @@ impl schemars::JsonSchema for SourceFile {
         "PackageSourceFile".into()
     }
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({"type":"string","description":"package.json, definitions.json, ontologies/<path>.json, laws/<path>.json, instances/<ref>.json, tests/<path>.json or scripts/<path>.rhai"})
+        schemars::json_schema!({"type":"string","description":"package.rhai, definitions.rhai, ontologies/<path>.rhai, laws/<path>.rhai, instances/<ref>.rhai, tests/<path>.rhai lib/<path>.rhai or scripts/<path>.rhai"})
     }
 }
 
@@ -139,61 +128,4 @@ impl schemars::JsonSchema for SourceFile {
 #[serde(deny_unknown_fields)]
 pub struct SourceTree {
     pub files: SourceFiles,
-}
-
-/// JSON maps otherwise accept a second spelling of a definition or ref and
-/// silently keep the last value. Visit keys before lowering to typed maps.
-struct UniqueKeys;
-impl<'de> Deserialize<'de> for UniqueKeys {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct Check;
-        impl<'de> serde::de::Visitor<'de> for Check {
-            type Value = UniqueKeys;
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a JSON value with unique object keys")
-            }
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<UniqueKeys, A::Error> {
-                let mut seen = BTreeSet::new();
-                while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
-                    if seen.contains(&key) {
-                        return Err(serde::de::Error::custom(format!(
-                            "duplicate source field `{key}`"
-                        )));
-                    }
-                    seen.insert(key);
-                    map.next_value::<UniqueKeys>()?;
-                }
-                Ok(UniqueKeys)
-            }
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> Result<UniqueKeys, A::Error> {
-                while seq.next_element::<UniqueKeys>()?.is_some() {}
-                Ok(UniqueKeys)
-            }
-            fn visit_bool<E>(self, _: bool) -> Result<UniqueKeys, E> {
-                Ok(UniqueKeys)
-            }
-            fn visit_i64<E>(self, _: i64) -> Result<UniqueKeys, E> {
-                Ok(UniqueKeys)
-            }
-            fn visit_u64<E>(self, _: u64) -> Result<UniqueKeys, E> {
-                Ok(UniqueKeys)
-            }
-            fn visit_f64<E>(self, _: f64) -> Result<UniqueKeys, E> {
-                Ok(UniqueKeys)
-            }
-            fn visit_str<E>(self, _: &str) -> Result<UniqueKeys, E> {
-                Ok(UniqueKeys)
-            }
-            fn visit_unit<E>(self) -> Result<UniqueKeys, E> {
-                Ok(UniqueKeys)
-            }
-        }
-        d.deserialize_any(Check)
-    }
 }

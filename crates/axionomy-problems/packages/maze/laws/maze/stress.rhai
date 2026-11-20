@@ -1,0 +1,360 @@
+[
+    [
+        "move/archive/gallery/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/archive", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/archive/gallery", "1"]]]],
+            produce: [["actor", [["at/gallery", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/archive/scriptorium/1/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/archive", "1"], ["energy", "1"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/archive/scriptorium", "1"]]]],
+            produce: [["actor", [["at/scriptorium", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/atrium/archive/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/atrium", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/atrium/archive", "1"]]]],
+            produce: [["actor", [["at/archive", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/chapel/bridge/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/chapel", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/chapel/bridge", "1"]]]],
+            produce: [["actor", [["at/bridge", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/docks/foundry/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/docks", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/docks/foundry", "1"]]]],
+            produce: [["actor", [["at/foundry", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/foundry/canal/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/foundry", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/foundry/canal", "1"]]]],
+            produce: [["actor", [["at/canal", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/foundry/tower/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "actor"},
+                    name: "retain-at-least-one-health",
+                    right: #{kind: "constant", value: "3"}
+                }
+            ],
+            consume: [["actor", [["at/foundry", "1"], ["energy", "2"], ["time", "1"], ["health", "2"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/foundry/tower", "1"]]]],
+            produce: [["actor", [["at/tower", "1"], ["spent-energy", "2"], ["spent-time", "1"], ["injury", "2"]]]]
+        }
+    ],
+    [
+        "move/key-room/scriptorium/1/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/key-room", "1"], ["energy", "1"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/key-room/scriptorium", "1"]]]],
+            produce: [["actor", [["at/scriptorium", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/market/docks/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/market", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/market/docks", "1"]]]],
+            produce: [["actor", [["at/docks", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/observatory/exit/3/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/observatory", "1"], ["energy", "3"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/observatory/exit", "1"]]]],
+            produce: [["actor", [["at/exit", "1"], ["spent-energy", "3"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/ridge/ruins/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "actor"},
+                    name: "retain-at-least-one-health",
+                    right: #{kind: "constant", value: "3"}
+                }
+            ],
+            consume: [["actor", [["at/ridge", "1"], ["energy", "2"], ["time", "1"], ["health", "2"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/ridge/ruins", "1"]]]],
+            produce: [["actor", [["at/ruins", "1"], ["spent-energy", "2"], ["spent-time", "1"], ["injury", "2"]]]]
+        }
+    ],
+    [
+        "move/ruins/chapel/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/ruins", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/ruins/chapel", "1"]]]],
+            produce: [["actor", [["at/chapel", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/ruins/garden/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/ruins", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/ruins/garden", "1"]]]],
+            produce: [["actor", [["at/garden", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/scriptorium/archive/1/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/scriptorium", "1"], ["energy", "1"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/scriptorium/archive", "1"]]]],
+            produce: [["actor", [["at/archive", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/scriptorium/key-room/1/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/scriptorium", "1"], ["energy", "1"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/scriptorium/key-room", "1"]]]],
+            produce: [["actor", [["at/key-room", "1"], ["spent-energy", "1"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/tower/observatory/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/tower", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/tower/observatory", "1"]]]],
+            produce: [["actor", [["at/observatory", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/tunnel/ridge/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/tunnel", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/tunnel/ridge", "1"]]]],
+            produce: [["actor", [["at/ridge", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "protected-move/foundry/tower/2",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/foundry", "1"], ["energy", "2"], ["time", "1"], ["shield", "2"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/foundry/tower", "1"]]]],
+            produce: [["actor", [["at/tower", "1"], ["spent-energy", "2"], ["spent-time", "1"], ["used-shield", "2"]]]]
+        }
+    ],
+    [
+        "protected-move/ridge/ruins/2",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            computed_consume: [#{asset: "time", quantity: #{asset: "injury", kind: "balance", role: "actor"}, role: "actor"}],
+            computed_produce: [
+                #{
+                    asset: "spent-time",
+                    quantity: #{asset: "injury", kind: "balance", role: "actor"},
+                    role: "actor"
+                }
+            ],
+            consume: [["actor", [["at/ridge", "1"], ["energy", "2"], ["time", "1"], ["shield", "2"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/ridge/ruins", "1"]]]],
+            produce: [["actor", [["at/ruins", "1"], ["spent-energy", "2"], ["spent-time", "1"], ["used-shield", "2"]]]]
+        }
+    ]
+]

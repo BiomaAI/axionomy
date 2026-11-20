@@ -1,0 +1,21 @@
+#{
+    start: "workshop/micro",
+    steps: [
+        #{
+            exchange: #{rate: "basic-chair", units: "1", bindings: #{shop: "workshop"}},
+            status: "Applicable",
+            balances: [["workshop", "chair", "1"], ["workshop", "wood", "4"], ["workshop", "tool", "1"]],
+            receipt: #{
+                exchange: #{rate: "basic-chair", units: "1", bindings: #{shop: "workshop"}},
+                deltas: [
+                    #{
+                        account: "workshop",
+                        consumed: [["wood", "2"], ["labor", "1"], ["time", "1"]],
+                        produced: [["chair", "1"], ["waste", "1"], ["spent-labor", "1"], ["spent-time", "1"]],
+                        preserved: [["active", "1"], ["tool", "1"]]
+                    }
+                ]
+            }
+        }
+    ]
+}

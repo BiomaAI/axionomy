@@ -1,0 +1,1917 @@
+[
+    [
+        "arrive/medic/{to}/false",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "medic"},
+                    role: "medic"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "travel-time-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "medic"}
+                }
+            ],
+            consume: [["medic", [["travelling/{to}", "1"]]], ["world", [["team-travelling/medic", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"], ["weather-open/{to}", "1"]]]],
+            produce: [["medic", [["ready", "1"], ["at/{to}", "1"]]], ["world", [["team-at/medic/{to}", "1"]]]],
+            variables: [#{name: "to", values: ["base", "north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "arrive/medic/{to}/true",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "medic"},
+                    role: "medic"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "travel-time-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "medic"}
+                }
+            ],
+            consume: [
+                ["medic", [["travelling/{to}", "1"], ["health", "1"]]],
+                ["world", [["team-travelling/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"], ["weather-blocked/{to}", "1"]]]],
+            produce: [
+                ["medic", [["ready", "1"], ["at/{to}", "1"], ["harm", "1"]]],
+                ["world", [["team-at/medic/{to}", "1"]]]
+            ],
+            variables: [#{name: "to", values: ["base", "north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "arrive/scout/{to}/false",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "scout"},
+                    role: "scout"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "travel-time-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "scout"}
+                }
+            ],
+            consume: [["scout", [["travelling/{to}", "1"]]], ["world", [["team-travelling/scout", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"], ["weather-open/{to}", "1"]]]],
+            produce: [["scout", [["ready", "1"], ["at/{to}", "1"]]], ["world", [["team-at/scout/{to}", "1"]]]],
+            variables: [#{name: "to", values: ["base", "north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "arrive/scout/{to}/true",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "scout"},
+                    role: "scout"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "travel-time-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "scout"}
+                }
+            ],
+            consume: [
+                ["scout", [["travelling/{to}", "1"], ["health", "1"]]],
+                ["world", [["team-travelling/scout", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"], ["weather-blocked/{to}", "1"]]]],
+            produce: [
+                ["scout", [["ready", "1"], ["at/{to}", "1"], ["harm", "1"]]],
+                ["world", [["team-at/scout/{to}", "1"]]]
+            ],
+            variables: [#{name: "to", values: ["base", "north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "clinical/{objective}/{day}/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "clinical-pulse-time-reached",
+                    right: #{kind: "variable", name: "day"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "next-clinical", kind: "balance", role: "world"},
+                    name: "scheduled-pulse",
+                    right: #{kind: "variable", name: "day"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{
+                        kind: "multiply",
+                        left: #{
+                            kind: "add",
+                            left: #{
+                                kind: "add",
+                                left: #{
+                                    kind: "add",
+                                    left: #{asset: "hidden", kind: "balance", role: "objective"},
+                                    right: #{asset: "located", kind: "balance", role: "objective"}
+                                },
+                                right: #{asset: "working", kind: "balance", role: "objective"}
+                            },
+                            right: #{asset: "carried", kind: "balance", role: "objective"}
+                        },
+                        right: #{
+                            kind: "minimum",
+                            left: #{asset: "health", kind: "balance", role: "objective"},
+                            right: #{kind: "constant", value: "1"}
+                        }
+                    },
+                    name: "match-living-unresolved-patient",
+                    right: #{kind: "constant", value: "0"}
+                }
+            ],
+            consume: [["objective", [["clinical-due/{day}", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["clinical-settled/{day}", "1"]]], ["world", [["clinical-count", "1"]]]],
+            relations: [#{rows: [["8"], ["16"], ["24"]], variables: ["day"]}]
+        }
+    ],
+    [
+        "clinical/{objective}/{day}/true",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_consume: [
+                #{
+                    asset: "stable",
+                    quantity: #{asset: "stable", kind: "balance", role: "objective"},
+                    role: "objective"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "unstable",
+                    quantity: #{asset: "stable", kind: "balance", role: "objective"},
+                    role: "objective"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "clinical-pulse-time-reached",
+                    right: #{kind: "variable", name: "day"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "next-clinical", kind: "balance", role: "world"},
+                    name: "scheduled-pulse",
+                    right: #{kind: "variable", name: "day"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{
+                        kind: "multiply",
+                        left: #{
+                            kind: "add",
+                            left: #{
+                                kind: "add",
+                                left: #{
+                                    kind: "add",
+                                    left: #{asset: "hidden", kind: "balance", role: "objective"},
+                                    right: #{asset: "located", kind: "balance", role: "objective"}
+                                },
+                                right: #{asset: "working", kind: "balance", role: "objective"}
+                            },
+                            right: #{asset: "carried", kind: "balance", role: "objective"}
+                        },
+                        right: #{
+                            kind: "minimum",
+                            left: #{asset: "health", kind: "balance", role: "objective"},
+                            right: #{kind: "constant", value: "1"}
+                        }
+                    },
+                    name: "match-living-unresolved-patient",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [["objective", [["clinical-due/{day}", "1"], ["health", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [
+                ["objective", [["clinical-settled/{day}", "1"], ["harm", "1"]]],
+                ["world", [["clinical-count", "1"]]]
+            ],
+            relations: [#{rows: [["8"], ["16"], ["24"]], variables: ["day"]}]
+        }
+    ],
+    [
+        "close",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "resolved", kind: "balance", role: "world"},
+                    name: "all-objectives-resolved",
+                    right: #{kind: "variable", name: "objective-count"}
+                }
+            ],
+            consume: [["world", [["active", "1"]]]],
+            distinct: [],
+            preserve: [["medic", [["ready", "1"]]], ["scout", [["ready", "1"]]]],
+            produce: [["world", [["closed", "1"]]]]
+        }
+    ],
+    [
+        "collect/{objective}/{location}",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_produce: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "3"}
+                    },
+                    role: "scout"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "3"}
+                    },
+                    name: "activity-ends-within-mission-horizon",
+                    right: #{kind: "variable", name: "horizon"}
+                }
+            ],
+            consume: [
+                ["objective", [["located", "1"]]],
+                ["scout", [["energy", "2"], ["ready", "1"]]],
+                ["world", [["permit/scout", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["scout", [["at/{location}", "1"], ["known/{objective}/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["objective", [["working", "1"]]],
+                ["scout", [["spent-energy", "2"], ["collecting/{objective}", "1"]]],
+                ["world", [["used-permit/scout", "1"]]]
+            ],
+            variables: [
+                #{name: "objective", values: ["1"]},
+                #{name: "location", values: ["north", "east", "south", "west"]}
+            ]
+        }
+    ],
+    [
+        "deliver/0",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/0"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_produce: [
+                #{
+                    asset: "saved-vitality",
+                    quantity: #{asset: "health", kind: "balance", role: "objective"},
+                    role: "world"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "delivery-before-deadline",
+                    right: #{kind: "variable", name: "deadline"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "evacuated-alive",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [
+                ["medic", [["cargo/0", "1"]]],
+                ["objective", [["carried", "1"]]],
+                ["world", [["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/base", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["seat", "1"]]],
+                ["objective", [["complete", "1"]]],
+                ["world", [["used-permit/medic", "1"], ["resolved", "1"], ["completed", "1"]]]
+            ]
+        }
+    ],
+    [
+        "deliver/1",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/1"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "delivery-before-deadline",
+                    right: #{kind: "variable", name: "deadline"}
+                }
+            ],
+            consume: [
+                ["objective", [["carried", "1"]]],
+                ["scout", [["cargo/1", "1"]]],
+                ["world", [["permit/scout", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["scout", [["ready", "1"], ["at/base", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["objective", [["complete", "1"]]],
+                ["scout", []],
+                ["world", [["used-permit/scout", "1"], ["resolved", "1"], ["completed", "1"]]]
+            ]
+        }
+    ],
+    [
+        "depart/medic/{from}/{to}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "energy",
+                    quantity: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "distance"},
+                        right: #{asset: "harm", kind: "balance", role: "medic"}
+                    },
+                    role: "medic"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "spent-energy",
+                    quantity: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "distance"},
+                        right: #{asset: "harm", kind: "balance", role: "medic"}
+                    },
+                    role: "medic"
+                },
+                #{
+                    asset: "ready-at",
+                    quantity: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "distance"},
+                            right: #{asset: "harm", kind: "balance", role: "medic"}
+                        }
+                    },
+                    role: "medic"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "distance"},
+                            right: #{asset: "harm", kind: "balance", role: "medic"}
+                        }
+                    },
+                    name: "activity-ends-within-mission-horizon",
+                    right: #{kind: "variable", name: "horizon"}
+                }
+            ],
+            consume: [
+                ["medic", [["ready", "1"], ["at/{from}", "1"]]],
+                ["world", [["permit/medic", "1"], ["team-at/medic/{from}", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"], ["weather-open/{to}", "1"]]]],
+            produce: [
+                ["medic", [["travelling/{to}", "1"]]],
+                ["world", [["used-permit/medic", "1"], ["team-travelling/medic", "1"]]]
+            ],
+            variables: [
+                #{name: "from", values: ["base", "north", "east", "south", "west"]},
+                #{name: "to", values: ["base", "north", "east", "south", "west"]}
+            ],
+            relations: [
+                #{
+                    gives: ["distance"],
+                    rows: [
+                        ["base", "north", "1"],
+                        ["base", "east", "2"],
+                        ["base", "south", "1"],
+                        ["base", "west", "2"],
+                        ["north", "base", "1"],
+                        ["north", "east", "1"],
+                        ["north", "south", "2"],
+                        ["north", "west", "1"],
+                        ["east", "base", "2"],
+                        ["east", "north", "1"],
+                        ["east", "south", "1"],
+                        ["east", "west", "2"],
+                        ["south", "base", "1"],
+                        ["south", "north", "2"],
+                        ["south", "east", "1"],
+                        ["south", "west", "1"],
+                        ["west", "base", "2"],
+                        ["west", "north", "1"],
+                        ["west", "east", "2"],
+                        ["west", "south", "1"]
+                    ],
+                    variables: ["from", "to"]
+                }
+            ]
+        }
+    ],
+    [
+        "depart/scout/{from}/{to}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "energy",
+                    quantity: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "distance"},
+                        right: #{asset: "harm", kind: "balance", role: "scout"}
+                    },
+                    role: "scout"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "spent-energy",
+                    quantity: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "distance"},
+                        right: #{asset: "harm", kind: "balance", role: "scout"}
+                    },
+                    role: "scout"
+                },
+                #{
+                    asset: "ready-at",
+                    quantity: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "distance"},
+                            right: #{asset: "harm", kind: "balance", role: "scout"}
+                        }
+                    },
+                    role: "scout"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "distance"},
+                            right: #{asset: "harm", kind: "balance", role: "scout"}
+                        }
+                    },
+                    name: "activity-ends-within-mission-horizon",
+                    right: #{kind: "variable", name: "horizon"}
+                }
+            ],
+            consume: [
+                ["scout", [["ready", "1"], ["at/{from}", "1"]]],
+                ["world", [["permit/scout", "1"], ["team-at/scout/{from}", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"], ["weather-open/{to}", "1"]]]],
+            produce: [
+                ["scout", [["travelling/{to}", "1"]]],
+                ["world", [["used-permit/scout", "1"], ["team-travelling/scout", "1"]]]
+            ],
+            variables: [
+                #{name: "from", values: ["base", "north", "east", "south", "west"]},
+                #{name: "to", values: ["base", "north", "east", "south", "west"]}
+            ],
+            relations: [
+                #{
+                    gives: ["distance"],
+                    rows: [
+                        ["base", "north", "1"],
+                        ["base", "east", "2"],
+                        ["base", "south", "1"],
+                        ["base", "west", "2"],
+                        ["north", "base", "1"],
+                        ["north", "east", "1"],
+                        ["north", "south", "2"],
+                        ["north", "west", "1"],
+                        ["east", "base", "2"],
+                        ["east", "north", "1"],
+                        ["east", "south", "1"],
+                        ["east", "west", "2"],
+                        ["south", "base", "1"],
+                        ["south", "north", "2"],
+                        ["south", "east", "1"],
+                        ["south", "west", "1"],
+                        ["west", "base", "2"],
+                        ["west", "north", "1"],
+                        ["west", "east", "2"],
+                        ["west", "south", "1"]
+                    ],
+                    variables: ["from", "to"]
+                }
+            ]
+        }
+    ],
+    [
+        "discover/{objective}/{location}",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["nature", "nature"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [["objective", [["hidden", "1"]]]],
+            distinct: [],
+            preserve: [
+                ["nature", [["truth/{objective}/{location}", "1"]]],
+                ["scout", [["surveyed/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [["objective", [["located", "1"]]], ["scout", [["known/{objective}/{location}", "1"]]]]
+        }
+    ],
+    [
+        "extract/{objective}/{location}",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_produce: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "2"}
+                    },
+                    role: "scout"
+                },
+                #{
+                    asset: "ready-at",
+                    quantity: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "2"}
+                    },
+                    role: "medic"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "2"}
+                    },
+                    name: "activity-ends-within-mission-horizon",
+                    right: #{kind: "variable", name: "horizon"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "patient-alive",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [
+                ["medic", [["seat", "1"], ["energy", "1"], ["ready", "1"]]],
+                ["objective", [["located", "1"]]],
+                ["scout", [["energy", "1"], ["ready", "1"]]],
+                ["world", [["permit/scout", "1"], ["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["at/{location}", "1"], ["known/{objective}/{location}", "1"]]],
+                ["objective", [["stable", "1"]]],
+                ["scout", [["at/{location}", "1"], ["known/{objective}/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                [
+                    "medic",
+                    [["reserved-seat/{objective}", "1"], ["spent-energy", "1"], ["extracting/{objective}", "1"]]
+                ],
+                ["objective", [["working", "1"]]],
+                ["scout", [["spent-energy", "1"], ["extracting/{objective}", "1"]]],
+                ["world", [["used-permit/scout", "1"], ["used-permit/medic", "1"]]]
+            ]
+        }
+    ],
+    [
+        "fail/0/carried/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/0"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "deadline-passed",
+                    right: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "deadline"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [["medic", [["cargo/0", "1"]]], ["objective", [["carried", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [
+                ["medic", [["seat", "1"]]],
+                ["objective", [["failed", "1"]]],
+                ["world", [["resolved", "1"], ["failed-count", "1"]]]
+            ]
+        }
+    ],
+    [
+        "fail/1/carried/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/1"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "deadline-passed",
+                    right: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "deadline"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [["objective", [["carried", "1"]]], ["scout", [["cargo/1", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["failed", "1"]]], ["world", [["resolved", "1"], ["failed-count", "1"]]]]
+        }
+    ],
+    [
+        "fail/{objective}/carried/true",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "patient-died",
+                    right: #{kind: "constant", value: "0"}
+                }
+            ],
+            consume: [["medic", [["cargo/{objective}", "1"]]], ["objective", [["carried", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [
+                ["medic", [["seat", "1"]]],
+                ["objective", [["failed", "1"]]],
+                ["world", [["resolved", "1"], ["failed-count", "1"]]]
+            ]
+        }
+    ],
+    [
+        "fail/{objective}/hidden/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "deadline-passed",
+                    right: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "deadline"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [["objective", [["hidden", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["failed", "1"]]], ["world", [["resolved", "1"], ["failed-count", "1"]]]]
+        }
+    ],
+    [
+        "fail/{objective}/hidden/true",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "patient-died",
+                    right: #{kind: "constant", value: "0"}
+                }
+            ],
+            consume: [["objective", [["hidden", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["failed", "1"]]], ["world", [["resolved", "1"], ["failed-count", "1"]]]]
+        }
+    ],
+    [
+        "fail/{objective}/located/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "deadline-passed",
+                    right: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "deadline"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            consume: [["objective", [["located", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["failed", "1"]]], ["world", [["resolved", "1"], ["failed-count", "1"]]]]
+        }
+    ],
+    [
+        "fail/{objective}/located/true",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "patient-died",
+                    right: #{kind: "constant", value: "0"}
+                }
+            ],
+            consume: [["objective", [["located", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["failed", "1"]]], ["world", [["resolved", "1"], ["failed-count", "1"]]]]
+        }
+    ],
+    [
+        "finish-collect/{objective}",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "scout"},
+                    role: "scout"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "work-duration-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "scout"}
+                }
+            ],
+            consume: [["objective", [["working", "1"]]], ["scout", [["collecting/{objective}", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [["objective", [["carried", "1"]]], ["scout", [["cargo/{objective}", "1"], ["ready", "1"]]]],
+            variables: [#{name: "objective", values: ["1"]}]
+        }
+    ],
+    [
+        "finish-extract/{objective}",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            computed_consume: [
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "scout"},
+                    role: "scout"
+                },
+                #{
+                    asset: "ready-at",
+                    quantity: #{asset: "ready-at", kind: "balance", role: "medic"},
+                    role: "medic"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "work-duration-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "scout"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "work-duration-elapsed",
+                    right: #{asset: "ready-at", kind: "balance", role: "medic"}
+                }
+            ],
+            consume: [
+                ["medic", [["extracting/{objective}", "1"], ["reserved-seat/{objective}", "1"]]],
+                ["objective", [["working", "1"]]],
+                ["scout", [["extracting/{objective}", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [
+                ["medic", [["cargo/{objective}", "1"], ["ready", "1"]]],
+                ["objective", [["carried", "1"]]],
+                ["scout", [["ready", "1"]]]
+            ]
+        }
+    ],
+    [
+        "report/{round}/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["nature", "nature"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [["scout", [["awaiting-report", "1"], ["scan-round/{round}", "1"]]]],
+            derived: [
+                #{
+                    name: "next",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "round"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [
+                ["nature", [["signal/{round}/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [["scout", [["ready", "1"], ["scan-round/{next}", "1"], ["hint/{round}/{location}", "1"]]]],
+            variables: [
+                #{name: "round", range: ["0", "1"]},
+                #{name: "location", values: ["north", "east", "south", "west"]}
+            ]
+        }
+    ],
+    [
+        "resupply/medic",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [
+                ["medic", []],
+                ["world", [["permit/medic", "1"], ["energy", "4"], ["medical-kit", "1"], ["supply", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/base", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["energy", "4"], ["medical-kit", "1"]]],
+                ["world", [["used-permit/medic", "1"], ["used-supply", "1"]]]
+            ]
+        }
+    ],
+    [
+        "resupply/scout",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [["scout", []], ["world", [["permit/scout", "1"], ["energy", "4"], ["supply", "1"]]]],
+            distinct: [],
+            preserve: [
+                ["scout", [["ready", "1"], ["at/base", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", []],
+                ["scout", [["energy", "4"]]],
+                ["world", [["used-permit/scout", "1"], ["used-supply", "1"]]]
+            ]
+        }
+    ],
+    [
+        "scan",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [["scout", [["energy", "1"], ["ready", "1"], ["sensor", "1"]]], ["world", [["permit/scout", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"], ["environment-ready", "1"]]]],
+            produce: [
+                ["scout", [["spent-energy", "1"], ["awaiting-report", "1"], ["used-sensor", "1"]]],
+                ["world", [["used-permit/scout", "1"]]]
+            ]
+        }
+    ],
+    [
+        "share/{objective}/{location}/false",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "known/{objective}/{location}", kind: "balance", role: "medic"},
+                    name: "recipient-does-not-already-know",
+                    right: #{kind: "constant", value: "0"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{
+                        kind: "add",
+                        left: #{
+                            kind: "add",
+                            left: #{
+                                kind: "add",
+                                left: #{
+                                    kind: "add",
+                                    left: #{
+                                        kind: "multiply",
+                                        left: #{asset: "at/base", kind: "balance", role: "scout"},
+                                        right: #{asset: "at/base", kind: "balance", role: "medic"}
+                                    },
+                                    right: #{
+                                        kind: "multiply",
+                                        left: #{asset: "at/north", kind: "balance", role: "scout"},
+                                        right: #{asset: "at/north", kind: "balance", role: "medic"}
+                                    }
+                                },
+                                right: #{
+                                    kind: "multiply",
+                                    left: #{asset: "at/east", kind: "balance", role: "scout"},
+                                    right: #{asset: "at/east", kind: "balance", role: "medic"}
+                                }
+                            },
+                            right: #{
+                                kind: "multiply",
+                                left: #{asset: "at/south", kind: "balance", role: "scout"},
+                                right: #{asset: "at/south", kind: "balance", role: "medic"}
+                            }
+                        },
+                        right: #{
+                            kind: "multiply",
+                            left: #{asset: "at/west", kind: "balance", role: "scout"},
+                            right: #{asset: "at/west", kind: "balance", role: "medic"}
+                        }
+                    },
+                    name: "local-briefing-requires-rendezvous",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [["scout", []], ["world", [["permit/scout", "1"]]]],
+            distinct: [],
+            preserve: [
+                ["scout", [["ready", "1"], ["known/{objective}/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["known/{objective}/{location}", "1"]]],
+                ["scout", [["shared/{objective}/{location}", "1"]]],
+                ["world", [["used-permit/scout", "1"]]]
+            ]
+        }
+    ],
+    [
+        "share/{objective}/{location}/true",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "known/{objective}/{location}", kind: "balance", role: "medic"},
+                    name: "recipient-does-not-already-know",
+                    right: #{kind: "constant", value: "0"}
+                }
+            ],
+            consume: [["scout", [["radio", "1"]]], ["world", [["permit/scout", "1"]]]],
+            distinct: [],
+            preserve: [
+                ["scout", [["ready", "1"], ["known/{objective}/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["known/{objective}/{location}", "1"]]],
+                ["scout", [["shared/{objective}/{location}", "1"], ["used-radio", "1"]]],
+                ["world", [["used-permit/scout", "1"]]]
+            ]
+        }
+    ],
+    [
+        "survey/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [["scout", [["energy", "1"], ["unsearched/{location}", "1"]]], ["world", [["permit/scout", "1"]]]],
+            distinct: [],
+            preserve: [
+                ["scout", [["ready", "1"], ["at/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["scout", [["spent-energy", "1"], ["surveyed/{location}", "1"]]],
+                ["world", [["used-permit/scout", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "tick/{day}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            computed_consume: [
+                #{
+                    asset: "environment-ready",
+                    quantity: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "weather-closes"},
+                        right: #{kind: "variable", name: "weather-clears"}
+                    },
+                    role: "world"
+                },
+                #{
+                    asset: "used-permit/scout",
+                    quantity: #{asset: "used-permit/scout", kind: "balance", role: "world"},
+                    role: "world"
+                },
+                #{
+                    asset: "used-permit/medic",
+                    quantity: #{asset: "used-permit/medic", kind: "balance", role: "world"},
+                    role: "world"
+                }
+            ],
+            computed_preserve: [
+                #{
+                    asset: "environment-ready",
+                    quantity: #{
+                        kind: "subtract",
+                        left: #{kind: "constant", value: "1"},
+                        right: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "weather-closes"},
+                            right: #{kind: "variable", name: "weather-clears"}
+                        }
+                    },
+                    role: "world"
+                }
+            ],
+            computed_produce: [
+                #{
+                    asset: "weather-due/false",
+                    quantity: #{kind: "variable", name: "weather-closes"},
+                    role: "world"
+                },
+                #{
+                    asset: "weather-due/true",
+                    quantity: #{kind: "variable", name: "weather-clears"},
+                    role: "world"
+                },
+                #{
+                    asset: "permit/scout",
+                    quantity: #{asset: "used-permit/scout", kind: "balance", role: "world"},
+                    role: "world"
+                },
+                #{
+                    asset: "permit/medic",
+                    quantity: #{asset: "used-permit/medic", kind: "balance", role: "world"},
+                    role: "world"
+                }
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "time", kind: "balance", role: "world"},
+                    name: "clock-step",
+                    right: #{kind: "variable", name: "day"}
+                }
+            ],
+            consume: [["world", [["time-remaining", "1"]]]],
+            distinct: [],
+            preserve: [["world", [["active", "1"]]]],
+            produce: [["world", [["time", "1"]]]]
+        }
+    ],
+    [
+        "treat-agent/medic/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [
+                ["medic", [["energy", "1"], ["medical-kit", "1"], ["harm", "1"]]],
+                ["world", [["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/{location}", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["spent-energy", "1"], ["used-medical-kit", "1"], ["health", "1"]]],
+                ["world", [["used-permit/medic", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["base", "north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "treat-agent/scout/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                }
+            ],
+            consume: [
+                ["medic", [["energy", "1"], ["medical-kit", "1"]]],
+                ["scout", [["harm", "1"]]],
+                ["world", [["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/{location}", "1"]]],
+                ["scout", [["at/{location}", "1"], ["ready", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["spent-energy", "1"], ["used-medical-kit", "1"]]],
+                ["scout", [["health", "1"]]],
+                ["world", [["used-permit/medic", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["base", "north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "treat-patient/{objective}/{location}/false",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "patient-alive",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "harm", kind: "balance", role: "objective"},
+                    name: "no-damage-to-restore",
+                    right: #{kind: "constant", value: "0"}
+                }
+            ],
+            consume: [
+                ["medic", [["energy", "1"], ["medical-kit", "1"]]],
+                ["objective", [["unstable", "1"]]],
+                ["world", [["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/{location}", "1"], ["known/{objective}/{location}", "1"]]],
+                ["objective", [["located", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["spent-energy", "1"], ["used-medical-kit", "1"]]],
+                ["objective", [["stable", "1"]]],
+                ["world", [["used-permit/medic", "1"]]]
+            ]
+        }
+    ],
+    [
+        "treat-patient/{objective}/{location}/true",
+        #{
+            accounts: [
+                ["medic", "agent/medic"],
+                ["objective", "objective/{objective}"],
+                ["scout", "agent/scout"],
+                ["world", "world"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "add",
+                        left: #{asset: "time", kind: "balance", role: "world"},
+                        right: #{kind: "constant", value: "1"}
+                    },
+                    name: "settle-scheduled-clinical-events-first",
+                    right: #{asset: "next-clinical", kind: "balance", role: "world"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{asset: "health", kind: "balance", role: "objective"},
+                    name: "patient-alive",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [
+                ["medic", [["energy", "1"], ["medical-kit", "1"]]],
+                ["objective", [["unstable", "1"], ["harm", "1"]]],
+                ["world", [["permit/medic", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["ready", "1"], ["at/{location}", "1"], ["known/{objective}/{location}", "1"]]],
+                ["objective", [["located", "1"]]],
+                ["world", [["active", "1"], ["environment-ready", "1"]]]
+            ],
+            produce: [
+                ["medic", [["spent-energy", "1"], ["used-medical-kit", "1"]]],
+                ["objective", [["stable", "1"], ["health", "1"]]],
+                ["world", [["used-permit/medic", "1"]]]
+            ]
+        }
+    ],
+    [
+        "weather/{location}/false",
+        #{
+            accounts: [["medic", "agent/medic"], ["nature", "nature"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [["world", [["weather-due/false", "1"], ["weather-open/{location}", "1"]]]],
+            distinct: [],
+            preserve: [["nature", [["hazard-site/{location}", "1"]]], ["world", [["active", "1"]]]],
+            produce: [["world", [["environment-ready", "1"], ["weather-blocked/{location}", "1"]]]],
+            variables: [#{name: "location", values: ["north", "east", "south", "west"]}]
+        }
+    ],
+    [
+        "weather/{location}/true",
+        #{
+            accounts: [["medic", "agent/medic"], ["nature", "nature"], ["scout", "agent/scout"], ["world", "world"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{kind: "units"},
+                    name: "one-mission-event",
+                    right: #{kind: "constant", value: "1"}
+                }
+            ],
+            consume: [["world", [["weather-due/true", "1"], ["weather-blocked/{location}", "1"]]]],
+            distinct: [],
+            preserve: [["nature", [["hazard-site/{location}", "1"]]], ["world", [["active", "1"]]]],
+            produce: [["world", [["environment-ready", "1"], ["weather-open/{location}", "1"]]]],
+            variables: [#{name: "location", values: ["north", "east", "south", "west"]}]
+        }
+    ]
+]

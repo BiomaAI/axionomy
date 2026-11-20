@@ -1,0 +1,245 @@
+[
+    [
+        "begin-scan",
+        #{
+            accounts: [["mission", "mission"], ["scout", "agent/scout"]],
+            consume: [["mission", [["planning", "1"], ["time-remaining", "1"]]], ["scout", [["sensor", "1"]]]],
+            distinct: [],
+            preserve: [["scout", [["at/base", "1"]]]],
+            produce: [["mission", [["awaiting-scan", "1"], ["elapsed-time", "1"]]], ["scout", [["used-sensor", "1"]]]]
+        }
+    ],
+    [
+        "encounter/{location}/injury",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["nature", "nature"], ["scout", "agent/scout"]],
+            consume: [
+                ["mission", [["awaiting-encounter", "1"], ["time-remaining", "1"]]],
+                ["nature", [["hazard/injury", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["at/{location}", "1"]]],
+                ["nature", [["truth/{location}", "1"]]],
+                ["scout", [["at/{location}", "1"]]]
+            ],
+            produce: [
+                ["mission", [["elapsed-time", "1"], ["needs-treatment", "1"]]],
+                ["nature", [["hazard-resolved", "1"]]],
+                ["scout", [["injured", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["north", "south"]}]
+        }
+    ],
+    [
+        "encounter/{location}/safe",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["nature", "nature"], ["scout", "agent/scout"]],
+            consume: [
+                ["mission", [["awaiting-encounter", "1"], ["time-remaining", "1"]]],
+                ["nature", [["hazard/safe", "1"]]]
+            ],
+            distinct: [],
+            preserve: [
+                ["medic", [["at/{location}", "1"]]],
+                ["nature", [["truth/{location}", "1"]]],
+                ["scout", [["at/{location}", "1"]]]
+            ],
+            produce: [["mission", [["elapsed-time", "1"], ["area-safe", "1"]]], ["nature", [["hazard-resolved", "1"]]]],
+            variables: [#{name: "location", values: ["north", "south"]}]
+        }
+    ],
+    [
+        "finish",
+        #{
+            accounts: [["goal", "success"], ["mission", "mission"]],
+            consume: [["mission", [["rescued", "1"]]]],
+            distinct: [],
+            preserve: [],
+            produce: [["goal", [["solved", "1"]]]]
+        }
+    ],
+    [
+        "instantiate/{truth}/{seed}/{hazard}",
+        #{
+            accounts: [["nature", "nature"]],
+            consume: [["nature", [["unresolved", "1"]]]],
+            distinct: [],
+            preserve: [],
+            produce: [["nature", [["truth/{truth}", "1"], ["seed/{seed}", "1"], ["hazard/{hazard}", "1"]]]],
+            variables: [
+                #{name: "truth", values: ["north", "south"]},
+                #{name: "seed", range: ["0", "3"]},
+                #{name: "hazard", values: ["injury", "safe"]}
+            ],
+            relations: [
+                #{
+                    gives: ["weight"],
+                    rows: [
+                        ["north", "0", "safe", "1"],
+                        ["north", "0", "injury", "1"],
+                        ["north", "1", "safe", "1"],
+                        ["north", "1", "injury", "1"],
+                        ["north", "2", "safe", "1"],
+                        ["north", "2", "injury", "1"],
+                        ["north", "3", "safe", "1"],
+                        ["north", "3", "injury", "1"],
+                        ["south", "0", "safe", "1"],
+                        ["south", "0", "injury", "1"],
+                        ["south", "1", "safe", "1"],
+                        ["south", "1", "injury", "1"],
+                        ["south", "2", "safe", "1"],
+                        ["south", "2", "injury", "1"],
+                        ["south", "3", "safe", "1"],
+                        ["south", "3", "injury", "1"]
+                    ],
+                    variables: ["truth", "seed", "hazard"]
+                }
+            ]
+        }
+    ],
+    [
+        "move-direct/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["scout", "agent/scout"]],
+            consume: [
+                ["medic", [["at/base", "1"], ["energy", "1"]]],
+                ["mission", [["planning", "1"], ["time-remaining", "1"]]],
+                ["scout", [["at/base", "1"], ["energy", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["scout", [["sensor", "1"]]]],
+            produce: [
+                ["medic", [["at/{location}", "1"], ["spent-energy", "1"]]],
+                ["mission", [["awaiting-encounter", "1"], ["elapsed-time", "1"]]],
+                ["scout", [["at/{location}", "1"], ["spent-energy", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["north", "south"]}]
+        }
+    ],
+    [
+        "move-together/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["scout", "agent/scout"]],
+            consume: [
+                ["medic", [["at/base", "1"], ["energy", "1"]]],
+                ["mission", [["planning", "1"], ["time-remaining", "1"]]],
+                ["scout", [["at/base", "1"], ["energy", "1"]]]
+            ],
+            distinct: [],
+            preserve: [["medic", [["intel/{location}", "1"]]], ["scout", [["shared-intel/{location}", "1"]]]],
+            produce: [
+                ["medic", [["at/{location}", "1"], ["spent-energy", "1"]]],
+                ["mission", [["awaiting-encounter", "1"], ["elapsed-time", "1"]]],
+                ["scout", [["at/{location}", "1"], ["spent-energy", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["north", "south"]}]
+        }
+    ],
+    [
+        "rescue/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["nature", "nature"], ["scout", "agent/scout"]],
+            consume: [["mission", [["area-safe", "1"], ["time-remaining", "1"]]]],
+            distinct: [],
+            preserve: [
+                ["medic", [["at/{location}", "1"]]],
+                ["nature", [["truth/{location}", "1"]]],
+                ["scout", [["at/{location}", "1"]]]
+            ],
+            produce: [["mission", [["rescued", "1"], ["elapsed-time", "1"]]]],
+            variables: [#{name: "location", values: ["north", "south"]}]
+        }
+    ],
+    [
+        "resolve-scan/{truth}/{seed}/{report}",
+        #{
+            accounts: [["mission", "mission"], ["nature", "nature"], ["scout", "agent/scout"]],
+            consume: [["mission", [["awaiting-scan", "1"]]], ["nature", [["seed/{seed}", "1"]]]],
+            derived: [
+                #{
+                    name: "next",
+                    value: #{
+                        kind: "subtract",
+                        left: #{
+                            kind: "add",
+                            left: #{kind: "variable", name: "seed"},
+                            right: #{kind: "constant", value: "1"}
+                        },
+                        right: #{
+                            kind: "multiply",
+                            left: #{
+                                denominator: #{kind: "constant", value: "4"},
+                                kind: "mul_div",
+                                left: #{
+                                    kind: "add",
+                                    left: #{kind: "variable", name: "seed"},
+                                    right: #{kind: "constant", value: "1"}
+                                },
+                                right: #{kind: "constant", value: "1"},
+                                rounding: "floor"
+                            },
+                            right: #{kind: "constant", value: "4"}
+                        }
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [["nature", [["truth/{truth}", "1"]]]],
+            produce: [
+                ["mission", [["planning", "1"]]],
+                ["nature", [["seed/{next}", "1"]]],
+                ["scout", [["intel/{report}", "1"]]]
+            ],
+            variables: [
+                #{name: "truth", values: ["north", "south"]},
+                #{name: "seed", range: ["0", "3"]},
+                #{name: "report", values: ["north", "south"]}
+            ],
+            relations: [
+                #{
+                    rows: [
+                        ["north", "0", "south"],
+                        ["north", "1", "north"],
+                        ["north", "2", "north"],
+                        ["north", "3", "north"],
+                        ["south", "0", "north"],
+                        ["south", "1", "south"],
+                        ["south", "2", "south"],
+                        ["south", "3", "south"]
+                    ],
+                    variables: ["truth", "seed", "report"]
+                }
+            ]
+        }
+    ],
+    [
+        "share/{location}",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["scout", "agent/scout"]],
+            consume: [["mission", [["time-remaining", "1"]]], ["scout", [["intel/{location}", "1"]]]],
+            distinct: [],
+            preserve: [["mission", [["planning", "1"]]]],
+            produce: [
+                ["medic", [["intel/{location}", "1"]]],
+                ["mission", [["elapsed-time", "1"]]],
+                ["scout", [["shared-intel/{location}", "1"]]]
+            ],
+            variables: [#{name: "location", values: ["north", "south"]}]
+        }
+    ],
+    [
+        "treat",
+        #{
+            accounts: [["medic", "agent/medic"], ["mission", "mission"], ["scout", "agent/scout"]],
+            consume: [
+                ["medic", [["medical-kit", "1"]]],
+                ["mission", [["needs-treatment", "1"], ["time-remaining", "1"]]],
+                ["scout", [["injured", "1"]]]
+            ],
+            distinct: [],
+            preserve: [],
+            produce: [["medic", [["used-medical-kit", "1"]]], ["mission", [["area-safe", "1"], ["elapsed-time", "1"]]]]
+        }
+    ]
+]

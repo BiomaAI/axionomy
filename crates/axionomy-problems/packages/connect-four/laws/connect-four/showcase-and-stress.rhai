@@ -1,0 +1,67 @@
+[
+    [
+        "draw/{player}",
+        #{
+            accounts: [
+                ["full/0", "column/0"],
+                ["full/1", "column/1"],
+                ["full/2", "column/2"],
+                ["full/3", "column/3"],
+                ["full/4", "column/4"],
+                ["full/5", "column/5"],
+                ["full/6", "column/6"],
+                ["game", "game"],
+                ["result", "result"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/0"},
+                    name: "the-column-is-full/0",
+                    right: #{kind: "constant", value: "6"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/1"},
+                    name: "the-column-is-full/1",
+                    right: #{kind: "constant", value: "6"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/2"},
+                    name: "the-column-is-full/2",
+                    right: #{kind: "constant", value: "6"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/3"},
+                    name: "the-column-is-full/3",
+                    right: #{kind: "constant", value: "6"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/4"},
+                    name: "the-column-is-full/4",
+                    right: #{kind: "constant", value: "6"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/5"},
+                    name: "the-column-is-full/5",
+                    right: #{kind: "constant", value: "6"}
+                },
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "full/6"},
+                    name: "the-column-is-full/6",
+                    right: #{kind: "constant", value: "6"}
+                }
+            ],
+            consume: [["game", [["turn/{player}", "1"]]]],
+            distinct: [],
+            preserve: [],
+            produce: [["result", [["draw", "1"]]]],
+            variables: [#{name: "player", values: ["red", "yellow"]}]
+        }
+    ]
+]

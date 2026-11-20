@@ -1,0 +1,1 @@
+#{format: "axionomy.package/1", name: "pantry", version: #{major: 1, minor: 0, patch: 0}}

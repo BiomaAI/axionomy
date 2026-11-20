@@ -1,0 +1,12 @@
+[
+    [
+        "deliver",
+        #{
+            consume: [["supplier", [["meal", "1"]]]],
+            produce: [["recipient", [["meal", "1"]]]],
+            preserve: [],
+            distinct: [["supplier", "recipient"]],
+            accounts: [["supplier", "stockroom"], ["recipient", "counter"]]
+        }
+    ]
+]

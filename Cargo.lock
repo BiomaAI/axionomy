@@ -446,6 +446,9 @@ dependencies = [
  "indexmap 2.14.2",
  "rhai",
  "serde",
+ "serde_ignored",
+ "serde_path_to_error",
+ "thiserror",
 ]
 
 [[package]]

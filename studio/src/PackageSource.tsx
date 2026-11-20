@@ -7,7 +7,7 @@ export function PackageSource({ engine, pkg }: { engine: PackageEngine; pkg: Pac
     queryKey: ["package-source", engine.kind, pkg.name, pkg.version],
     queryFn: () => engine.sourceTree(pkg.name),
   });
-  const [file, setFile] = useState("package.json");
+  const [file, setFile] = useState("package.rhai");
   const [experiment, setExperiment] = useState(pkg.experiments[0]?.experiment ?? "");
   const comparison = useMutation({
     mutationFn: (other: File) => engine.compareBuild(pkg.name, experiment, other),

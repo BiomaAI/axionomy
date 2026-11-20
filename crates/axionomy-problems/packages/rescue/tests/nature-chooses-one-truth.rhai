@@ -1,0 +1,10 @@
+#{
+    start: "rescue/micro",
+    steps: [
+        #{
+            exchange: #{rate: "instantiate/north/0", units: "1", bindings: #{nature: "nature"}},
+            status: "Applicable",
+            balances: [["nature", "truth/north", "1"], ["nature", "unresolved", "0"]]
+        }
+    ]
+}

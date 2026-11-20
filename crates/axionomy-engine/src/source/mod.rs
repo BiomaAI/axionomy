@@ -200,7 +200,18 @@ type Instance = axionomy_authoring::Instance<paths::Paths>;
 /// Parses and checks all files, then builds the source into a fresh store.
 pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
     let manifest = &SourceFile::Package;
+    let host = axionomy_authoring::program::Program::with_modules(files.iter().filter_map(
+        |(file, text)| {
+            if let SourceFile::Library(id) = file {
+                Some((id, text.as_str()))
+            } else {
+                None
+            }
+        },
+    ))
+    .map_err(|(id, err)| files::diagnostic(&SourceFile::Library(id), err))?;
     let header: Header = files::parse(
+        &host,
         manifest,
         files
             .get(manifest)
@@ -218,9 +229,9 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
     for (file, text) in files {
         match file {
             SourceFile::Package => {}
-            SourceFile::Definitions => definitions = files::parse(file, text)?,
+            SourceFile::Definitions => definitions = files::parse(&host, file, text)?,
             SourceFile::Ontology(id) => {
-                let vocab: Vocabulary = files::parse(file, text)?;
+                let vocab: Vocabulary = files::parse(&host, file, text)?;
                 for f in &vocab.account_families {
                     f.validate().map_err(|e| Diagnostic::new(file, e))?;
                 }
@@ -233,7 +244,7 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
                 vocabularies.insert(id, vocab);
             }
             SourceFile::Laws(id) => {
-                let declarations = files::parse(file, text)?;
+                let declarations = files::parse(&host, file, text)?;
                 law_sets.insert(
                     id,
                     axionomy_authoring::expand(declarations)
@@ -241,13 +252,18 @@ pub fn build(files: &SourceFiles) -> Result<BuiltPackage, Diagnostic> {
                 );
             }
             SourceFile::Instance(id) => {
-                instances.insert(id, files::parse(file, text)?);
+                instances.insert(id, files::parse(&host, file, text)?);
             }
-            SourceFile::Script(id) => {
-                scripts.insert(id, text.as_str());
+            SourceFile::Script(id) | SourceFile::Library(id) => {
+                if scripts.insert(id, text.as_str()).is_some() {
+                    return Err(Diagnostic::new(
+                        file,
+                        format!("duplicate script module {id}"),
+                    ));
+                }
             }
             SourceFile::Test(id) => {
-                tests.insert(id.clone(), files::parse(file, text)?);
+                tests.insert(id.clone(), files::parse(&host, file, text)?);
             }
         }
     }

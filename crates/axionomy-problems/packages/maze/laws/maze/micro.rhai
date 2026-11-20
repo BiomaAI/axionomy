@@ -1,0 +1,82 @@
+[
+    [
+        "finish",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["active", "1"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["at/exit", "1"]]], ["environment", [["target/exit", "1"]]]],
+            produce: [["actor", [["solved", "1"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/detour/exit/5/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["at/detour", "1"], ["energy", "5"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/detour/exit", "1"]]]],
+            produce: [["actor", [["at/exit", "1"], ["spent-energy", "5"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/gate/exit/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["at/gate", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/gate/exit", "1"]]]],
+            produce: [["actor", [["at/exit", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/key-room/gate/2/true",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["at/key-room", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/key-room/gate", "1"], ["open", "1"]]]],
+            produce: [["actor", [["at/gate", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/start/detour/4/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["at/start", "1"], ["energy", "4"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/start/detour", "1"]]]],
+            produce: [["actor", [["at/detour", "1"], ["spent-energy", "4"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "move/start/key-room/2/false",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["at/start", "1"], ["energy", "2"], ["time", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["active", "1"]]], ["environment", [["edge/start/key-room", "1"]]]],
+            produce: [["actor", [["at/key-room", "1"], ["spent-energy", "2"], ["spent-time", "1"]]]]
+        }
+    ],
+    [
+        "take-key/key-room",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["time", "1"]]], ["environment", [["key", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["at/key-room", "1"], ["active", "1"]]]],
+            produce: [["actor", [["spent-time", "1"], ["key", "1"]]]]
+        }
+    ],
+    [
+        "unlock-door/key-room",
+        #{
+            accounts: [["actor", "agent"], ["environment", "world"]],
+            consume: [["actor", [["key", "1"], ["time", "1"]]], ["environment", [["locked", "1"]]]],
+            distinct: [],
+            preserve: [["actor", [["at/key-room", "1"], ["active", "1"]]]],
+            produce: [["actor", [["spent-time", "1"]]], ["environment", [["open", "1"]]]]
+        }
+    ]
+]

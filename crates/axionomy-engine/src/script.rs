@@ -22,7 +22,7 @@ use crate::{
 };
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Basket, Instance, ObservationKey, PathKind, Pattern,
-    Quantity, RatePath, RolePath, Rounding, VariablePath,
+    Quantity, RatePath, RolePath, VariablePath,
     path::Path,
     paths::{self, Paths},
 };
@@ -62,15 +62,7 @@ const MAX_CALL_LEVELS: usize = 64;
 
 /// The kind of path a script is named by.
 pub mod kind {
-    use axionomy::PathKind;
-
-    /// A script a package carries.
-    pub enum Script {}
-
-    impl PathKind for Script {
-        const SCHEMA: &'static str = "ScriptPath";
-        const EXAMPLE: &'static str = "maze/heuristic";
-    }
+    pub use axionomy_authoring::program::Library as Script;
 }
 
 /// A script's name, such as `maze/heuristic`.
@@ -316,7 +308,6 @@ pub(crate) fn host(scripts: Scripts) -> rhai::Engine {
     rhai.on_print(|_| {});
     rhai.on_debug(|_, _, _| {});
     axionomy_authoring::script::register(&mut rhai);
-    quantities(&mut rhai);
     states(&mut rhai);
     exchanges(&mut rhai);
     crate::view::register(&mut rhai);
@@ -617,69 +608,6 @@ fn imports(ast: &rhai::AST) -> Result<Vec<ScriptPath>, String> {
 }
 
 use axionomy_authoring::script::quantity as quantity_of;
-
-fn checked(value: Option<Quantity>, what: &str) -> Result<Quantity, Failure> {
-    value.ok_or_else(|| format!("{what} is out of range").into())
-}
-
-fn rounding(name: &str) -> Result<Rounding, Failure> {
-    match name {
-        "floor" => Ok(Rounding::Floor),
-        "ceil" => Ok(Rounding::Ceil),
-        other => Err(format!("rounding `{other}` is neither `floor` nor `ceil`").into()),
-    }
-}
-
-fn quantities(rhai: &mut rhai::Engine) {
-    rhai.register_fn("to_string", |q: &mut Quantity| q.to_string())
-        .register_fn("to_debug", |q: &mut Quantity| q.to_string())
-        .register_fn("is_zero", |q: &mut Quantity| q.is_zero())
-        .register_fn("to_int", |q: &mut Quantity| -> Result<i64, Failure> {
-            i64::try_from(u64::try_from(*q).map_err(|_| Failure::from("too large"))?)
-                .map_err(|_| format!("{q} does not fit an integer").into())
-        })
-        .register_fn(
-            "mul_div",
-            |a: Quantity, b: Quantity, c: Quantity, round: &str| {
-                checked(a.checked_mul_div(b, c, rounding(round)?), "a mul_div")
-            },
-        )
-        .register_fn("min", |a: Quantity, b: Quantity| a.min(b))
-        .register_fn("max", |a: Quantity, b: Quantity| a.max(b));
-    macro_rules! arithmetic {
-        ($($operator:literal => $method:ident),*) => {$(
-            rhai.register_fn($operator, |a: Quantity, b: Quantity| {
-                checked(a.$method(b), concat!("a quantity ", $operator))
-            });
-            rhai.register_fn($operator, |a: Quantity, b: i64| {
-                checked(a.$method(quantity_of(b)?), concat!("a quantity ", $operator))
-            });
-            rhai.register_fn($operator, |a: i64, b: Quantity| {
-                checked(quantity_of(a)?.$method(b), concat!("a quantity ", $operator))
-            });
-        )*};
-    }
-    arithmetic!("+" => checked_add, "-" => checked_sub, "*" => checked_mul);
-    macro_rules! comparisons {
-        ($($operator:literal => $compare:expr),*) => {$(
-            rhai.register_fn($operator, |a: Quantity, b: Quantity| $compare(a, b));
-            rhai.register_fn($operator, |a: Quantity, b: i64| -> Result<bool, Failure> {
-                Ok($compare(a, quantity_of(b)?))
-            });
-            rhai.register_fn($operator, |a: i64, b: Quantity| -> Result<bool, Failure> {
-                Ok($compare(quantity_of(a)?, b))
-            });
-        )*};
-    }
-    comparisons!(
-        "==" => |a: Quantity, b: Quantity| a == b,
-        "!=" => |a: Quantity, b: Quantity| a != b,
-        "<" => |a: Quantity, b: Quantity| a < b,
-        "<=" => |a: Quantity, b: Quantity| a <= b,
-        ">" => |a: Quantity, b: Quantity| a > b,
-        ">=" => |a: Quantity, b: Quantity| a >= b
-    );
-}
 
 fn parsed<K: PathKind>(text: &str) -> Result<Path<K>, Failure> {
     text.parse()

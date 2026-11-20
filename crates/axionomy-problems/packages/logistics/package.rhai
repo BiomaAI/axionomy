@@ -1,0 +1,11 @@
+#{
+    format: "axionomy.package/1",
+    name: "logistics",
+    version: #{major: 0, minor: 3, patch: 2},
+    script_ontologies: #{
+        logistics: ["logistics"],
+        "logistics/view": ["logistics"],
+        "logistics/fleet/view": ["logistics/fleet"],
+        "logistics/fleet": ["logistics/fleet"]
+    }
+}

@@ -1,9 +1,13 @@
 //! Read the shipped model as the problem's own account, asset, role and
 //! rate types. Unknown typed identifiers fail while the fixture is built.
 use axionomy::{Account, Basket, Economy, Ontology, OntologyPath, Quantity, path::Path};
+use axionomy_authoring::program::{LibraryPath, Program};
 use axionomy_authoring::{Instance, LawSet, LawSetPath};
 use serde::de::DeserializeOwned;
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, LazyLock, Mutex},
+};
 
 pub(super) const GALLERY: &[(&str, &str, &str)] = include!(concat!(env!("OUT_DIR"), "/gallery.rs"));
 
@@ -41,9 +45,7 @@ where
         .split('/')
         .next()
         .expect("a package name");
-    let mut instance: Instance<O> =
-        serde_json::from_str(file(package, &format!("instances/{reference}.json")))
-            .expect("typed instance");
+    let mut instance: Instance<O> = document(package, &format!("instances/{reference}.rhai"));
     assert_eq!(instance.ontology, OntologyPath::of::<O>());
     edit(&mut instance);
     let laws: BTreeMap<LawSetPath, LawSet<O>> = instance
@@ -81,12 +83,53 @@ pub(super) fn set<O: Ontology>(
     *account = Account::from(balances);
 }
 
-fn file(package: &str, relative: &str) -> &'static str {
-    GALLERY
+// The source is embedded and immutable. Evaluate each program once, then
+// decode its result through each problem's own strongly typed ontology.
+type SourceKey = (&'static str, &'static str);
+type ValueCache = Mutex<BTreeMap<SourceKey, Arc<axionomy_authoring::program::Value>>>;
+
+fn document<T: DeserializeOwned>(package: &str, relative: &str) -> T {
+    static HOSTS: LazyLock<BTreeMap<&'static str, Program>> = LazyLock::new(|| {
+        let mut libraries = BTreeMap::<_, Vec<(LibraryPath, &str)>>::new();
+        for &(package, file, text) in GALLERY {
+            let modules = libraries.entry(package).or_default();
+            if let Some(id) = file
+                .strip_prefix("lib/")
+                .and_then(|p| p.strip_suffix(".rhai"))
+            {
+                modules.push((id.parse().unwrap(), text));
+            }
+        }
+        libraries
+            .into_iter()
+            .map(|(id, modules)| {
+                (
+                    id,
+                    Program::with_modules(modules.iter().map(|(id, text)| (id, *text)))
+                        .expect("gallery authoring modules"),
+                )
+            })
+            .collect()
+    });
+    static VALUES: LazyLock<ValueCache> = LazyLock::new(Mutex::default);
+    let &(package, file, source) = GALLERY
         .iter()
         .find(|(p, name, _)| *p == package && *name == relative)
-        .unwrap_or_else(|| panic!("missing {relative} in {package}"))
-        .2
+        .unwrap_or_else(|| panic!("missing {relative} in {package}"));
+    let value = VALUES
+        .lock()
+        .expect("fixture values")
+        .entry((package, file))
+        .or_insert_with(|| {
+            Arc::new(
+                HOSTS[package]
+                    .evaluate(source)
+                    .unwrap_or_else(|e| panic!("{file}: {e}")),
+            )
+        })
+        .clone();
+    axionomy_authoring::program::decode(&value)
+        .unwrap_or_else(|e| panic!("{file} {}: {e}", e.field))
 }
 
 pub(super) fn laws<O>(id: &LawSetPath) -> LawSet<O>
@@ -99,7 +142,6 @@ where
         >,
 {
     let package = id.as_str().split('/').next().expect("a package name");
-    let declarations =
-        serde_json::from_str(file(package, &format!("laws/{id}.json"))).expect("typed rate laws");
+    let declarations = document(package, &format!("laws/{id}.rhai"));
     axionomy_authoring::expand(declarations).expect("finite checked rate families")
 }

@@ -1,0 +1,160 @@
+let model = #{ontology: "maze", laws: ["maze/showcase-and-stress", "maze/stress"]};
+let accounts = [];
+accounts.push(opening(account("agent"), basket([
+    amount(asset("active"), 1),
+    amount(asset("at/start"), 1),
+    amount(asset("energy"), 24),
+    amount(asset("health"), 3),
+    amount(asset("time"), 18)
+])));
+accounts.push(opening(account("world"), basket([
+    amount(asset("distance/archive"), 5),
+    amount(asset("distance/atrium"), 5),
+    amount(asset("distance/bridge"), 2),
+    amount(asset("distance/canal"), 4),
+    amount(asset("distance/chapel"), 4),
+    amount(asset("distance/detour"), 7),
+    amount(asset("distance/docks"), 8),
+    amount(asset("distance/foundry"), 6),
+    amount(asset("distance/gallery"), 3),
+    amount(asset("distance/garden"), 8),
+    amount(asset("distance/gate"), 2),
+    amount(asset("distance/key-room"), 5),
+    amount(asset("distance/library"), 4),
+    amount(asset("distance/market"), 6),
+    amount(asset("distance/observatory"), 3),
+    amount(asset("distance/ridge"), 8),
+    amount(asset("distance/ruins"), 6),
+    amount(asset("distance/scriptorium"), 6),
+    amount(asset("distance/start"), 6),
+    amount(asset("distance/tower"), 5),
+    amount(asset("distance/tunnel"), 6),
+    amount(asset("distance/vault"), 1),
+    amount(asset("distance/workshop"), 6),
+    amount(asset("edge/archive/gallery"), 1),
+    amount(asset("edge/archive/scriptorium"), 1),
+    amount(asset("edge/atrium/archive"), 1),
+    amount(asset("edge/atrium/gallery"), 1),
+    amount(asset("edge/atrium/library"), 1),
+    amount(asset("edge/bridge/canal"), 1),
+    amount(asset("edge/bridge/exit"), 1),
+    amount(asset("edge/canal/bridge"), 1),
+    amount(asset("edge/chapel/bridge"), 1),
+    amount(asset("edge/detour/exit"), 1),
+    amount(asset("edge/docks/foundry"), 1),
+    amount(asset("edge/foundry/canal"), 1),
+    amount(asset("edge/foundry/tower"), 1),
+    amount(asset("edge/gallery/gate"), 1),
+    amount(asset("edge/gallery/market"), 1),
+    amount(asset("edge/garden/market"), 1),
+    amount(asset("edge/garden/workshop"), 1),
+    amount(asset("edge/gate/vault"), 1),
+    amount(asset("edge/key-room/library"), 1),
+    amount(asset("edge/key-room/scriptorium"), 1),
+    amount(asset("edge/library/gallery"), 1),
+    amount(asset("edge/library/key-room"), 1),
+    amount(asset("edge/market/canal"), 1),
+    amount(asset("edge/market/docks"), 1),
+    amount(asset("edge/market/gallery"), 1),
+    amount(asset("edge/observatory/exit"), 1),
+    amount(asset("edge/ridge/ruins"), 1),
+    amount(asset("edge/ruins/chapel"), 1),
+    amount(asset("edge/ruins/garden"), 1),
+    amount(asset("edge/scriptorium/archive"), 1),
+    amount(asset("edge/scriptorium/key-room"), 1),
+    amount(asset("edge/start/atrium"), 1),
+    amount(asset("edge/start/detour"), 1),
+    amount(asset("edge/start/garden"), 1),
+    amount(asset("edge/start/tunnel"), 1),
+    amount(asset("edge/tower/observatory"), 1),
+    amount(asset("edge/tunnel/bridge"), 1),
+    amount(asset("edge/tunnel/ridge"), 1),
+    amount(asset("edge/tunnel/workshop"), 1),
+    amount(asset("edge/vault/exit"), 1),
+    amount(asset("edge/workshop/canal"), 1),
+    amount(asset("edge/workshop/garden"), 1),
+    amount(asset("key"), 1),
+    amount(asset("locked"), 1),
+    amount(asset("medicine"), 2),
+    amount(asset("power-transit"), 1),
+    amount(asset("shield"), 2),
+    amount(asset("target/exit"), 1)
+])));
+model.accounts = accounts;
+let rules = [];
+{
+    let rule = invariant("one-agent-position");
+    for name in [
+        "at/archive",
+        "at/atrium",
+        "at/bridge",
+        "at/canal",
+        "at/chapel",
+        "at/detour",
+        "at/docks",
+        "at/exit",
+        "at/foundry",
+        "at/gallery",
+        "at/garden",
+        "at/gate",
+        "at/key-room",
+        "at/library",
+        "at/market",
+        "at/observatory",
+        "at/ridge",
+        "at/ruins",
+        "at/scriptorium",
+        "at/start",
+        "at/tower",
+        "at/tunnel",
+        "at/vault",
+        "at/workshop"
+    ] {
+        rule.weight(asset(name), 1);
+    }
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("energy-is-only-spent");
+    rule.weight(asset("energy"), 1);
+    rule.weight(asset("spent-energy"), 1);
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("time-is-only-spent");
+    rule.weight(asset("time"), 1);
+    rule.weight(asset("spent-time"), 1);
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("maze-lifecycle");
+    rule.weight(asset("active"), 1);
+    rule.weight(asset("solved"), 1);
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("one-shared-power-circuit");
+    rule.weight(asset("power-transit"), 1);
+    rule.weight(asset("power-vault"), 1);
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("health-and-injury");
+    rule.weight(asset("health"), 1);
+    rule.weight(asset("injury"), 1);
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("finite-protective-equipment");
+    rule.weight(asset("shield"), 1);
+    rule.weight(asset("used-shield"), 1);
+    rules.push(rule.finish());
+}
+{
+    let rule = invariant("finite-medicine");
+    rule.weight(asset("medicine"), 1);
+    rule.weight(asset("used-medicine"), 1);
+    rules.push(rule.finish());
+}
+model.invariants = rules;
+model

@@ -2,7 +2,7 @@
 //! bindings are shared by package construction and the live engine.
 use axionomy::{
     AccountPath, AssetAmount, AssetPath, InvariantPath, PathKind, Quantity, RatePath, RolePath,
-    path::Path, paths,
+    Rounding, path::Path, paths,
 };
 use indexmap::{IndexMap, map::Entry};
 use rhai::{Array, Engine, EvalAltResult, ImmutableString};
@@ -60,6 +60,7 @@ impl Invariant {
 
 pub fn register(engine: &mut Engine) {
     use axionomy::path::kind;
+    quantities(engine);
     identifier::<kind::Account>(engine, "account");
     identifier::<kind::Asset>(engine, "asset");
     identifier::<kind::Rate>(engine, "rate");
@@ -143,4 +144,67 @@ pub fn register(engine: &mut Engine) {
                 Ok(exchange.bind(role, account))
             },
         );
+}
+
+fn checked(value: Option<Quantity>, what: &str) -> Result<Quantity, Failure> {
+    value.ok_or_else(|| format!("{what} is out of range").into())
+}
+
+fn rounding(name: &str) -> Result<Rounding, Failure> {
+    match name {
+        "floor" => Ok(Rounding::Floor),
+        "ceil" => Ok(Rounding::Ceil),
+        other => Err(format!("rounding `{other}` is neither `floor` nor `ceil`").into()),
+    }
+}
+
+fn quantities(rhai: &mut rhai::Engine) {
+    rhai.register_fn("to_string", |q: &mut Quantity| q.to_string())
+        .register_fn("to_debug", |q: &mut Quantity| q.to_string())
+        .register_fn("is_zero", |q: &mut Quantity| q.is_zero())
+        .register_fn("to_int", |q: &mut Quantity| -> Result<i64, Failure> {
+            i64::try_from(u64::try_from(*q).map_err(|_| Failure::from("too large"))?)
+                .map_err(|_| format!("{q} does not fit an integer").into())
+        })
+        .register_fn(
+            "mul_div",
+            |a: Quantity, b: Quantity, c: Quantity, round: &str| {
+                checked(a.checked_mul_div(b, c, rounding(round)?), "a mul_div")
+            },
+        )
+        .register_fn("min", |a: Quantity, b: Quantity| a.min(b))
+        .register_fn("max", |a: Quantity, b: Quantity| a.max(b));
+    macro_rules! arithmetic {
+        ($($operator:literal => $method:ident),*) => {$(
+            rhai.register_fn($operator, |a: Quantity, b: Quantity| {
+                checked(a.$method(b), concat!("a quantity ", $operator))
+            });
+            rhai.register_fn($operator, |a: Quantity, b: i64| {
+                checked(a.$method(quantity(b)?), concat!("a quantity ", $operator))
+            });
+            rhai.register_fn($operator, |a: i64, b: Quantity| {
+                checked(quantity(a)?.$method(b), concat!("a quantity ", $operator))
+            });
+        )*};
+    }
+    arithmetic!("+" => checked_add, "-" => checked_sub, "*" => checked_mul);
+    macro_rules! comparisons {
+        ($($operator:literal => $compare:expr),*) => {$(
+            rhai.register_fn($operator, |a: Quantity, b: Quantity| $compare(a, b));
+            rhai.register_fn($operator, |a: Quantity, b: i64| -> Result<bool, Failure> {
+                Ok($compare(a, quantity(b)?))
+            });
+            rhai.register_fn($operator, |a: i64, b: Quantity| -> Result<bool, Failure> {
+                Ok($compare(quantity(a)?, b))
+            });
+        )*};
+    }
+    comparisons!(
+        "==" => |a: Quantity, b: Quantity| a == b,
+        "!=" => |a: Quantity, b: Quantity| a != b,
+        "<" => |a: Quantity, b: Quantity| a < b,
+        "<=" => |a: Quantity, b: Quantity| a <= b,
+        ">" => |a: Quantity, b: Quantity| a > b,
+        ">=" => |a: Quantity, b: Quantity| a >= b
+    );
 }

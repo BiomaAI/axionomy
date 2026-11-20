@@ -1,6 +1,0 @@
-{
-  "accounts": ["counter", "stockroom"],
-  "assets": ["meal"],
-  "roles": ["recipient", "supplier"],
-  "rates": ["deliver"]
-}

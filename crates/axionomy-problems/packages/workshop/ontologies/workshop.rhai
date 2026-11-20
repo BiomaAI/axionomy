@@ -1,0 +1,107 @@
+let world = ontology();
+
+for name in ["customer/0", "customer/1", "customer/2", "customer/3", "customer/4", "workshop"] {
+    world.declare(account(name));
+}
+
+for name in [
+    "active",
+    "assembled/0",
+    "assembled/1",
+    "assembled/2",
+    "assembled/3",
+    "assembled/4",
+    "chair",
+    "completed",
+    "contract/0",
+    "contract/1",
+    "contract/2",
+    "contract/3",
+    "contract/4",
+    "credit",
+    "durability",
+    "frame",
+    "fulfilled/0",
+    "fulfilled/1",
+    "fulfilled/2",
+    "fulfilled/3",
+    "fulfilled/4",
+    "idle",
+    "labor",
+    "offcut",
+    "panel",
+    "prepared/0",
+    "prepared/1",
+    "prepared/2",
+    "prepared/3",
+    "prepared/4",
+    "raw/0",
+    "raw/1",
+    "raw/2",
+    "raw/3",
+    "raw/4",
+    "repair-kit",
+    "solved",
+    "spent-labor",
+    "spent-time",
+    "table",
+    "time",
+    "tool",
+    "tool-potential",
+    "upgrade-kit",
+    "upgraded",
+    "used-repair-kit",
+    "waste",
+    "wear",
+    "wood"
+] {
+    world.declare(asset(name));
+}
+
+for name in ["customer", "shop"] {
+    world.declare(role(name));
+}
+
+for name in [
+    "accept/0",
+    "accept/1",
+    "accept/2",
+    "accept/3",
+    "accept/4",
+    "assemble/0",
+    "assemble/1",
+    "assemble/2",
+    "assemble/3",
+    "assemble/4",
+    "basic-chair",
+    "counterfeit-chair",
+    "deliver/0",
+    "deliver/1",
+    "deliver/2",
+    "deliver/3",
+    "deliver/4",
+    "efficient-batch",
+    "finish",
+    "prepare/0/false/false",
+    "prepare/0/false/true",
+    "prepare/0/true/false",
+    "prepare/1/false/false",
+    "prepare/1/false/true",
+    "prepare/1/true/false",
+    "prepare/2/false/false",
+    "prepare/2/false/true",
+    "prepare/2/true/false",
+    "prepare/3/false/false",
+    "prepare/3/false/true",
+    "prepare/3/true/false",
+    "prepare/4/false/false",
+    "prepare/4/false/true",
+    "prepare/4/true/false",
+    "recycle",
+    "repair",
+    "upgrade"
+] {
+    world.rate_pattern(name);
+}
+
+world

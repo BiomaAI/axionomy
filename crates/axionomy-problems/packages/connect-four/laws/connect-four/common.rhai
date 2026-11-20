@@ -1,0 +1,636 @@
+[
+    [
+        "drop/red/{column}/{row}",
+        #{
+            accounts: [["cell", "cell/{column}/{row}"], ["column", "column/{column}"], ["game", "game"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "column"},
+                    name: "lands-on-the-column-height",
+                    right: #{kind: "variable", name: "row"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "maximum",
+                        left: #{
+                            kind: "maximum",
+                            left: #{
+                                kind: "maximum",
+                                left: #{
+                                    kind: "maximum",
+                                    left: #{
+                                        kind: "maximum",
+                                        left: #{
+                                            kind: "maximum",
+                                            left: #{
+                                                kind: "maximum",
+                                                left: #{
+                                                    kind: "maximum",
+                                                    left: #{
+                                                        kind: "maximum",
+                                                        left: #{
+                                                            kind: "maximum",
+                                                            left: #{
+                                                                kind: "maximum",
+                                                                left: #{
+                                                                    kind: "maximum",
+                                                                    left: #{
+                                                                        kind: "maximum",
+                                                                        left: #{
+                                                                            kind: "maximum",
+                                                                            left: #{
+                                                                                kind: "maximum",
+                                                                                left: #{
+                                                                                    asset: "line/red/across/{column}/{row}",
+                                                                                    kind: "balance",
+                                                                                    role: "game"
+                                                                                },
+                                                                                right: #{
+                                                                                    asset: "line/red/up/{column}/{row}",
+                                                                                    kind: "balance",
+                                                                                    role: "game"
+                                                                                }
+                                                                            },
+                                                                            right: #{
+                                                                                asset: "line/red/rising/{column}/{row}",
+                                                                                kind: "balance",
+                                                                                role: "game"
+                                                                            }
+                                                                        },
+                                                                        right: #{
+                                                                            asset: "line/red/falling/{column}/{up-3}",
+                                                                            kind: "balance",
+                                                                            role: "game"
+                                                                        }
+                                                                    },
+                                                                    right: #{
+                                                                        asset: "line/red/across/{right-1}/{row}",
+                                                                        kind: "balance",
+                                                                        role: "game"
+                                                                    }
+                                                                },
+                                                                right: #{
+                                                                    asset: "line/red/up/{column}/{up-1}",
+                                                                    kind: "balance",
+                                                                    role: "game"
+                                                                }
+                                                            },
+                                                            right: #{
+                                                                asset: "line/red/rising/{right-1}/{up-1}",
+                                                                kind: "balance",
+                                                                role: "game"
+                                                            }
+                                                        },
+                                                        right: #{
+                                                            asset: "line/red/falling/{right-1}/{up-2}",
+                                                            kind: "balance",
+                                                            role: "game"
+                                                        }
+                                                    },
+                                                    right: #{
+                                                        asset: "line/red/across/{right-2}/{row}",
+                                                        kind: "balance",
+                                                        role: "game"
+                                                    }
+                                                },
+                                                right: #{
+                                                    asset: "line/red/up/{column}/{up-2}",
+                                                    kind: "balance",
+                                                    role: "game"
+                                                }
+                                            },
+                                            right: #{
+                                                asset: "line/red/rising/{right-2}/{up-2}",
+                                                kind: "balance",
+                                                role: "game"
+                                            }
+                                        },
+                                        right: #{
+                                            asset: "line/red/falling/{right-2}/{up-1}",
+                                            kind: "balance",
+                                            role: "game"
+                                        }
+                                    },
+                                    right: #{asset: "line/red/across/{right-3}/{row}", kind: "balance", role: "game"}
+                                },
+                                right: #{asset: "line/red/up/{column}/{up-3}", kind: "balance", role: "game"}
+                            },
+                            right: #{asset: "line/red/rising/{right-3}/{up-3}", kind: "balance", role: "game"}
+                        },
+                        right: #{asset: "line/red/falling/{right-3}/{row}", kind: "balance", role: "game"}
+                    },
+                    name: "completes-no-line-of-four",
+                    right: #{kind: "constant", value: "2"}
+                }
+            ],
+            consume: [["cell", [["empty", "1"]]], ["game", [["turn/red", "1"]]]],
+            derived: [
+                #{
+                    name: "right-1",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                },
+                #{
+                    name: "up-1",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                },
+                #{
+                    name: "right-2",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "2"}
+                    }
+                },
+                #{
+                    name: "up-2",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "2"}
+                    }
+                },
+                #{
+                    name: "right-3",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "3"}
+                    }
+                },
+                #{
+                    name: "up-3",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "3"}
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [],
+            produce: [
+                ["cell", [["piece/red", "1"]]],
+                ["column", [["height", "1"]]],
+                [
+                    "game",
+                    [
+                        ["line/red/across/{column}/{row}", "1"],
+                        ["line/red/up/{column}/{row}", "1"],
+                        ["line/red/rising/{column}/{row}", "1"],
+                        ["line/red/falling/{column}/{up-3}", "1"],
+                        ["line/red/across/{right-1}/{row}", "1"],
+                        ["line/red/up/{column}/{up-1}", "1"],
+                        ["line/red/rising/{right-1}/{up-1}", "1"],
+                        ["line/red/falling/{right-1}/{up-2}", "1"],
+                        ["line/red/across/{right-2}/{row}", "1"],
+                        ["line/red/up/{column}/{up-2}", "1"],
+                        ["line/red/rising/{right-2}/{up-2}", "1"],
+                        ["line/red/falling/{right-2}/{up-1}", "1"],
+                        ["line/red/across/{right-3}/{row}", "1"],
+                        ["line/red/up/{column}/{up-3}", "1"],
+                        ["line/red/rising/{right-3}/{up-3}", "1"],
+                        ["line/red/falling/{right-3}/{row}", "1"],
+                        ["turn/yellow", "1"]
+                    ]
+                ]
+            ]
+        }
+    ],
+    [
+        "drop/yellow/{column}/{row}",
+        #{
+            accounts: [["cell", "cell/{column}/{row}"], ["column", "column/{column}"], ["game", "game"]],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "column"},
+                    name: "lands-on-the-column-height",
+                    right: #{kind: "variable", name: "row"}
+                },
+                #{
+                    comparison: "less_than_or_equal",
+                    left: #{
+                        kind: "maximum",
+                        left: #{
+                            kind: "maximum",
+                            left: #{
+                                kind: "maximum",
+                                left: #{
+                                    kind: "maximum",
+                                    left: #{
+                                        kind: "maximum",
+                                        left: #{
+                                            kind: "maximum",
+                                            left: #{
+                                                kind: "maximum",
+                                                left: #{
+                                                    kind: "maximum",
+                                                    left: #{
+                                                        kind: "maximum",
+                                                        left: #{
+                                                            kind: "maximum",
+                                                            left: #{
+                                                                kind: "maximum",
+                                                                left: #{
+                                                                    kind: "maximum",
+                                                                    left: #{
+                                                                        kind: "maximum",
+                                                                        left: #{
+                                                                            kind: "maximum",
+                                                                            left: #{
+                                                                                kind: "maximum",
+                                                                                left: #{
+                                                                                    asset: "line/yellow/across/{column}/{row}",
+                                                                                    kind: "balance",
+                                                                                    role: "game"
+                                                                                },
+                                                                                right: #{
+                                                                                    asset: "line/yellow/up/{column}/{row}",
+                                                                                    kind: "balance",
+                                                                                    role: "game"
+                                                                                }
+                                                                            },
+                                                                            right: #{
+                                                                                asset: "line/yellow/rising/{column}/{row}",
+                                                                                kind: "balance",
+                                                                                role: "game"
+                                                                            }
+                                                                        },
+                                                                        right: #{
+                                                                            asset: "line/yellow/falling/{column}/{up-3}",
+                                                                            kind: "balance",
+                                                                            role: "game"
+                                                                        }
+                                                                    },
+                                                                    right: #{
+                                                                        asset: "line/yellow/across/{right-1}/{row}",
+                                                                        kind: "balance",
+                                                                        role: "game"
+                                                                    }
+                                                                },
+                                                                right: #{
+                                                                    asset: "line/yellow/up/{column}/{up-1}",
+                                                                    kind: "balance",
+                                                                    role: "game"
+                                                                }
+                                                            },
+                                                            right: #{
+                                                                asset: "line/yellow/rising/{right-1}/{up-1}",
+                                                                kind: "balance",
+                                                                role: "game"
+                                                            }
+                                                        },
+                                                        right: #{
+                                                            asset: "line/yellow/falling/{right-1}/{up-2}",
+                                                            kind: "balance",
+                                                            role: "game"
+                                                        }
+                                                    },
+                                                    right: #{
+                                                        asset: "line/yellow/across/{right-2}/{row}",
+                                                        kind: "balance",
+                                                        role: "game"
+                                                    }
+                                                },
+                                                right: #{
+                                                    asset: "line/yellow/up/{column}/{up-2}",
+                                                    kind: "balance",
+                                                    role: "game"
+                                                }
+                                            },
+                                            right: #{
+                                                asset: "line/yellow/rising/{right-2}/{up-2}",
+                                                kind: "balance",
+                                                role: "game"
+                                            }
+                                        },
+                                        right: #{
+                                            asset: "line/yellow/falling/{right-2}/{up-1}",
+                                            kind: "balance",
+                                            role: "game"
+                                        }
+                                    },
+                                    right: #{
+                                        asset: "line/yellow/across/{right-3}/{row}",
+                                        kind: "balance",
+                                        role: "game"
+                                    }
+                                },
+                                right: #{asset: "line/yellow/up/{column}/{up-3}", kind: "balance", role: "game"}
+                            },
+                            right: #{asset: "line/yellow/rising/{right-3}/{up-3}", kind: "balance", role: "game"}
+                        },
+                        right: #{asset: "line/yellow/falling/{right-3}/{row}", kind: "balance", role: "game"}
+                    },
+                    name: "completes-no-line-of-four",
+                    right: #{kind: "constant", value: "2"}
+                }
+            ],
+            consume: [["cell", [["empty", "1"]]], ["game", [["turn/yellow", "1"]]]],
+            derived: [
+                #{
+                    name: "right-1",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                },
+                #{
+                    name: "up-1",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                },
+                #{
+                    name: "right-2",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "2"}
+                    }
+                },
+                #{
+                    name: "up-2",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "2"}
+                    }
+                },
+                #{
+                    name: "right-3",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "3"}
+                    }
+                },
+                #{
+                    name: "up-3",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "3"}
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [],
+            produce: [
+                ["cell", [["piece/yellow", "1"]]],
+                ["column", [["height", "1"]]],
+                [
+                    "game",
+                    [
+                        ["line/yellow/across/{column}/{row}", "1"],
+                        ["line/yellow/up/{column}/{row}", "1"],
+                        ["line/yellow/rising/{column}/{row}", "1"],
+                        ["line/yellow/falling/{column}/{up-3}", "1"],
+                        ["line/yellow/across/{right-1}/{row}", "1"],
+                        ["line/yellow/up/{column}/{up-1}", "1"],
+                        ["line/yellow/rising/{right-1}/{up-1}", "1"],
+                        ["line/yellow/falling/{right-1}/{up-2}", "1"],
+                        ["line/yellow/across/{right-2}/{row}", "1"],
+                        ["line/yellow/up/{column}/{up-2}", "1"],
+                        ["line/yellow/rising/{right-2}/{up-2}", "1"],
+                        ["line/yellow/falling/{right-2}/{up-1}", "1"],
+                        ["line/yellow/across/{right-3}/{row}", "1"],
+                        ["line/yellow/up/{column}/{up-3}", "1"],
+                        ["line/yellow/rising/{right-3}/{up-3}", "1"],
+                        ["line/yellow/falling/{right-3}/{row}", "1"],
+                        ["turn/red", "1"]
+                    ]
+                ]
+            ]
+        }
+    ],
+    [
+        "win/{player}/{column}/{row}",
+        #{
+            accounts: [
+                ["cell", "cell/{column}/{row}"],
+                ["column", "column/{column}"],
+                ["game", "game"],
+                ["result", "result"]
+            ],
+            conditions: [
+                #{
+                    comparison: "equal",
+                    left: #{asset: "height", kind: "balance", role: "column"},
+                    name: "lands-on-the-column-height",
+                    right: #{kind: "variable", name: "row"}
+                },
+                #{
+                    comparison: "greater_than_or_equal",
+                    left: #{
+                        kind: "maximum",
+                        left: #{
+                            kind: "maximum",
+                            left: #{
+                                kind: "maximum",
+                                left: #{
+                                    kind: "maximum",
+                                    left: #{
+                                        kind: "maximum",
+                                        left: #{
+                                            kind: "maximum",
+                                            left: #{
+                                                kind: "maximum",
+                                                left: #{
+                                                    kind: "maximum",
+                                                    left: #{
+                                                        kind: "maximum",
+                                                        left: #{
+                                                            kind: "maximum",
+                                                            left: #{
+                                                                kind: "maximum",
+                                                                left: #{
+                                                                    kind: "maximum",
+                                                                    left: #{
+                                                                        kind: "maximum",
+                                                                        left: #{
+                                                                            kind: "maximum",
+                                                                            left: #{
+                                                                                kind: "maximum",
+                                                                                left: #{
+                                                                                    asset: "line/{player}/across/{column}/{row}",
+                                                                                    kind: "balance",
+                                                                                    role: "game"
+                                                                                },
+                                                                                right: #{
+                                                                                    asset: "line/{player}/up/{column}/{row}",
+                                                                                    kind: "balance",
+                                                                                    role: "game"
+                                                                                }
+                                                                            },
+                                                                            right: #{
+                                                                                asset: "line/{player}/rising/{column}/{row}",
+                                                                                kind: "balance",
+                                                                                role: "game"
+                                                                            }
+                                                                        },
+                                                                        right: #{
+                                                                            asset: "line/{player}/falling/{column}/{up-3}",
+                                                                            kind: "balance",
+                                                                            role: "game"
+                                                                        }
+                                                                    },
+                                                                    right: #{
+                                                                        asset: "line/{player}/across/{right-1}/{row}",
+                                                                        kind: "balance",
+                                                                        role: "game"
+                                                                    }
+                                                                },
+                                                                right: #{
+                                                                    asset: "line/{player}/up/{column}/{up-1}",
+                                                                    kind: "balance",
+                                                                    role: "game"
+                                                                }
+                                                            },
+                                                            right: #{
+                                                                asset: "line/{player}/rising/{right-1}/{up-1}",
+                                                                kind: "balance",
+                                                                role: "game"
+                                                            }
+                                                        },
+                                                        right: #{
+                                                            asset: "line/{player}/falling/{right-1}/{up-2}",
+                                                            kind: "balance",
+                                                            role: "game"
+                                                        }
+                                                    },
+                                                    right: #{
+                                                        asset: "line/{player}/across/{right-2}/{row}",
+                                                        kind: "balance",
+                                                        role: "game"
+                                                    }
+                                                },
+                                                right: #{
+                                                    asset: "line/{player}/up/{column}/{up-2}",
+                                                    kind: "balance",
+                                                    role: "game"
+                                                }
+                                            },
+                                            right: #{
+                                                asset: "line/{player}/rising/{right-2}/{up-2}",
+                                                kind: "balance",
+                                                role: "game"
+                                            }
+                                        },
+                                        right: #{
+                                            asset: "line/{player}/falling/{right-2}/{up-1}",
+                                            kind: "balance",
+                                            role: "game"
+                                        }
+                                    },
+                                    right: #{
+                                        asset: "line/{player}/across/{right-3}/{row}",
+                                        kind: "balance",
+                                        role: "game"
+                                    }
+                                },
+                                right: #{asset: "line/{player}/up/{column}/{up-3}", kind: "balance", role: "game"}
+                            },
+                            right: #{asset: "line/{player}/rising/{right-3}/{up-3}", kind: "balance", role: "game"}
+                        },
+                        right: #{asset: "line/{player}/falling/{right-3}/{row}", kind: "balance", role: "game"}
+                    },
+                    name: "completes-a-line-of-four",
+                    right: #{kind: "constant", value: "3"}
+                }
+            ],
+            consume: [["cell", [["empty", "1"]]], ["game", [["turn/{player}", "1"]]]],
+            derived: [
+                #{
+                    name: "right-1",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                },
+                #{
+                    name: "up-1",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "1"}
+                    }
+                },
+                #{
+                    name: "right-2",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "2"}
+                    }
+                },
+                #{
+                    name: "up-2",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "2"}
+                    }
+                },
+                #{
+                    name: "right-3",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "column"},
+                        right: #{kind: "constant", value: "3"}
+                    }
+                },
+                #{
+                    name: "up-3",
+                    value: #{
+                        kind: "add",
+                        left: #{kind: "variable", name: "row"},
+                        right: #{kind: "constant", value: "3"}
+                    }
+                }
+            ],
+            distinct: [],
+            preserve: [],
+            produce: [
+                ["cell", [["piece/{player}", "1"]]],
+                ["column", [["height", "1"]]],
+                [
+                    "game",
+                    [
+                        ["line/{player}/across/{column}/{row}", "1"],
+                        ["line/{player}/up/{column}/{row}", "1"],
+                        ["line/{player}/rising/{column}/{row}", "1"],
+                        ["line/{player}/falling/{column}/{up-3}", "1"],
+                        ["line/{player}/across/{right-1}/{row}", "1"],
+                        ["line/{player}/up/{column}/{up-1}", "1"],
+                        ["line/{player}/rising/{right-1}/{up-1}", "1"],
+                        ["line/{player}/falling/{right-1}/{up-2}", "1"],
+                        ["line/{player}/across/{right-2}/{row}", "1"],
+                        ["line/{player}/up/{column}/{up-2}", "1"],
+                        ["line/{player}/rising/{right-2}/{up-2}", "1"],
+                        ["line/{player}/falling/{right-2}/{up-1}", "1"],
+                        ["line/{player}/across/{right-3}/{row}", "1"],
+                        ["line/{player}/up/{column}/{up-3}", "1"],
+                        ["line/{player}/rising/{right-3}/{up-3}", "1"],
+                        ["line/{player}/falling/{right-3}/{row}", "1"]
+                    ]
+                ],
+                ["result", [["winner/{player}", "1"]]]
+            ]
+        }
+    ]
+]
