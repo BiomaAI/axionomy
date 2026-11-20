@@ -104,14 +104,13 @@ fn label(item) {
 // The unit of an asset's quantities, if it has one.
 fn unit(asset) {
     switch asset {
-        "fuel" | "spent-fuel" => "units",
+        "fuel" | "spent-fuel" => "fuel units",
         "money" => "credits",
         "time-remaining" | "elapsed-time" => "ticks",
         _ => (),
     }
 }
 
-// Fuel reads in units, money in credits and time in ticks.
 fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }

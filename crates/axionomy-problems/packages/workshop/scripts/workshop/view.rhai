@@ -74,7 +74,10 @@ fn label(item) {
 // The unit quantities of `asset` are read in, or nothing for a count.
 fn unit(asset) {
     switch asset {
-        "wood" | "panel" | "waste" | "labor" | "spent-labor" => "units",
+        "wood" => "pieces of wood",
+        "panel" => "panels",
+        "waste" => "offcuts",
+        "labor" | "spent-labor" => "labor units",
         "time" | "spent-time" => "ticks",
         "credit" => "credits",
         _ => (),

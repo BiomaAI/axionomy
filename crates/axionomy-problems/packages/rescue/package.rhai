@@ -1,7 +1,7 @@
 #{
     format: "axionomy.package/1",
     name: "rescue",
-    version: #{major: 0, minor: 3, patch: 2},
+    version: #{major: 0, minor: 3, patch: 3},
     branches: #{
         "rescue/micro/scenario": #{
             from: "rescue/micro",

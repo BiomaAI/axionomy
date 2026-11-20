@@ -125,17 +125,15 @@ fn unit(asset) {
         "fresh" | "preserved" | "spoiled" | "disposed" | "delivered" | "cold-space"
             | "cold-occupancy" | "demand" | "future-demand" | "satisfied-demand"
             | "missed-demand" => "crates",
-        "energy" | "spent-energy" | "grid-potential" | "spilled-energy" | "fuel"
-            | "generator-fuel" | "transport-fuel" | "labor" | "spent-labor" | "future-labor"
-            | "unused-labor" => "units",
+        "energy" | "spent-energy" | "grid-potential" | "spilled-energy" => "energy units",
+        "fuel" | "generator-fuel" | "transport-fuel" => "fuel units",
+        "labor" | "spent-labor" | "future-labor" | "unused-labor" => "labor units",
         "money" => "credits",
         "day" => "days",
         _ => (),
     }
 }
 
-// Food reads in crates, energy, fuel and labor in units, money in credits
-// and time in days.
 fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }

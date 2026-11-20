@@ -1,7 +1,7 @@
 #{
     format: "axionomy.package/1",
     name: "perishables",
-    version: #{major: 0, minor: 3, patch: 3},
+    version: #{major: 0, minor: 3, patch: 4},
     script_ontologies: #{
         "perishables/view": ["perishables"],
         "perishables/cold-chain/view": ["perishables/cold-chain"],

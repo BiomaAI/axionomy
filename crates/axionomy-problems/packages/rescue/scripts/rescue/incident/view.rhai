@@ -124,7 +124,8 @@ fn label(item) {
 fn unit(asset) {
     switch asset {
         "time" | "time-remaining" | "next-decline" | "deadline" => "ticks",
-        "fuel" | "spent-fuel" | "energy" | "spent-energy" => "units",
+        "fuel" | "spent-fuel" => "fuel units",
+        "energy" | "spent-energy" => "energy points",
         _ => (),
     }
 }

@@ -66,7 +66,7 @@ fn format(item) {
     let asset = item[1];
     let name = asset.split("/")[0];
     if name == "energy" || name == "spent-energy" || name == "distance" {
-        return #{ scale: 0, unit: "units" };
+        return #{ scale: 0, unit: "energy points" };
     }
     if name == "time" || name == "spent-time" || name == "injury" {
         return #{ scale: 0, unit: "ticks" };
@@ -183,7 +183,7 @@ fn scene(state, frame) {
             if escaped { `escaped · E ${energy} · T ${time}` } else { `E ${energy} · T ${time}` },
         ), "agent", `at/${focus}`);
         explorer.metrics = [
-            metric("energy", "Energy", energy, "units"),
+            metric("energy", "Energy", energy, "energy points"),
             metric("time", "Time", time, "ticks"),
         ];
         scene.entities.push(explorer);
@@ -208,7 +208,7 @@ fn scene(state, frame) {
     let key_state = if held(state, "world", "key") { "waiting" }
         else if held(state, "agent", "key") { "carried" } else { "used" };
     scene.metrics = [
-        metric("energy-left", "Explorer energy", state.balance("agent", "energy"), "units"),
+        metric("energy-left", "Explorer energy", state.balance("agent", "energy"), "energy points"),
         metric("time-left", "Time remaining", state.balance("agent", "time"), "ticks"),
         metric("key-state", "Key", key_state, ()),
         metric("gate-state", "Vault gate", gate_status, ()),

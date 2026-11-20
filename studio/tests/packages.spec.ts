@@ -267,6 +267,30 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await expect(comparison.locator(".compare-ends")).toContainText("energy");
 });
 
+test("AMM holdings and lending balances show their economic denominations", async ({ page }) => {
+  await openSample(page, "amm");
+  await openRef(page, "amm/micro");
+  await expect(page.locator(".scene-metric", { hasText: "Discovered price" }).locator("strong")).toHaveText("10.000 credits / energy lot");
+  await page.locator(".state-list").getByRole("button", { name: "Energy / credit AMM", exact: true }).click();
+  const pool = inspectors(page).getByRole("region", { name: "Account Energy / credit AMM" });
+  await pool.getByRole("button", { name: "Usable energy" }).click();
+  const energy = inspectors(page).getByRole("region", { name: "Asset Usable energy" });
+  await expect(energy.locator(".balance", { hasText: "Solar generator" })).toContainText("3000 energy lots");
+  await expect(energy.locator(".balance", { hasText: "Energy / credit AMM" })).toContainText("4000 energy lots");
+
+  await openSample(page, "lending");
+  await openRef(page, "lending/micro");
+  await expect(page.locator(".scene-metric", { hasText: "Collateral price" }).locator("strong")).toHaveText("100 cash / collateral unit");
+  await page.locator(".state-list").getByRole("button", { name: "Lending market", exact: true }).click();
+  const market = inspectors(page).getByRole("region", { name: "Account Lending market" });
+  for (const [label, balance] of [
+    ["Borrow index", "1 ×"], ["Cash", "7000 cash"], ["Collateral price", "100 cash / collateral unit"],
+    ["Locked genesis share", "1000 vault shares"], ["Vault share supply", "7000 vault shares"],
+  ]) {
+    await expect(market.locator(".balance").filter({ has: page.getByRole("button", { name: label, exact: true }) }).locator("strong")).toHaveText(balance);
+  }
+});
+
 test("names open inspectors: an account pinned follows the cursor, and the rules list every rate", async ({ page }) => {
   await openSample(page, "sokoban");
   expect(await openRef(page, "sokoban/micro/deadlock")).toBe(3);

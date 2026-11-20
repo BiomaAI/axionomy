@@ -7,6 +7,10 @@ goals. Credit has value because it settles obligations and buys scarce
 access to that energy. No external price or oracle exists: the AMM reserve
 ratio is the economy's only public marginal price.
 
+The market counts whole energy lots. Inventory and storage use lots, generating
+capacity uses lots per market day, and prices quote settlement credits per lot.
+The model leaves the physical size of a lot unspecified.
+
 ## Specification
 
 Energy and settlement credit trade through a constant-product pool. The

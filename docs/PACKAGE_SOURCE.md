@@ -52,6 +52,13 @@ rule.finish()
 
 An ontology can also return a Rhai object with `asset_families`, `account_families` and `asset_schema`. For example, `#{pattern: "meal/{batch}", variables: [#{name: "batch", range: ["1", "12"]}]}` declares an inclusive range. The compiler validates declared and referenced denominations including assets reached through rate patterns.
 
+A view's `format` function tells Studio how to read a balance. Lending uses
+`#{scale: 18, unit: "×"}` for its borrow index, so 10¹⁸ atoms display as
+`1 ×`. The AMM counts energy in tradable lots and quotes credits per lot.
+For a physically calibrated asset, `asset_schema` records the dimension,
+measurement kind and exact physical quantity in one atom. A view can then
+display that denomination throughout the account and asset inspectors.
+
 A rate names the roles that consume, produce or preserve assets. Bind a role to a fixed account when identity is part of the law. Supply outstanding variables or relations in the instance's `tables` under the rate's exact key. This lets several opening economies share the same laws while differing in their map, calendar or population.
 
 A rate key such as `move/{from}/{to}` normally remains a kernel template. Use an entry shaped as `#{expand: "select/ab/{before}", rate: …}` to materialize individual rates in domain order when the published economy exposes each concrete rate. Exact Cover uses this for progress transitions. A branch in `package.rhai` names a starting ref and its ordered `exchanges`. The compiler applies each exchange to establish that branch's history. [Exact Cover source](../crates/axionomy-problems/packages/exact-cover)

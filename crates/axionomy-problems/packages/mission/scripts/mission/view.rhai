@@ -87,7 +87,7 @@ fn label(item) {
 // The unit quantities of `asset` are read in, or nothing for a count.
 fn unit(asset) {
     switch asset {
-        "energy" | "spent-energy" => "units",
+        "energy" | "spent-energy" => "energy points",
         "time-remaining" | "elapsed-time" => "ticks",
         _ => (),
     }
@@ -147,7 +147,7 @@ fn agent_entity(state, agent) {
     }];
     drawn.metrics = [#{
         key: `energy/${agent}`, label: "Energy",
-        value: state.balance(own, "energy").to_string(), unit: "units",
+        value: state.balance(own, "energy").to_string(), unit: "energy points",
     }];
     drawn
 }

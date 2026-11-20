@@ -154,15 +154,14 @@ fn unit(asset) {
     switch asset.split("/")[0] {
         "tick" | "ready-at" | "lease-until" | "time-remaining" | "elapsed-time" => "ticks",
         "credit" | "value" => "credits",
-        "energy" | "spent-energy" | "charging-energy" | "charge-supply" | "material"
-            | "material-spent" | "reclaiming-material" | "embodied-material" | "recycling-loss"
-            | "waste" | "recycled-waste" | "repair-supply" | "spent-repair-supply" => "units",
+        "energy" | "spent-energy" | "charging-energy" | "charge-supply" => "energy points",
+        "material" | "material-spent" | "reclaiming-material" | "embodied-material" | "recycling-loss"
+            | "waste" | "recycled-waste" => "material units",
+        "repair-supply" | "spent-repair-supply" => "repair kits",
         _ => (),
     }
 }
 
-// Time reads in ticks of the shared work clock, earnings in credits, and
-// energy, material, waste and supplies in units.
 fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }
@@ -547,7 +546,7 @@ fn leaderboards(state, frame) {
         board(
             "least-waste", "Least residual waste",
             "Waste still held after recycling; only agents that completed work are ranked.",
-            false, "units",
+            false, unit("waste"),
             rows.map(|row| score(row, row.waste, 1, row.completed > 0, ())),
         ),
         board(

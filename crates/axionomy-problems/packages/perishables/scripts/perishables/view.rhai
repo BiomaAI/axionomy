@@ -94,13 +94,13 @@ fn label(item) {
     }
 }
 
-// Cooling energy reads in units; every other quantity is a count.
+// Cooling energy is a budget spent to preserve food.
 fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }
     let asset = item[1];
     switch asset {
-        "cooling-energy" | "spent-cooling-energy" => #{ scale: 0, unit: "units" },
+        "cooling-energy" | "spent-cooling-energy" => #{ scale: 0, unit: "energy units" },
         _ => (),
     }
 }

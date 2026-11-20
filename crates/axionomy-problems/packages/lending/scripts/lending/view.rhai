@@ -77,13 +77,17 @@ fn label(item) {
     }
 }
 
-// The market's terms are WAD-scaled shares, read as percentages; the
-// scheduled price drop reads as cash and when it happens in periods.
+fn price_unit() { "cash / collateral unit" }
+
+// The market's fractional terms are WAD-scaled. Its price shock uses the
+// same quote as the oracle, and the clock counts periods.
 fn constant_format(name) {
     switch name {
         "shock-after" => #{ scale: 0, unit: "periods" },
-        "price-drop" => #{ scale: 0, unit: "cash" },
-        _ => #{ scale: 16, unit: "%" },
+        "price-drop" => #{ scale: 0, unit: price_unit() },
+        "base-rate" | "slope-above-kink" | "slope-below-kink" => #{ scale: 16, unit: "% / period" },
+        "kink" | "liquidation-bonus" | "liquidation-threshold" | "loan-to-value" | "reserve-factor" => #{ scale: 16, unit: "%" },
+        _ => (),
     }
 }
 
@@ -95,8 +99,12 @@ fn format(item) {
     if item[0] != "asset" { return (); }
     let asset = item[1];
     switch asset.split("/")[0] {
-        "borrow-index" => #{ scale: 18 },
-        "cash" | "reserves" | "collateral-price" => #{ scale: 0, unit: "cash" },
+        "borrow-index" => #{ scale: 18, unit: "×" },
+        "cash" | "reserves" => #{ scale: 0, unit: "cash" },
+        "share" | "locked-share" | "share-supply" => #{ scale: 0, unit: "vault shares" },
+        "debt-share" | "debt-share-supply" => #{ scale: 0, unit: "debt shares" },
+        "collateral" | "posted-collateral" => #{ scale: 0, unit: "collateral units" },
+        "collateral-price" => #{ scale: 0, unit: price_unit() },
         "period" | "elapsed-period" => #{ scale: 0, unit: "periods" },
         _ => (),
     }
@@ -244,7 +252,7 @@ fn scene(state, frame) {
         metric("owed", "Borrower owes", owed, "cash"),
         metric("borrow-limit", "Borrowing limit", lending::limit(state, "loan-to-value"), "cash"),
         metric("liquidation-limit", "Liquidation threshold", liquidation_limit, "cash"),
-        metric("price", "Collateral price", market_balance(state, "collateral-price"), "cash"),
+        metric("price", "Collateral price", market_balance(state, "collateral-price"), price_unit()),
         metric("reserves", "Reserves", market_balance(state, "reserves"), "cash"),
         metric("share-assets", "Depositors' assets", total_assets(state), "cash"),
     ];

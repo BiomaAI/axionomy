@@ -150,14 +150,14 @@ fn label(item) {
 fn unit(asset) {
     switch asset {
         "time" | "time-remaining" | "departed-at" | "ready-at" => "ticks",
-        "fuel" | "tank-space" | "spent-fuel" | "space" | "dock-space" | "dock-used" => "units",
+        "fuel" | "tank-space" | "spent-fuel" => "fuel units",
+        "space" | "dock-space" | "dock-used" => "payload slots",
+        "cold-space" => "refrigerated slots",
         "money" | "revenue" => "credits",
         _ => (),
     }
 }
 
-// Time reads in ticks of the fleet's clock, fuel and payload in units, and
-// money in credits.
 fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }
@@ -294,7 +294,7 @@ fn scene(state, frame) {
                     if fleet::cold(terms) { "Refrigerated" } else if fleet::heavy(terms) { "Heavy freight" } else { "Standard freight" },
                     `order/${id}`,
                 );
-                cargo.metrics = [metric("weight", "Payload", terms.weight, "units")];
+                cargo.metrics = [metric("weight", "Payload", terms.weight, unit("space"))];
                 entities.push(cargo);
             }
         }

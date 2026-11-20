@@ -156,7 +156,7 @@ fn label(item) {
 fn unit(asset) {
     switch asset {
         "time" | "time-remaining" | "ready-at" | "next-clinical" => "ticks",
-        "energy" | "spent-energy" => "units",
+        "energy" | "spent-energy" => "energy points",
         _ => (),
     }
 }

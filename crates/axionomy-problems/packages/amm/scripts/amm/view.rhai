@@ -122,17 +122,18 @@ fn label(item) {
 // The unit quantities of `asset` are read in, or nothing for a count.
 fn unit(asset) {
     switch asset.split("/")[0] {
-        "energy" | "spent-energy" | "solar-potential" | "storage-capacity" | "production-allowance" => "units",
-        "production-capacity" | "future-capacity" | "pending-capacity" => "units / day",
+        "energy" | "spent-energy" | "solar-potential" | "storage-capacity" | "production-allowance" => "energy lots",
+        "production-capacity" | "future-capacity" | "pending-capacity" => "energy lots / day",
         "credit" => "credits",
-        "reference-price" => "credit / energy",
+        "reference-price" => "credits / energy lot",
+        "lp-share" | "unissued-lp-share" => "LP shares",
         "day" | "construction-due" => "days",
         "current-sunlight" => "%",
         _ => (),
     }
 }
 
-// The reference price is kept in thousandths of a credit per unit of energy.
+// The reference price is kept in thousandths of a credit per energy lot.
 fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }
@@ -202,7 +203,7 @@ fn leaderboards(state, frame) {
             participant: #{ key: `amm/account/actor/${actor}`, label: actor_label(actor) },
             score: value,
             value: milli(value, true),
-            unit: "Δ credit / energy",
+            unit: unit("reference-price"),
             eligible: true,
             components: [],
         }
@@ -290,7 +291,7 @@ fn scene(state, frame) {
         });
     }
     let metrics = [
-        metric("price", "Discovered price", milli(price, false), "credit / energy"),
+        metric("price", "Discovered price", milli(price, false), unit("reference-price")),
         asset_metric("energy-reserve", "Energy reserve", "energy", energy),
         asset_metric("liquidity", "Liquidity shares issued", "lp-share", issued),
     ];
@@ -315,12 +316,12 @@ fn scene(state, frame) {
                 id: #{ key: "amm/pool/energy-credit", label: "Energy / Credit AMM" },
                 account: "amm/account/pool",
                 caption: "AMM pool · x · y = k",
-                base: #{ asset: #{ key: "amm/asset/energy", label: "Energy" }, quantity: energy.to_string(), symbol: "E" },
-                quote: #{ asset: #{ key: "amm/asset/credit", label: "Credit" }, quantity: credit.to_string(), symbol: "C" },
+                base: #{ asset: #{ key: "amm/asset/energy", label: "Energy" }, quantity: energy.to_string(), symbol: unit("energy") },
+                quote: #{ asset: #{ key: "amm/asset/credit", label: "Credit" }, quantity: credit.to_string(), symbol: unit("credit") },
                 ratio: #{
                     label: "Discovered price",
                     value: `${price}`,
-                    format: #{ scale: 3, digits: 3, unit: "credit / energy" },
+                    format: #{ scale: 3, digits: 3, unit: unit("reference-price") },
                 },
                 curve: #{ kind: "constant_product", label: "Reserve curve · xy = k", product: (energy * credit).to_string() },
             },

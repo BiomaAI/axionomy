@@ -57,7 +57,7 @@ fn format(item) {
     let item = item.split("/", 2);
     if item[0] != "asset" { return (); }
     let asset = item[1];
-    if asset == "energy" || asset == "spent-energy" { #{ scale: 0, unit: "units" } } else { () }
+    if asset == "energy" || asset == "spent-energy" { #{ scale: 0, unit: "energy points" } } else { () }
 }
 
 fn entity(key, label, glyph, node, role, tone, status) {
@@ -103,7 +103,7 @@ fn scene(state, frame) {
         "agent/responder", "Responder", "agent", focus, "occupant", "active",
         if rescue::holds(state, "awaiting-observation") { "awaiting observation" } else { "acting" },
     ), `at/${focus}`);
-    agent.metrics = [#{ key: "energy", label: "Energy", value: energy.to_string(), unit: "units" }];
+    agent.metrics = [#{ key: "energy", label: "Energy", value: energy.to_string(), unit: "energy points" }];
     let entities = [agent];
     for site in rescue::sites() {
         if rescue::holds(state, `belief/${site}`) {
@@ -125,7 +125,7 @@ fn scene(state, frame) {
         entities,
     );
     scene.metrics = [
-        #{ key: "energy", label: "Energy remaining", value: energy.to_string(), unit: "units" },
+        #{ key: "energy", label: "Energy remaining", value: energy.to_string(), unit: "energy points" },
         #{ key: "sensor", label: "Sensor charges", value: state.balance("agent", "sensor").to_string(), unit: () },
     ];
     scene
