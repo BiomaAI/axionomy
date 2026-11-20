@@ -77,6 +77,7 @@ function token(stream: StringStream, state: Context[]): string | null {
   if (stream.match(/^(?:0x[\da-f_]+|0b[01_]+|0o[0-7_]+|\d[\d_]*(?:\.\d[\d_]*)?(?:e[+-]?\d[\d_]*)?)/i)) return "number";
   if (stream.match(/^[\p{ID_Start}_][\p{ID_Continue}]*/u)) {
     const word = stream.current();
+    if (stream.match(/^\s*:(?!:)/, false)) return "propertyName";
     if (keywords.has(word)) return "keyword";
     if (word === "true" || word === "false") return "bool";
     return stream.match(/^\s*\(/, false) ? "variableName.function" : null;

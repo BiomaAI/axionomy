@@ -714,11 +714,13 @@ input[type="search"] { min-height: 32px; padding: 0 10px; border: 1px solid var(
 .rhai-editor .tok-comment { color: var(--muted); font-style: italic; }
 .rhai-editor .tok-string { color: var(--credit); }
 .rhai-editor .tok-variableName { color: #90bbdd; }
+.rhai-editor .tok-propertyName { color: #dac99e; }
 .rhai-editor .tok-keyword, .rhai-editor .tok-string2 { color: #d2abe5; }
 .rhai-editor .tok-number, .rhai-editor .tok-bool { color: #e5af87; }
 .rhai-editor .tok-operator { color: var(--steel); }
 @media (prefers-color-scheme: light) {
   .rhai-editor .tok-variableName { color: #235f8a; }
+  .rhai-editor .tok-propertyName { color: #725621; }
   .rhai-editor .tok-keyword, .rhai-editor .tok-string2 { color: #75418b; }
   .rhai-editor .tok-number, .rhai-editor .tok-bool { color: #8a482a; }
 }

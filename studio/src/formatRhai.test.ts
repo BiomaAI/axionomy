@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactRhai, formatRhai } from "./formatRhai";
+import { formatRhai } from "./formatRhai";
 
 describe("Rhai source layout", () => {
   it("opens compact maps, nested blocks and statements on indented lines", () => {
-    const result = formatCompactRhai('let m=#{name:"maze",version:#{major:1,minor:2}};if true{return m;}\n');
+    const result = formatRhai('let m=#{name:"maze",version:#{major:1,minor:2}};if true{return m;}\n');
     expect(result).toBe('let m = #{\n    name: "maze",\n    version: #{\n        major: 1,\n        minor: 2\n    }\n};\nif true {\n    return m;\n}\n');
     expect(formatRhai(result)).toBe(result);
   });
@@ -32,11 +32,9 @@ describe("Rhai source layout", () => {
     expect(formatRhai(formatted)).toBe(formatted);
   });
 
-  it("leaves an unfinished edit intact and preserves already multiline files on open", () => {
+  it("leaves an unfinished edit intact", () => {
     for (const source of ['let x=#{a:1', 'fn f(]', '`value/${', 'let x="unfinished', '/* open']) {
       expect(formatRhai(source)).toBe(source);
     }
-    const multiline = 'fn f() {\n  1\n}\n';
-    expect(formatCompactRhai(multiline)).toBe(multiline);
   });
 });

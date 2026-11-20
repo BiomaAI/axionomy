@@ -90,7 +90,3 @@ function columnAt(source: string, offset: number): number {
   const lineStart = Math.max(source.lastIndexOf("\n", offset - 1), source.lastIndexOf("\r", offset - 1)) + 1;
   return Array.from(source.slice(lineStart, offset)).length;
 }
-
-export function formatCompactRhai(source: string): string {
-  return /[\r\n]/.test(source.trim()) ? source : formatRhai(source);
-}

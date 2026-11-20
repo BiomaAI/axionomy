@@ -404,3 +404,21 @@ test("Rhai at a point reads a balance and applies the assessed move", async ({ p
   await console.getByRole("button", { name: "Apply assessed exchange" }).click();
   await expect(trace(page)).toHaveAttribute("max", "1");
 });
+
+test("Sokoban opens with formatted exchange bindings and syntax colors", async ({ page }) => {
+  await openSample(page, "sokoban");
+  await page.getByRole("button", { name: "Source", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Rhai source" });
+  const binding = editor.locator(".cm-line").filter({ hasText: /^\s*from: "cell\/8",$/ }).first();
+  await expect(binding).toBeAttached();
+  await binding.scrollIntoViewIfNeeded();
+  await expect(binding.locator(".tok-propertyName")).toHaveText("from");
+  await expect(binding.locator(".tok-string")).toHaveText('"cell/8"');
+  for (const colorScheme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme });
+    const key = await binding.locator(".tok-propertyName").evaluate(el => getComputedStyle(el).color);
+    const value = await binding.locator(".tok-string").evaluate(el => getComputedStyle(el).color);
+    expect(key).not.toBe(value);
+  }
+  await expect(page.getByRole("button", { name: "Discard edits" })).toHaveCount(0);
+});

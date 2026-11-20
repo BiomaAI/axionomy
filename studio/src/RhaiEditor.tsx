@@ -4,7 +4,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { classHighlighter } from "@lezer/highlight";
-import { formatCompactRhai, formatRhai } from "./formatRhai";
+import { formatRhai } from "./formatRhai";
 import { rhaiLanguage } from "./rhaiLanguage";
 
 const externalValue = Annotation.define<boolean>();
@@ -22,7 +22,7 @@ export default function RhaiEditor({ label, value, onChange, disabled = false, c
   const id = useId();
   const parent = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
-  const shown = useMemo(() => formatOnOpen ? formatCompactRhai(value) : value, [formatOnOpen, value]);
+  const shown = useMemo(() => formatOnOpen ? formatRhai(value) : value, [formatOnOpen, value]);
   const latest = useRef({ shown, onChange });
   useLayoutEffect(() => { latest.current = { shown, onChange }; }, [shown, onChange]);
 
