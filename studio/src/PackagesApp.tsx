@@ -1,10 +1,9 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconMaximize } from "@tabler/icons-react";
 import { ActivityStrip, type Activity, type Said } from "./Activity";
 import type { AccountData, ModelData, ViewDocument } from "./api";
 import { BrowserPackages } from "./browserPackages";
-import { PackageSource } from "./PackageSource";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
 import { RhaiConsole } from "./RhaiConsole";
@@ -38,6 +37,8 @@ import { Formatted, QuantityFormats } from "./Quantity";
 import { RateTable } from "./RateView";
 import { SceneView, type ReplayMotionMode } from "./SceneView";
 import { Term } from "./Term";
+
+const PackageSource = lazy(() => import("./PackageSource"));
 
 /** The one browser engine of the page: one Worker holds the saved store. */
 let browser: BrowserPackages | undefined;
@@ -677,7 +678,9 @@ export function PackagesApp() {
     </section>
 
 
-    {sourceOpen && engine && pkg && <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />}
+    {sourceOpen && engine && pkg && <Suspense fallback={<p role="status">Opening source…</p>}>
+      <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />
+    </Suspense>}
 
     {!engine || !listing.data ? <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />

@@ -695,8 +695,30 @@ input[type="search"] { min-height: 32px; padding: 0 10px; border: 1px solid var(
 .package-source { margin: 1rem; padding: 1rem; min-width: 0; }
 .package-source h2 { margin: 0 0 .8rem; }
 .package-source select { max-width: 100%; }
-.package-source textarea { box-sizing: border-box; width: 100%; resize: vertical; font-family: monospace; }
 .package-source pre { overflow: auto; max-height: 24rem; padding: .75rem; border: 1px solid currentColor; }
 .source-comparison { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
 .source-results { flex-basis: 100%; }
 .source-results details { margin: .4rem 0; }
+
+.rhai-field { display: grid; gap: 5px; min-width: 0; }
+.rhai-heading { display: flex; align-items: center; justify-content: space-between; }
+.rhai-heading label { font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.rhai-heading button { min-height: 25px; padding: 2px 8px; }
+.rhai-editor { height: 19rem; min-height: 6rem; overflow: hidden; resize: vertical; border: 1px solid var(--line); background: var(--surface-2); }
+.compact .rhai-editor { height: 8rem; }
+.rhai-editor:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rhai-editor .cm-editor { height: 100%; outline: none; }
+.rhai-editor .cm-scroller { overflow: auto; font: 12px/1.55 var(--mono); }
+.rhai-editor .cm-content { padding: 8px 0; caret-color: var(--text); }
+.rhai-editor .cm-line { padding: 0 10px; }
+.rhai-editor .tok-comment { color: var(--muted); font-style: italic; }
+.rhai-editor .tok-string { color: var(--credit); }
+.rhai-editor .tok-variableName { color: #90bbdd; }
+.rhai-editor .tok-keyword, .rhai-editor .tok-string2 { color: #d2abe5; }
+.rhai-editor .tok-number, .rhai-editor .tok-bool { color: #e5af87; }
+.rhai-editor .tok-operator { color: var(--steel); }
+@media (prefers-color-scheme: light) {
+  .rhai-editor .tok-variableName { color: #235f8a; }
+  .rhai-editor .tok-keyword, .rhai-editor .tok-string2 { color: #75418b; }
+  .rhai-editor .tok-number, .rhai-editor .tok-bool { color: #8a482a; }
+}

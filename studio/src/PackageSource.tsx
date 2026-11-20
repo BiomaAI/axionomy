@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { PackageEngine, PackageView, SourceTree } from "./packageEngine";
+import RhaiEditor from "./RhaiEditor";
 
-export function PackageSource({ engine, pkg }: { engine: PackageEngine; pkg: PackageView }) {
+export default function PackageSource({ engine, pkg }: { engine: PackageEngine; pkg: PackageView }) {
   const source = useQuery({
     queryKey: ["package-source", engine.kind, pkg.name, pkg.version],
     queryFn: () => engine.sourceTree(pkg.name),
@@ -28,10 +29,8 @@ export function PackageSource({ engine, pkg }: { engine: PackageEngine; pkg: Pac
       <label className="field"><span>Source file</span><select value={file} onChange={e => setFile(e.target.value)}>
         {Object.keys(files).sort().map(name => <option key={name}>{name}</option>)}
       </select></label>
-      <label className="field"><span>Rhai source</span>
-        <textarea rows={16} spellCheck={false} value={files[file] ?? ""} disabled={build.isPending}
-          onChange={e => edit({ ...files, [file]: e.target.value })} />
-      </label>
+      <RhaiEditor key={file} label="Rhai source" value={files[file] ?? ""} formatOnOpen={files[file] === source.data?.files[file]} disabled={build.isPending}
+        onChange={text => edit({ ...files, [file]: text })} />
       <details><summary>Manage source files</summary>
         <label className="field"><span>New source path</span><input value={newFile} placeholder="lib/example/helpers.rhai"
           onChange={e => setNewFile(e.target.value)} /></label>
