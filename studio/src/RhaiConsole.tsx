@@ -11,7 +11,6 @@ export function RhaiConsole({ engine, at, onApply }: {
   at: PointId;
   onApply: (program: string, label: string) => Promise<void>;
 }) {
-  const [opened, setOpened] = useState(false);
   const [source, setSource] = useState('state.accounts("")');
   const run = useMutation({
     mutationFn: async ({ mode, source }: { mode: "query" | "assess"; source: string }):
@@ -23,12 +22,11 @@ export function RhaiConsole({ engine, at, onApply }: {
   });
   const apply = useMutation({ mutationFn: (proposal: Candidate) => onApply(proposal.program, proposal.proposal.label) });
   const current = run.data?.source === source ? run.data : undefined;
-  return <details className="from-section" onToggle={e => { if (e.currentTarget.open) setOpened(true); }}>
-    <summary>Rhai console</summary>
-    {opened && <Suspense fallback={<p role="status">Opening editor…</p>}>
+  return <section className="rhai-console" aria-label="Rhai console">
+    <Suspense fallback={<p role="status">Opening editor…</p>}>
       <RhaiEditor compact label="Program" value={source}
         onChange={text => { setSource(text); run.reset(); apply.reset(); }} />
-    </Suspense>}
+    </Suspense>
     <div className="actions">
       <button disabled={!source.trim() || run.isPending} onClick={() => run.mutate({ mode: "query", source })}>Run query</button>
       <button disabled={!source.trim() || run.isPending} onClick={() => run.mutate({ mode: "assess", source })}>Assess exchange</button>
@@ -38,5 +36,5 @@ export function RhaiConsole({ engine, at, onApply }: {
     </div>
     {(run.error || apply.error) && <p role="alert">{(run.error || apply.error)?.message}</p>}
     {current && <pre tabIndex={0}>{JSON.stringify(current.value, null, 2)}</pre>}
-  </details>;
+  </section>;
 }

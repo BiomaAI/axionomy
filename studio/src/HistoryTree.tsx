@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -22,9 +22,12 @@ export type TreeBranch = {
   tone?: "named" | "trial" | "branch";
   /** Names written beside steps of it, such as a ref at the step it names. */
   labels?: TreeLabel[];
+  /** What it is drawn together with: first histories of one group sit close, a gap before the next group. */
+  group?: string;
 };
 
-export type TreeLabel = { step: number; text: string; tone?: "named" | "fixed" | "trial"; onClick?: () => void };
+/** A name beside a step: as written, and in full where it is written short. */
+export type TreeLabel = { step: number; text: string; name?: string; tone?: "named" | "fixed" | "trial"; onClick?: () => void };
 
 /** Where a person is: a branch's history up to `end`, shown at step `cursor` of it. */
 export type TreeSelection = { id: string; end: number; cursor: number };
@@ -35,6 +38,8 @@ const UNIT = 24;
 const ROW = 30;
 const PAD_X = 16;
 const PAD_Y = 18;
+/** The space between groups of first histories. */
+const GROUP_GAP = 12;
 /** The radius of the corner a branch turns from its parent's trunk onto its own row. */
 const CORNER = 8;
 /** How far dashes keep from the steps and the count they run between. */
@@ -71,6 +76,8 @@ function labelOffsets(labels: TreeLabel[]): number[] {
 
 export type Laid = {
   rows: Map<string, number>;
+  /** The y of a branch's row. */
+  y: (id: string) => number;
   /** The x of a step, compressed stretches included. */
   x: (step: number) => number;
   /** The step nearest to `x`. */
@@ -103,6 +110,16 @@ export function layoutTree(branches: TreeBranch[], selection?: TreeSelection): L
   };
   roots.forEach(visit);
   const rows = new Map(ordered.map((branch, index) => [branch.id, index]));
+  // Each row a row below the last, and a gap more where a first history starts another group.
+  const ys = new Map<string, number>();
+  let rowY = PAD_Y;
+  let group: string | undefined;
+  ordered.forEach((branch, index) => {
+    const root = !branch.parent || !byId.has(branch.parent.id);
+    if (index > 0) rowY += ROW + (root && branch.group !== group ? GROUP_GAP : 0);
+    if (root) group = branch.group;
+    ys.set(branch.id, rowY);
+  });
 
   const keys = new Set<number>([0]);
   for (const branch of branches) {
@@ -151,11 +168,12 @@ export function layoutTree(branches: TreeBranch[], selection?: TreeSelection): L
   }
   return {
     rows,
+    y: (id) => ys.get(id) ?? PAD_Y,
     x,
     stepAt,
     gaps,
     width: right + PAD_X,
-    height: PAD_Y * 2 + Math.max(0, ordered.length - 1) * ROW,
+    height: rowY + PAD_Y,
     ordered,
   };
 }
@@ -185,7 +203,7 @@ function cursorBranch(path: Map<string, { from: number; to: number }>, step: num
   return undefined;
 }
 
-export function HistoryTree({ branches, selection, onSelect, describe, label }: {
+export function HistoryTree({ branches, selection, onSelect, describe, label, height }: {
   branches: TreeBranch[];
   selection?: TreeSelection;
   /** A step of a branch picked out. */
@@ -193,6 +211,8 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
   /** What a hover over a step of a branch says. */
   describe?: (branch: TreeBranch, step: number) => ReactNode;
   label: string;
+  /** How tall it is drawn; the rest of it scrolls. */
+  height?: number;
 }) {
   const laid = useMemo(() => layoutTree(branches, selection), [branches, selection]);
   const path = useMemo(() => pathOf(branches, selection), [branches, selection]);
@@ -201,6 +221,8 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
   // The card of the step hovered stays where that step is, so the pointer
   // can move onto it and read its words; it goes once the pointer leaves both.
   const [hover, setHover] = useState<{ branch: TreeBranch; step: number }>();
+  // The tree scrolling inside itself moves the card with its step.
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
   const leaving = useRef<number | undefined>(undefined);
   const stay = () => window.clearTimeout(leaving.current);
   const leave = () => { stay(); leaving.current = window.setTimeout(() => setHover(undefined), 220); };
@@ -212,7 +234,7 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
     window.addEventListener("scroll", gone, { passive: true });
     return () => window.removeEventListener("scroll", gone);
   }, [hover]);
-  const y = (id: string) => PAD_Y + (laid.rows.get(id) ?? 0) * ROW;
+  const y = laid.y;
   const compressed = (step: number) => laid.gaps.some((gap) => step > gap.from && step < gap.to);
   const point = (branch: TreeBranch, step: number) => { stay(); setHover({ branch, step }); };
   const onTrack = (branch: TreeBranch, event: React.MouseEvent<SVGElement>) => {
@@ -222,6 +244,19 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
     onSelect(branch.id, Math.min(branch.last, Math.max(own, laid.stepAt(event.clientX - box.left))));
   };
   const cursorOn = selection ? cursorBranch(path, selection.cursor, roots) : undefined;
+  // A history opened is scrolled into view where the tree scrolls; as it
+  // plays, the tree stays where it was put.
+  const cursorAt = selection && cursorOn ? { x: laid.x(selection.cursor), y: y(cursorOn) } : undefined;
+  const opened = useRef(cursorAt);
+  opened.current = cursorAt;
+  useEffect(() => {
+    const box = host.current;
+    const at = opened.current;
+    if (!box || !at) return;
+    const margin = ROW;
+    if (at.y < box.scrollTop + margin || at.y > box.scrollTop + box.clientHeight - margin) box.scrollTop = at.y - box.clientHeight / 2;
+    if (at.x < box.scrollLeft + margin || at.x > box.scrollLeft + box.clientWidth - margin) box.scrollLeft = at.x - box.clientWidth / 2;
+  }, [selection?.id, selection?.end]);
   const frame = host.current?.getBoundingClientRect();
   // Where a branch leaves its parent's row: down the parent's trunk at the
   // step it branched at, then round a corner onto its own row.
@@ -274,7 +309,7 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
       {stretches.map((piece, index) => <line key={index} className={className} strokeDasharray={piece.dash} x1={piece.x1} x2={piece.x2} y1={rowY} y2={rowY} />)}
     </g>;
   };
-  return <div className="history-tree" ref={host} role="group" aria-label={label} onScroll={() => setHover(undefined)}>
+  return <div className="history-tree" ref={host} role="group" aria-label={label} style={height === undefined ? undefined : { height }} onScroll={() => { if (hover) redraw(); }}>
     <svg width={laid.width} height={laid.height} role="presentation">
       <g className="tree-edges">
         {laid.ordered.map((branch) => row(branch, branch.first, branch.last, false, branch.parent && lastOff.get(`${branch.parent.id}:${branch.parent.step}`) === branch.id ? fork(branch)?.y : undefined))}
@@ -311,7 +346,8 @@ export function HistoryTree({ branches, selection, onSelect, describe, label }: 
           })}
           {(branch.labels ?? []).map((label, index, labels) => {
             const lx = laid.x(label.step) + labelOffsets(labels)[index];
-            return <g key={`${label.text}:${index}`} className={`tree-label tone-${label.tone ?? "named"}${label.onClick ? " clickable" : ""}`} transform={`translate(${lx} ${row - 9})`} onClick={label.onClick} role={label.onClick ? "button" : undefined} aria-label={label.onClick ? `Open ${label.text}` : undefined}>
+            return <g key={`${label.text}:${index}`} className={`tree-label tone-${label.tone ?? "named"}${label.onClick ? " clickable" : ""}`} transform={`translate(${lx} ${row - 9})`} onClick={label.onClick} role={label.onClick ? "button" : undefined} aria-label={label.onClick ? `Open ${label.name ?? label.text}` : undefined}>
+              {label.name && label.name !== label.text && <title>{label.name}</title>}
               <rect height={18} width={labelWidth(label.text)} rx={9} />
               <text x={6} y={12.5}>{label.text}</text>
             </g>;

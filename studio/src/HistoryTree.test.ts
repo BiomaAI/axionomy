@@ -16,6 +16,19 @@ describe("layoutTree", () => {
     expect([...laid.rows.entries()]).toEqual([["trunk", 0], ["branch", 1], ["twig", 2], ["late", 3]]);
   });
 
+  test("sets first histories of one group close, and a gap before the next group", () => {
+    const laid = layoutTree([
+      { id: "micro", first: 0, last: 0, title: "micro", group: "micro" },
+      { id: "micro-field", first: 0, last: 0, title: "micro/field", group: "micro" },
+      { id: "branch", parent: { id: "micro-field", step: 0 }, first: 0, last: 2, title: "branch" },
+      { id: "showcase", first: 0, last: 0, title: "showcase", group: "showcase" },
+    ]);
+    const row = laid.y("micro-field") - laid.y("micro");
+    expect(laid.y("branch") - laid.y("micro-field")).toBe(row);
+    expect(laid.y("showcase") - laid.y("branch")).toBeGreaterThan(row);
+    expect(laid.height).toBeGreaterThan(laid.y("showcase"));
+  });
+
   test("keeps steps in order left to right and finds the step under a position", () => {
     const laid = layoutTree(branches);
     for (let step = 0; step < 7; step++) expect(laid.x(step + 1)).toBeGreaterThan(laid.x(step));

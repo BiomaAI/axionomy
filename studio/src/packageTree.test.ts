@@ -47,7 +47,10 @@ describe("branchesOf", () => {
       { id: trial, parent: { id: root, step: 0 }, first: 0, last: 6, title: "a-star, trial 1 of maze/micro", tone: "trial" },
       { id: mine, parent: { id: solved, step: 1 }, first: 1, last: 2, title: "maze/mine", tone: "named" },
     ]);
-    expect(branches[0].labels?.map(({ text, tone }) => ({ text, tone }))).toEqual([{ text: "maze/micro", tone: "fixed" }]);
+    // A ref is written without its package's name, and named in full.
+    expect(branches[0].labels?.map(({ text, name, tone }) => ({ text, name, tone }))).toEqual([{ text: "micro", name: "maze/micro", tone: "fixed" }]);
+    // A first history is grouped by its ref's first part.
+    expect(branches.map(({ group }) => group)).toEqual(["micro", undefined, undefined, undefined]);
     expect(branches[2].labels?.map(({ text }) => text)).toEqual(["a-star"]);
     expect(info.get(trial)?.trial?.trial.values).toEqual(["6"]);
     // The empty trial labels nothing of the history it started from.

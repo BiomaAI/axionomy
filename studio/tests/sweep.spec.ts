@@ -45,6 +45,7 @@ for (const sample of samples) {
     let ran = 0;
     for (const ref of refs) {
       await openRef(page, ref);
+      await page.locator(".action-panel").getByRole("tab", { name: "Strategy", exact: true }).click();
       const offered = await strategy(page).getByRole("combobox", { name: "Strategy" }).locator("option").evaluateAll((all) => all.map((option) => (option as HTMLOptionElement).value)).catch(() => [] as string[]);
       for (const offer of offered) {
         // From the ref's own point each time: a run opens the branch it made.

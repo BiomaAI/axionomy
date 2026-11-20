@@ -1,19 +1,20 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconChevronDown, IconChevronRight, IconMaximize } from "@tabler/icons-react";
-import { ActivityStrip, type Activity, type Said } from "./Activity";
+import { IconChevronDown, IconChevronRight, IconMaximize, IconX } from "@tabler/icons-react";
+import { ActivityStrip, type Activity, type Said, type StoreWords } from "./Activity";
 import type { AccountData, ModelData, ViewDocument } from "./api";
 import { BrowserPackages } from "./browserPackages";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
 import { RhaiConsole } from "./RhaiConsole";
 import { ExchangeEditor } from "./ExchangeEditor";
-import { ExchangeView, Holding } from "./ExchangeView";
+import { Effects, ExchangeView, Holding } from "./ExchangeView";
 import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
 import { IdLink, InspectionProvider, InspectorDock, PanelHeading, subjectKey, useSnapshot, type Subject } from "./Inspectors";
 import { inspector } from "./inspect";
 import { StateList } from "./Ledger";
-import { ExperimentView, endedWords } from "./PackageViews";
+import { ResizeHandle, TabPanels, TabStrip, type Tab } from "./Layout";
+import { ExperimentView, ResultsTable, endedWords } from "./PackageViews";
 import {
   EngineRefusal,
   loadedPackages,
@@ -262,10 +263,13 @@ export function PackagesApp() {
   const pin = useCallback((subject: Subject) => setPinned((current) => [...current.filter((each) => subjectKey(each) !== subjectKey(subject)), subject]), []);
   const unpin = useCallback((subject: Subject) => setPinned((current) => current.filter((each) => subjectKey(each) !== subjectKey(subject))), []);
   useEffect(() => setPinned([]), [packageName]);
-  const [sourceOpen, setSourceOpen] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const rulesPanel = useRef<HTMLElement>(null);
-  useEffect(() => { if (rulesOpen) rulesPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [rulesOpen]);
+  /** The rail's tab open, and the drawer's, if it is open. */
+  const [railTab, setRailTab] = useState<RailKey>("step");
+  const [drawerTab, setDrawerTab] = useState<DrawerKey>();
+  const [drawerHeight, setDrawerHeight] = useState(() => Math.round(window.innerHeight * 0.4));
+  const [treeHeight, setTreeHeight] = useState(132);
+  /** The experiments run in this tab, the latest last: the drawer lists their results the latest first. */
+  const [runOrder, setRunOrder] = useState<string[]>([]);
 
   const drawn = useQuery({
     queryKey: ["draw", kind, opened?.point],
@@ -551,6 +555,8 @@ export function PackagesApp() {
       queryClient.setQueryData(["results", engine.kind, path], next);
       const ends = (played: ResultsView) => JSON.stringify(played.arms.map((arm) => arm.trials.map((trial) => [trial.ended, trial.values])));
       report(done(!before ? `Ran ${path}.` : ends(before) === ends(next) ? `Ran ${path} again: same results.` : `Ran ${path} again: results changed.`));
+      setRunOrder((current) => [...current.filter((each) => each !== path), path]);
+      setDrawerTab("results");
     } catch (cause) {
       report(experimentsStopped.current.has(path) ? caution(`Stopped ${path}: no results kept.`) : failed(cause));
     } finally {
@@ -595,7 +601,7 @@ export function PackagesApp() {
   };
 
   const label = engine ? connectionLabel(engine.kind, "connected") : connectionLabel("native", "checking");
-  const storeWords = !engine ? "Looking for an engine…" : engine.kind === "native" ? "Saved on the server" : kept.data?.persistent ? "Saved in this browser" : `Not saved${kept.data?.reason ? `: ${kept.data.reason}` : ""}`;
+  const store: StoreWords = !engine ? { words: "Looking for an engine…" } : engine.kind === "native" ? { words: "Saved on the server" } : kept.data?.persistent ? { words: "Saved in this browser" } : { words: "Not saved", why: kept.data?.reason ?? undefined };
   const toggleTheater = () => {
     const node = worldPanel.current;
     if (!node) return;
@@ -646,97 +652,226 @@ export function PackagesApp() {
     pin({ kind: "account", id: snapshot?.accounts.find((account) => account.account.key === key)?.account ?? { key, label: key } });
   };
 
+  const comparing = Boolean(opened && against && against !== opened.point && !stale);
+  const orderedResults = [...results].sort((left, right) => runOrder.indexOf(right.experiment) - runOrder.indexOf(left.experiment));
+  const drawerTabs: Tab<DrawerKey>[] = [
+    { key: "results", label: "Results", disabled: results.length === 0 },
+    { key: "compare", label: "Compare", disabled: !comparing && drawerTab !== "compare" },
+    { key: "rules", label: "Rules", disabled: !model },
+    { key: "source", label: "Source", disabled: !pkg || !engine },
+    { key: "console", label: "Console", disabled: !opened },
+  ];
+  const toggleDrawer = (key: DrawerKey) => setDrawerTab((current) => current === key ? undefined : key);
+  const railTabs: Tab<RailKey>[] = [
+    { key: "step", label: "Step" },
+    { key: "moves", label: "Moves" },
+    { key: "strategy", label: "Strategy" },
+    { key: "experiments", label: "Experiments" },
+    { key: "ref", label: "Ref" },
+  ];
+  const at = playing ? undefined : screenPoint;
+  const waiting = <p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p>;
+
   return <InspectionProvider value={{ inspect, pin }}>
   <QuantityFormats.Provider value={document?.formats ?? {}}>
   <div className={`app-shell packages-workspace${pinned.length > 0 ? " docked" : ""}`}>
     <header className="topbar">
       <Brand />
+      <section className="command-bar" aria-label="Package controls">
+        <label className="package-field"><span className="visually-hidden">Package</span><select name="package" value={packageName ?? ""} disabled={!engine || Boolean(busy)} onChange={(event) => {
+          const value = event.target.value;
+          if (value.startsWith(SAMPLE)) openSample(value.slice(SAMPLE.length));
+          else if (value) selectPackage(value);
+        }}>
+          {!packageName && <option value="">Open a package…</option>}
+          {(listing.data?.packages.length ?? 0) > 0 && <optgroup label="In the store">{listing.data?.packages.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name} {candidate.version}</option>)}</optgroup>}
+          {unloaded.length > 0 && <optgroup label="Samples">{unloaded.map((sample) => <option key={sample.url} value={`${SAMPLE}${sample.url}`}>{sample.name}</option>)}</optgroup>}
+        </select></label>
+        <label className="file-button">Load a file<input name="package-file" type="file" accept=".zip,.redb,application/zip" disabled={!engine || Boolean(busy)} onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file || !engine) return;
+          setLoadedUrl(undefined);
+          void load(file.name, () => engine.loadFile(file));
+        }} /></label>
+        <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
+        <button type="button" aria-expanded={drawerTab === "source"} onClick={() => toggleDrawer("source")} disabled={!pkg}>Source</button>
+        <button type="button" aria-expanded={drawerTab === "rules"} onClick={() => toggleDrawer("rules")} disabled={!model}>Rules</button>
+      </section>
+      <ActivityStrip activities={activities} said={said} store={store} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
-    <ActivityStrip activities={activities} said={said} store={storeWords} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
-
-    <section className="command-bar" aria-label="Package controls">
-      <label className="field package-field"><span><Term name="package">Package</Term></span><select name="package" value={packageName ?? ""} disabled={!engine || Boolean(busy)} onChange={(event) => {
-        const value = event.target.value;
-        if (value.startsWith(SAMPLE)) openSample(value.slice(SAMPLE.length));
-        else if (value) selectPackage(value);
-      }}>
-        {!packageName && <option value="">Open a package…</option>}
-        {(listing.data?.packages.length ?? 0) > 0 && <optgroup label="In the store">{listing.data?.packages.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name} {candidate.version}</option>)}</optgroup>}
-        {unloaded.length > 0 && <optgroup label="Samples">{unloaded.map((sample) => <option key={sample.url} value={`${SAMPLE}${sample.url}`}>{sample.name}</option>)}</optgroup>}
-      </select></label>
-      <label className="file-button">Load a file<input name="package-file" type="file" accept=".zip,.redb,application/zip" disabled={!engine || Boolean(busy)} onChange={(event) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (!file || !engine) return;
-        setLoadedUrl(undefined);
-        void load(file.name, () => engine.loadFile(file));
-      }} /></label>
-      <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
-      <button type="button" aria-expanded={sourceOpen} onClick={() => setSourceOpen(!sourceOpen)} disabled={!pkg}>Source</button>
-      <button type="button" aria-expanded={rulesOpen} onClick={() => setRulesOpen(!rulesOpen)} disabled={!model}>Rules</button>
-    </section>
-
-
-    {sourceOpen && engine && pkg && <Suspense fallback={<p role="status">Opening source…</p>}>
-      <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />
-    </Suspense>}
 
     {!engine || !listing.data ? <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />
       : <main className="point-cockpit" aria-busy={stale}>
-        <section className="panel tree-panel" aria-label="History tree">
-          <PanelHeading kicker={<><Term name="history">History</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
-          {histories.isError ? <div className="assessment-issue">{described(histories.error)}</div>
-            : !histories.data ? <div className="empty-state">Loading…</div>
-            : <HistoryTree branches={tree.branches} selection={selection} onSelect={pick} label="History tree" describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
-              onCompare={opened && selection && branch.id !== selection.id && rootOf(branch.id) === rootOf(selection.id) ? () => setCompareWith(`${branch.id}:${branch.last}`) : undefined} />} />}
-        </section>
-        {!opened ? <div className="empty-state">No refs</div>
-          : !document ? <div className="loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
-          : snapshot && <>
-            <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />
-            <section className="stage point-stage">
-              <div className="panel world-panel" ref={worldPanel}>
+        <div className="work-column">
+          <section className="panel tree-panel" aria-label="History tree">
+            <PanelHeading kicker={<><Term name="history">History</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
+            <div className="tree-frame">
+            {histories.isError ? <div className="assessment-issue">{described(histories.error)}</div>
+              : !histories.data ? <div className="empty-state">Loading…</div>
+              : <HistoryTree branches={tree.branches} selection={selection} onSelect={pick} label="History tree" height={treeHeight} describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
+                onCompare={opened && selection && branch.id !== selection.id && rootOf(branch.id) === rootOf(selection.id) ? () => { setCompareWith(`${branch.id}:${branch.last}`); setDrawerTab("compare"); } : undefined} />} />}
+            <ResizeHandle edge="bottom" label="Resize the history tree" size={treeHeight} min={56} max={Math.round(window.innerHeight * 0.6)} onResize={setTreeHeight} />
+            </div>
+          </section>
+          {opened && document && snapshot && <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />}
+          <div className="picture-area">
+            {!opened ? <div className="panel empty-state">No refs</div>
+              : !document || !snapshot ? <div className="panel loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
+              : <div className="panel world-panel" ref={worldPanel}>
                 <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
                 <SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} />
-              </div>
-              <div className="panel action-panel">
-                <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
-                <FromHere engine={engine} pkg={pkg} document={document} accounts={snapshot.accounts} runs={runs} runsKey={`${pkg?.name}:${screenRoot}:${document?.source.key}`} at={playing ? undefined : screenPoint} playing={playing} opened={opened} onRefPoint={onRefPoint} position={position}
-                  onApply={act} finding={Boolean(finding)} onLetPlay={letPlay} results={results} onWatch={watch} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives}
-                  experimenting={experimenting} onPlayExperiment={(experiment) => void playExperiment(experiment)} onStopExperiment={stopExperiment} />
-              </div>
-              <div className="truth-rail">
-                <div className="panel ticker-panel">
-                  <PanelHeading kicker="This step" title={stepWords} aside={position === 0 ? `0 / ${steps}` : <IdLink subject={{ kind: "step", step: position }} label={`${position} / ${steps}`} />} />
-                  <div className="step-now">{frame ? <ExchangeView exchange={frame.exchange} assessment={frame.assessment} recorded /> : <div className="empty-state">{steps === 0 ? "No steps" : "Initial state"}</div>}</div>
-                </div>
-                <div className="panel accounts-panel">
-                  <PanelHeading kicker="State" title="Accounts" aside={counted(snapshot.accounts.length, "account")} />
-                  <StateList accounts={snapshot.accounts} before={position > 0 ? previous?.accounts : undefined} focus={focusedAccount} />
-                </div>
-              </div>
-            </section>
-            {rulesOpen && model && <section className="panel rules-panel" aria-label="Rules" ref={rulesPanel}>
-              <PanelHeading kicker="Rules" title={document.title} aside={counted(model.rates.length, "rate")} action={<button type="button" onClick={() => setRulesOpen(false)}>Close</button>} />
-              <div className="rules-body">
-                <RateTable rates={model.rates} />
-                {((model.constants ?? []).length > 0 || model.goal.length > 0 || model.invariants.length > 0) && <div className="rules-side">
-                  {(model.constants ?? []).length > 0 && <section className="view-section"><h4><Term name="constant">Constants</Term></h4><dl className="facts">{model.constants?.map((constant) => <Fragment key={constant.name}><dt>{constant.name}</dt><dd><Formatted atoms={constant.value} format={constant.format ?? undefined} /></dd></Fragment>)}</dl></section>}
-                  {model.goal.length > 0 && <section className="view-section"><h4><Term name="goal">Goal</Term></h4>{model.goal.map((goal) => <div className="effect" key={goal.account.key}><IdLink subject={{ kind: "account", id: goal.account }} /><div className="holdings">{goal.required.map((required) => <Holding key={required.asset.key} value={required} />)}</div></div>)}</section>}
-                  {model.invariants.length > 0 && <section className="view-section"><h4>Invariants</h4><dl className="facts">{model.invariants.map((invariant) => <InvariantRow key={invariant.name} invariant={invariant} />)}</dl></section>}
-                </div>}
-              </div>
-            </section>}
-            {against && against !== opened.point && !stale && <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
-              leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => setCompareWith(null)} />}
-          </>}
+              </div>}
+            <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
+          </div>
+        </div>
+        {opened && document && snapshot && <div className="panel action-panel">
+          <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
+          <TabStrip id="rail" label="From here" tabs={railTabs} open={railTab} onOpen={setRailTab} />
+          <div className="rail-body">
+            <TabPanels id="rail" open={railTab} panels={{
+              step: () => <StepHere position={position} steps={steps} frame={frame} accounts={snapshot.accounts} before={position > 0 ? previous?.accounts : undefined} focus={focusedAccount} />,
+              moves: () => !at ? waiting : <>
+                <Moves engine={engine} pkg={pkg} at={at} onApply={act} />
+                <ExchangeEditor rates={document.model?.rates ?? []} accounts={snapshot.accounts.map((account) => account.account)} ontology={document.source.key} point={at}
+                  onCheck={(program) => engine.assess(at, program)} onApply={act} />
+              </>,
+              strategy: () => !at ? waiting : <StrategyHere key={`${pkg?.name}:${screenRoot}:${document.source.key}`} offered={runs} finding={Boolean(finding)} onLetPlay={letPlay} />,
+              experiments: () => <ExperimentsHere pkg={pkg} inTree={inTree} results={results} experimenting={experimenting}
+                onPlay={(experiment) => void playExperiment(experiment)} onStop={stopExperiment} onResults={() => setDrawerTab("results")} />,
+              ref: () => !at ? waiting : <RefHere pkg={pkg} document={document} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives} />,
+            }} />
+          </div>
+        </div>}
       </main>}
-    <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
+
+    {engine && listing.data && listing.data.packages.length > 0 && <section className={`drawer${drawerTab ? " open" : ""}`} aria-label="Drawer" style={drawerTab ? { maxHeight: drawerHeight } : undefined}>
+      {drawerTab && <ResizeHandle edge="top" label="Resize the drawer" size={drawerHeight} min={140} max={Math.round(window.innerHeight * 0.8)} onResize={setDrawerHeight} />}
+      <div className="drawer-bar">
+        <TabStrip id="drawer" label="Drawer" tabs={drawerTabs} open={drawerTab} onOpen={toggleDrawer} />
+        {drawerTab && <button type="button" className="drawer-close" aria-label="Close the drawer" onClick={() => setDrawerTab(undefined)}><IconX size={14} stroke={2} aria-hidden="true" /></button>}
+      </div>
+      {drawerTab && <div className="drawer-body">
+        <TabPanels id="drawer" open={drawerTab} panels={{
+          results: () => <ResultsHere results={orderedResults} onWatch={watch} />,
+          compare: () => comparing && opened && against ? <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
+            leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => { setCompareWith(null); setDrawerTab(undefined); }} />
+            : <p className="empty-state">No history to compare with</p>,
+          rules: () => model && document ? <section className="rules-panel" aria-label="Rules">
+            <div className="drawer-heading"><h2>{document.title}</h2><small>{counted(model.rates.length, "rate")}</small></div>
+            <div className="rules-body">
+              <RateTable rates={model.rates} />
+              {((model.constants ?? []).length > 0 || model.goal.length > 0 || model.invariants.length > 0) && <div className="rules-side">
+                {(model.constants ?? []).length > 0 && <section className="view-section"><h4><Term name="constant">Constants</Term></h4><dl className="facts">{model.constants?.map((constant) => <Fragment key={constant.name}><dt>{constant.name}</dt><dd><Formatted atoms={constant.value} format={constant.format ?? undefined} /></dd></Fragment>)}</dl></section>}
+                {model.goal.length > 0 && <section className="view-section"><h4><Term name="goal">Goal</Term></h4>{model.goal.map((goal) => <div className="effect" key={goal.account.key}><IdLink subject={{ kind: "account", id: goal.account }} /><div className="holdings">{goal.required.map((required) => <Holding key={required.asset.key} value={required} />)}</div></div>)}</section>}
+                {model.invariants.length > 0 && <section className="view-section"><h4>Invariants</h4><dl className="facts">{model.invariants.map((invariant) => <InvariantRow key={invariant.name} invariant={invariant} />)}</dl></section>}
+              </div>}
+            </div>
+          </section> : <p className="empty-state">No rules</p>,
+          source: () => pkg ? <Suspense fallback={<p role="status">Opening source…</p>}>
+            <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />
+          </Suspense> : <p className="empty-state">No package</p>,
+          console: () => at ? <RhaiConsole key={at} engine={engine} at={at} onApply={act} /> : waiting,
+        }} />
+      </div>}
+    </section>}
   </div>
   </QuantityFormats.Provider>
   </InspectionProvider>;
+}
+
+/** What the drawer along the bottom holds: what is too wide for the rail. */
+type DrawerKey = "results" | "compare" | "rules" | "source" | "console";
+/** The rail's tabs: the step on screen, and what one can do from it. */
+type RailKey = "step" | "moves" | "strategy" | "experiments" | "ref";
+
+/**
+ * The step on screen: the exchange it applied and what each account gave,
+ * kept and got; then the accounts, those it changed first.
+ */
+function StepHere({ position, steps, frame, accounts, before, focus }: {
+  position: number;
+  steps: number;
+  frame?: ViewDocument["frames"][number];
+  accounts: AccountData[];
+  before?: AccountData[];
+  focus?: string;
+}) {
+  const cue = frame?.cues[0]?.label;
+  return <>
+    <section className="from-section step-now" aria-label="This step">
+      <h3>Step {position === 0 ? `0 / ${steps}` : <IdLink subject={{ kind: "step", step: position }} label={`${position} / ${steps}`} />}</h3>
+      {frame ? <>
+        {cue && cue !== frame.exchange.rate.label && <p className="step-cue">{cue}</p>}
+        <ExchangeView exchange={frame.exchange} assessment={frame.assessment} recorded />
+        <Effects deltas={frame.receipt.deltas} />
+      </> : <p className="muted">{steps === 0 ? "Nothing has happened here yet" : "Initial state"}</p>}
+    </section>
+    <section className="from-section" aria-label="State">
+      <h3>Accounts <small>{counted(accounts.length, "account")}</small></h3>
+      <StateList accounts={accounts} before={before} focus={focus} />
+    </section>
+  </>;
+}
+
+/**
+ * The package's experiments, one line each: those that start in the tree on
+ * screen first, the rest after. A line opens on what it compares.
+ */
+function ExperimentsHere({ pkg, inTree, results, experimenting, onPlay, onStop, onResults }: {
+  pkg?: PackageView;
+  inTree: (ref: string) => boolean;
+  results: ResultsView[];
+  experimenting: ReadonlyMap<string, ExperimentRun>;
+  onPlay: (experiment: ExperimentData) => void;
+  onStop: (path: string) => void;
+  onResults: () => void;
+}) {
+  const experiments = pkg?.experiments ?? [];
+  const starts = (experiment: ExperimentData) => inTree(experiment.start) || experiment.arms.some((arm) => arm.start && inTree(arm.start));
+  const here = experiments.filter(starts);
+  const first = here.length > 0 ? here : experiments;
+  const others = here.length > 0 ? experiments.filter((experiment) => !starts(experiment)) : [];
+  const line = (experiment: ExperimentData) => <ExperimentLine key={experiment.experiment} experiment={experiment} running={experimenting.has(experiment.experiment)}
+    recorded={results.some((result) => result.experiment === experiment.experiment)} onPlay={() => onPlay(experiment)} onStop={() => onStop(experiment.experiment)} onResults={onResults} />;
+  return <section className="from-section" aria-label="Experiments">
+    {experiments.length === 0 ? <p className="muted">No experiments</p> : <ul className="experiment-list">{first.map(line)}</ul>}
+    {others.length > 0 && <>
+      <h3>Other experiments</h3>
+      <ul className="experiment-list">{others.map(line)}</ul>
+    </>}
+  </section>;
+}
+
+function ExperimentLine({ experiment, running, recorded, onPlay, onStop, onResults }: { experiment: ExperimentData; running: boolean; recorded: boolean; onPlay: () => void; onStop: () => void; onResults: () => void }) {
+  const [open, setOpen] = useState(false);
+  const trials = Number(experiment.trials);
+  return <li className="experiment-item">
+    <div className="experiment-line">
+      <button type="button" className="disclosure" aria-expanded={open} aria-label={`What ${experiment.experiment} compares`} onClick={() => setOpen(!open)}>{open ? <IconChevronDown size={14} aria-hidden="true" /> : <IconChevronRight size={14} aria-hidden="true" />}</button>
+      <div className="experiment-name">
+        <IdLink subject={{ kind: "experiment", path: experiment.experiment }} />
+        <small>{counted(experiment.arms.length, "arm")} · {counted(trials, "trial")}</small>
+      </div>
+      {recorded && <button type="button" onClick={onResults}>Results</button>}
+      {running ? <button type="button" className="danger" onClick={onStop}>Stop</button>
+        : <button type="button" className="primary" onClick={onPlay}>{recorded ? "Run again" : "Run"}</button>}
+    </div>
+    {open && <ExperimentView experiment={experiment} />}
+  </li>;
+}
+
+/** Every experiment run, the latest first, each a table of its arms' trials. */
+function ResultsHere({ results, onWatch }: { results: ResultsView[]; onWatch: (trial: { end: PointId; start: PointId }) => void }) {
+  if (results.length === 0) return <p className="empty-state">No experiment has run</p>;
+  return <section className="results-drawer" aria-label="Results">
+    {results.map((result) => <section key={result.experiment} className="results-section" aria-label={`Results of ${result.experiment}`}>
+      <h3><IdLink subject={{ kind: "experiment", path: result.experiment }} /></h3>
+      <ResultsTable results={result} onWatch={onWatch} />
+    </section>)}
+  </section>;
 }
 
 /** A conservation law: its name, and the weighted sum of assets it keeps. */
@@ -841,58 +976,6 @@ function outcomeWords(outcome: RanView["outcome"]): string {
   }
 }
 
-/** Everything one can do from the point on screen, each a click from done. */
-function FromHere({ engine, pkg, document, accounts, runs, runsKey, at, playing, opened, onRefPoint, position, onApply, finding, onLetPlay, results, onWatch, onKeep, onDelete, follow, objectives, experimenting, onPlayExperiment, onStopExperiment }: {
-  engine: PackageEngine;
-  pkg?: PackageView;
-  /** The history on screen. */
-  document: ViewDocument;
-  /** The accounts at the step on screen. */
-  accounts: AccountData[];
-  /** What runs on the history on screen, and what changes when another history's tree is opened. */
-  runs: Playable;
-  runsKey: string;
-  at?: PointId;
-  playing: boolean;
-  opened: Opened;
-  onRefPoint: boolean;
-  position: number;
-  onApply: (program: string, label: string) => Promise<void>;
-  finding: boolean;
-  onLetPlay: (strategy: string, asked: Asked) => Promise<void>;
-  results: ResultsView[];
-  onWatch: (trial: { end: PointId; start: PointId }) => void;
-  onKeep: (name: string) => void;
-  onDelete: () => void;
-  follow: Following;
-  objectives: string[];
-  experimenting: ReadonlyMap<string, ExperimentRun>;
-  onPlayExperiment: (experiment: ExperimentData) => void;
-  onStopExperiment: (path: string) => void;
-}) {
-  const ids = useMemo(() => accounts.map((account) => account.account), [accounts]);
-  if (!at) return <div className="from-here"><p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p></div>;
-  return <div className="from-here">
-    <Moves engine={engine} pkg={pkg} at={at} onApply={onApply} />
-    <RhaiConsole key={at} engine={engine} at={at} onApply={onApply} />
-    <StrategyHere key={runsKey} offered={runs} finding={finding} onLetPlay={onLetPlay} />
-    <section className="from-section" aria-label="Experiments">
-      <h3><Term name="experiment">Experiments</Term></h3>
-      {(pkg?.experiments.length ?? 0) === 0 ? <p className="muted">No experiments</p>
-        : pkg?.experiments.map((experiment) => {
-          const running = experimenting.has(experiment.experiment);
-          const recorded = results.find((result) => result.experiment === experiment.experiment);
-          return <ExperimentView key={experiment.experiment} experiment={experiment} results={recorded} onWatch={onWatch}
-            actions={running ? <button type="button" className="danger" onClick={() => onStopExperiment(experiment.experiment)}>Stop</button>
-              : <button type="button" className="primary" onClick={() => onPlayExperiment(experiment)}>{recorded ? "Run again" : "Run"}</button>} />;
-        })}
-    </section>
-    <RefHere pkg={pkg} document={document} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={onKeep} onDelete={onDelete} follow={follow} objectives={objectives} />
-    <ExchangeEditor rates={document.model?.rates ?? []} accounts={ids} ontology={document.source.key} point={at}
-      onCheck={(program) => engine.assess(at, program)} onApply={onApply} />
-  </div>;
-}
-
 /** The moves the package's rules offer here, each checked, each one click from applied:
  * those of the candidate set picked, or of the first that offers any here. */
 function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: PackageView; at: PointId; onApply: (program: string, label: string) => Promise<void> }) {
@@ -944,7 +1027,6 @@ function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; find
   const [asked, setAsked] = useState<Asked | undefined>(first?.asked);
   const valid = asked !== undefined && natural(asked.seed) && natural(asked.budget) && BigInt(asked.budget) > 0n && natural(asked.turns);
   return <section className="from-section" aria-label="Strategy">
-    <h3><Term name="strategy">Strategy</Term></h3>
     {!strategy || !asked ? <p className="muted">No strategy runs on this history</p> : <>
       <div className="let-play">
         <select name="strategy" aria-label="Strategy" value={strategy} disabled={finding} onChange={(event) => { setStrategy(event.target.value); setAsked(offered.strategies.find((candidate) => candidate.strategy === event.target.value)?.asked); }}>{offered.strategies.map((candidate) => <option key={candidate.strategy} value={candidate.strategy}>{candidate.strategy}</option>)}</select>
@@ -978,7 +1060,6 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
   if (onRefPoint && opened.ref) {
     const { following, setFollowing, delivered, problem } = follow;
     return <section className="from-section" aria-label="Ref">
-      <h3><Term name="ref">Ref</Term></h3>
       {named}
       <div className="let-play">
         <button type="button" className={following ? "danger" : ""} onClick={() => setFollowing(!following)}>{following ? "Stop following" : <>Follow it</>}</button>
@@ -998,7 +1079,6 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
     </section>;
   }
   return <section className="from-section" aria-label="Ref">
-    <h3><Term name="ref">Ref</Term></h3>
     {named}
     <form className="let-play" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onKeep(name.trim()); }}>
       <input name="ref-name" aria-label="Ref name" value={name} onChange={(event) => setName(event.target.value)} />

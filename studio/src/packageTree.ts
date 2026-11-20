@@ -52,6 +52,8 @@ export function branchesOf(
   openRef: (name: string) => void,
 ): { branches: TreeBranch[]; info: Map<string, BranchInfo> } {
   const info = new Map<string, BranchInfo>();
+  /** A ref's name as the tree writes it, its package's name left off: `maze/micro` is `micro`. */
+  const inPackage = (name: string) => pkg && name.startsWith(`${pkg.name}/`) ? name.slice(pkg.name.length + 1) : name;
   const infoOf = (run: string) => {
     let known = info.get(run);
     if (!known) { known = { refs: [] }; info.set(run, known); }
@@ -75,7 +77,7 @@ export function branchesOf(
     const tip = parsePoint(segment.tip);
     const from = segment.from ? parsePoint(segment.from) : undefined;
     const known = info.get(tip.run);
-    const labels: TreeLabel[] = (known?.refs ?? []).map((ref) => ({ step: ref.step, text: ref.name, tone: ref.fixed ? "fixed" : "named", onClick: () => openRef(ref.name) }));
+    const labels: TreeLabel[] = (known?.refs ?? []).map((ref) => ({ step: ref.step, text: inPackage(ref.name), name: ref.name, tone: ref.fixed ? "fixed" : "named", onClick: () => openRef(ref.name) }));
     const trial = known?.trial;
     if (trial) labels.push({ step: tip.step, text: `${lastPart(trial.strategy)}${trial.index > 0 ? ` · trial ${trial.index + 1}` : ""}`, tone: "trial" });
     else if (known?.note) labels.push({ step: tip.step, text: shortened(known.note.label), tone: "trial" });
@@ -88,6 +90,8 @@ export function branchesOf(
       title: named?.name ?? (trial ? `${lastPart(trial.strategy)}, trial ${trial.index + 1} of ${trial.experiment}` : known?.note?.words ?? (from ? "A branch" : "A history")),
       tone: named ? "named" : trial ? "trial" : "branch",
       labels,
+      // A first history is drawn with those whose refs start alike: `micro` with `micro/deadlock`.
+      group: from ? undefined : known?.refs[0] && inPackage(known.refs[0].name).split("/")[0],
     };
   });
   return { branches, info };

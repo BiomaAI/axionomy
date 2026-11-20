@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { IdLink } from "./Inspectors";
 import type { ExperimentView as ExperimentData, ObjectiveView as ObjectiveData, PointId, RefView as RefData, ResultsView as ResultsData } from "./packageEngine";
 import { Term } from "./Term";
@@ -66,20 +65,14 @@ export function ObjectiveView({ objective, measuredBy }: { objective?: Objective
 
 /**
  * An experiment: what it compares from where, toward what goal, with what
- * effort, and what its trials came to. `actions` runs or stops it where it
- * can be run.
+ * effort, and, once it has run, what its trials came to.
  */
-export function ExperimentView({ experiment, results, onWatch, actions }: {
+export function ExperimentView({ experiment, results, onWatch }: {
   experiment: ExperimentData;
   results?: ResultsData;
   onWatch?: (trial: { end: PointId; start: PointId }) => void;
-  actions?: ReactNode;
 }) {
   return <div className="experiment-view">
-    <div className="experiment-line">
-      <IdLink subject={{ kind: "experiment", path: experiment.experiment }} />
-      {actions}
-    </div>
     <dl className="facts">
       <dt><Term name="ref">start</Term></dt><dd><IdLink subject={{ kind: "ref", path: experiment.start }} /></dd>
       <dt><Term name="goal" /></dt><dd>{experiment.goal}</dd>
@@ -104,7 +97,7 @@ export function ResultsTable({ results, onWatch }: { results: ResultsData; onWat
       {onWatch && <th />}
     </tr></thead>
     <tbody>{results.arms.flatMap((arm) => arm.trials.map((trial, index) => <tr key={`${arm.arm.strategy}:${arm.arm.start ?? ""}:${index}`}>
-      <td><IdLink subject={{ kind: "strategy", path: arm.arm.strategy }} label={arm.arm.strategy.split("/").at(-1)} /></td>
+      <td className="arm"><IdLink subject={{ kind: "strategy", path: arm.arm.strategy }} label={arm.arm.strategy.split("/").at(-1)} />{arm.arm.start && <small> from <IdLink subject={{ kind: "ref", path: arm.arm.start }} label={arm.arm.start.split("/").slice(1).join("/")} /></small>}</td>
       <td className="number">{index + 1}</td>
       <td>{endedWords(trial.ended)}</td>
       <td className="number">{stepOf(trial.end) - stepOf(arm.start)}</td>

@@ -43,9 +43,16 @@ describe("AccountView", () => {
     expect(container.querySelector(".unchanged-assets")).toBeNull();
   });
 
-  test("the state list counts what the step changed of each account", () => {
-    render(<StateList accounts={[after, account("world", { gate: "1" })]} before={[before, account("world", { gate: "1" })]} />);
-    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["walker3 changed", "world"]);
+  test("the state list shows what the step changed of each account, and folds the rest", () => {
+    const { container } = render(<StateList accounts={[after, account("world", { gate: "1" })]} before={[before, account("world", { gate: "1" })]} />);
+    expect([...container.querySelectorAll(".state > .state-list > li")].map((item) => item.textContent)).toEqual(["walker3 changedcoin1 →3map0 →1key4 →0"]);
+    expect(container.querySelector(".unchanged-accounts summary")).toHaveTextContent("1 unchanged");
+    expect(container.querySelector(".unchanged-accounts li")).toHaveTextContent("world");
+  });
+
+  test("at the start, the state list is every account", () => {
+    render(<StateList accounts={[after, account("world", { gate: "1" })]} />);
+    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["walker", "world"]);
   });
 });
 

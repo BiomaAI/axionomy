@@ -19,6 +19,17 @@ async function openSample(page: Page, name: string) {
 
 const trace = (page: Page) => page.getByRole("slider", { name: "Trace position" });
 const fromHere = (page: Page) => page.locator(".action-panel");
+/** The rail with its tab `name` open: Step, Moves, Strategy, Experiments or Ref. */
+async function rail(page: Page, name: string) {
+  await fromHere(page).getByRole("tab", { name, exact: true }).click();
+  return fromHere(page);
+}
+/** The drawer with its tab `name` open, whichever was open before. */
+async function drawer(page: Page, name: string) {
+  const tab = page.getByRole("tablist", { name: "Drawer" }).getByRole("tab", { name, exact: true });
+  if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
+}
+const stepNow = (page: Page) => page.getByRole("region", { name: "This step" });
 const tree = (page: Page) => page.getByRole("group", { name: "History tree" });
 const activity = (page: Page) => page.getByRole("region", { name: "Activity" });
 const inspectors = (page: Page) => page.getByRole("complementary", { name: "Inspectors" });
@@ -48,6 +59,7 @@ function ownRef(pkg: string): string {
 async function playFrom(page: Page, shipped: string, name: string): Promise<number> {
   const start = await openRef(page, shipped);
   await expect(fromHere(page).locator(".panel-heading small")).toHaveText("fixed");
+  await rail(page, "Ref");
   await fromHere(page).getByRole("textbox", { name: "Ref name" }).fill(name);
   await fromHere(page).getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("status").filter({ hasText: `${name} names step ${start}.` })).toBeVisible();
@@ -58,6 +70,7 @@ async function playFrom(page: Page, shipped: string, name: string): Promise<numb
 
 /** The first move offered here that applies, applied. */
 async function applyFirst(page: Page) {
+  await rail(page, "Moves");
   await fromHere(page).locator(".move-applicable").first().getByRole("button", { name: "Apply" }).click();
 }
 
@@ -76,16 +89,17 @@ test("a sample opens from the package picker, and its tree opens its refs", asyn
   await page.getByRole("button", { name: "Go to initial state" }).click();
   await expect(trace(page)).toHaveValue("0");
   await page.getByRole("button", { name: "Next exchange" }).click();
-  await expect(page.locator(".ticker-panel .panel-heading small")).toHaveText("1 / 3");
-  // This step is the exchange applied; its full check is the step's inspector.
-  await expect(page.locator(".ticker-panel .exchange-rate")).toHaveText("Move from cell 8 to cell 9");
-  await page.locator(".ticker-panel .panel-heading").getByRole("button", { name: "1 / 3" }).click();
+  // This step is the exchange applied, with what each account gave, kept and
+  // got; its full check is the step's inspector.
+  await expect(stepNow(page).locator(".exchange-rate")).toHaveText("Move from cell 8 to cell 9");
+  await expect(stepNow(page).locator(".effect").first()).toBeVisible();
+  await stepNow(page).getByRole("button", { name: "1 / 3" }).click();
   await expect(inspectors(page).getByRole("region", { name: "Step 1" }).locator(".assessment-applicable")).toContainText("applicable");
   // Picking a step of the history on screen in the tree moves the cursor there.
   await tree(page).getByRole("button", { name: /^Step 2 of / }).first().click();
   await expect(trace(page)).toHaveValue("2");
-  await expect(page.locator(".stage .world-panel")).toBeVisible();
-  await expect(page.locator(".stage .accounts-panel")).toBeVisible();
+  await expect(page.locator(".picture-area .world-panel")).toBeVisible();
+  await expect(page.getByRole("region", { name: "State" })).toBeVisible();
 });
 
 test("opens a package and plays it: Play finds the moves where nothing has happened yet", async ({ page }) => {
@@ -108,6 +122,7 @@ test("offers the moves of the first candidate set with any here, and those of th
   expect(await openRef(page, "marketplace/micro")).toBe(0);
   // The package's first set fulfills the larger markets' contracts; Micro's
   // orders settle through the second.
+  await rail(page, "Moves");
   const candidates = fromHere(page).getByRole("combobox", { name: "Candidates" });
   await expect(candidates).toHaveValue("marketplace/settlements");
   await expect(fromHere(page).locator(".move-applicable").first()).toBeVisible();
@@ -123,6 +138,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   const mine = ownRef("maze");
   const start = await playFrom(page, "maze/showcase", mine);
   // Each move is shown checked before anything is applied.
+  await rail(page, "Moves");
   await fromHere(page).locator(".move-applicable").first().getByRole("button", { name: "Details" }).click();
   await expect(fromHere(page).locator(".move-detail .assessment-applicable")).toBeVisible();
   await applyFirst(page);
@@ -145,6 +161,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
 
   // An exchange written from a rate is checked before it can be applied; the
   // accounts the rate fixes are filled in.
+  await rail(page, "Moves");
   const editor = fromHere(page).getByRole("region", { name: "Exchange", exact: true });
   const apply = editor.getByRole("button", { name: "Apply" });
   const check = editor.getByRole("button", { name: "Check" });
@@ -167,6 +184,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   await expect(trace(page)).toHaveAttribute("max", String(start + 2));
 
   // One's own ref is deleted; its history stays on screen and in the tree.
+  await rail(page, "Ref");
   await fromHere(page).getByRole("button", { name: "Delete it" }).click();
   await expect(page.getByRole("status").filter({ hasText: `Deleted ${mine}.` })).toBeVisible();
   await expect(trace(page)).toHaveAttribute("max", String(start + 2));
@@ -179,7 +197,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
 test("lets a strategy play from here: its branch opens and plays", async ({ page }) => {
   await openSample(page, "maze");
   const start = await openRef(page, "maze/showcase");
-  const play = fromHere(page).getByRole("region", { name: "Strategy", exact: true });
+  const play = (await rail(page, "Strategy")).getByRole("region", { name: "Strategy", exact: true });
   await play.getByRole("combobox", { name: "Strategy" }).selectOption("maze/a-star");
   // The goal and the effort are those of the experiment that runs the strategy.
   await expect(play.getByRole("combobox", { name: "Goal" })).toHaveValue("maze/solved");
@@ -200,6 +218,7 @@ test("follows a ref and receives the steps it is moved over", async ({ page }) =
   // Following goes on while this page acts at the ref's point.
   await applyFirst(page);
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
+  await rail(page, "Ref");
   await expect(fromHere(page).getByRole("list", { name: "Delivered steps" })).toContainText(`step ${start + 1}`);
   await expect(fromHere(page).getByRole("button", { name: "Stop following" })).toBeVisible();
   // What runs is said at the top of the page, and stopped from there.
@@ -216,7 +235,7 @@ test("stops a game mid-play, and nothing else notices", async ({ page }) => {
   const live = ownRef("connect-four");
   const start = await playFrom(page, "connect-four/stress", live);
   await fromHere(page).getByRole("button", { name: "Follow it" }).click();
-  const play = fromHere(page).getByRole("region", { name: "Strategy", exact: true });
+  const play = (await rail(page, "Strategy")).getByRole("region", { name: "Strategy", exact: true });
   // Against the minimax opponent the game takes long enough to be stopped.
   await play.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/search-opponent");
   await play.getByRole("button", { name: "Run" }).click();
@@ -227,9 +246,11 @@ test("stops a game mid-play, and nothing else notices", async ({ page }) => {
   await expect(play.getByRole("button", { name: "Run" })).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
   // The follower never noticed: it is still waiting, and hears the next move.
+  await rail(page, "Ref");
   await expect(fromHere(page).getByRole("button", { name: "Stop following" })).toBeVisible();
   await applyFirst(page);
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
+  await rail(page, "Ref");
   await expect(fromHere(page).getByRole("list", { name: "Delivered steps" })).toContainText(`step ${start + 1}`);
 });
 
@@ -238,31 +259,43 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await openSample(page, "maze");
   await openRef(page, "maze/micro");
   const branches = await tree(page).locator(".tree-branch").count();
-  // Every experiment of the package is listed; maze/micro's is run.
-  const here = fromHere(page).getByRole("region", { name: "Experiments", exact: true }).locator(".experiment-view").filter({ has: page.locator(".experiment-line .id-link", { hasText: /^maze\/micro$/ }) });
+  // Every experiment of the package is listed, one line each, those that
+  // start in this tree first; a line opens on what it compares.
+  const experiments = (await rail(page, "Experiments")).getByRole("region", { name: "Experiments", exact: true });
+  await expect(experiments.locator(".experiment-item").first()).toContainText("maze/micro");
+  await expect(experiments).toContainText("Other experiments");
+  const here = experiments.locator(".experiment-item").filter({ has: page.locator(".experiment-name .id-link", { hasText: /^maze\/micro$/ }) });
+  await here.getByRole("button", { name: "What maze/micro compares" }).click();
   await expect(here.locator(".facts")).toContainText("maze/micro");
   await here.getByRole("button", { name: /^Run( again)?$/ }).click();
   await expect(activity(page).getByRole("status")).toContainText(/^Ran maze\/micro( again: same results)?\.$/, { timeout: 60_000 });
-  // Five strategies, each a trial that reached the goal, each a new branch.
-  await expect(here.locator(".results-table tbody tr")).toHaveCount(5);
-  await expect(here.locator(".results-table")).toContainText("a-star");
-  await expect(here.locator(".results-table")).toContainText("reached the goal");
+  // Its results open in the drawer: five strategies, each a trial that
+  // reached the goal, each a new branch.
+  const results = page.getByRole("region", { name: "Results of maze/micro" });
+  await expect(results.locator(".results-table tbody tr")).toHaveCount(5);
+  await expect(results.locator(".results-table")).toContainText("a-star");
+  await expect(results.locator(".results-table")).toContainText("reached the goal");
   await expect(tree(page).locator(".tree-branch")).toHaveCount(branches + 5);
   await expect(tree(page).locator(".tone-trial").first()).toBeVisible();
   // Played again with the same seeds, it says the results are the same.
   await here.getByRole("button", { name: "Run again" }).click();
   await expect(activity(page).getByRole("status")).toContainText("again: same results", { timeout: 60_000 });
   // A trial is watched: its branch opens where it started and plays.
-  await here.locator(".results-table tbody tr", { hasText: "a-star" }).getByRole("button", { name: "Watch" }).click();
+  await results.locator(".results-table tbody tr", { hasText: "a-star" }).getByRole("button", { name: "Watch" }).click();
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("a-star");
   expect(await steps(page)).toBeGreaterThan(0);
   // A branch is set against the history it left: the same up to where it split, then step by step.
+  await drawer(page, "Compare");
   const comparison = page.getByRole("region", { name: "Comparison" });
   await expect(comparison.locator(".compare-note")).toContainText("Split at step 0");
   await expect(comparison.locator("tbody tr").first()).toContainText("Walk Start");
   // Any branch of the same tree is compared from its card in the tree.
-  await tree(page).getByRole("button", { name: /^Step 3 of breadth-first/ }).last().hover();
-  await page.getByRole("button", { name: "Compare with the history on screen" }).click();
+  const compareWith = page.getByRole("button", { name: "Compare with the history on screen" });
+  await expect(async () => {
+    await tree(page).getByRole("button", { name: /^Step 3 of breadth-first/ }).last().hover();
+    await expect(compareWith).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await compareWith.click();
   await expect(comparison.locator(".panel-heading h2")).toContainText("breadth-first");
   await expect(comparison.locator(".compare-ends")).toContainText("energy");
 });
@@ -296,9 +329,12 @@ test("names open inspectors: an account pinned follows the cursor, and the rules
   expect(await openRef(page, "sokoban/micro/deadlock")).toBe(3);
   await page.getByRole("button", { name: "Go to initial state" }).click();
   await page.getByRole("button", { name: "Next exchange" }).click();
-  // The step changed two balances of the cell the player left.
+  const picture = async () => (await page.locator(".world-panel").boundingBox())!;
+  const unpinned = await picture();
+  // The step changed two balances of the cell the player left, listed under it.
   const left = page.locator(".state-list li", { hasText: /^Cell 8/ });
   await expect(left).toContainText("2 changed");
+  await expect(left.locator(".state-changes .balance.changed")).toHaveCount(2);
   // A hover previews it; a click pins it.
   await left.getByRole("button", { name: "Cell 8" }).hover();
   await expect(page.getByRole("tooltip").locator(".balance.changed")).toHaveCount(2);
@@ -312,26 +348,25 @@ test("names open inspectors: an account pinned follows the cursor, and the rules
   await expect(pinned.locator(".balance.changed")).toHaveCount(0);
   // The rate of a step pins beside it; Esc closes the latest, × the other.
   await page.getByRole("button", { name: "Next exchange" }).click();
-  await page.locator(".ticker-panel .exchange-rate").click();
+  await stepNow(page).locator(".exchange-rate").click();
   await expect(inspectors(page).getByRole("region", { name: /^Rate / })).toContainText("Player's cell");
-  // However far the page is scrolled, the docked inspectors cover nothing:
-  // the page makes room for them.
-  for (const y of [0, 120, 260, 400, 10_000]) {
-    await page.evaluate((top) => window.scrollTo(0, top), y);
-    await expect.poll(() => page.evaluate(() => {
-      const dock = document.querySelector(".inspector-dock")!.getBoundingClientRect();
-      return [".playback", ".tree-panel", ".world-panel", ".action-panel", ".ticker-panel", ".accounts-panel"].filter((panel) => {
-        const box = document.querySelector(panel)!.getBoundingClientRect();
-        return !(dock.bottom <= box.top || dock.top >= box.bottom || dock.right <= box.left || dock.left >= box.right);
-      });
-    }), `scrolled to ${y}`).toEqual([]);
-  }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  // Pinned inspectors float over the picture's edge: nothing moves to make
+  // room for them, and they cover neither the rail, the transport nor the tree.
+  expect(await picture()).toEqual(unpinned);
+  expect(await page.evaluate(() => {
+    const dock = document.querySelector(".inspector-dock")!.getBoundingClientRect();
+    return [".playback", ".tree-panel", ".action-panel"].filter((panel) => {
+      const box = document.querySelector(panel)!.getBoundingClientRect();
+      return !(dock.bottom <= box.top || dock.top >= box.bottom || dock.right <= box.left || dock.left >= box.right);
+    });
+  })).toEqual([]);
+  // The page is one screen: it does not scroll.
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
   await expect(inspectors(page).getByRole("region")).toHaveCount(1);
   await pinned.getByRole("button", { name: "Close Cell 8" }).click();
   await expect(inspectors(page)).toHaveCount(0);
-  // Rules lists the model's rates as written, each opening on its name.
+  // Rules, in the drawer, lists the model's rates as written, each opening on its name.
   await page.getByRole("button", { name: "Rules" }).click();
   const rules = page.getByRole("region", { name: "Rules" });
   await expect(rules.locator("tbody tr")).toHaveCount(3);
@@ -373,6 +408,7 @@ test("keeps Studio within a narrow viewport", async ({ page }) => {
   await page.goto("/?package=/packages/sokoban.zip&name=sokoban&ref=sokoban%2Fmicro%2Fdeadlock");
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of sokoban/micro/deadlock", { timeout: 30_000 });
   expect(await steps(page)).toBe(3);
+  await rail(page, "Moves");
   await expect(fromHere(page).locator(".move").first()).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
@@ -411,8 +447,8 @@ test("a release exposes its source and compares an uploaded build on matching se
 test("Rhai at a point reads a balance and applies the assessed move", async ({ page }) => {
   await openSample(page, "maze");
   await openRef(page, "maze/micro");
-  await page.getByText("Rhai console", { exact: true }).click();
-  const console = fromHere(page).locator("details").filter({ has: page.getByText("Rhai console", { exact: true }) });
+  await drawer(page, "Console");
+  const console = page.getByRole("region", { name: "Rhai console" });
   const program = console.getByLabel("Program");
   await program.fill('let wallet=#{owner:account("agent"),unit:asset("energy")};state.balance(wallet.owner,wallet.unit)');
   await console.getByRole("button", { name: "Format", exact: true }).click();

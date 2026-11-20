@@ -32,12 +32,6 @@ export function ledgerRows(account: AccountData | undefined, before: AccountData
   return rows;
 }
 
-/** How many of an account's balances differ from before. */
-export function changedCount(account: AccountData | undefined, before: AccountData | undefined): number {
-  if (!before) return 0;
-  return ledgerRows(account, before).filter((row) => row.before !== undefined).length;
-}
-
 /**
  * An account's ledger: each balance, before → after where it changed, the
  * balances that never change in the history counted and folded.
@@ -69,18 +63,34 @@ function Balance({ row }: { row: LedgerRow }) {
   </div>;
 }
 
-/** The accounts at a step, one row each, with how many of its balances the step changed. */
+/**
+ * The accounts at a step, one row each. After a step, those it changed come
+ * first, each with the balances it changed, before → after; the rest are
+ * counted and folded. At the start, every account.
+ */
 export function StateList({ accounts, before, focus }: { accounts: AccountData[]; before?: AccountData[]; focus?: string }) {
   const prior = new Map((before ?? []).map((account) => [account.account.key, account]));
-  return <ul className="state-list">
-    {accounts.map((account) => {
-      const changed = before ? changedCount(account, prior.get(account.account.key) ?? { account: account.account, balances: [] }) : 0;
-      return <li key={account.account.key} className={`${changed > 0 ? "changed" : ""}${focus === account.account.key ? " focused" : ""}`}>
-        <IdLink subject={{ kind: "account", id: account.account }} />
-        {changed > 0 && <small>{changed} changed</small>}
-      </li>;
-    })}
-  </ul>;
+  const rows = accounts.map((account) => ({
+    account,
+    changes: before ? ledgerRows(account, prior.get(account.account.key) ?? { account: account.account, balances: [] }).filter((row) => row.before !== undefined) : [],
+  }));
+  const item = ({ account, changes }: (typeof rows)[number]) => <li key={account.account.key} className={`${changes.length > 0 ? "changed" : ""}${focus === account.account.key ? " focused" : ""}`}>
+    <div className="state-account">
+      <IdLink subject={{ kind: "account", id: account.account }} />
+      {changes.length > 0 && <small>{changes.length} changed</small>}
+    </div>
+    {changes.length > 0 && <div className="ledger state-changes">{changes.map((row) => <Balance key={row.asset.key} row={row} />)}</div>}
+  </li>;
+  if (!before) return <ul className="state-list">{rows.map(item)}</ul>;
+  const changed = rows.filter((row) => row.changes.length > 0);
+  const still = rows.filter((row) => row.changes.length === 0);
+  return <div className="state">
+    {changed.length > 0 && <ul className="state-list">{changed.map(item)}</ul>}
+    {still.length > 0 && <details className="unchanged-accounts" open={changed.length === 0 || still.some((row) => row.account.account.key === focus)}>
+      <summary>{still.length} unchanged</summary>
+      <ul className="state-list">{still.map(item)}</ul>
+    </details>}
+  </div>;
 }
 
 /** Who holds an asset at a step: each account and how much, before → after where it changed. */

@@ -10,13 +10,16 @@ export type Activity = {
 /** What the last thing done came to: done as asked, done otherwise, or failed. */
 export type Said = { tone: "done" | "caution" | "error"; message: string };
 
+/** Where the store is kept, in a few words, and why it is not, when it is not. */
+export type StoreWords = { words: string; why?: string };
+
 /**
- * What is running now, one entry each, at the top of the page however far
- * it is scrolled: a strategy or an experiment playing, a package loading, a
- * ref followed, a history played back. Then what the last thing done came
- * to, until the next one, and where the store is kept.
+ * What is running now, one entry each, in the bar at the top of the page: a
+ * strategy or an experiment playing, a package loading, a ref followed, a
+ * history played back. Then what the last thing done came to, until the next
+ * one, and where the store is kept, with why it is not on its hover.
  */
-export function ActivityStrip({ activities, said, store, onReplaceStore }: { activities: Activity[]; said: Said[]; store: string; onReplaceStore?: () => void }) {
+export function ActivityStrip({ activities, said, store, onReplaceStore }: { activities: Activity[]; said: Said[]; store: StoreWords; onReplaceStore?: () => void }) {
   const words = said.map((each) => each.message).join(" ");
   const tone = said.find((each) => each.tone === "error")?.tone ?? said.find((each) => each.tone === "caution")?.tone ?? "done";
   return <section className="activity-strip" aria-label="Activity">
@@ -26,6 +29,6 @@ export function ActivityStrip({ activities, said, store, onReplaceStore }: { act
       {activity.stop && <button type="button" onClick={activity.stop.onStop}>{activity.stop.label}</button>}
     </span>)}
     {words && <span className={`activity-said tone-${tone}`} role={tone === "error" ? "alert" : "status"} title={words}>{words}</span>}
-    <span className="activity-store">{store}{onReplaceStore && <button type="button" onClick={onReplaceStore} title="Replace the saved store with an empty one; what it held is lost">Replace it</button>}</span>
+    <span className="activity-store">{store.why ? <span className="store-why" tabIndex={0} title={store.why} aria-label={`${store.words}: ${store.why}`}>{store.words}</span> : store.words}{onReplaceStore && <button type="button" onClick={onReplaceStore} title="Replace the saved store with an empty one; what it held is lost">Replace it</button>}</span>
   </section>;
 }

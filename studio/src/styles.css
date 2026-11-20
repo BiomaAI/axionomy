@@ -30,19 +30,26 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); }
 button, select, input { font: inherit; }
 button { cursor: pointer; }
-.app-shell { max-width: 1800px; margin: auto; padding: 0 30px; }
-/* The masthead carries the register's double rule. */
-.topbar { height: 82px; display: flex; align-items: center; justify-content: space-between; border-bottom: 3px double var(--line-strong); }
-.brand { display: flex; align-items: center; gap: 14px; color: inherit; text-decoration: none; border-radius: 4px; }
+/* ------------------------------------------------------------------ frame --
+   One screen: the bar; the work column (tree, transport, picture) beside the
+   rail; the drawer along the bottom. On a wide window the page never
+   scrolls: each part scrolls inside itself, and nothing moves another. */
+.app-shell { max-width: 1920px; height: 100dvh; margin: auto; padding: 0 16px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; }
+/* The bar carries the register's double rule. */
+.topbar { min-height: 50px; display: flex; align-items: center; gap: 14px; border-bottom: 3px double var(--line-strong); }
+.brand { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; border-radius: 4px; }
 .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.brand picture, .brand img { display: block; width: 188px; height: auto; }
-.brand-name { font: 500 14px var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
-.brand-subtitle, .connection { color: var(--muted); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
-.connection { display: flex; align-items: center; gap: 8px; }
+.brand picture, .brand img { display: block; width: 116px; height: auto; }
+.brand-name { font: 500 11px var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+.brand-subtitle { display: none; }
+.connection { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; white-space: nowrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .status-dot { width: 7px; height: 7px; color: var(--hold); background: currentColor; }
 .status-dot.online { color: var(--credit); }
 
-.command-bar { display: flex; gap: 9px; align-items: end; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.command-bar { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
+.command-bar select, .command-bar button, .command-bar .file-button { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.package-field select { width: 200px; }
 .field { min-width: 180px; display: grid; gap: 6px; }
 .field > select, .field > input { width: 100%; min-width: 0; }
 
@@ -56,13 +63,14 @@ button.danger { color: var(--debit); }
 .file-button { display: grid; place-items: center; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .file-button input { display: none; }
 
-/* What is running now stays in view however far the page is scrolled, one line, above the transport. */
-.activity-strip { position: sticky; top: 0; z-index: 75; display: flex; align-items: center; gap: 20px; height: 34px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; background: var(--bg); border-bottom: 1px solid var(--line); color: var(--muted); font: 11px var(--mono); scrollbar-width: none; }
+/* What is running now, in the bar, one line. */
+.activity-strip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 16px; height: 34px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; color: var(--muted); font: 11px var(--mono); scrollbar-width: none; }
 .activity-strip::-webkit-scrollbar { display: none; }
 .activity-said { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 .activity-said.tone-caution { color: var(--hold); }
 .activity-said.tone-error { color: var(--debit); }
 .activity-store { flex: 0 0 auto; margin-left: auto; color: var(--muted); }
+.store-why { border-bottom: 1px dotted color-mix(in srgb, currentColor 60%, transparent); cursor: help; color: var(--hold); }
 .activity-entry { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; color: var(--text); }
 .activity-entry strong { font-weight: 600; }
 .activity-entry button, .activity-store button { min-height: 24px; padding: 0 9px; font-size: 10px; }
@@ -98,8 +106,8 @@ h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; mar
    every card at its minimum and let a wrapped label push metrics under the
    next card. */
 
-/* The transport stays reachable for the whole replay (sticky). */
-.playback { position: sticky; top: 34px; z-index: 70; display: grid; grid-template-columns: auto minmax(180px, 1fr) repeat(4, auto); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); padding: 11px 14px; margin-bottom: 14px; box-shadow: 0 8px 20px #0006; }
+/* The transport, between the tree and the picture it plays. */
+.playback { display: grid; grid-template-columns: auto minmax(180px, 1fr) repeat(4, auto); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); padding: 5px 12px; }
 .transport { display: flex; gap: 4px; }
 .transport button { min-height: 32px; padding: 0; width: 32px; display: grid; place-items: center; font-family: var(--mono); }
 .transport button svg { display: block; }
@@ -117,23 +125,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* A confirmation reads plainly and goes by itself; a caution is amber and stays until dismissed. */
 
-/* ---------------------------------------------------------------- stage --
-   One viewport-height cockpit: picture | standings rail | truth rail.
-   Frames come from this grid, never from panel content (IC-1). */
-.stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(288px, 350px) minmax(276px, 330px); gap: 14px; height: clamp(560px, calc(100dvh - 120px), 1160px); margin-bottom: 14px; }
-.truth-rail { display: grid; grid-template-rows: fit-content(44%) minmax(0, 1fr); gap: 14px; min-height: 0; }
+/* ---------------------------------------------------------------- cockpit --
+   The work column and the rail. Frames come from this grid, never from
+   panel content (IC-1). */
+.point-cockpit { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 10px; }
+.work-column { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; }
+.picture-area { position: relative; min-width: 0; min-height: 0; display: grid; }
+.picture-area > .panel { min-height: 0; }
 
 .panel { min-width: 0; min-height: 0; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--line); overflow: hidden; }
-.panel-heading { min-height: 52px; padding: 10px 15px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 15px; }
-.panel-heading h2 { margin: 4px 0 0; font: 400 15px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-heading { min-height: 42px; padding: 6px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.panel-heading h2 { margin: 2px 0 0; font: 400 14px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel-heading > div:first-child { min-width: 0; }
 .panel-heading-side { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .panel-heading-side small { color: var(--brass); font: 10px var(--mono); text-transform: uppercase; }
 .theater-btn { min-height: 28px; padding: 0 8px; font-size: 12px; line-height: 1; }
 .theater-btn svg { display: block; }
 .world-panel:fullscreen { border: 0; background: var(--bg); }
-.world-panel, .accounts-panel, .ticker-panel { display: flex; flex-direction: column; }
-.state-list, .step-now { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.world-panel { display: flex; flex-direction: column; }
 
 /* Scene chrome rides the canvas as an overlay lane so metric or annotation
    changes never resize the picture (IC-5). It wraps instead of clipping; the
@@ -143,9 +152,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .scene-composition { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .scene-chrome { position: absolute; top: 0; left: 0; right: 0; z-index: 6; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; padding: 8px 10px; pointer-events: none; }
 .scene-metrics, .scene-legend, .scene-annotations { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.scene-metric { flex: 0 0 auto; padding: 4px 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(3px); }
-.scene-metric span, .scene-metric small { display: block; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
-.scene-metric small.unchanged { visibility: hidden; }
+.scene-metric { flex: 0 0 auto; display: flex; align-items: baseline; gap: 7px; padding: 3px 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(3px); }
+.scene-metric.changed { border-color: color-mix(in srgb, var(--brass) 60%, var(--line)); }
+.scene-metric span { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
 .scene-metric strong { font: 11px var(--mono); font-variant-numeric: tabular-nums; color: var(--brass); white-space: nowrap; }
 .scene-legend { gap: 4px 12px; padding: 5px 9px; background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(3px); }
 .scene-legend li, .scene-annotations li { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
@@ -203,14 +212,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .reserves-links line.is-active { animation: none; } .reserves-participant, .reserves-pool, .reserves-bar i { transition: none; } }
 /* The map has a strict visual grammar: structures define topology; occupants
    dock to it; attachments hang from it; state is folded into its owner. */
-.react-flow__node.structure-node { box-sizing: border-box; background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 6px; text-align: center; font: 500 8px/1.12 var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; z-index: 2 !important; }
+.react-flow__node.structure-node { box-sizing: border-box; background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 6px; text-align: center; font: 500 9px/1.12 var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; z-index: 2 !important; }
 .react-flow__node.structure-node.resource, .react-flow__node.structure-node.facility, .react-flow__node.structure-node.buyer, .react-flow__node.structure-node.seller, .react-flow__node.structure-node.carrier { border-radius: 7px; }
 .react-flow__node.structure-node.goal { border-style: double; border-width: 3px; }
 .rich-node, .rich-node-lifecycle, .rich-node-effect { width: 100%; display: grid; place-items: center; }
 .rich-node-content { width: 100%; min-width: 0; display: grid; place-items: center; gap: 2px; }
 .rich-node-content svg { color: var(--steel); }
-.rich-node-content small { color: var(--muted); max-width: 76px; overflow: hidden; font: 5.5px/1.1 var(--mono); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.structure-label { max-width: 76px; overflow: hidden; display: -webkit-box; font: 500 8px/1.12 var(--mono); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.rich-node-content small { color: var(--muted); max-width: 76px; overflow: hidden; font: 7px/1.1 var(--mono); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.structure-label { max-width: 76px; overflow: hidden; display: -webkit-box; font: 500 9px/1.12 var(--mono); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .structure-state { color: var(--brass) !important; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .structure-state-count { opacity: .8; }
 .graph-node-handle { width: 5px; height: 5px; min-width: 5px; min-height: 5px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); background: var(--surface-3); opacity: .42; transition: opacity .2s ease, background .2s ease; }
@@ -220,8 +229,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .react-flow__node.occupant-overlay.motion-seek, .react-flow__node.attachment-group.motion-seek { transition: none; }
 .occupant-content { grid-template-areas: "icon title cargo" "icon status cargo"; grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 6px; row-gap: 2px; text-align: left; }
 .occupant-content svg { grid-area: icon; align-self: center; }
-.occupant-label { grid-area: title; width: 100%; min-width: 0; overflow: hidden; font: 500 8px/1.1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-.occupant-status { grid-area: status; width: 100%; min-width: 0; max-width: none !important; overflow: hidden; font: 5.5px/1.1 var(--mono) !important; text-overflow: ellipsis; white-space: nowrap; }
+.occupant-label { grid-area: title; width: 100%; min-width: 0; overflow: hidden; font: 500 9px/1.1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.occupant-status { grid-area: status; width: 100%; min-width: 0; max-width: none !important; overflow: hidden; font: 7px/1.1 var(--mono) !important; text-overflow: ellipsis; white-space: nowrap; }
 .occupant-inventory { grid-area: cargo; align-self: center; display: flex; align-items: center; gap: 2px; }
 .occupant-inventory > span { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 999px; background: color-mix(in srgb, var(--surface) 86%, transparent); box-shadow: 0 3px 8px #0008; }
 .occupant-inventory small { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -230,16 +239,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .relation-handle.relation-source, .relation-handle.relation-unused { opacity: 0; }
 .react-flow__node.attachment-group { width: 168px; padding: 0; border: 0; background: transparent; color: var(--text); z-index: 4 !important; box-shadow: none; }
 .attachment-collection { width: 100%; border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); box-shadow: 0 9px 22px #0008; overflow: hidden; }
-.attachment-collection > header { min-height: 29px; padding: 5px 7px; display: flex; align-items: center; justify-content: space-between; gap: 7px; border-bottom: 1px solid var(--line); color: var(--muted); font: 7px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.attachment-collection > header { min-height: 29px; padding: 5px 7px; display: flex; align-items: center; justify-content: space-between; gap: 7px; border-bottom: 1px solid var(--line); color: var(--muted); font: 8px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
 .attachment-collection > header b { min-width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--text); font-weight: 500; }
 .attachment-rows { display: grid; }
-.attachment-rows button { min-height: 42px; padding: 4px 7px; display: grid; grid-template-columns: 17px minmax(0, 1fr); align-items: center; gap: 5px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); background: transparent; color: inherit; text-align: left; font: 8px var(--mono); }
+.attachment-rows button { min-height: 42px; padding: 4px 7px; display: grid; grid-template-columns: 17px minmax(0, 1fr); align-items: center; gap: 5px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); background: transparent; color: inherit; text-align: left; font: 9px var(--mono); }
 .attachment-rows button:last-child { border-bottom: 0; }
 .attachment-rows button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .attachment-rows button:disabled { opacity: 1; cursor: default; }
 .attachment-rows button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attachment-rows button small { grid-column: 2; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 6px; text-transform: uppercase; white-space: nowrap; }
-.attachment-overflow { min-height: 22px; display: grid; place-items: center; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
+.attachment-rows button small { grid-column: 2; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 7px; text-transform: uppercase; white-space: nowrap; }
+.attachment-overflow { min-height: 22px; display: grid; place-items: center; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
 .scene-context { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; margin: 0; padding: 0; list-style: none; pointer-events: auto; }
 .scene-context button { min-height: 26px; max-width: 100%; padding: 3px 8px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-left: 2px solid var(--hold); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(3px); color: var(--text); font: 10px var(--mono); text-align: left; }
 .scene-context button:disabled { opacity: 1; cursor: default; }
@@ -273,7 +282,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .react-flow__edge.path-current .react-flow__edge-path, .react-flow__edge.path-incumbent .react-flow__edge-path, .react-flow__edge.path-traversed .react-flow__edge-path { stroke: var(--accent); stroke-width: 2.5; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 48%, transparent)); }
 .react-flow__edge.path-candidate .react-flow__edge-path { stroke: var(--hold); stroke-width: 2.1; stroke-dasharray: 6 5; }
 .react-flow__edge.path-rejected .react-flow__edge-path, .react-flow__edge.path-blocked .react-flow__edge-path { stroke: var(--debit); stroke-dasharray: 4 4; }
-.react-flow__edge-text { font: 9px var(--mono); fill: var(--muted); }
+.react-flow__edge-text { font: 10px var(--mono); fill: var(--muted); }
 .react-flow__edge-textbg { fill: var(--surface); }
 .react-flow__controls { background: var(--surface); border-color: var(--line); }
 .react-flow__controls button { background: var(--surface); border-color: var(--line); fill: var(--text); }
@@ -312,7 +321,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .grid-entity.motion-seek { transition: none; }
 .grid-entity:disabled, .matrix-entity:disabled, .timeline-queue button:disabled { opacity: 1; cursor: default; }
 .grid-entity b { max-width: 64px; overflow: hidden; font: 500 8px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-.grid-entity small { max-width: 64px; overflow: hidden; color: var(--muted); font: 6px var(--mono); text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
+.grid-entity small { max-width: 64px; overflow: hidden; color: var(--muted); font: 7px var(--mono); text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
 .grid-entity.status-player { border-radius: 999px; color: var(--accent); }
 .grid-entity.status-crate, .grid-entity.status-on-goal { color: var(--hold); }
 .grid-entity.status-on-goal { border-color: var(--credit); background: color-mix(in srgb, var(--credit) 15%, var(--surface-3)); color: var(--credit); }
@@ -398,35 +407,36 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
 
 @media (max-width: 1400px) {
-  .stage { grid-template-columns: minmax(0, 1fr) minmax(268px, 310px) minmax(256px, 296px); }
-}
-
-@media (max-width: 1180px) {
-  .command-bar { flex-wrap: wrap; }
-  .stage { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .stage > .world-panel { height: min(74vh, 640px); }
-  .truth-rail { grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .truth-rail > .panel { max-height: min(52vh, 440px); }
-  .playback { grid-template-columns: auto 1fr auto auto; }
+  .point-cockpit { grid-template-columns: minmax(0, 1fr) 360px; }
   .kbd-hint { display: none; }
 }
 
+/* A narrow window stacks the parts, and the page scrolls; the transport
+   stays in reach. */
+@media (max-width: 1180px) {
+  .app-shell { height: auto; display: block; }
+  .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 0; }
+  .command-bar { flex: 1 1 auto; flex-wrap: wrap; min-width: 0; }
+  .activity-strip { order: 3; flex-basis: 100%; }
+  .point-cockpit { grid-template-columns: minmax(0, 1fr); margin-top: 10px; }
+  .work-column { grid-template-rows: none; }
+  .playback { position: sticky; top: 0; z-index: 70; grid-template-columns: auto 1fr auto auto; box-shadow: 0 8px 20px #0006; }
+  .picture-area { height: min(74vh, 640px); }
+  .action-panel { max-height: min(80vh, 680px); }
+  .drawer { margin-top: 10px; }
+}
+
 @media (max-width: 880px) {
-  .app-shell { padding: 0 14px; }
-  .brand picture, .brand img { width: 155px; }
-  
-  .stage > .world-panel { height: min(70vh, 520px); }
-  .truth-rail { grid-template-columns: minmax(0, 1fr); }
-  .truth-rail > .panel { max-height: 420px; }
+  .app-shell { padding: 0 12px; }
+  .picture-area { height: min(70vh, 520px); }
   .playback { grid-template-columns: auto 1fr; }
   .replay-proof { display: none; }
 }
 
 @media (max-width: 520px) {
-  .topbar { height: auto; min-height: 76px; align-items: start; padding: 13px 0; }
-  .brand { align-items: start; flex-direction: column; gap: 4px; }
-  .connection { font-size: 10px; }
   .field { width: 100%; min-width: 0; }
+  .package-field, .package-field select { width: 100%; }
+  .connection { display: none; }
   
   .timeline-lane { grid-template-columns: 100px 1fr; }
   .timeline-axis { margin-left: 115px; }
@@ -465,43 +475,32 @@ input[type="text"], textarea { border: 1px solid var(--line); color: var(--text)
 textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var(--mono); resize: vertical; }
 .package-field { min-width: 210px; }
 
-.empty-catalog { display: grid; gap: 8px; max-width: 720px; margin: 60px auto; padding: 22px 24px; border: 1px solid var(--line); background: var(--surface); }
+.empty-catalog { display: grid; gap: 8px; align-self: start; width: min(720px, 100%); margin: 60px auto; padding: 22px 24px; border: 1px solid var(--line); background: var(--surface); }
 .empty-catalog strong { font: 400 18px var(--serif); }
 .empty-catalog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .empty-catalog code { font: 11px var(--mono); color: var(--text); }
 
 .packages-workspace .command-bar button { white-space: nowrap; }
-.action-panel { display: flex; flex-direction: column; }
 
 
 .delivered-frames { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .delivered-frames li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 4px 10px; padding: 6px 9px; border: 1px solid var(--line); font: 10px var(--mono); }
 .delivered-frames small { grid-column: 2; display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--muted); font-size: 10px; }
 
-@media (max-width: 880px) {
-  .topbar { flex-wrap: wrap; gap: 8px 12px; }
-}
-
-/* The point's stage: the picture, what to do here, and what is true there. */
-.point-stage > .action-panel { display: flex; flex-direction: column; }
 
 .sample-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
 .sample-list button { min-height: 32px; font-size: 12px; }
-.packages-workspace .command-bar button, .packages-workspace .command-bar .file-button { font-size: 12px; }
-@media (max-width: 1180px) {
-  .point-stage > .action-panel { max-height: min(70vh, 560px); }
-}
 @media (max-width: 520px) {
   /* The lane above the picture wraps into several rows on a phone. */
-  .point-stage > .world-panel { height: min(86vh, 700px); }
+  .picture-area { height: min(86vh, 700px); }
 }
-.point-stage .action-panel .panel-heading h2 { white-space: normal; line-height: 1.3; }
+.action-panel .panel-heading h2 { white-space: normal; line-height: 1.3; }
 
 /* ------------------------------------------------------------ history tree --
    Every history of the package and its branches, live: steps run left to
    right, each branch on its own row, the history on screen in brass. */
-.tree-panel { margin-bottom: 14px; }
-.history-tree { position: relative; overflow: auto; max-height: 320px; }
+.tree-frame { position: relative; }
+.history-tree { position: relative; overflow: auto; }
 .history-tree svg { display: block; }
 .tree-edge { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tree-edge.on-path { stroke: var(--brass); stroke-width: 3; }
@@ -531,36 +530,65 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .term:focus-visible { outline: 1px solid var(--brass); outline-offset: 2px; }
 .term-tip { position: fixed; z-index: 90; width: max-content; max-width: 290px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 8px 20px #0008; color: var(--text); font: 400 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: 0; text-transform: none; white-space: normal; pointer-events: none; }
 
-/* ---------------------------------------------------------------- from here --
-   Everything one can do from the point on screen, one size of control. */
-.from-here { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px 16px; display: grid; gap: 18px; align-content: start; }
+/* ------------------------------------------------------------------- tabs --
+   The rail's and the drawer's: words in a row, the open one underlined. */
+.tab-strip { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tab-strip::-webkit-scrollbar { display: none; }
+.tab-strip [role="tab"] { flex: 0 0 auto; min-height: 34px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.tab-strip [role="tab"]:hover:not(:disabled) { color: var(--text); }
+.tab-strip [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tab-strip [role="tab"]:disabled { opacity: .35; }
+.tab-panel[hidden] { display: none !important; }
+.resize-handle { position: absolute; left: 0; right: 0; z-index: 6; height: 9px; cursor: ns-resize; touch-action: none; }
+.resize-handle::after { content: ""; position: absolute; left: 50%; top: 3px; width: 36px; height: 3px; transform: translateX(-50%); border-radius: 2px; background: var(--line-strong); opacity: 0; transition: opacity .15s; }
+.resize-handle:hover::after, .resize-handle:focus-visible::after { opacity: 1; }
+.resize-handle:focus-visible { outline: none; }
+.resize-top { top: -5px; }
+.resize-bottom { bottom: -5px; }
+
+/* ---------------------------------------------------------------- the rail --
+   The point on screen, and what one can do from it, a tab each, one size of
+   control. */
+.action-panel { display: flex; flex-direction: column; min-height: 0; }
+.action-panel > .tab-strip { border-bottom: 1px solid var(--line); }
+.rail-body { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.rail-body .tab-panel { padding: 12px 14px 16px; display: grid; gap: 18px; align-content: start; }
+.rail-body, .drawer-body { --control: 30px; }
 .from-what { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .from-section { display: grid; gap: 8px; }
-.from-section h3 { margin: 0; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.from-here button, .from-here select, .from-here input, .from-here .file-button { min-height: 30px; padding: 0 10px; font-size: 12px; }
-.from-here input { border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
-.from-here .field { min-width: 0; gap: 4px; }
+.from-section h3 { margin: 0; display: flex; justify-content: space-between; gap: 8px; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.from-section h3 small { color: var(--brass); font-size: 10px; letter-spacing: .04em; }
+:is(.rail-body, .drawer-body) :is(button, select, input, .file-button) { min-height: var(--control); padding: 0 10px; font-size: 12px; }
+:is(.rail-body, .drawer-body) input { border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+:is(.rail-body, .drawer-body) .field { min-width: 0; gap: 4px; }
 .move-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .move { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; padding: 6px 0 0 8px; border-left: 2px solid var(--line); }
 .move-applicable { border-left-color: color-mix(in srgb, var(--credit) 60%, var(--line)); }
 .move-actions { display: flex; gap: 4px; }
-.from-here .move-details { width: 30px; padding: 0; display: grid; place-items: center; }
+.rail-body .move-details { width: 30px; padding: 0; display: grid; place-items: center; }
 .move-detail { grid-column: 1 / -1; padding: 4px 0 6px; }
 .let-play { display: flex; gap: 6px; align-items: center; }
 .let-play select, .let-play input { flex: 1; min-width: 0; }
 .settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .exchange-editor { display: grid; gap: 8px; }
 .exchange-editor output { min-height: 30px; display: flex; align-items: center; padding: 0 10px; border: 1px dashed var(--line); font: 11px var(--mono); overflow-wrap: anywhere; }
-.experiment-view { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
-.experiment-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-.experiment-line > .id-link { font: 600 11px var(--mono); overflow-wrap: anywhere; }
-.from-here .muted { font-size: 11px; }
+.experiment-view { display: grid; gap: 6px; }
+.experiment-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.experiment-item { display: grid; gap: 8px; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.experiment-item:first-child { padding-top: 0; }
+.experiment-item > .experiment-view { padding-left: 30px; }
+.experiment-line { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.experiment-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.experiment-name > .id-link { font: 600 11px var(--mono); overflow-wrap: anywhere; }
+.experiment-name small { color: var(--muted); font: 10px var(--mono); }
+.rail-body .disclosure { width: 24px; min-height: 24px; padding: 0; display: grid; place-items: center; border: 0; background: none; color: var(--muted); }
+.rail-body .muted { font-size: 11px; }
+.step-cue { margin: 0; font-size: 12px; }
 .refs-here { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 11px var(--mono); }
 
 /* ---------------------------------------------------------------- compare --
    The history on screen set against another: where they part, step by
    step what each did and what differs, and how each ends. */
-.compare-panel { margin-bottom: 14px; }
 .compare-panel .panel-heading h2 { white-space: normal; }
 .versus { color: var(--muted); font: 11px var(--mono); text-transform: uppercase; margin: 0 6px; }
 .compare-panel .panel-heading button { min-height: 28px; font-size: 11px; }
@@ -582,7 +610,7 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 /* ------------------------------------------------------------ identifiers --
    Every identifier is one link: its label, its card on a hover, its
    inspector pinned on a click. */
-button.id-link, .from-here button.id-link, .branch-card button.id-link, .compare-panel button.id-link {
+button.id-link, :is(.rail-body, .drawer-body) button.id-link, .branch-card button.id-link, .compare-panel button.id-link {
   min-height: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; text-transform: inherit; cursor: pointer;
   text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px; overflow-wrap: anywhere;
 }
@@ -595,21 +623,17 @@ button.id-link:hover { color: var(--brass); }
 .inspector-heading code { font: 10px var(--mono); color: var(--muted); overflow-wrap: anywhere; user-select: all; }
 .inspector-close { flex: 0 0 auto; width: 26px; min-height: 26px; padding: 0; display: grid; place-items: center; }
 .inspector-body { display: grid; gap: 10px; padding: 9px 11px 11px; font-size: 11px; }
-/* Pinned inspectors dock in a column of their own at the right, below the
-   activity line, and the page makes room for it, so they cover nothing; on
-   a narrow window they are a sheet along the bottom, and the page can
-   scroll anything above it. */
-.inspector-dock { position: fixed; top: 42px; right: 16px; bottom: 16px; z-index: 78; width: 380px; overflow: auto; display: grid; align-content: start; gap: 8px; }
-@media (min-width: 1101px) {
-  .app-shell.docked { padding-right: calc(380px + 16px + 24px); }
-}
+/* Pinned inspectors float at the picture's right edge, below its heading:
+   pinning one moves nothing, and the rail stays in reach. On a narrow
+   window they are a sheet along the bottom, and the page can scroll
+   anything above it. */
+.inspector-dock { position: absolute; top: 50px; right: 8px; bottom: 8px; z-index: 20; width: min(360px, calc(100% - 16px)); overflow: auto; display: grid; align-content: start; gap: 8px; pointer-events: none; }
+.inspector-dock > * { pointer-events: auto; }
 .inspector { background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 10px 26px #0009; }
 .inspector .inspector-body { max-height: min(46vh, 440px); overflow: auto; }
 
 /* ---------------------------------------------------------------- exchange --
    An exchange, compact in lists and on the step, full in its inspector. */
-.step-now { padding: 10px 12px; }
-.step-now > .empty-state { padding: 18px; }
 .exchange { display: grid; gap: 4px; min-width: 0; font-size: 11px; }
 .exchange-full { gap: 8px; }
 .exchange-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
@@ -636,12 +660,20 @@ button.id-link.exchange-rate { font-size: 12px; font-weight: 600; }
 .effect-keeps .holding > .id-link { color: var(--steel); }
 
 /* ------------------------------------------------------------------ state --
-   The accounts at the step, one row each, and an account's ledger. */
-.state-list { list-style: none; margin: 0; padding: 4px 12px 10px; }
-.state-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-height: 26px; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); font-size: 11px; }
+   The accounts at the step, one row each, those the step changed first with
+   what it changed, and an account's ledger. */
+.state-list { list-style: none; margin: 0; padding: 0; }
+.state-list li { display: grid; gap: 3px; min-height: 26px; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); font-size: 11px; }
 .state-list li:last-child { border-bottom: 0; }
-.state-list li small { flex: 0 0 auto; color: var(--hold); font: 10px var(--mono); }
+.state-account { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.state-account small { flex: 0 0 auto; color: var(--hold); font: 10px var(--mono); }
 .state-list li.focused { padding-left: 8px; box-shadow: inset 3px 0 var(--accent); }
+.state-changes { padding-left: 10px; }
+.state-changes .balance { min-height: 20px; border-bottom: 0; }
+.unchanged-accounts summary { cursor: pointer; list-style: none; padding: 6px 0 4px; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
+.unchanged-accounts summary::-webkit-details-marker { display: none; }
+.unchanged-accounts summary::before { content: "▸ "; }
+.unchanged-accounts[open] summary::before { content: "▾ "; }
 .balance > span { grid-column: 1; min-width: 0; }
 .balance small { grid-column: 2; }
 .balance strong { grid-row: 1; grid-column: 3; }
@@ -671,19 +703,44 @@ button.id-link.exchange-rate { font-size: 12px; font-weight: 600; }
 
 /* ------------------------------------------------------------------ rules --
    The model's rates, its goal and invariants, opened by Rules. */
-.rules-panel { margin-bottom: 14px; scroll-margin-top: 110px; }
-.rules-panel .panel-heading button { min-height: 28px; font-size: 11px; }
-.rules-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px); gap: 18px; padding: 12px 15px 15px; }
+.rules-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px); gap: 18px; }
 .rate-table { display: grid; align-content: start; gap: 8px; min-width: 0; }
-.rate-table .table-scroll { max-height: 460px; }
-.rules-side { display: grid; align-content: start; gap: 14px; min-width: 0; max-height: 500px; overflow: auto; }
+.rate-table .table-scroll { max-height: none; }
+.rules-side { display: grid; align-content: start; gap: 14px; min-width: 0; }
+
+/* ---------------------------------------------------------------- drawer --
+   Along the bottom: what is too wide for the rail, a tab each. Its tabs
+   always show; it opens on one, to the height it is dragged to. */
+.drawer { position: relative; min-height: 0; display: flex; flex-direction: column; margin-bottom: 10px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 94%, transparent); }
+.drawer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 6px; }
+.drawer.open .drawer-bar { border-bottom: 1px solid var(--line); }
+.drawer-close { width: 26px; min-height: 26px; padding: 0; display: grid; place-items: center; }
+.drawer-body { flex: 1; min-height: 0; overflow: auto; }
+.drawer-body .tab-panel { padding: 12px 15px 15px; }
+.drawer-body .empty-state { padding: 24px; }
+.drawer-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.drawer-heading h2 { margin: 0; font: 400 14px var(--serif); }
+.drawer-heading small { color: var(--brass); font: 10px var(--mono); text-transform: uppercase; }
+.results-drawer { display: grid; gap: 18px; }
+.results-section { display: grid; gap: 6px; }
+.results-section h3 { margin: 0; font: 600 12px var(--mono); }
+.results-section .table-scroll { max-height: none; }
+.results-section .compact-table { width: auto; min-width: min(640px, 100%); }
+.results-table td.arm { white-space: nowrap; }
+.results-table td.arm small { color: var(--muted); font: 10px var(--mono); }
+.drawer .compare-panel, .drawer .package-source { margin: 0; padding: 0; border: 0; background: none; }
+.drawer .compare-panel > .panel-heading { padding: 0 0 8px; min-height: 0; }
+.drawer .compare-body { padding: 8px 0 0; }
+.drawer .compare-scroll { max-height: none; }
+.rhai-console { display: grid; gap: 8px; }
+.rhai-console .actions, .package-source .actions { display: flex; flex-wrap: wrap; gap: 6px; }
 input[type="search"] { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); }
 
 @media (max-width: 880px) {
   .rules-body { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 1100px) {
-  .inspector-dock { top: auto; right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 45vh; align-content: end; }
+@media (max-width: 1180px) {
+  .inspector-dock { position: fixed; z-index: 78; top: auto; right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 45vh; align-content: end; }
   .app-shell.docked { padding-bottom: calc(45vh + 16px); }
 }
 @media (prefers-color-scheme: light) {

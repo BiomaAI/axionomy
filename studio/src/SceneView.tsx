@@ -228,9 +228,10 @@ function SceneChrome({ scene, lane, onAccount }: { scene: Scene; lane: RefObject
   return <div className="scene-chrome" ref={lane}>
     {scene.metrics.length > 0 && <div className="scene-metrics">{scene.metrics.map((metric) => {
       const changed = metric.previous !== null && metric.previous !== undefined && metric.previous !== metric.value;
-      // Every metric keeps a line for its change, so the lane's height, and
-      // the picture fitted below it, hold still from step to step.
-      return <div key={metric.key} className="scene-metric"><span>{metric.label}</span><strong>{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</strong>{changed ? <small>{metric.previous} → {metric.value}</small> : <small className="unchanged" aria-hidden="true">{"\u00a0"}</small>}</div>;
+      // One line each, its change marked and told on its hover, so the
+      // lane's height, and the picture fitted below it, hold still from step
+      // to step.
+      return <div key={metric.key} className={`scene-metric${changed ? " changed" : ""}`} title={changed ? `${metric.label}: ${metric.previous} → ${metric.value}` : undefined}><span>{metric.label}</span><strong>{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</strong>{changed && <small className="visually-hidden">, was {metric.previous}</small>}</div>;
     })}</div>}
     {scene.annotations.length > 0 && <ul className="scene-annotations" aria-label="Scene notes">{scene.annotations.map((annotation) => <li key={annotation.id} className={`tone-${annotation.tone}`}>{annotation.label}</li>)}</ul>}
     {scene.legend.length > 0 && <ul className="scene-legend" aria-label="Scene legend">{scene.legend.slice(0, 8).map((entry, index) => <li key={`${entry.glyph}:${entry.tone}:${index}`} className={`tone-${entry.tone}`}><SceneIcon glyph={entry.glyph} size={15} />{entry.label}</li>)}</ul>}
