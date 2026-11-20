@@ -21,6 +21,7 @@ import {
   nativePackages,
   samplePackages,
   type ExperimentProgress,
+  type Sample,
   type ExperimentView as ExperimentData,
   type HistoriesView,
   type LoadedFrom,
@@ -897,11 +898,17 @@ function experimentWords({ experiment, progress }: ExperimentRun) {
   return <>Running <strong>{experiment.experiment}</strong>{arm && progress ? <>: <strong>{arm.strategy}</strong>, arm {progress.arm + 1} of {experiment.arms.length}{trials > 1 && `, trial ${progress.trial + 1} of ${trials}`} · {counted(progress.progress.expanded, "state")} looked at</> : "…"}</>;
 }
 
-/** The page before any package is loaded: the samples, each a click from open. */
-function EmptyCatalog({ samples, busy, onOpen }: { samples: { name: string; url: string }[]; busy: boolean; onOpen: (url: string) => void }) {
+/** The page before any package is loaded: the samples, a card each, each a click from open. */
+function EmptyCatalog({ samples, busy, onOpen }: { samples: Sample[]; busy: boolean; onOpen: (url: string) => void }) {
   return <div className="empty-catalog" role="note">
-    <strong>Open a <Term name="package">package</Term></strong>
-    {samples.length > 0 && <ul className="sample-list" aria-label="Sample packages">{samples.map((sample) => <li key={sample.url}><button type="button" disabled={busy} onClick={() => onOpen(sample.url)}>{sample.name}</button></li>)}</ul>}
+    <h1>Open a <Term name="package">package</Term></h1>
+    {samples.length > 0 && <ul className="sample-cards" aria-label="Sample packages">{samples.map((sample) => <li key={sample.url}>
+      <button type="button" className="sample-card" disabled={busy} onClick={() => onOpen(sample.url)}>
+        <strong>{sample.title ?? sample.name}</strong>
+        {sample.title && <code>{sample.name}</code>}
+        <small>{counted(sample.refs, "ref")} · {counted(sample.experiments, "experiment")} · {counted(sample.strategies, "strategy", "strategies")}</small>
+      </button>
+    </li>)}</ul>}
   </div>;
 }
 

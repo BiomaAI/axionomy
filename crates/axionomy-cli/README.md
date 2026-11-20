@@ -29,6 +29,7 @@ one in a store file, creating it if needed: merged, or in place of the
 version of it the store holds, which it names; `package inspect` lists a
 package's manifest, refs and definitions; `package samples` writes every
 sample's package, zipped, into a directory, with `index.json` naming them,
+each with its title and how many refs, experiments and strategies it has,
 which Studio lists them by.
 
 `mcp` serves MCP over Streamable HTTP at `/mcp` with `/health`, keeping

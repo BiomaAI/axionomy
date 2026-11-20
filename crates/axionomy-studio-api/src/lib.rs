@@ -21,8 +21,8 @@ pub use histories::{ChangeView, HistoriesView, SegmentView, histories};
 pub use ids::{Natural, ObjectiveList, PackageVersion, PointId, PointIdError};
 pub use packages::{
     ArmView, ExperimentView, KeptView, LoadedView, ObjectiveView, PackageList, PackageView,
-    ReleaseView, SamplePackages, SourceBuild, build_source, compare_build, load, packages,
-    source_tree,
+    ReleaseView, SamplePackage, SamplePackages, SourceBuild, build_source, compare_build, load,
+    packages, source_tree,
 };
 pub use points::{
     AccountBalances, Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances,

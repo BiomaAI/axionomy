@@ -163,13 +163,16 @@ export interface PackageEngine {
   divergence(query: DivergenceQuery): Promise<DivergenceView>;
 }
 
+/** A sample a static site serves beside Studio: what the index says of it, and where it is. */
+export type Sample = SamplePackages["packages"][number] & { url: string };
+
 /** The sample packages a static site serves beside Studio, each at `packages/<name>.zip`. */
-export async function samplePackages(): Promise<{ name: string; url: string }[]> {
+export async function samplePackages(): Promise<Sample[]> {
   const base = new URL(import.meta.env.BASE_URL, window.location.origin);
   const response = await fetch(new URL("packages/index.json", base), { cache: "no-store" });
   if (!response.ok) return [];
   const index = (await response.json()) as SamplePackages;
-  return index.packages.map((name) => ({ name, url: new URL(`packages/${name}.zip`, base).href }));
+  return index.packages.map((sample) => ({ ...sample, url: new URL(`packages/${sample.name}.zip`, base).href }));
 }
 
 /** What openapi-fetch gave, or the refusal it carried. */

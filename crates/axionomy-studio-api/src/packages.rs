@@ -4,8 +4,8 @@
 use crate::{Natural, PackageVersion, PointId, RefView, Refusal};
 use axionomy::{OntologyPath, PathKind, path::Path};
 use axionomy_engine::{
-    CandidatesPath, Engine, EngineError, Experiment, ExperimentPath, GoalPath, Loaded, Manifest,
-    ObjectivePath, PackagePath, StrategyPath,
+    CandidatesPath, Contents, Engine, EngineError, Experiment, ExperimentPath, GoalPath, Loaded,
+    Manifest, ObjectivePath, PackagePath, StrategyPath,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::{DefinitionPath, RefPath};
@@ -111,10 +111,47 @@ pub struct KeptView {
 }
 
 /// The sample packages a static site serves beside Studio, each at
-/// `packages/<name>.zip`.
+/// `packages/<name>.zip`, with what the page listing them says of each.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SamplePackages {
-    pub packages: Vec<PackagePath>,
+    pub packages: Vec<SamplePackage>,
+}
+
+/// A sample as the page listing them shows it, before it is loaded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SamplePackage {
+    pub name: PackagePath,
+    /// What the view of its first ref's economy calls it, for people to read.
+    pub title: Option<String>,
+    pub refs: usize,
+    pub experiments: usize,
+    pub strategies: usize,
+}
+
+impl SamplePackage {
+    /// What a page listing samples says of the package `name`, whose
+    /// contents `engine` holds.
+    pub fn of(
+        engine: &Engine,
+        name: PackagePath,
+        contents: &Contents,
+    ) -> Result<Self, EngineError> {
+        let title = match contents.refs.iter().min() {
+            Some(first) => engine
+                .view(&engine.ontology(engine.referred(first)?)?)?
+                .map(|view| view.title),
+            None => None,
+        };
+        let experiments: Vec<ExperimentPath> = carried(&contents.definitions);
+        let strategies: Vec<StrategyPath> = carried(&contents.definitions);
+        Ok(Self {
+            name,
+            title,
+            refs: contents.refs.len(),
+            experiments: experiments.len(),
+            strategies: strategies.len(),
+        })
+    }
 }
 
 impl From<&Loaded> for LoadedView {

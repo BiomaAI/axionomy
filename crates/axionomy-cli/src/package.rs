@@ -6,7 +6,7 @@ use axionomy_engine::{
     Contents, Engine, Loaded, Manifest, PackagePath, Version, package as read_package, zipped,
 };
 use axionomy_store::{DefinitionPath, RefPath, Store, Target};
-use axionomy_studio_api::SamplePackages;
+use axionomy_studio_api::{SamplePackage, SamplePackages};
 use clap::Subcommand;
 use std::{fs, path::PathBuf};
 
@@ -179,6 +179,7 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
             for (name, _) in axionomy_problems::packages() {
                 let built = axionomy_engine::source::build(&axionomy_problems::source(&name))?;
                 let contents = built.engine.named_under(&name)?;
+                let listed = SamplePackage::of(&built.engine, name.clone(), &contents)?;
                 let output = directory.join(format!("{name}.zip"));
                 lines.push(written(
                     &built.engine,
@@ -187,7 +188,7 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
                     contents,
                     &output,
                 )?);
-                index.packages.push(name);
+                index.packages.push(listed);
             }
             // What a static site lists its samples by: Studio's own contract.
             let listed = directory.join(INDEX);
@@ -388,6 +389,20 @@ mod tests {
         run_from(arguments.iter().copied())
             .unwrap()
             .expect("a package command prints")
+    }
+
+    #[test]
+    fn a_sample_is_listed_by_its_title_and_what_it_holds() {
+        let name: axionomy_engine::PackagePath = "maze".parse().unwrap();
+        let built = axionomy_engine::source::build(&axionomy_problems::source(&name)).unwrap();
+        let contents = built.engine.named_under(&name).unwrap();
+        let listed =
+            axionomy_studio_api::SamplePackage::of(&built.engine, name.clone(), &contents).unwrap();
+        assert_eq!(listed.name, name);
+        assert_eq!(listed.title.as_deref(), Some("Key-door maze"));
+        assert_eq!(listed.refs, 3);
+        assert_eq!(listed.experiments, 3);
+        assert_eq!(listed.strategies, 5);
     }
 
     #[test]

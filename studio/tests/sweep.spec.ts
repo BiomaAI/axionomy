@@ -9,7 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
  * samples run side by side, as many as the project allows, each in a
  * browser context, and so a store, of its own.
  */
-const samples: string[] = JSON.parse(readFileSync(new URL("../public/packages/index.json", import.meta.url), "utf8")).packages;
+const samples: string[] = JSON.parse(readFileSync(new URL("../public/packages/index.json", import.meta.url), "utf8")).packages.map((sample: { name: string }) => sample.name);
 
 test.describe.configure({ mode: "parallel" });
 

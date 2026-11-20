@@ -74,6 +74,20 @@ async function applyFirst(page: Page) {
   await fromHere(page).locator(".move-applicable").first().getByRole("button", { name: "Apply" }).click();
 }
 
+test("an empty store lists the samples, a card each, by what their views call them", async ({ page }) => {
+  await page.goto("/");
+  const cards = page.getByRole("list", { name: "Sample packages" });
+  // A store that holds packages opens the first instead, as the native server's may.
+  const opened = page.getByRole("group", { name: "History tree" });
+  await expect(cards.or(opened)).toBeVisible({ timeout: 30_000 });
+  test.skip(await opened.isVisible(), "The store holds packages already.");
+  const maze = cards.getByRole("button", { name: /^Key-door maze/ });
+  await expect(maze).toContainText("maze");
+  await expect(maze).toContainText(/\d+ refs? · \d+ experiments? · \d+ strateg(y|ies)/);
+  await maze.click();
+  await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue("maze", { timeout: 30_000 });
+});
+
 test("a sample opens from the package picker, and its tree opens its refs", async ({ page }) => {
   await page.goto("/");
   const picker = page.getByRole("combobox", { name: "Package", exact: true });

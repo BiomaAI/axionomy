@@ -49,7 +49,8 @@ stopped that way keeps no results, so the results it kept before stay.
 What the store lacks is 404, a request that cannot be served as asked 400,
 and an engine failure 500, each `ErrorResponse {error}`. The contract also
 carries `SamplePackages`, the `packages/index.json` a static site lists its
-sample packages by, which no endpoint serves.
+sample packages by (each `SamplePackage` its name, its title and how many
+refs, experiments and strategies it has), which no endpoint serves.
 
 ## Refs
 
