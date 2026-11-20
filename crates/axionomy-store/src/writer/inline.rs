@@ -54,14 +54,12 @@ mod tests {
     use super::Writer;
     use crate::StoreError;
     use redb::{
-        Database, ReadableDatabase, StorageBackend, TableDefinition, backends::InMemoryBackend,
+        BackendError, Database, ReadableDatabase, ReadableTable, StorageBackend, TableDefinition,
+        backends::InMemoryBackend,
     };
-    use std::{
-        io,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
     };
 
     const TABLE: TableDefinition<u64, u64> = TableDefinition::new("numbers");
@@ -74,24 +72,24 @@ mod tests {
     }
 
     impl StorageBackend for Counted {
-        fn len(&self) -> Result<u64, io::Error> {
+        fn len(&self) -> Result<u64, BackendError> {
             self.bytes.len()
         }
 
-        fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), io::Error> {
+        fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), BackendError> {
             self.bytes.read(offset, out)
         }
 
-        fn set_len(&self, len: u64) -> Result<(), io::Error> {
+        fn set_len(&self, len: u64) -> Result<(), BackendError> {
             self.bytes.set_len(len)
         }
 
-        fn sync_data(&self) -> Result<(), io::Error> {
+        fn sync_data(&self) -> Result<(), BackendError> {
             self.syncs.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        fn write(&self, offset: u64, data: &[u8]) -> Result<(), io::Error> {
+        fn write(&self, offset: u64, data: &[u8]) -> Result<(), BackendError> {
             self.bytes.write(offset, data)
         }
     }

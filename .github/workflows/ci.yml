@@ -35,13 +35,24 @@ jobs:
           lake exe conformance > ../conformance.json
           git diff --exit-code -- ../conformance.json
 
-  rust:
+  msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.99"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --locked --workspace --all-targets --all-features
+      - run: cargo check --locked --manifest-path crates/axionomy-burn/Cargo.toml --all-targets
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100"
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
@@ -83,7 +94,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.99"
+          toolchain: "1.100"
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -100,7 +111,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.99"
+          toolchain: "1.100"
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
@@ -159,7 +170,7 @@ jobs:
   # Deploy only what passed every check.
   pages:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [spec, rust, studio]
+    needs: [spec, msrv, rust, studio]
     runs-on: ubuntu-latest
     permissions:
       pages: write

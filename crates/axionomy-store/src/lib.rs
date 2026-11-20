@@ -186,7 +186,7 @@ impl Store {
     /// Compacts the store file at `path`, which no store may have open, so
     /// it takes no more space than what it holds; returns whether it shrank.
     pub fn compact(path: impl AsRef<Path>) -> Result<bool, StoreError> {
-        Ok(Database::open(path)?.compact()?)
+        Ok(Database::open(path)?.compact(redb::CompactionMode::Balanced)?)
     }
 
     /// A store kept in memory: the same store, gone when dropped.

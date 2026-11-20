@@ -6,9 +6,9 @@ use axionomy_engine::{Engine, EngineError, Version, zipped};
 use axionomy_store::Store;
 use axionomy_studio_api as api;
 use axionomy_studio_wasm::{Source, Validators, WorkerEngine};
-use redb::{StorageBackend, backends::InMemoryBackend};
+use redb::{BackendError, StorageBackend, backends::InMemoryBackend};
 use serde_json::{Value, json};
-use std::{io, ops::ControlFlow, sync::Arc};
+use std::{ops::ControlFlow, sync::Arc};
 
 fn path<K>(text: &str) -> axionomy::path::Path<K> {
     text.parse().unwrap()
@@ -28,23 +28,23 @@ impl Kept {
 }
 
 impl StorageBackend for Kept {
-    fn len(&self) -> Result<u64, io::Error> {
+    fn len(&self) -> Result<u64, BackendError> {
         self.0.len()
     }
 
-    fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), io::Error> {
+    fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), BackendError> {
         self.0.read(offset, out)
     }
 
-    fn set_len(&self, len: u64) -> Result<(), io::Error> {
+    fn set_len(&self, len: u64) -> Result<(), BackendError> {
         self.0.set_len(len)
     }
 
-    fn sync_data(&self) -> Result<(), io::Error> {
+    fn sync_data(&self) -> Result<(), BackendError> {
         self.0.sync_data()
     }
 
-    fn write(&self, offset: u64, data: &[u8]) -> Result<(), io::Error> {
+    fn write(&self, offset: u64, data: &[u8]) -> Result<(), BackendError> {
         self.0.write(offset, data)
     }
 }

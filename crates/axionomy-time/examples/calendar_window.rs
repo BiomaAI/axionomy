@@ -1,5 +1,5 @@
 use axionomy::{AssetAmount, Basket, Quantity};
-use axionomy_time::jiff::{SignedDuration, Span, Zoned};
+use axionomy_time::jiff::{SignedDuration, Span, ZonedDateTime};
 use axionomy_time::{CalendarWindow, TimelineAsset};
 use axionomy_units::{AssetSchema, UnitAsset};
 use tracing::{debug, info};
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compact()
         .init();
 
-    let opens: Zoned = "2024-03-09T12:00:00-05:00[America/New_York]".parse()?;
+    let opens: ZonedDateTime = "2024-03-09T12:00:00-05:00[America/New_York]".parse()?;
     let window = CalendarWindow::from_span(opens, Span::new().days(1))?;
     let mut assets = AssetSchema::new();
     let elapsed_hour = TimelineAsset::define(

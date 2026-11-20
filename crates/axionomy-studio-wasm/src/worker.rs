@@ -13,7 +13,7 @@ use axionomy_studio_api::{
     self as api, ChangeView, ExperimentProgress, LoadedView, PointId, Refusal,
 };
 use js_sys::Function;
-use redb::{TableDefinition, TableError};
+use redb::{ReadableTable, TableDefinition, TableError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{cell::RefCell, ops::ControlFlow, sync::Arc};
 use wasm_bindgen::prelude::*;

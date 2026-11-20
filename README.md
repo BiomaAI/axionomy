@@ -679,7 +679,7 @@ lake build
 lake exe conformance > ../conformance.json
 ```
 
-Axionomy uses Rust Edition 2024 and supports Rust 1.99 or newer.
+Axionomy uses Rust Edition 2024 and supports Rust 1.99 or newer. CI runs the test suite on Rust 1.100 and checks the main workspace and Burn adapter on 1.99.
 
 ```console
 cargo test --workspace --all-targets --all-features

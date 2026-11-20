@@ -8,7 +8,7 @@ use axionomy_units::{
     AssetDefinition, AssetSchema, AssetSchemaError, MeasureScalar, MeasuredAsset, Rational,
     UnitAsset,
 };
-use jiff::{SignedDuration, Span, Timestamp, Zoned};
+use jiff::{SignedDuration, Span, Timestamp, ZonedDateTime};
 use std::hash::Hash;
 use thiserror::Error;
 
@@ -93,8 +93,8 @@ where
 
     pub fn encode_zoned_between(
         &self,
-        start: &Zoned,
-        end: &Zoned,
+        start: &ZonedDateTime,
+        end: &ZonedDateTime,
     ) -> Result<AssetAmount<UnitAsset<Id>>, TimeBindingError> {
         self.encode(end.duration_since(start))
     }
@@ -131,12 +131,12 @@ fn base_seconds_to_nanoseconds<Id>(
 /// asset and quantity.
 #[derive(Debug, Clone)]
 pub struct CalendarWindow {
-    opens: Zoned,
-    closes: Zoned,
+    opens: ZonedDateTime,
+    closes: ZonedDateTime,
 }
 
 impl CalendarWindow {
-    pub fn new(opens: Zoned, closes: Zoned) -> Result<Self, TimeBindingError> {
+    pub fn new(opens: ZonedDateTime, closes: ZonedDateTime) -> Result<Self, TimeBindingError> {
         if closes.duration_since(&opens).is_negative() {
             return Err(TimeBindingError::WindowEndsBeforeItStarts);
         }
@@ -144,16 +144,16 @@ impl CalendarWindow {
     }
 
     /// Builds a window using Jiff's calendar-aware span arithmetic.
-    pub fn from_span(opens: Zoned, span: Span) -> Result<Self, TimeBindingError> {
+    pub fn from_span(opens: ZonedDateTime, span: Span) -> Result<Self, TimeBindingError> {
         let closes = opens.checked_add(span)?;
         Self::new(opens, closes)
     }
 
-    pub const fn opens(&self) -> &Zoned {
+    pub const fn opens(&self) -> &ZonedDateTime {
         &self.opens
     }
 
-    pub const fn closes(&self) -> &Zoned {
+    pub const fn closes(&self) -> &ZonedDateTime {
         &self.closes
     }
 
@@ -205,7 +205,7 @@ mod tests {
     use axionomy_units::si::rational64::Time;
     use axionomy_units::si::time::hour;
     use axionomy_units::{AssetSchema, Rational, UnitAsset};
-    use jiff::{SignedDuration, Span, Zoned};
+    use jiff::{SignedDuration, Span, ZonedDateTime};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     enum AssetId {
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn calendar_days_respect_daylight_saving_transitions() {
-        let opens: Zoned = "2024-03-09T12:00:00-05:00[America/New_York]"
+        let opens: ZonedDateTime = "2024-03-09T12:00:00-05:00[America/New_York]"
             .parse()
             .unwrap();
         let window = CalendarWindow::from_span(opens, Span::new().days(1)).unwrap();

@@ -3,30 +3,30 @@
 use super::BuiltPackage;
 use crate::{EngineError, PackageError};
 use axionomy_store::Store;
-use redb::{StorageBackend, backends::InMemoryBackend};
-use std::{io, sync::Arc};
+use redb::{BackendError, StorageBackend, backends::InMemoryBackend};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
 struct MemoryFile(Arc<InMemoryBackend>);
 
 impl StorageBackend for MemoryFile {
-    fn len(&self) -> io::Result<u64> {
+    fn len(&self) -> Result<u64, BackendError> {
         self.0.len()
     }
 
-    fn read(&self, offset: u64, out: &mut [u8]) -> io::Result<()> {
+    fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), BackendError> {
         self.0.read(offset, out)
     }
 
-    fn write(&self, offset: u64, data: &[u8]) -> io::Result<()> {
+    fn write(&self, offset: u64, data: &[u8]) -> Result<(), BackendError> {
         self.0.write(offset, data)
     }
 
-    fn set_len(&self, len: u64) -> io::Result<()> {
+    fn set_len(&self, len: u64) -> Result<(), BackendError> {
         self.0.set_len(len)
     }
 
-    fn sync_data(&self) -> io::Result<()> {
+    fn sync_data(&self) -> Result<(), BackendError> {
         self.0.sync_data()
     }
 }
@@ -38,7 +38,7 @@ impl BuiltPackage {
         let store = Store::on(file.clone())?;
         self.export(&store)?;
         drop(store);
-        let archive_error = |error: io::Error| PackageError::Archive(error.to_string());
+        let archive_error = |error: BackendError| PackageError::Archive(error.to_string());
         let length = usize::try_from(file.len().map_err(archive_error)?)
             .map_err(|e| PackageError::Archive(e.to_string()))?;
         let mut bytes = vec![0; length];

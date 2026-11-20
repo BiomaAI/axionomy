@@ -386,7 +386,7 @@ impl Transaction<'_> {
             .retain_in(points, |_, _| false)?;
         let mut tags = self.redb().open_table(TAGS)?;
         let mut tagged = self.redb().open_table(TAGGED)?;
-        for entry in tags.extract_from_if((this, "")..(next, ""), |_, _| true)? {
+        for entry in tags.extract_if((this, "")..(next, ""), |_, _| true)? {
             let (key, value) = entry?;
             tagged.remove((key.value().1, value.value(), this))?;
         }
@@ -588,13 +588,10 @@ fn copy_range<K, V, R>(
 where
     K: redb::Key + 'static,
     V: redb::Value + 'static,
-    R: std::ops::RangeBounds<K::SelfType<'static>>,
+    R: redb::KeyRange<K>,
 {
     let mut ours = txn.redb().open_table(table)?;
-    for entry in other
-        .open_table(table)?
-        .range::<K::SelfType<'static>>(range)?
-    {
+    for entry in other.open_table(table)?.range(range)? {
         let (key, value) = entry?;
         ours.insert(key.value(), value.value())?;
     }

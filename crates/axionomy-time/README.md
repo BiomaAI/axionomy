@@ -13,7 +13,7 @@ without creating competing denominations.
 ```rust
 use axionomy::{AssetAmount, Quantity};
 use axionomy_time::{CalendarWindow, TimelineAsset};
-use axionomy_time::jiff::{SignedDuration, Span, Zoned};
+use axionomy_time::jiff::{SignedDuration, Span, ZonedDateTime};
 use axionomy_units::{AssetSchema, UnitAsset};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,7 +27,7 @@ let elapsed_hour = TimelineAsset::define(
     AssetId::ElapsedHour,
     SignedDuration::from_hours(1),
 )?;
-let opens: Zoned =
+let opens: ZonedDateTime =
     "2024-03-09T12:00:00-05:00[America/New_York]".parse()?;
 let window = CalendarWindow::from_span(opens, Span::new().days(1))?;
 let amount: AssetAmount<UnitAsset<AssetId>> = window.encode(&elapsed_hour)?;

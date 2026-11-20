@@ -176,23 +176,23 @@ fn a_store_on_disk_keeps_its_runs_and_mints_new_identifiers() {
 struct Kept(std::sync::Arc<redb::backends::InMemoryBackend>);
 
 impl redb::StorageBackend for Kept {
-    fn len(&self) -> Result<u64, std::io::Error> {
+    fn len(&self) -> Result<u64, redb::BackendError> {
         self.0.len()
     }
 
-    fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), std::io::Error> {
+    fn read(&self, offset: u64, out: &mut [u8]) -> Result<(), redb::BackendError> {
         self.0.read(offset, out)
     }
 
-    fn set_len(&self, len: u64) -> Result<(), std::io::Error> {
+    fn set_len(&self, len: u64) -> Result<(), redb::BackendError> {
         self.0.set_len(len)
     }
 
-    fn sync_data(&self) -> Result<(), std::io::Error> {
+    fn sync_data(&self) -> Result<(), redb::BackendError> {
         self.0.sync_data()
     }
 
-    fn write(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+    fn write(&self, offset: u64, data: &[u8]) -> Result<(), redb::BackendError> {
         self.0.write(offset, data)
     }
 }

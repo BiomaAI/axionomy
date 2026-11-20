@@ -12,7 +12,7 @@ use crate::{
 };
 use axionomy::{ApplyError, Economy, Exchange, OntologyPath, Receipt, paths::Paths};
 use axionomy_tree::{Hash, Tree};
-use redb::{ReadTransaction, ReadableTableMetadata};
+use redb::{ReadTransaction, ReadableTable, ReadableTableMetadata};
 use std::collections::BTreeMap;
 
 /// A state the store holds or rebuilt: the kernel's economy, which decides
