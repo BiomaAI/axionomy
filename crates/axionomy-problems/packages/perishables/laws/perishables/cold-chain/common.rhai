@@ -1,3 +1,11 @@
+fn day_end_output() {
+    let output = [amount(asset("aging"), 1)];
+    for batch in 0..6 {
+        output.push(amount(asset(`pending-age/${batch}`), 1));
+    }
+    basket(output)
+}
+
 [
     [
         "age-cold/{batch}",
@@ -329,20 +337,7 @@
             consume: [["world", [["decisions", "1"]]]],
             distinct: [],
             preserve: [],
-            produce: [
-                [
-                    "world",
-                    [
-                        ["aging", "1"],
-                        ["pending-age/0", "1"],
-                        ["pending-age/1", "1"],
-                        ["pending-age/2", "1"],
-                        ["pending-age/3", "1"],
-                        ["pending-age/4", "1"],
-                        ["pending-age/5", "1"]
-                    ]
-                ]
-            ]
+            produce: [["world", day_end_output()]]
         }
     ],
     [

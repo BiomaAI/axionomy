@@ -153,30 +153,17 @@ let definitions = #{
         }
     }
 };
-let goals = #{};
-{
+fn settled(orders) {
     let target = goal();
-    target = target.require(account("order/a"), basket([amount(asset("settled-order/a"), 1)]));
-    target = target.require(account("order/b"), basket([amount(asset("settled-order/b"), 1)]));
-    goals["marketplace/micro/settled"] = #{ontology: "marketplace", goal: target};
+    for id in orders {
+        let received = basket([amount(asset(`settled-order/${id}`), 1)]);
+        target = target.require(account(`order/${id}`), received);
+    }
+    #{ontology: "marketplace", goal: target}
 }
-{
-    let target = goal();
-    target = target.require(account("order/a"), basket([amount(asset("settled-order/a"), 1)]));
-    target = target.require(account("order/b"), basket([amount(asset("settled-order/b"), 1)]));
-    target = target.require(account("order/c"), basket([amount(asset("settled-order/c"), 1)]));
-    target = target.require(account("order/d"), basket([amount(asset("settled-order/d"), 1)]));
-    goals["marketplace/showcase/settled"] = #{ontology: "marketplace", goal: target};
-}
-{
-    let target = goal();
-    target = target.require(account("order/a"), basket([amount(asset("settled-order/a"), 1)]));
-    target = target.require(account("order/b"), basket([amount(asset("settled-order/b"), 1)]));
-    target = target.require(account("order/c"), basket([amount(asset("settled-order/c"), 1)]));
-    target = target.require(account("order/d"), basket([amount(asset("settled-order/d"), 1)]));
-    target = target.require(account("order/e"), basket([amount(asset("settled-order/e"), 1)]));
-    target = target.require(account("order/f"), basket([amount(asset("settled-order/f"), 1)]));
-    goals["marketplace/stress/settled"] = #{ontology: "marketplace", goal: target};
-}
-definitions.goals = goals;
+definitions.goals = #{
+    "marketplace/micro/settled": settled(["a", "b"]),
+    "marketplace/showcase/settled": settled(["a", "b", "c", "d"]),
+    "marketplace/stress/settled": settled(["a", "b", "c", "d", "e", "f"])
+};
 definitions

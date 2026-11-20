@@ -6,20 +6,25 @@ accounts.push(opening(account("agent"), basket([
     amount(asset("energy"), 9),
     amount(asset("time"), 6)
 ])));
-accounts.push(opening(account("world"), basket([
+let world = [
     amount(asset("distance/detour"), 5),
     amount(asset("distance/gate"), 2),
     amount(asset("distance/key-room"), 4),
     amount(asset("distance/start"), 6),
-    amount(asset("edge/detour/exit"), 1),
-    amount(asset("edge/gate/exit"), 1),
-    amount(asset("edge/key-room/gate"), 1),
-    amount(asset("edge/start/detour"), 1),
-    amount(asset("edge/start/key-room"), 1),
     amount(asset("key"), 1),
     amount(asset("locked"), 1),
     amount(asset("target/exit"), 1)
-])));
+];
+for edge in [
+    ["detour", "exit"],
+    ["gate", "exit"],
+    ["key-room", "gate"],
+    ["start", "detour"],
+    ["start", "key-room"]
+] {
+    world.push(amount(asset(`edge/${edge[0]}/${edge[1]}`), 1));
+}
+accounts.push(opening(account("world"), basket(world)));
 model.accounts = accounts;
 let rules = [];
 {

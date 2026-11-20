@@ -7,7 +7,7 @@ accounts.push(opening(account("agent"), basket([
     amount(asset("health"), 3),
     amount(asset("time"), 14)
 ])));
-accounts.push(opening(account("world"), basket([
+let world = [
     amount(asset("distance/atrium"), 5),
     amount(asset("distance/bridge"), 2),
     amount(asset("distance/canal"), 4),
@@ -22,38 +22,43 @@ accounts.push(opening(account("world"), basket([
     amount(asset("distance/tunnel"), 6),
     amount(asset("distance/vault"), 1),
     amount(asset("distance/workshop"), 6),
-    amount(asset("edge/atrium/gallery"), 1),
-    amount(asset("edge/atrium/library"), 1),
-    amount(asset("edge/bridge/canal"), 1),
-    amount(asset("edge/bridge/exit"), 1),
-    amount(asset("edge/canal/bridge"), 1),
-    amount(asset("edge/detour/exit"), 1),
-    amount(asset("edge/gallery/gate"), 1),
-    amount(asset("edge/gallery/market"), 1),
-    amount(asset("edge/garden/market"), 1),
-    amount(asset("edge/garden/workshop"), 1),
-    amount(asset("edge/gate/vault"), 1),
-    amount(asset("edge/key-room/library"), 1),
-    amount(asset("edge/library/gallery"), 1),
-    amount(asset("edge/library/key-room"), 1),
-    amount(asset("edge/market/canal"), 1),
-    amount(asset("edge/market/gallery"), 1),
-    amount(asset("edge/start/atrium"), 1),
-    amount(asset("edge/start/detour"), 1),
-    amount(asset("edge/start/garden"), 1),
-    amount(asset("edge/start/tunnel"), 1),
-    amount(asset("edge/tunnel/bridge"), 1),
-    amount(asset("edge/tunnel/workshop"), 1),
-    amount(asset("edge/vault/exit"), 1),
-    amount(asset("edge/workshop/canal"), 1),
-    amount(asset("edge/workshop/garden"), 1),
     amount(asset("key"), 1),
     amount(asset("locked"), 1),
     amount(asset("medicine"), 2),
     amount(asset("power-transit"), 1),
     amount(asset("shield"), 2),
     amount(asset("target/exit"), 1)
-])));
+];
+for edge in [
+    ["atrium", "gallery"],
+    ["atrium", "library"],
+    ["bridge", "canal"],
+    ["bridge", "exit"],
+    ["canal", "bridge"],
+    ["detour", "exit"],
+    ["gallery", "gate"],
+    ["gallery", "market"],
+    ["garden", "market"],
+    ["garden", "workshop"],
+    ["gate", "vault"],
+    ["key-room", "library"],
+    ["library", "gallery"],
+    ["library", "key-room"],
+    ["market", "canal"],
+    ["market", "gallery"],
+    ["start", "atrium"],
+    ["start", "detour"],
+    ["start", "garden"],
+    ["start", "tunnel"],
+    ["tunnel", "bridge"],
+    ["tunnel", "workshop"],
+    ["vault", "exit"],
+    ["workshop", "canal"],
+    ["workshop", "garden"]
+] {
+    world.push(amount(asset(`edge/${edge[0]}/${edge[1]}`), 1));
+}
+accounts.push(opening(account("world"), basket(world)));
 model.accounts = accounts;
 let rules = [];
 {
