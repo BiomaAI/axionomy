@@ -8,6 +8,7 @@ use crate::{
     records::{
         BRANCHES, Checkpoints, DEFINITIONS, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS,
         RUN_METRICS, RUNS, Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
+        ref_record,
     },
 };
 use axionomy::{OntologyPath, Receipt, paths::Paths};
@@ -274,7 +275,40 @@ impl Transaction<'_> {
         self.set_ref(name, to)
     }
 
-    /// Points a ref at a target, or removes it with `None`.
+    /// Advances a live ref after the engine checked that `to` descends from
+    /// `expected`. Returns false for a retry already covered by this ref's
+    /// history. The comparison, original start and new head share one write.
+    pub fn advance_ref(
+        &mut self,
+        name: &RefPath,
+        expected: Point,
+        to: Point,
+    ) -> Result<bool, StoreError> {
+        let mut refs = self.redb().open_table(REFS)?;
+        let record = refs
+            .get(name.as_str())?
+            .map(|record| ref_record(record.value()))
+            .transpose()?;
+        if let Some((_, Some(history))) = record {
+            if history.current == to && expected.step >= history.start.step {
+                return Ok(false);
+            }
+            if history.current == expected {
+                refs.insert(
+                    name.as_str(),
+                    encode(&(Target::Step(to), history.start)).as_slice(),
+                )?;
+                return Ok(true);
+            }
+        }
+        Err(StoreError::Moved {
+            name: name.clone(),
+            current: record.map(|(target, _)| target),
+        })
+    }
+
+    /// Points a ref at a target, or removes it with `None`. A direct
+    /// assignment starts a fresh history at that target.
     pub fn set_ref(&mut self, name: &RefPath, target: Option<Target>) -> Result<(), StoreError> {
         let mut refs = self.redb().open_table(REFS)?;
         match target {

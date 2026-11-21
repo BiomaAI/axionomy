@@ -1,7 +1,7 @@
 //! What the store records about runs, steps, groups and refs, and the redb
 //! tables that hold them.
 
-use crate::{GroupId, GroupKindPath, MetricPath, Point, RunId, TagPath};
+use crate::{GroupId, GroupKindPath, MetricPath, Point, RunId, StoreError, TagPath};
 use axionomy::{Exchange, Ontology, OntologyPath};
 use axionomy_tree::Hash;
 use redb::TableDefinition;
@@ -193,6 +193,31 @@ pub enum Target {
     Run(RunId),
     Step(Point),
     Group(GroupId),
+}
+
+/// The part of a point's history over which a live ref can deliver frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RefHistory {
+    pub start: Point,
+    pub current: Point,
+}
+
+/// The target is the first postcard value, as in a plain ref. An advanced
+/// live ref also stores its starting point. Export and merge copy both together.
+pub(crate) fn ref_record(bytes: &[u8]) -> Result<(Target, Option<RefHistory>), StoreError> {
+    let (target, rest) =
+        postcard::take_from_bytes(bytes).map_err(|_| StoreError::Malformed("ref target"))?;
+    let Target::Step(current) = target else {
+        return Ok((target, None));
+    };
+    // A newly created ref and an older store's ref both start at the only
+    // point on record. Earlier moves cannot be inferred from the economy.
+    let start = if rest.is_empty() {
+        current
+    } else {
+        crate::transaction::decode(rest)?
+    };
+    Ok((target, Some(RefHistory { start, current })))
 }
 
 /// A digest: its hex digits where people read the format, its 32 bytes in the

@@ -120,6 +120,7 @@ impl From<EngineError> for Refusal {
             | EngineError::Undefined(_)
             | EngineError::UnknownScript(_) => Self::NotFound(error.to_string()),
             EngineError::Operation(_)
+            | EngineError::BeforeRefStart { .. }
             | EngineError::Returned { .. }
             | EngineError::Script { .. } => Self::BadRequest(error.to_string()),
             EngineError::Shipped { .. } => Self::Forbidden(error.to_string()),

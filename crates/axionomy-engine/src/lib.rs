@@ -65,6 +65,8 @@ pub enum EngineError {
     UnknownPoint(Point),
     #[error("step {step} is not on the history of step {} of run {}", .at.step, .at.run)]
     NotOnHistory { at: Point, step: u64 },
+    #[error("the cursor precedes the first recorded point of ref `{name}`, step {} of {}", .start.step, .start.run)]
+    BeforeRefStart { name: RefPath, start: Point },
     /// Two points whose histories share no point: neither history runs
     /// through the other's, nor do both start from a third, as for two
     /// economies authored apart.

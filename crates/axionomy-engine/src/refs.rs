@@ -55,6 +55,8 @@ impl Moves {
 
 /// Why a ref's write did not move it.
 enum Unmoved {
+    /// This ref already moved over the expected point to the requested head.
+    AlreadyAt,
     /// The ref is on `current`, or names nothing, not where the mover
     /// expected it.
     Moved(Option<Target>),
@@ -83,9 +85,8 @@ impl Engine {
     /// `expected` nor `to`, and for a ref a package ships, which is fixed.
     ///
     /// A move already made succeeds again: when the ref is at `to`, the move
-    /// asked for is the move made, since a ref only moves forward and so
-    /// cannot be at `to` by another route. A mover that never heard whether
-    /// its move counted asks again.
+    /// asked for is covered if `expected` is on this ref's history, starting
+    /// at its creation. A mover that never heard whether its move counted asks again.
     pub fn advance(&self, name: &RefPath, expected: Point, to: Point) -> Result<(), EngineError> {
         if let Some(package) = self.shipped_by(name)? {
             return Err(EngineError::Shipped {
@@ -101,13 +102,7 @@ impl Engine {
                 to,
             });
         }
-        match self.move_ref(name, Some(expected), Some(to)) {
-            Err(EngineError::Moved {
-                current: Some(current),
-                ..
-            }) if current == to => Ok(()),
-            moved => moved,
-        }
+        self.move_ref(name, Some(expected), Some(to))
     }
 
     /// Deletes the ref `name` from `expected`, where its deleter saw it.
@@ -123,10 +118,9 @@ impl Engine {
 
     /// The steps the ref `name` was moved over after `after`, the point a
     /// follower last handled, earliest first and at most `limit` of them,
-    /// each measured as `following` asks. `after` must be on the history of
-    /// where the ref is. Each step is named as its mover named it, so a
-    /// follower that falls behind receives the points the ref was advanced
-    /// to.
+    /// each measured as `following` asks. `after` must be the ref's starting
+    /// point or a point it moved over. A follower that falls behind receives
+    /// each point with the same name its mover used.
     pub fn frames(
         &self,
         name: &RefPath,
@@ -134,8 +128,31 @@ impl Engine {
         following: &Following,
         limit: usize,
     ) -> Result<Vec<Frame>, EngineError> {
-        let current = self.referred(name)?;
+        Ok(self.frames_with_head(name, after, following, limit)?.0)
+    }
+
+    /// A page of frames and the head used to read that page, even if another
+    /// caller moves the ref or reuses its name while the page is built.
+    pub fn frames_with_head(
+        &self,
+        name: &RefPath,
+        after: Point,
+        following: &Following,
+        limit: usize,
+    ) -> Result<(Vec<Frame>, Point), EngineError> {
+        let history = self
+            .store
+            .read()?
+            .ref_history(name)?
+            .ok_or_else(|| EngineError::UnknownRef(name.clone()))?;
+        let current = history.current;
         let mut economy = self.reach(after)?.state.economy.clone();
+        if after.step < history.start.step {
+            return Err(EngineError::BeforeRefStart {
+                name: name.clone(),
+                start: history.start,
+            });
+        }
         if !self.passes_through(current, after)? {
             return Err(EngineError::NotOnHistory {
                 at: current,
@@ -170,7 +187,7 @@ impl Engine {
                 holds: goal.as_ref().map(|goal| economy.matches(goal)),
             });
         }
-        Ok(frames)
+        Ok((frames, current))
     }
 
     /// How many times this engine has moved a ref, making one included. A
@@ -234,12 +251,19 @@ impl Engine {
                 {
                     return Ok(Some(Unmoved::Shipped(package)));
                 }
-                match txn.compare_and_set_ref(
-                    &named,
-                    expected.map(Target::Step),
-                    to.map(Target::Step),
-                ) {
-                    Ok(()) => Ok(None),
+                let changed = match (expected, to) {
+                    (Some(from), Some(to)) => txn.advance_ref(&named, from, to),
+                    _ => txn
+                        .compare_and_set_ref(
+                            &named,
+                            expected.map(Target::Step),
+                            to.map(Target::Step),
+                        )
+                        .map(|()| true),
+                };
+                match changed {
+                    Ok(true) => Ok(None),
+                    Ok(false) => Ok(Some(Unmoved::AlreadyAt)),
                     Err(StoreError::Moved { current, .. }) => Ok(Some(Unmoved::Moved(current))),
                     Err(error) => Err(error),
                 }
@@ -261,6 +285,7 @@ impl Engine {
                     _ => None,
                 },
             }),
+            Ok(Some(Unmoved::AlreadyAt)) => Ok(()),
             Ok(Some(Unmoved::Shipped(package))) => Err(EngineError::Shipped {
                 name: name.clone(),
                 package,

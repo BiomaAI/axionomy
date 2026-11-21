@@ -17,7 +17,7 @@ pub use ontology::{Id, Recordable};
 pub use read::{Reader, State, Transition};
 pub use recorder::{GroupRecorder, Recorder};
 pub use records::{
-    Checkpoints, FORMAT_VERSION, Group, GroupRecord, Member, Run, Step, Summary, Target,
+    Checkpoints, FORMAT_VERSION, Group, GroupRecord, Member, RefHistory, Run, Step, Summary, Target,
 };
 pub use state::StateError;
 pub use transaction::{Merged, Selection};

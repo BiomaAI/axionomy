@@ -416,8 +416,7 @@ impl Archive {
                 objectives: Vec::new(),
                 goal,
             };
-            let frames = engine.frames(&name, after, &following, limit)?;
-            Ok((frames, engine.referred(&name)?))
+            engine.frames_with_head(&name, after, &following, limit)
         })
         .await?;
         let reader = self.engine.store().read()?;

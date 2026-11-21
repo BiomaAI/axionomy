@@ -912,7 +912,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_ref_frames",
         title = "Follow a ref",
-        description = "Deliver the steps a ref was moved over after `after_economy_id`, the last economy the follower handled, earliest first: each frame is a step's exchange, its receipt and the `economy_id` it made, which every other tool takes. Only the steps a ref is moved over are delivered, never an exchange that was only tried out. At most `limit` frames, up to 100, per call; while the ref's `economy_id` is past the last frame, call again from that frame. With `wait_seconds`, up to 30, the call waits for the ref to move when it is still at `after_economy_id`. With a `goal`, as axionomy_search takes it, each frame says whether its economy `holds` it.",
+        description = "Follow from the ref's starting economy or the last frame handled. An earlier cursor returns invalid_request with details.start_economy_id. Frames contain the exchange, receipt and economy_id of each step the ref moved over, earliest first. Each call returns up to `limit` frames (maximum 100). While the ref's economy_id is past the last frame, call again from that frame. Set `wait_seconds` (up to 30) to wait for the next move. With a `goal`, each frame says whether its economy `holds` it.",
         output_schema = schema_for_output::<RefFramesResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -956,6 +956,13 @@ impl AxionomyMcp {
             .await;
         let (frames, economy_id) = match followed {
             Ok(followed) => followed,
+            Err(EngineError::BeforeRefStart { start, .. }) => {
+                let start = self.archive.handle_of(start).map_err(ToolError::internal)?;
+                return Err(ToolError::new(
+                    FailureCode::InvalidRequest,
+                    format!("the cursor precedes the start of ref `{}`; follow from `{start}` or a frame it delivered", request.ref_id),
+                ).with_details(RefStartDetails { pointer: "/after_economy_id", start_economy_id: start }));
+            }
             Err(EngineError::NotOnHistory { .. }) => {
                 let current = self.referred(&request.ref_id)?;
                 return Err(ToolError::argument(
@@ -1521,7 +1528,7 @@ fn moved(ref_id: &RefId, expected: &EconomyId, current: &EconomyId) -> ToolError
     ToolError::new(
         FailureCode::Moved,
         format!(
-            "ref `{ref_id}` is no longer at `{expected}`: another move came first, and it is at `{current}`; look again from there"
+            "ref `{ref_id}` is at `{current}`; the request expected `{expected}`. Look again from its current economy."
         ),
     )
     .with_details(MovedDetails {
@@ -1533,6 +1540,12 @@ fn moved(ref_id: &RefId, expected: &EconomyId, current: &EconomyId) -> ToolError
 #[derive(Serialize)]
 struct MovedDetails<'a> {
     current_economy_id: &'a EconomyId,
+}
+
+#[derive(Serialize)]
+struct RefStartDetails {
+    pointer: &'static str,
+    start_economy_id: EconomyId,
 }
 
 fn script_error(error: EngineError) -> ToolError {

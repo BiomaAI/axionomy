@@ -969,6 +969,38 @@ async def test_a_follower_receives_only_the_steps_a_ref_moves_over(url: str) -> 
         assert waited["result"].structured_content["economy_id"] == third
 
 
+async def test_a_ref_delivers_only_work_after_its_creation_across_restarts(tmp_path: Path) -> None:
+    async def frames(client: Client, after: str) -> CallToolResult:
+        return await client.call_tool("axionomy_ref_frames", {"ref_id": ref_id, "after_economy_id": after})
+
+    store = tmp_path / "refs.redb"
+    with running(store) as base_url:
+        async with Client(f"{base_url}/mcp") as client:
+            earlier = await create(client, ECONOMY)
+            start = await applied(client, earlier, transfer(1))
+            ref_id = await refer(client, start)
+            refused = await frames(client, earlier)
+            assert refused.is_error
+            assert refused.structured_content["error"] == "invalid_request"
+            details = {"pointer": "/after_economy_id", "start_economy_id": start}
+            assert refused.structured_content["details"] == details
+            assert delivered(await frames(client, start)) == []
+            # A request from before creation cannot be acknowledged as an earlier move.
+            retry = await advance(client, ref_id, earlier, start)
+            assert retry.is_error and retry.structured_content["error"] == "moved"
+            next_id = await applied(client, start, transfer(2))
+            assert not (await advance(client, ref_id, start, next_id)).is_error
+
+    with running(store) as base_url:
+        async with Client(f"{base_url}/mcp") as client:
+            refused = await frames(client, earlier)
+            assert refused.is_error and refused.structured_content["error"] == "invalid_request"
+            assert refused.structured_content["details"] == details
+            assert delivered(await frames(client, start)) == [next_id]
+            assert delivered(await frames(client, next_id)) == []
+            assert not (await advance(client, ref_id, start, next_id)).is_error
+
+
 async def test_malformed_arguments_are_structured_errors_naming_the_argument(url: str) -> None:
     async with Client(url) as client:
         economy_id = await create(client, ECONOMY)

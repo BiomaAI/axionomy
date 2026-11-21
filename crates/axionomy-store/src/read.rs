@@ -5,7 +5,7 @@ use crate::{
     ontology::Recordable,
     records::{
         BRANCHES, DEFINITIONS, GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS,
-        Run, STATES, STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
+        RefHistory, Run, STATES, STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target, ref_record,
     },
     state,
     transaction::{decode, receipt_digest},
@@ -502,6 +502,14 @@ impl Reader {
             .get(name.as_str())?
             .map(|target| decode(target.value()))
             .transpose()
+    }
+
+    /// The starting and current points of a step ref, read from one record.
+    pub fn ref_history(&self, name: &RefPath) -> Result<Option<RefHistory>, StoreError> {
+        match self.txn.open_table(REFS)?.get(name.as_str())? {
+            Some(record) => Ok(ref_record(record.value())?.1),
+            None => Ok(None),
+        }
     }
 
     /// The runs forked from `run`, each with the step it forked at, in step

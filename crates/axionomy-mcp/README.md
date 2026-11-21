@@ -340,10 +340,9 @@ or a loop applying responses are alike.
   mover expects it, so of two movers from one economy the second fails with
   `moved` and `details.current_economy_id`, where the ref is, and looks again
   from there. It never moves back, or to an economy not made from where it is:
-  that is an `invalid_request` at `/economy_id`. So a ref at `economy_id` was
-  moved there over `expected_economy_id`, and asking again for a move already
-  made succeeds: a mover that never heard whether its move counted asks
-  again, and fails with `moved` only once the ref is somewhere else.
+  that is an `invalid_request` at `/economy_id`. Retrying a move succeeds
+  while the ref is still at the destination and the expected economy belongs
+  to the ref's history. An expected economy from before creation yields `moved`.
 - `axionomy_ref_frames` gives a follower the steps the ref was moved over
   after `after_economy_id`, the last economy it handled, earliest first: each
   frame is the step's `exchange`, as `axionomy_exchange_apply` takes it, its
@@ -356,6 +355,12 @@ or a loop applying responses are alike.
   up to 30, a call made while the ref is still at `after_economy_id` waits for
   it to move, on a thread where blocking is allowed, and returns as soon as it
   does.
+
+  Start following at the economy returned by `axionomy_ref_create`. A cursor
+  earlier than the ref's start returns `invalid_request` at `/after_economy_id`;
+  `details.start_economy_id` gives the earliest valid cursor. The start
+  survives a restart with a disk store. For refs saved by versions that kept
+  only the current point, that saved point is the earliest valid cursor.
 - `axionomy_ref_delete` deletes the ref from `expected_economy_id`, where the
   deleter saw it, failing with `moved` and where it is as an advance does,
   and returns the economy it was at. Only the ref goes: the economies it

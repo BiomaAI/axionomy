@@ -4,7 +4,7 @@
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError, Following, Measure, Objective, ScriptCall};
 use axionomy_search::pareto::ObjectiveDirection;
-use axionomy_store::{Durability, Point, Store};
+use axionomy_store::{Durability, Point, Selection, Store};
 use std::{
     sync::{Arc, mpsc},
     thread,
@@ -130,6 +130,40 @@ fn a_move_already_made_succeeds_again() {
         engine.advance(&live, start, first),
         Err(EngineError::Moved { current: Some(at), .. }) if at == then
     ));
+}
+
+#[test]
+fn exporting_and_reusing_a_ref_name_preserve_each_refs_own_start() {
+    let (engine, root) = bank();
+    let live = path("live");
+    let first = engine.apply(root, &[pay(1)]).unwrap();
+    let next = engine.apply(first, &[pay(2)]).unwrap();
+    engine.refer(&live, first).unwrap();
+    engine.advance(&live, first, next).unwrap();
+
+    let exported = Store::memory().unwrap();
+    let selection = Selection {
+        refs: vec![live.clone()],
+        ..Default::default()
+    };
+    engine.store().export(selection, &exported).wait().unwrap();
+    let copy = Engine::new(Store::memory().unwrap()).unwrap();
+    copy.store().merge(&exported).wait().unwrap();
+
+    engine.delete_ref(&live, next).unwrap();
+    engine.refer(&live, next).unwrap();
+    let follower = Following::default();
+    assert!(matches!(
+        engine.frames(&live, first, &follower, 1),
+        Err(EngineError::BeforeRefStart { start, .. }) if start == next
+    ));
+    assert!(matches!(
+        copy.frames(&live, root, &follower, 1),
+        Err(EngineError::BeforeRefStart { start, .. }) if start == first
+    ));
+    let frames = copy.frames(&live, first, &follower, 1).unwrap();
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].point, next);
 }
 
 #[test]

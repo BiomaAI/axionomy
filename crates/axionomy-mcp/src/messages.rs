@@ -552,8 +552,8 @@ pub struct RefPosition {
 #[serde(deny_unknown_fields)]
 pub struct RefFramesRequest {
     pub ref_id: RefId,
-    /// The last economy the follower handled: the ref's economy when it last
-    /// looked, or the last frame's. Frames are the steps after it.
+    /// The ref's starting economy or a later economy the ref moved over.
+    /// Frames begin after this cursor.
     pub after_economy_id: EconomyId,
     /// The most frames to return, from 1 to 100; the next call follows from
     /// the last one returned.

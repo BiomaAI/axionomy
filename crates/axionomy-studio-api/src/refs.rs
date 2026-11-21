@@ -9,7 +9,7 @@
 use crate::{ObjectiveList, PointId, RefMoved, Refusal};
 use axionomy::{Quantity, paths};
 use axionomy_engine::{Engine, EngineError, Following, Frame, GoalPath, PackagePath};
-use axionomy_store::{Point, RefPath};
+use axionomy_store::RefPath;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -211,8 +211,8 @@ pub fn frames(engine: &Engine, name: RefPath, query: RefFramesQuery) -> Result<R
         goal: query.goal,
     };
     let limit = usize::try_from(query.limit).unwrap_or(usize::MAX);
-    let frames = engine.frames(&name, query.after.point(), &following, limit)?;
-    let current: Point = engine.referred(&name)?;
+    let (frames, current) =
+        engine.frames_with_head(&name, query.after.point(), &following, limit)?;
     Ok(RefFrames {
         name,
         point: current.into(),
