@@ -394,7 +394,7 @@ test("a link names a package by its URL and opens it", async ({ page }) => {
   await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue("sokoban", { timeout: 30_000 });
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of sokoban/micro");
   // The link keeps naming the URL, so reloading opens it again.
-  await expect(page).toHaveURL(/package=%2Fpackages%2Fsokoban\.zip/);
+  await expect(page).toHaveURL(/package=packages%2Fsokoban\.zip/);
   await openRef(page, "sokoban/micro/deadlock");
   await expect(page).toHaveURL(/ref=sokoban%2Fmicro%2Fdeadlock/);
   await page.reload();
@@ -415,6 +415,66 @@ test("a link to what the store does not hold opens the first package, and the br
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText(" of ", { timeout: 30_000 });
   await expect(page).not.toHaveURL(/no-such/);
   await expect(activity(page)).not.toContainText("no-such");
+});
+
+test("a link names a strategy played from a ref, at a step, and plays it only once", async ({ page }) => {
+  // A seed no other test asks with: the native server's store outlives a test.
+  const seed = String(Date.now());
+  const link = `/?package=packages/maze.zip&ref=maze/showcase&strategy=maze/a-star&seed=${seed}&step=8`;
+  const branches = page.locator(".tree-panel .panel-heading small");
+  await page.goto(link);
+  await expect(fromHere(page).locator(".panel-heading h2")).toHaveText("Step 8 of a-star, from step 0", { timeout: 30_000 });
+  await expect(activity(page)).toContainText(/maze\/a-star: reached the goal in \d+ steps/);
+  expect(await steps(page)).toBeGreaterThan(8);
+  const made = await branches.textContent();
+  // The address names what plays it, not the point only this store holds.
+  const asked = new URLSearchParams({ strategy: "maze/a-star", seed, step: "8" });
+  await expect(page).toHaveURL(new RegExp(`package=packages%2Fmaze\\.zip&name=maze&ref=maze%2Fshowcase&${asked.toString().replaceAll("+", "\\+")}$`));
+  await page.getByRole("button", { name: "Copy link" }).click();
+  await expect(activity(page)).not.toContainText("The link opens only");
+  // However long what the bar says is, the page is no wider than the window.
+  await page.setViewportSize({ width: 1240, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1240);
+  // Opened again, the branch is the one the store holds.
+  await page.goto(link);
+  await expect(fromHere(page).locator(".panel-heading h2")).toHaveText("Step 8 of a-star, from step 0", { timeout: 30_000 });
+  await expect(branches).toHaveText(made ?? "");
+  await expect(activity(page)).not.toContainText("reached the goal");
+});
+
+test("a link to a strategy the package lacks opens its ref, and says so", async ({ page }) => {
+  await page.goto("/?package=packages/maze.zip&ref=maze/no-such-ref&strategy=maze/a-star");
+  await expect(activity(page)).toContainText("maze has no ref maze/no-such-ref: opened maze.", { timeout: 30_000 });
+  await page.goto("/?package=packages/maze.zip&ref=maze/showcase&strategy=maze/no-such-strategy&step=8");
+  await expect(activity(page)).toContainText("maze has no strategy maze/no-such-strategy: opened maze/showcase.", { timeout: 30_000 });
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of maze/showcase");
+  await expect(page).not.toHaveURL(/no-such-strategy/);
+});
+
+test("a link says what of it Studio does not read, and the address drops it", async ({ page }) => {
+  await page.goto("/?budget=128&document=marketplace:market_clearing&instance=showcase&problem=marketplace&seed=17&step=4&strategy=market_clearing&view=replay");
+  await expect(activity(page)).toContainText("The link names no package, ref or point. Ignored: budget, document, instance, problem, seed, step, strategy and view.", { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/problem|document|market_clearing/);
+  await page.goto("/?package=packages/maze.zip&ref=maze/showcase&view=experiments");
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of maze/showcase", { timeout: 30_000 });
+  await expect(activity(page)).toContainText("Ignored: view.");
+  await expect(page).not.toHaveURL(/view=/);
+});
+
+test("a link to a branch only this store holds says so when it is copied", async ({ page }) => {
+  await openSample(page, "maze");
+  await openRef(page, "maze/micro");
+  await applyFirst(page);
+  await expect(page).toHaveURL(/point=run-/);
+  await page.getByRole("button", { name: "Copy link" }).click();
+  await expect(activity(page)).toContainText(/The link opens only (in this browser|on this server), whose store holds this branch\./);
+  const point = new URL(page.url()).searchParams.get("point")!;
+  await page.reload();
+  await expect(page).toHaveURL(new RegExp(`point=${point.replace(":", "%3A")}`), { timeout: 30_000 });
+  await expect(activity(page)).not.toContainText("does not hold");
+  // Where it is not held, the package's first ref opens.
+  await page.goto("/?package=packages/maze.zip&point=run-00000000000000000000000000000000:1");
+  await expect(activity(page)).toContainText(/This store does not hold point .*: opened maze\./, { timeout: 30_000 });
 });
 
 test("keeps Studio within a narrow viewport", async ({ page }) => {

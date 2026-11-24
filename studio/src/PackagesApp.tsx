@@ -13,6 +13,7 @@ import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
 import { IdLink, InspectionProvider, InspectorDock, PanelHeading, subjectKey, useSnapshot, type Subject } from "./Inspectors";
 import { inspector } from "./inspect";
 import { StateList } from "./Ledger";
+import { DEFAULT_EFFORT, askedBy, natural, playedLink, readLink, sameAsked, writeLink, type LinkedStrategy } from "./link";
 import { ResizeHandle, TabPanels, TabStrip, type Tab } from "./Layout";
 import { ExperimentView, ResultsTable, endedWords } from "./PackageViews";
 import {
@@ -26,12 +27,15 @@ import {
   type HistoriesView,
   type LoadedFrom,
   type PackageEngine,
+  type PackageList,
   type PackageView,
   type PointId,
   type RanView,
   type RefFrames,
+  type RefView,
   type ResultsView,
   type SearchProgress,
+  type StrategyRequest,
 } from "./packageEngine";
 import { branchesOf, lastPart, parsePoint, type BranchInfo, type Note } from "./packageTree";
 import { Brand, PlaybackControls, changingBalances } from "./Playback";
@@ -66,40 +70,6 @@ function useEngine(): PackageEngine | undefined {
   return chosen.data === "native" ? nativePackages : browserPackages();
 }
 
-/** What a link asks Studio to open. */
-type PackagesLink = {
-  /** A package's URL to load first. */
-  package?: string;
-  /** A loaded package, by name. */
-  name?: string;
-  ref?: string;
-  point?: PointId;
-  step?: number;
-};
-
-function readLink(): PackagesLink {
-  const query = new URLSearchParams(window.location.search);
-  const step = query.get("step");
-  return {
-    package: query.get("package") ?? undefined,
-    name: query.get("name") ?? undefined,
-    ref: query.get("ref") ?? undefined,
-    point: query.get("point") ?? undefined,
-    step: step !== null && /^\d+$/.test(step) ? Number(step) : undefined,
-  };
-}
-
-function writeLink(link: PackagesLink) {
-  const query = new URLSearchParams();
-  if (link.package) query.set("package", link.package);
-  if (link.name) query.set("name", link.name);
-  if (link.ref) query.set("ref", link.ref);
-  else if (link.point) query.set("point", link.point);
-  if (link.step !== undefined) query.set("step", String(link.step));
-  const written = query.toString();
-  window.history.replaceState({}, "", `${window.location.pathname}${written ? `?${written}` : ""}${window.location.hash}`);
-}
-
 /**
  * The history on screen: up to a ref's point, or to the tip of a branch
  * picked in the tree or reached some other way.
@@ -116,6 +86,11 @@ type Opened = {
 export function shortPoint(point: PointId): string {
   const [run, step] = point.split(":");
   return `${run.slice(0, 4)}…${run.slice(-6)}:${step}`;
+}
+
+/** Words for a list read in a sentence: `a, b and c`. */
+function listed(words: string[]): string {
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words.join();
 }
 
 const done = (message: string): Said => ({ tone: "done", message });
@@ -190,14 +165,15 @@ const SAMPLE = "sample:";
 export function PackagesApp() {
   const engine = useEngine();
   const queryClient = useQueryClient();
-  const link = useRef(readLink()).current;
+  const [{ link, unread }] = useState(() => readLink(window.location.search));
   const kind = engine?.kind;
   const kept = useQuery({ queryKey: ["store", kind], queryFn: () => engine!.store(), enabled: Boolean(engine), staleTime: Infinity });
   const listing = useQuery({ queryKey: ["packages", kind], queryFn: () => engine!.packages(), enabled: Boolean(engine) && kept.isSuccess, placeholderData: keepPreviousData });
   const samples = useQuery({ queryKey: ["sample-packages"], queryFn: samplePackages, staleTime: Infinity, retry: false });
   const [packageName, setPackageName] = useState<string>();
   const [opened, setOpened] = useState<Opened>();
-  const [loadedUrl, setLoadedUrl] = useState<string | undefined>(link.package);
+  /** The URLs packages were loaded from in this tab, by name; none for one loaded from a file. */
+  const [sources, setSources] = useState<ReadonlyMap<string, string | undefined>>(new Map());
   const [busy, setBusy] = useState<string>();
   const [said, setSaid] = useState<Said[]>([]);
   const [copied, setCopied] = useState(false);
@@ -206,6 +182,8 @@ export function PackagesApp() {
   const note = (point: PointId, label: string, from: PointId) => setNotes((current) => new Map(current).set(parsePoint(point).run, { label, words: `${label}, from step ${stepOf(from)}` }));
   /** Says what the latest action came to, in place of what the one before it said. */
   const report = (...words: Said[]) => setSaid(words);
+  /** Says `words` besides what was said already. */
+  const say = (words: string) => setSaid((current) => [...current, caution(words)]);
   const pkg = listing.data?.packages.find((candidate) => candidate.name === packageName);
 
   // The history tree stays the store's: each change arrives as it is made.
@@ -386,6 +364,8 @@ export function PackagesApp() {
     try {
       const from = await loading();
       const names = loadedPackages(from);
+      const url = from.url && linkPath(from.url);
+      setSources((current) => new Map([...current, ...names.map((name) => [name, url] as const)]));
       if (from.got === "current") report(done(`Opened ${names.join(", ")}, unchanged.`));
       else if (from.got === "kept") report(caution(`${what} unreachable (${from.message}): opened the stored ${names.join(", ")}.`));
       else report(
@@ -408,48 +388,110 @@ export function PackagesApp() {
   /** Loads the sample at `url` and opens it; a link names it relative to Studio. */
   const openSample = (url: string) => {
     if (!url || !engine) return;
-    const path = linkPath(url);
-    setLoadedUrl(path);
-    void load(path, () => engine.loadUrl(url));
+    void load(linkPath(url), () => engine.loadUrl(url));
   };
 
-  // Once the engine's store is open: a linked package's URL first, then
-  // what the link names, else the first package the store holds.
+  /** Opens what the link names, else the first package the store holds. */
+  const openLinked = async (held: PackageList) => {
+    if (!engine) return;
+    let list = held;
+    let names: string[] = [];
+    if (link.package) {
+      const url = new URL(link.package, window.location.href).href;
+      names = await load(link.package, () => engine.loadUrl(url), false);
+      list = await relist();
+    }
+    // A link naming what the store does not hold opens the first package
+    // there is, and says so.
+    const stored = (name?: string) => list.packages.find((candidate) => candidate.name === name);
+    const named = stored(link.name) ?? stored(names[0]) ?? list.packages[0];
+    if (!named) return;
+    const missing = (words: string) => say(`${words}: opened ${named.name}.`);
+    if (link.name && link.name !== named.name) missing(`No package ${link.name} is stored here`);
+    setPackageName(named.name);
+    const ref = named.refs.find((candidate) => candidate.name === link.ref);
+    if (ref && link.play) await openPlayed(named, ref, link.play);
+    else if (ref) await openRef(ref.name, link.step ?? "end");
+    else if (link.point && await holds(link.point)) {
+      pendingStep.current = link.step ?? "end";
+      setOpened({ point: link.point });
+    } else {
+      if (link.ref && (!link.name || link.name === named.name)) missing(`${named.name} has no ref ${link.ref}`);
+      else if (link.point) missing(`This store does not hold point ${shortPoint(link.point)}`);
+      if (named.refs[0]) await openRef(named.refs[0].name);
+    }
+  };
+
+  // Once the engine's store is open, the link is; until it has been, the
+  // address stays what it was, but for what was not read.
   const started = useRef(false);
+  const [linked, setLinked] = useState(false);
   useEffect(() => {
     if (!engine || !kept.isSuccess || !listing.data || started.current) return;
     started.current = true;
-    void (async () => {
-      let list = listing.data;
-      let names: string[] = [];
-      if (link.package) {
-        const url = new URL(link.package, window.location.href).href;
-        names = await load(link.package, () => engine.loadUrl(url), false);
-        list = await relist();
-      }
-      // A link naming what the store does not hold opens the first package
-      // there is, and says so.
-      const stored = (name?: string) => list.packages.find((candidate) => candidate.name === name);
-      const named = stored(link.name) ?? stored(names[0]) ?? list.packages[0];
-      if (!named) return;
-      const missing = (words: string) => setSaid((current) => [...current, caution(`${words}: opened ${named.name}.`)]);
-      if (link.name && link.name !== named.name) missing(`No package ${link.name} is stored here`);
-      setPackageName(named.name);
-      if (link.ref && named.refs.some((ref) => ref.name === link.ref)) void openRef(link.ref, link.step ?? "end");
-      else if (link.ref) {
-        if (link.name === named.name) missing(`${named.name} has no ref ${link.ref}`);
-        if (named.refs[0]) void openRef(named.refs[0].name);
-      } else if (link.point) {
-        pendingStep.current = link.step ?? "end";
-        setOpened({ point: link.point });
-      } else if (named?.refs[0]) void openRef(named.refs[0].name);
-    })();
+    if (unread.length > 0) window.history.replaceState({}, "", `${window.location.pathname}${writeLink(link)}${window.location.hash}`);
+    void openLinked(listing.data).catch((cause: unknown) => report(failed(cause))).finally(() => {
+      setLinked(true);
+      const names = Object.values(link).some((named) => named !== undefined);
+      if (unread.length > 0) say(`${names ? "" : "The link names no package, ref or point. "}Ignored: ${listed(unread)}.`);
+    });
   }, [engine, kept.isSuccess, listing.data]);
 
+  /** The history tree of `name` as the store holds it now. */
+  const treeOf = (name: string) => queryClient.fetchQuery({ queryKey: ["histories", kind, name], queryFn: () => engine!.histories(name), staleTime: 0 });
+  /** A point's history, drawn, as the picture draws it. */
+  const draw = (point: PointId) => queryClient.fetchQuery({ queryKey: ["draw", kind, point], queryFn: () => engine!.draw(point), staleTime: Infinity });
+  /** Whether the store holds `point`. */
+  const holds = (point: PointId) => draw(point).then(() => true, (cause: unknown) => {
+    if (cause instanceof EngineRefusal && cause.status === 404) return false;
+    throw cause;
+  });
+  /**
+   * Opens what a link's strategy plays from `ref`: the branch it already
+   * made, where the store holds it; else the ref while it plays, then the
+   * branch it makes.
+   */
+  const openPlayed = async (owner: PackageView, ref: RefView, play: LinkedStrategy) => {
+    if (!engine) return;
+    const asked = askedBy(owner, ref.name, play);
+    if (!asked) {
+      say(`${owner.name} has no strategy ${play.strategy}: opened ${ref.name}.`);
+      await openRef(ref.name);
+      return;
+    }
+    try {
+      const from = play.from === undefined || play.from === stepOf(ref.point) ? ref.point : await engine.ancestor(ref.point, play.from);
+      const made = (await treeOf(owner.name)).segments.find((segment) => segment.from === from && segment.asked && sameAsked(segment.asked, asked));
+      if (made) {
+        openPoint(made.tip, link.step ?? stepOf(from), link.step === undefined);
+        return;
+      }
+      await openRef(ref.name, stepOf(from));
+      // Drawn before the strategy plays: the browser's engine does one thing at a time.
+      await draw(ref.point);
+      await playFrom(from, asked, link.step);
+    } catch (cause) { report(failed(cause)); }
+  };
+
+  /** A package's URL, where a link can name one: what it was loaded from in this tab, or the sample's of its name. */
+  const urlOf = (name: string) => {
+    if (sources.has(name)) return sources.get(name);
+    const sample = samples.data?.find((candidate) => candidate.name === name);
+    return sample && linkPath(sample.url);
+  };
+  // What the address names: the ref on screen, the strategy that played the
+  // branch on screen, or its point.
+  const onSegment = opened && histories.data?.segments.find((segment) => parsePoint(segment.tip).run === parsePoint(opened.point).run);
+  const played = pkg && onSegment && !opened?.ref && opened?.point === onSegment.tip ? playedLink(pkg, onSegment) : undefined;
+  const address = writeLink({
+    package: packageName && urlOf(packageName),
+    name: packageName,
+    ...(opened?.ref ? { ref: opened.ref } : played ?? { point: opened?.point }),
+    step: opened && document ? position : undefined,
+  });
   useEffect(() => {
-    if (!started.current) return;
-    writeLink({ package: loadedUrl, name: packageName, ref: opened?.ref, point: opened?.point, step: document ? position : undefined });
-  }, [loadedUrl, packageName, opened, position, document?.id]);
+    if (linked && packageName) window.history.replaceState({}, "", `${window.location.pathname}${address}${window.location.hash}`);
+  }, [linked, packageName, address]);
 
   /** Applies `exchange` at the point on screen: at a ref of one's own the ref moves over it; anywhere else it makes a branch. */
   const act = async (program: string, label: string) => {
@@ -484,25 +526,21 @@ export function PackagesApp() {
     finding.cancel();
   };
   /**
-   * Lets `strategy` play from the point on screen toward `asked.goal`; the
-   * branch it makes opens at the step it started from and plays. Asked again
-   * while it searches, it stops.
+   * Lets a strategy play from `from`, as `asked`; the branch it makes opens
+   * at `step`, or at the step it started from and plays.
    */
-  const letPlay = async (strategy: string, asked: Asked) => {
-    if (finding) { stopFinding(); return; }
-    if (!engine || !screenPoint || !asked.goal) return;
-    report();
-    const from = screenPoint;
+  const playFrom = async (from: PointId, asked: StrategyRequest, step?: number) => {
+    if (!engine) return;
+    const { strategy, goal } = asked;
     const shown = coalesced((progress: SearchProgress) => setFinding((current) => current && { ...current, progress }));
-    const work = engine.runStrategy(from, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, shown.push);
+    const work = engine.runStrategy(from, asked, shown.push);
     setFinding({ cancel: work.cancel, strategy, from });
     try {
       const ran = await work.result;
       const found = stepOf(ran.end) - stepOf(ran.start);
-      if (found === 0) { report(ran.outcome.kind === "reached" ? done(`${asked.goal} holds here already.`) : caution(`${strategy}: no steps toward ${asked.goal}; ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
-      note(ran.end, lastPart(strategy), ran.start);
+      if (found === 0) { report(ran.outcome.kind === "reached" ? done(`${goal} holds here already.`) : caution(`${strategy}: no steps toward ${goal}; ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
       report(done(`${strategy}: ${outcomeWords(ran.outcome).toLowerCase()} in ${counted(found, "step")}${ran.thinking ? `, ${counted(ran.thinking.expanded, "state")} looked at` : ""}.`));
-      openPoint(ran.end, stepOf(ran.start), true);
+      openPoint(ran.end, step ?? stepOf(ran.start), step === undefined);
     } catch (cause) {
       if (!findingStopped.current) report(failed(cause));
     } finally {
@@ -510,6 +548,13 @@ export function PackagesApp() {
       setFinding(undefined);
       findingStopped.current = false;
     }
+  };
+  /** Lets `strategy` play from the point on screen; asked again while it plays, it stops. */
+  const letPlay = async (strategy: string, { goal, ...effort }: Asked) => {
+    if (finding) { stopFinding(); return; }
+    if (!screenPoint || !goal) return;
+    report();
+    await playFrom(screenPoint, { strategy, goal, ...effort });
   };
   /** Play where nothing has happened yet: the first strategy that plays this history. */
   const playAhead = () => {
@@ -595,7 +640,11 @@ export function PackagesApp() {
     } catch (cause) { report(failed(cause)); }
   };
 
+  // A link opens anywhere when a package's URL serves what it names: a ref
+  // the package ships, or a strategy played from one.
+  const opensAnywhere = Boolean(pkg && urlOf(pkg.name) && (opened?.ref ? opened.shipped : played));
   const copyLink = async () => {
+    if (!opensAnywhere) report(caution(`The link opens only ${engine?.kind === "native" ? "on this server" : "in this browser"}, whose store holds ${pkg && !urlOf(pkg.name) ? pkg.name : opened?.ref ?? "this branch"}.`));
     await navigator.clipboard.writeText(window.location.href).catch(() => undefined);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
@@ -692,7 +741,6 @@ export function PackagesApp() {
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file || !engine) return;
-          setLoadedUrl(undefined);
           void load(file.name, () => engine.loadFile(file));
         }} /></label>
         <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
@@ -923,18 +971,11 @@ function BranchCard({ branch, step, info, branches, onCompare }: { branch: TreeB
     {info?.refs.map((ref) => <span key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} /> names step {ref.step}{ref.fixed ? <>, <Term name="fixed">fixed</Term></> : ""}</span>)}
     {trial && <span><Term name="trial">Trial</Term> {trial.index + 1} of <IdLink subject={{ kind: "experiment", path: trial.experiment }} />, <IdLink subject={{ kind: "strategy", path: trial.strategy }} label={lastPart(trial.strategy)} />: {endedWords(trial.trial.ended)}</span>}
     {trial && trial.objectives.length > 0 && <span className="branch-values">{trial.objectives.map((objective, index) => <span key={objective.objective}><IdLink subject={{ kind: "objective", path: objective.objective }} label={lastPart(objective.objective)} /> {trial.trial.values[index]}</span>)}</span>}
-    {info?.note && !trial && <span>Made in this tab: {info.note.words}</span>}
+    {info?.asked && !trial && <span><IdLink subject={{ kind: "strategy", path: info.asked.strategy }} /> toward {info.asked.goal}</span>}
+    {info?.note && <span>Made in this tab: {info.note.words}</span>}
     {onCompare && <button type="button" onClick={onCompare}>Compare with the history on screen</button>}
   </div>;
 }
-
-/** A whole number below 2^64, written in decimal. */
-function natural(text: string): boolean {
-  return /^(0|[1-9]\d*)$/.test(text) && BigInt(text) < 2n ** 64n;
-}
-
-/** The effort Studio gives a strategy no experiment runs. */
-const DEFAULT_EFFORT = { seed: "17", budget: "1000000", turns: "1000" };
 
 /** What a strategy is asked: the goal it plays toward and the effort it is given. */
 type Asked = { goal?: string; seed: string; budget: string; turns: string };
