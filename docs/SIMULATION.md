@@ -864,7 +864,7 @@ instead of recording its stopped searches as trials that ran out.
 
 Studio opens on packages, and since P9 on nothing else. A package loads from
 a file, from a sample's URL, or from `?package=<url>`; the link keeps the
-URL, the ref or point, the step and the view, so reloading opens them again.
+URL, the ref or point and the step, so reloading opens them again.
 Opening a ref draws its point's history with the package's view, in the
 playback, scene and inspectors the studies used. Act offers the candidates at
 the step on screen, each assessed, and an exchange written as JSON, assessed

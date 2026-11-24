@@ -29,10 +29,8 @@ stays in reach.
   `packages/index.json` lists with each one's title and how many refs,
   experiments and strategies it has; with nothing loaded, Studio lists them
   as cards on its first page). Picking either opens it; **Load a file**
-  opens a store file or a zip of one. A link such as
-  `?package=packages/maze.zip` loads one when it opens. The link keeps the
-  URL, the package, the ref or point and the step (`name`, `ref`, `point`,
-  `step`), so a reload or a copied link opens the same. A package is a
+  opens a store file or a zip of one, and **Copy link** copies the address,
+  which names what is on screen ([Links](#links)). A package is a
   release: loading another version of one the store holds replaces what the
   held version shipped, and Studio says so; loading the same version again
   changes nothing. Refs and runs of your own stay. **Source** and **Rules**
@@ -56,8 +54,8 @@ stays in reach.
   the steps they name, written without the package's name (`micro` for
   `maze/micro`; a package's own, which are fixed, in steel; yours in
   brass); first histories whose refs start alike sit together, a gap before
-  the next group. Experiment trials and branches made in this tab are
-  labelled at their tips, and the history on screen is drawn in brass with
+  the next group. Experiment trials, the branches a strategy played and the
+  moves made in this tab are labelled at their tips, and the history on screen is drawn in brass with
   the play cursor on it. Edges are drawn beneath the steps: one trunk where
   branches leave a row, each turning onto its own row in one stroke, the
   history on screen over the rest. The tree keeps its height as branches
@@ -193,6 +191,31 @@ yet, such as a package's first ref when it opens, runs the strategy the
 package's first experiment runs toward its goal and plays the moves it
 finds; pressed again while it searches, it stops.
 
+## Links
+
+Studio's address names what is on screen, so a reload or a copied link opens
+the same:
+
+| Parameter | What it names |
+| --- | --- |
+| `package` | a package's URL, loaded first, such as `packages/maze.zip` |
+| `name` | a package the store holds |
+| `ref` | a ref of it |
+| `strategy` | a strategy played from the ref |
+| `from` | the step of the ref's history it plays from, when it is earlier than the ref's |
+| `goal`, `seed`, `budget`, `turns` | what the strategy is asked, where it is not what its experiment asks there |
+| `point` | a point of the store the link was written from, where no ref and no strategy names it |
+| `step` | the step of that history on screen |
+
+A link to a strategy opens the branch it already made, where the store holds
+one asked the same, or else plays it and opens the branch at the step, or
+from its start when the link names none:
+`?package=packages/marketplace.zip&ref=marketplace/showcase&strategy=marketplace/market-clearing&step=4`.
+Any store can open it. A branch a move made, a ref of one's own and a
+package loaded from a file are only where they are stored, and copying a
+link to one says so. Studio says which parameters of a link it did not read,
+and its address drops them.
+
 ## Run locally
 
 Install `wasm-pack`, then install dependencies and start Studio:
@@ -274,7 +297,8 @@ applies a candidate at a ref's point (the ref moves) and at an earlier step
 assessed applicable, continues from a ref's point with a strategy and moves
 the ref to where it ended, follows a ref while the page moves it, runs an
 experiment and compares its trials, pins inspectors that follow the cursor
-and opens the rules, and opens a `?package=` link and reloads it. The
+and opens the rules, opens a `?package=` link and reloads it, and opens a
+link to a strategy twice, which plays once. The
 native server's store outlives a test, so each test that moves a ref has
 one of its own and counts from where it is. Natively, the suite also
 follows a ref that another proposer moves over the HTTP API.

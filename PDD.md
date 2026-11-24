@@ -2552,6 +2552,23 @@ branches. A narrow window stacks the same parts, and the page scrolls. The
 samples index names each sample's title and counts, so the empty page
 lists them as cards.
 
+### D-064: A link names a game by the strategy that plays it
+
+Decided after someone opened a link from before Studio moved to packages
+and met the first page. Such a link named a problem, a strategy,
+a seed and a step, and opened there. Its successor named a ref or a point,
+and a point's run is named by the store that made it, so a link to a branch
+opened for nobody else. A run the engine records for a kept strategy now
+keeps what the strategy was asked, its goal and its effort, as tags; a
+segment of the history tree gives it, so a branch says what made it after a
+reload and to every client. Studio's link names a ref the package ships, the
+strategy played from it, what it was asked otherwise than its experiment
+asks, and the step; opening one opens the branch the store holds, or plays
+the strategy there. A branch a move made is named by its point, and copying
+that link says it opens only where the store is. The user asked that the old
+parameters neither be kept nor look as though they meant something: Studio
+names the parameters of a link it does not read, and its address drops them.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
