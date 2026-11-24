@@ -18,7 +18,7 @@ type Props = {
   formatOnOpen?: boolean;
 };
 
-export default function RhaiEditor({ label, value, onChange, disabled = false, compact, formatOnOpen }: Props) {
+export function RhaiEditor({ label, value, onChange, disabled = false, compact, formatOnOpen }: Props) {
   const id = useId();
   const parent = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);

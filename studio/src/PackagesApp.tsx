@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconMaximize, IconX } from "@tabler/icons-react";
 import { ActivityStrip, type Activity, type Said, type StoreWords } from "./Activity";
@@ -7,6 +7,7 @@ import { BrowserPackages } from "./browserPackages";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
 import { RhaiConsole } from "./RhaiConsole";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { ExchangeEditor } from "./ExchangeEditor";
 import { Effects, ExchangeView, Holding } from "./ExchangeView";
 import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
@@ -38,13 +39,12 @@ import {
   type StrategyRequest,
 } from "./packageEngine";
 import { branchesOf, lastPart, parsePoint, type BranchInfo, type Note } from "./packageTree";
+import { PackageSource } from "./PackageSource";
 import { Brand, PlaybackControls, changingBalances } from "./Playback";
 import { Formatted, QuantityFormats } from "./Quantity";
 import { RateTable } from "./RateView";
 import { SceneView, type ReplayMotionMode } from "./SceneView";
 import { Term } from "./Term";
-
-const PackageSource = lazy(() => import("./PackageSource"));
 
 /** The one browser engine of the page: one Worker holds the saved store. */
 let browser: BrowserPackages | undefined;
@@ -184,6 +184,8 @@ export function PackagesApp() {
   const report = (...words: Said[]) => setSaid(words);
   /** Says `words` besides what was said already. */
   const say = (words: string) => setSaid((current) => [...current, caution(words)]);
+  /** Why the engine answers nothing, while it does not. */
+  const broken = kept.error ?? listing.error;
   const pkg = listing.data?.packages.find((candidate) => candidate.name === packageName);
 
   // The history tree stays the store's: each change arrives as it is made.
@@ -747,11 +749,11 @@ export function PackagesApp() {
         <button type="button" aria-expanded={drawerTab === "source"} onClick={() => toggleDrawer("source")} disabled={!pkg}>Source</button>
         <button type="button" aria-expanded={drawerTab === "rules"} onClick={() => toggleDrawer("rules")} disabled={!model}>Rules</button>
       </section>
-      <ActivityStrip activities={activities} said={said} store={store} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
+      <ActivityStrip activities={activities} said={broken ? [failed(broken)] : said} store={store} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
 
-    {!engine || !listing.data ? <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
+    {!engine || !listing.data ? broken ? null : <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />
       : <main className="point-cockpit" aria-busy={stale}>
         <div className="work-column">
@@ -771,7 +773,7 @@ export function PackagesApp() {
               : !document || !snapshot ? <div className="panel loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
               : <div className="panel world-panel" ref={worldPanel}>
                 <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
-                <SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} />
+                <ErrorBoundary label="The picture" resetOn={snapshot}><SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} /></ErrorBoundary>
               </div>}
             <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
           </div>
@@ -819,9 +821,7 @@ export function PackagesApp() {
               </div>}
             </div>
           </section> : <p className="empty-state">No rules</p>,
-          source: () => pkg ? <Suspense fallback={<p role="status">Opening source…</p>}>
-            <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />
-          </Suspense> : <p className="empty-state">No package</p>,
+          source: () => pkg ? <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} /> : <p className="empty-state">No package</p>,
           console: () => at ? <RhaiConsole key={at} engine={engine} at={at} onApply={act} /> : waiting,
         }} />
       </div>}

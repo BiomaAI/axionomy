@@ -10,7 +10,10 @@ const scope = self as DedicatedWorkerGlobalScope;
 let initialized: Promise<void> | undefined;
 
 function initialize() {
-  initialized ??= init().then(() => undefined);
+  initialized ??= init().then(() => undefined, (cause: unknown) => {
+    initialized = undefined;
+    throw new Error(`The engine did not start: ${cause instanceof Error ? cause.message : String(cause)}. Reload the page.`);
+  });
   return initialized;
 }
 

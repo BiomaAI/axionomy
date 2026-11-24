@@ -140,6 +140,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .panel-heading > div:first-child { min-width: 0; }
 .panel-heading-side { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .panel-heading-side small { color: var(--brass); font: 10px var(--mono); text-transform: uppercase; }
+.render-failure { padding: 14px 16px; display: grid; gap: 10px; justify-items: start; align-content: start; font-size: 12px; line-height: 1.5; }
+.render-failure p { margin: 0; overflow-wrap: anywhere; }
+.render-failure strong { color: var(--debit); font-weight: 600; }
 .theater-btn { min-height: 28px; padding: 0 8px; font-size: 12px; line-height: 1; }
 .theater-btn svg { display: block; }
 .world-panel:fullscreen { border: 0; background: var(--bg); }

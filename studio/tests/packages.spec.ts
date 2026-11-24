@@ -559,6 +559,20 @@ test("the market's charts stay in its picture, however short the drawer leaves i
   }
 });
 
+test("opening a panel fetches no script, so a page outlives the files it was loaded from", async ({ page }) => {
+  await openSample(page, "maze");
+  await openRef(page, "maze/micro");
+  const scripts: string[] = [];
+  page.on("request", (request) => { if (request.resourceType() === "script") scripts.push(request.url()); });
+  for (const name of ["Moves", "Strategy", "Experiments", "Ref"]) await rail(page, name);
+  for (const [name, region] of [["Rules", "Rules"], ["Source", "Package source"], ["Console", "Rhai console"]]) {
+    await drawer(page, name);
+    await expect(page.getByRole("region", { name: region, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("region", { name: "Rhai console" }).getByLabel("Program")).toBeVisible();
+  expect(scripts).toEqual([]);
+});
+
 test("Sokoban opens with formatted exchange bindings and syntax colors", async ({ page }) => {
   await openSample(page, "sokoban");
   await page.getByRole("button", { name: "Source", exact: true }).click();

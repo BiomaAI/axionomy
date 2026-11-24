@@ -1,8 +1,7 @@
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { Candidate, PackageEngine, PointId } from "./packageEngine";
-
-const RhaiEditor = lazy(() => import("./RhaiEditor"));
+import { RhaiEditor } from "./RhaiEditor";
 
 /** Read or propose against the point currently being inspected. Applying
  * submits the concrete proposal that the engine has already assessed. */
@@ -23,10 +22,8 @@ export function RhaiConsole({ engine, at, onApply }: {
   const apply = useMutation({ mutationFn: (proposal: Candidate) => onApply(proposal.program, proposal.proposal.label) });
   const current = run.data?.source === source ? run.data : undefined;
   return <section className="rhai-console" aria-label="Rhai console">
-    <Suspense fallback={<p role="status">Opening editor…</p>}>
-      <RhaiEditor compact label="Program" value={source}
-        onChange={text => { setSource(text); run.reset(); apply.reset(); }} />
-    </Suspense>
+    <RhaiEditor compact label="Program" value={source}
+      onChange={text => { setSource(text); run.reset(); apply.reset(); }} />
     <div className="actions">
       <button disabled={!source.trim() || run.isPending} onClick={() => run.mutate({ mode: "query", source })}>Run query</button>
       <button disabled={!source.trim() || run.isPending} onClick={() => run.mutate({ mode: "assess", source })}>Assess exchange</button>

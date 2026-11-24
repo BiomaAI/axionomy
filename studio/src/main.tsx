@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@xyflow/react/dist/style.css";
 import "./styles.css";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { PackagesApp } from "./PackagesApp";
 
 const queryClient = new QueryClient({
@@ -13,8 +14,10 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <PackagesApp />
-    </QueryClientProvider>
+    <ErrorBoundary label="Studio" reload>
+      <QueryClientProvider client={queryClient}>
+        <PackagesApp />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

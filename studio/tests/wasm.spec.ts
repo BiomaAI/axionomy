@@ -253,3 +253,34 @@ test("a saved store this version cannot open is left alone until it is replaced"
   }, client);
   expect(replaced).toEqual({ persistent: true });
 });
+
+test("a Worker that does not load fails what is asked of it, and the next request starts another", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(BLANK);
+  // As on a site published again since the page was loaded: its Worker's script is gone.
+  let gone = false;
+  await page.route("**/engine.worker.ts*", (route) => gone ? route.fulfill({ status: 404 }) : route.continue());
+  await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    await packages.open();
+    await packages.loadUrl("/packages/connect-four.zip");
+    const listed = await packages.packages();
+    const start = listed.packages[0].refs.find((ref: { name: string }) => ref.name === "connect-four/stress").point;
+    let reports = 0;
+    const run = packages.runStrategy(start, { strategy: "connect-four/mcts-32/self-play", goal: "connect-four/red-wins", seed: "17", budget: "1", turns: "1000" }, () => { reports += 1; });
+    run.result.catch(() => undefined);
+    while (reports < 1) await new Promise((resolve) => setTimeout(resolve, 10));
+    Object.assign(globalThis, { packages, run });
+  }, "/src/browserPackages.ts");
+  const listed = () => page.evaluate(async () => {
+    const { packages } = globalThis as unknown as { packages: { packages(): Promise<{ packages: { name: string }[] }> } };
+    return packages.packages().then((held) => held.packages.map((each) => each.name), (cause: Error) => cause.message);
+  });
+  gone = true;
+  await page.evaluate(() => (globalThis as unknown as { run: { cancel(): void } }).run.cancel());
+  expect(await listed()).toBe("The engine did not start: its Worker did not load. Reload the page.");
+  expect(await listed()).toBe("The engine did not start: its Worker did not load. Reload the page.");
+  gone = false;
+  expect(await listed()).toEqual(["connect-four"]);
+});

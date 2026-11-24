@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 /** A tab: the key it opens, its words, and whether there is anything behind it yet. */
 export type Tab<K extends string> = { key: K; label: ReactNode; disabled?: boolean };
@@ -48,7 +49,7 @@ export function TabPanels<K extends string>({ id, open, panels }: { id: string; 
     if (open !== undefined && !seen.has(open)) setSeen(new Set(seen).add(open));
   }, [open, seen]);
   return <>{(Object.keys(panels) as K[]).filter((key) => key === open || seen.has(key)).map((key) =>
-    <div key={key} role="tabpanel" id={`${id}-panel-${key}`} aria-labelledby={`${id}-tab-${key}`} className="tab-panel" hidden={key !== open}>{panels[key]()}</div>)}</>;
+    <div key={key} role="tabpanel" id={`${id}-panel-${key}`} aria-labelledby={`${id}-tab-${key}`} className="tab-panel" hidden={key !== open}><ErrorBoundary label="This panel">{panels[key]()}</ErrorBoundary></div>)}</>;
 }
 
 /** How tall the box a handle resizes is drawn. */
