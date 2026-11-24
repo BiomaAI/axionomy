@@ -4,6 +4,7 @@
 
 use crate::{
     CandidatesPath, Engine, EngineError, GoalPath, ObjectivePath, Random, ScriptCall, ScriptState,
+    StrategyPath,
     definitions::{CandidateSet, Measure, Objective, Offer},
 };
 use axionomy::{
@@ -11,7 +12,7 @@ use axionomy::{
     paths::{self, Paths},
 };
 use axionomy_search::{
-    AStarSession, BfsSession, GraphSearchProgress,
+    AStarSession, BfsSession, GraphSearchProgress, SearchSolution,
     action_source::eager_actions,
     best_first,
     bounded::{Tie, beam, branch_and_bound, minimax},
@@ -22,7 +23,7 @@ use axionomy_search::{
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample, sample_seed},
     session::{SearchStatus, WorkBudget},
 };
-use axionomy_store::Point;
+use axionomy_store::{Point, RunId, StoreError, TagPath, Transaction};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
@@ -33,6 +34,13 @@ use std::{
 
 /// The most expansions a search makes between two looks at its progress.
 const CHUNK: usize = 1_000;
+
+/// The tags of a run a strategy made, by which [`Asked`] is read back.
+const STRATEGY_TAG: &str = "asked/strategy";
+const GOAL_TAG: &str = "asked/goal";
+const SEED_TAG: &str = "asked/seed";
+const BUDGET_TAG: &str = "asked/budget";
+const TURNS_TAG: &str = "asked/turns";
 
 /// An algorithm with what it calls and its own settings: how to choose,
 /// never what to choose for or how much to spend. The question comes from
@@ -316,6 +324,82 @@ pub enum Outcome {
     Interrupted,
 }
 
+/// A strategy kept at a path, asked to play toward a goal with an effort:
+/// with the point it starts from, all that decides what it plays. A run the
+/// engine records for one keeps it as tags, so what made a branch can be read
+/// back, and asked again in another store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asked {
+    pub strategy: StrategyPath,
+    pub goal: GoalPath,
+    pub effort: Effort,
+}
+
+impl Asked {
+    /// Writes it as the tags of `run`.
+    pub(crate) fn tag(&self, txn: &mut Transaction<'_>, run: RunId) -> Result<(), StoreError> {
+        for (key, value) in [
+            (STRATEGY_TAG, self.strategy.to_string()),
+            (GOAL_TAG, self.goal.to_string()),
+            (SEED_TAG, self.effort.seed.to_string()),
+            (BUDGET_TAG, self.effort.budget.to_string()),
+            (TURNS_TAG, self.effort.turns.to_string()),
+        ] {
+            txn.tag(run, &key.parse().expect("a path"), Some(&value))?;
+        }
+        Ok(())
+    }
+
+    /// What a run's tags say it was asked; none for one no kept strategy made.
+    pub(crate) fn tagged(tags: &BTreeMap<TagPath, String>) -> Option<Self> {
+        let written = |key: &str| tags.get(&key.parse().expect("a path"));
+        let count = |key: &str| written(key)?.parse().ok();
+        Some(Self {
+            strategy: written(STRATEGY_TAG)?.parse().ok()?,
+            goal: written(GOAL_TAG)?.parse().ok()?,
+            effort: Effort {
+                seed: count(SEED_TAG)?,
+                budget: count(BUDGET_TAG)?,
+                turns: count(TURNS_TAG)?,
+            },
+        })
+    }
+}
+
+/// What a strategy found from a point, before it is recorded: the exchanges
+/// it chose, none of which it applied to the store, and how it ended.
+struct Found {
+    exchanges: Vec<paths::Exchange>,
+    outcome: Outcome,
+    thinking: Option<GraphSearchProgress>,
+    cost: Option<u64>,
+}
+
+impl Found {
+    /// `exchanges` found with nothing said of a search.
+    fn played(exchanges: Vec<paths::Exchange>, outcome: Outcome) -> Self {
+        Self {
+            exchanges,
+            outcome,
+            thinking: None,
+            cost: None,
+        }
+    }
+
+    /// Nothing found.
+    fn nothing(outcome: Outcome) -> Self {
+        Self::played(Vec::new(), outcome)
+    }
+
+    /// The solution of a search that costs its exchanges.
+    fn solved(solution: &SearchSolution<Paths>) -> Self {
+        Self {
+            cost: Some(solution.cost()),
+            ..Self::played(solution.trace().exchanges().to_vec(), Outcome::Reached)
+        }
+    }
+}
+
 /// A strategy's run: where it started and ended, how, and what a search
 /// explored on the way.
 #[derive(Debug, Clone)]
@@ -357,34 +441,59 @@ impl Engine {
         effort: Effort,
         watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
     ) -> Result<Ran, EngineError> {
-        match self.run(at, strategy, goal, effort, watch) {
-            Err(EngineError::Interrupted) => Ok(Ran {
-                start: at,
-                end: at,
-                outcome: Outcome::Interrupted,
-                thinking: None,
-                cost: None,
-            }),
-            ran => ran,
-        }
+        let found = self.find(at, strategy, goal, effort, watch);
+        self.record(at, found, None)
     }
 
-    /// What [`run_strategy`](Self::run_strategy) runs. A run `watch` stops
-    /// unwinds as [`EngineError::Interrupted`], unless its search's session
-    /// ends it as stopped.
-    fn run(
+    /// Runs the strategy `asked` names, as [`run_strategy`](Self::run_strategy)
+    /// runs one; the run it records says what it was asked.
+    pub fn ask(
+        &self,
+        at: Point,
+        asked: &Asked,
+        watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+    ) -> Result<Ran, EngineError> {
+        let strategy = self.strategy(&asked.strategy)?;
+        let found = self.find(at, &strategy, &asked.goal, asked.effort, watch);
+        self.record(at, found, Some(asked))
+    }
+
+    /// Records what a strategy found from `at`; one stopped found nothing.
+    fn record(
+        &self,
+        at: Point,
+        found: Result<Found, EngineError>,
+        asked: Option<&Asked>,
+    ) -> Result<Ran, EngineError> {
+        let found = match found {
+            Err(EngineError::Interrupted) => Found::nothing(Outcome::Interrupted),
+            found => found?,
+        };
+        Ok(Ran {
+            start: at,
+            end: self.fork(at, &found.exchanges, asked)?,
+            outcome: found.outcome,
+            thinking: found.thinking,
+            cost: found.cost,
+        })
+    }
+
+    /// What `strategy` finds from `at`. One `watch` stops unwinds as
+    /// [`EngineError::Interrupted`], unless its search's session ends it as
+    /// stopped.
+    fn find(
         &self,
         at: Point,
         strategy: &Strategy,
         goal: &GoalPath,
         effort: Effort,
         watch: &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>,
-    ) -> Result<Ran, EngineError> {
+    ) -> Result<Found, EngineError> {
         let initial = self.reach(at)?.state.economy.clone();
         let goal = self.goal(goal)?;
         match strategy {
             Strategy::Policy { policy } => {
-                self.drive(at, initial, policy, &goal, effort, Watcher::turns(watch))
+                self.drive(initial, policy, &goal, effort, Watcher::turns(watch))
             }
             Strategy::Plan { plan } => {
                 let mut watcher = Watcher::turns(watch);
@@ -398,13 +507,7 @@ impl Engine {
                     self.call(script, function, (state,))?
                 };
                 if planned.is_unit() {
-                    return Ok(Ran {
-                        start: at,
-                        end: at,
-                        outcome: Outcome::Stopped,
-                        thinking: None,
-                        cost: None,
-                    });
+                    return Ok(Found::nothing(Outcome::Stopped));
                 }
                 let exchanges = crate::exchanges_of(planned.try_cast::<rhai::Array>().ok_or(
                     EngineError::Returned {
@@ -414,34 +517,21 @@ impl Engine {
                 )?)?;
                 // A plan stopped while it was being made is not applied.
                 watcher.look(exchanges.len())?;
-                let (end, outcome) = match self.apply(at, &exchanges) {
-                    Ok(end) => {
-                        let reached = self.reach(end)?.state.economy.matches(&goal);
-                        (
-                            end,
-                            if reached {
-                                Outcome::Reached
-                            } else {
-                                Outcome::Stopped
-                            },
-                        )
-                    }
-                    Err(EngineError::Refused { index, assessment }) => (
-                        at,
-                        Outcome::Refused {
+                let mut economy = initial;
+                for (index, exchange) in exchanges.iter().enumerate() {
+                    if economy.apply(exchange.clone()).is_err() {
+                        return Ok(Found::nothing(Outcome::Refused {
                             turn: index as u64,
-                            assessment,
-                        },
-                    ),
-                    Err(error) => return Err(error),
+                            assessment: Box::new(economy.assess(exchange)),
+                        }));
+                    }
+                }
+                let outcome = if economy.matches(&goal) {
+                    Outcome::Reached
+                } else {
+                    Outcome::Stopped
                 };
-                Ok(Ran {
-                    start: at,
-                    end,
-                    outcome,
-                    thinking: None,
-                    cost: None,
-                })
+                Ok(Found::played(exchanges, outcome))
             }
             Strategy::BreadthFirst { candidates } => {
                 let candidates = self.candidate_set(candidates)?;
@@ -453,7 +543,7 @@ impl Engine {
                 let progress = session.progress();
                 let solution = session.into_solution();
                 failed(failure)?;
-                self.searched(at, status, progress, solution)
+                Ok(searched(status, progress, solution))
             }
             Strategy::BranchAndBound {
                 candidates,
@@ -474,24 +564,10 @@ impl Engine {
                     usize::try_from(effort.budget).unwrap_or(usize::MAX),
                 );
                 failed(failure)?;
-                let outcome = match (&found.solution, found.exhausted) {
-                    (Some(_), _) => Outcome::Reached,
-                    (None, true) => Outcome::Exhausted,
-                    (None, false) => Outcome::Spent,
-                };
-                let (end, cost) = match found.solution {
-                    Some(solution) => (
-                        self.apply(at, solution.trace().exchanges())?,
-                        Some(solution.cost()),
-                    ),
-                    None => (at, None),
-                };
-                Ok(Ran {
-                    start: at,
-                    end,
-                    outcome,
-                    thinking: None,
-                    cost,
+                Ok(match (found.solution, found.exhausted) {
+                    (Some(solution), _) => Found::solved(&solution),
+                    (None, true) => Found::nothing(Outcome::Exhausted),
+                    (None, false) => Found::nothing(Outcome::Spent),
                 })
             }
             Strategy::Beam {
@@ -516,16 +592,9 @@ impl Engine {
                     *tie,
                 );
                 failed(failure)?;
-                let (end, outcome) = match found.best {
-                    Some(best) => (self.apply(at, best.trace.exchanges())?, Outcome::Reached),
-                    None => (at, Outcome::Exhausted),
-                };
-                Ok(Ran {
-                    start: at,
-                    end,
-                    outcome,
-                    thinking: None,
-                    cost: None,
+                Ok(match found.best {
+                    Some(best) => Found::played(best.trace.exchanges().to_vec(), Outcome::Reached),
+                    None => Found::nothing(Outcome::Exhausted),
                 })
             }
             Strategy::BestFirst {
@@ -559,36 +628,17 @@ impl Engine {
                 failed(failure)?;
                 // A goal found once a state went unexpanded may not be the
                 // one that ranks best.
-                let (end, outcome, cost) = match found {
-                    _ if spent.get() => (at, Outcome::Spent, None),
-                    Some(solution) => (
-                        self.apply(at, solution.trace().exchanges())?,
-                        Outcome::Reached,
-                        Some(solution.cost()),
-                    ),
-                    None => (at, Outcome::Exhausted, None),
-                };
-                Ok(Ran {
-                    start: at,
-                    end,
-                    outcome,
-                    thinking: None,
-                    cost,
+                Ok(match found {
+                    _ if spent.get() => Found::nothing(Outcome::Spent),
+                    Some(solution) => Found::solved(&solution),
+                    None => Found::nothing(Outcome::Exhausted),
                 })
             }
             Strategy::Pareto {
                 candidates,
                 objectives,
                 by,
-            } => self.pareto(
-                at,
-                &initial,
-                candidates,
-                goal,
-                (objectives, by),
-                effort,
-                watch,
-            ),
+            } => self.pareto(&initial, candidates, goal, (objectives, by), effort, watch),
             Strategy::Game {
                 nature,
                 actor,
@@ -634,21 +684,10 @@ impl Engine {
                 failed(failure)?;
                 // A goal found once a state went unexpanded may not be the
                 // cheapest.
-                let (end, outcome, cost) = match found {
-                    _ if spent => (at, Outcome::Spent, None),
-                    Some(solution) => (
-                        self.apply(at, solution.trace().exchanges())?,
-                        Outcome::Reached,
-                        Some(solution.cost()),
-                    ),
-                    None => (at, Outcome::Exhausted, None),
-                };
-                Ok(Ran {
-                    start: at,
-                    end,
-                    outcome,
-                    thinking: None,
-                    cost,
+                Ok(match found {
+                    _ if spent => Found::nothing(Outcome::Spent),
+                    Some(solution) => Found::solved(&solution),
+                    None => Found::nothing(Outcome::Exhausted),
                 })
             }
             Strategy::Cheapest {
@@ -678,7 +717,7 @@ impl Engine {
                 let progress = session.progress();
                 let solution = session.into_solution();
                 failed(failure)?;
-                self.searched(at, status, progress, solution)
+                Ok(searched(status, progress, solution))
             }
         }
     }
@@ -1061,7 +1100,7 @@ impl Engine {
         players: &[Chooser],
         Effort { seed, turns, .. }: Effort,
         watcher: &RefCell<Watcher<'_>>,
-    ) -> Result<Ran, EngineError> {
+    ) -> Result<Found, EngineError> {
         // Nature and the players meet the same world, its events drawn from
         // the game's seed; the players' own sequence is apart from Nature's.
         let chance = Random::new(seed);
@@ -1133,13 +1172,7 @@ impl Engine {
             exchanges.push(exchange);
             watcher.borrow_mut().expanded(1);
         };
-        Ok(Ran {
-            start: at,
-            end: self.apply(at, &exchanges)?,
-            outcome,
-            thinking: None,
-            cost: None,
-        })
+        Ok(Found::played(exchanges, outcome))
     }
 
     /// What `chooser` chooses on `turn`, with what the game's
@@ -1392,13 +1425,12 @@ impl Engine {
 
     fn drive(
         &self,
-        at: Point,
         mut economy: paths::Economy,
         policy: &ScriptCall,
         goal: &paths::Goal,
         Effort { seed, turns, .. }: Effort,
         mut watcher: Watcher<'_>,
-    ) -> Result<Ran, EngineError> {
+    ) -> Result<Found, EngineError> {
         let random = Random::new(seed);
         let mut exchanges = Vec::new();
         let outcome = loop {
@@ -1435,29 +1467,18 @@ impl Engine {
             exchanges.push(exchange);
             watcher.expanded(1);
         };
-        Ok(Ran {
-            start: at,
-            end: self.apply(at, &exchanges)?,
-            outcome,
-            thinking: None,
-            cost: None,
-        })
+        Ok(Found::played(exchanges, outcome))
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "a search's parts, each read once"
-    )]
     fn pareto(
         &self,
-        at: Point,
         initial: &paths::Economy,
         candidates: &CandidatesPath,
         goal: paths::Goal,
         (objectives, by): (&[ObjectivePath], &[ObjectivePath]),
         effort: Effort,
         watch: &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>,
-    ) -> Result<Ran, EngineError> {
+    ) -> Result<Found, EngineError> {
         // Where each objective ranking the front is among those measured.
         let ranking = by
             .iter()
@@ -1549,45 +1570,34 @@ impl Engine {
                     .map(|entry| entry.payload().clone())
             })
             .flatten();
-        let (end, outcome) = match (status, best) {
-            (_, Some(trace)) => (self.apply(at, trace.exchanges())?, Outcome::Reached),
-            (SearchStatus::Exhausted, None) => (at, Outcome::Exhausted),
-            (SearchStatus::Interrupted, None) => (at, Outcome::Interrupted),
-            _ => (at, Outcome::Spent),
+        let found = match (status, best) {
+            (_, Some(trace)) => Found::played(trace.exchanges().to_vec(), Outcome::Reached),
+            (SearchStatus::Exhausted, None) => Found::nothing(Outcome::Exhausted),
+            (SearchStatus::Interrupted, None) => Found::nothing(Outcome::Interrupted),
+            _ => Found::nothing(Outcome::Spent),
         };
-        Ok(Ran {
-            start: at,
-            end,
-            outcome,
+        Ok(Found {
             thinking: Some(progress),
-            cost: None,
+            ..found
         })
     }
+}
 
-    fn searched(
-        &self,
-        at: Point,
-        status: SearchStatus,
-        progress: GraphSearchProgress,
-        solution: Option<axionomy_search::SearchSolution<axionomy::paths::Paths>>,
-    ) -> Result<Ran, EngineError> {
-        let (end, outcome, cost) = match (status, solution) {
-            (_, Some(solution)) => (
-                self.apply(at, solution.trace().exchanges())?,
-                Outcome::Reached,
-                Some(solution.cost()),
-            ),
-            (SearchStatus::Exhausted, None) => (at, Outcome::Exhausted, None),
-            (SearchStatus::Interrupted, None) => (at, Outcome::Interrupted, None),
-            (SearchStatus::Running | SearchStatus::Solved, None) => (at, Outcome::Spent, None),
-        };
-        Ok(Ran {
-            start: at,
-            end,
-            outcome,
-            thinking: Some(progress),
-            cost,
-        })
+/// What a search session found, with what it explored.
+fn searched(
+    status: SearchStatus,
+    progress: GraphSearchProgress,
+    solution: Option<SearchSolution<Paths>>,
+) -> Found {
+    let found = match (status, solution) {
+        (_, Some(solution)) => Found::solved(&solution),
+        (SearchStatus::Exhausted, None) => Found::nothing(Outcome::Exhausted),
+        (SearchStatus::Interrupted, None) => Found::nothing(Outcome::Interrupted),
+        (SearchStatus::Running | SearchStatus::Solved, None) => Found::nothing(Outcome::Spent),
+    };
+    Found {
+        thinking: Some(progress),
+        ..found
     }
 }
 

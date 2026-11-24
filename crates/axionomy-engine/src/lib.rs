@@ -27,7 +27,7 @@ pub use package::{
 pub use refs::{Following, Frame};
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
-pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
+pub use strategy::{Asked, Chooser, Effort, Outcome, Ran, Strategy};
 pub use view::{View, ViewPath};
 
 use axionomy::{
@@ -664,6 +664,7 @@ impl Engine {
         self.changes.tell(&Change::Run(Segment {
             from: None,
             tip: point,
+            asked: None,
         }));
         self.reached.insert(
             point,
@@ -683,6 +684,17 @@ impl Engine {
     /// and the fork's points are the steps it takes. Applying no exchanges
     /// reaches `at` itself.
     pub fn apply(&self, at: Point, exchanges: &[paths::Exchange]) -> Result<Point, EngineError> {
+        self.fork(at, exchanges, None)
+    }
+
+    /// What [`apply`](Self::apply) does, the run it records saying what the
+    /// strategy that chose `exchanges` was asked, when one did.
+    fn fork(
+        &self,
+        at: Point,
+        exchanges: &[paths::Exchange],
+        asked: Option<&Asked>,
+    ) -> Result<Point, EngineError> {
         let source = self.reach(at)?;
         if exchanges.is_empty() {
             return Ok(at);
@@ -707,6 +719,8 @@ impl Engine {
         let receipts = steps.iter().map(|(receipt, _)| receipt.clone()).collect();
         let first = source.state.tree.clone();
         let last_tree = state.tree.clone();
+        let asked = asked.cloned();
+        let tagged = asked.clone();
         self.store
             .transact(Durability::Immediate, move |txn| {
                 txn.create_run::<Paths>(
@@ -723,12 +737,16 @@ impl Engine {
                     };
                     txn.put_step::<Paths>(point, &receipt, tree.as_ref())?;
                 }
+                if let Some(asked) = &tagged {
+                    asked.tag(txn, run)?;
+                }
                 txn.pin(last, Some(&last_tree))
             })
             .wait()?;
         self.changes.tell(&Change::Run(Segment {
             from: Some(at),
             tip: last,
+            asked,
         }));
         self.reached.insert(
             last,

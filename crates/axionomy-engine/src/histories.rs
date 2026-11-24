@@ -6,7 +6,7 @@
 //! [`Engine::subscribe`] tells it of every run recorded, ref moved and
 //! definition kept afterwards, so the tree it drew stays the store's.
 
-use crate::{Engine, EngineError};
+use crate::{Asked, Engine, EngineError};
 use axionomy_store::{Point, RefPath, RunId};
 use std::{
     collections::{BTreeSet, VecDeque},
@@ -16,10 +16,12 @@ use std::{
 /// The steps one run took: from the point it forked at, or from its own
 /// first state when `from` is none, up to `tip`, the run's last point. The
 /// run is `tip.run`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segment {
     pub from: Option<Point>,
     pub tip: Point,
+    /// What the kept strategy that made it was asked, when one did.
+    pub asked: Option<Asked>,
 }
 
 /// Something the store holds now that it did not before.
@@ -98,6 +100,7 @@ impl Engine {
             segments.push(Segment {
                 from,
                 tip: Point { run, step: last },
+                asked: Asked::tagged(&reader.tags(run)?),
             });
             queue.extend(
                 reader

@@ -14,7 +14,7 @@ engine's own and shapes its answer for the wire.
 | --- | --- | --- |
 | `packages` | `manifests`, `named_under`, `referred`, `shipped_by`, `experiment`, `objective` | `PackageList`: each package's manifest, its refs with their points (those it ships marked `shipped_by`, fixed), experiments, strategies, objectives, goals and candidate sets |
 | `load` | `package`, `load` | `LoadedView`: the packages a file held, the names the store kept, and the versions it replaced |
-| `histories` | `manifests`, `histories` | `HistoriesView`: a package's history tree, every history its refs are on and every branch grown from it, as segments `{from, tip}` |
+| `histories` | `manifests`, `histories` | `HistoriesView`: a package's history tree, every history its refs are on and every branch grown from it, as segments `{from, tip, asked}`, `asked` being what the strategy that made it was asked, when one did |
 | `ChangeView` | `subscribe` | each change the store is told of as it is made: a run recorded, a ref moved, definitions kept; what both transports deliver |
 | `draw` | `draw` | a point's history as a `ViewDocument`, drawn with its view |
 | `ancestor` | `ancestor` | the point at an earlier step of a history |

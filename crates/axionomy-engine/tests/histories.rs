@@ -3,9 +3,14 @@
 //! whoever subscribed.
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
-use axionomy_engine::{Change, Engine, Segment};
+use axionomy_engine::{
+    Asked, CandidateSet, Change, Effort, Engine, Segment, Strategy, StrategyPath,
+};
 use axionomy_store::{Point, Store};
-use std::sync::{Arc, Mutex};
+use std::{
+    ops::ControlFlow,
+    sync::{Arc, Mutex},
+};
 
 fn path<K>(text: &str) -> Path<K> {
     text.parse().unwrap()
@@ -53,22 +58,27 @@ fn the_tree_lists_every_branch_from_the_root_parents_first() {
                 Segment {
                     from: None,
                     tip: start,
+                    asked: None,
                 },
                 Segment {
                     from: Some(start),
                     tip: trunk,
+                    asked: None,
                 },
                 Segment {
                     from: Some(start),
                     tip: early,
+                    asked: None,
                 },
                 Segment {
                     from: Some(middle),
                     tip: branch,
+                    asked: None,
                 },
                 Segment {
                     from: Some(branch),
                     tip: twig,
+                    asked: None,
                 },
             ]
         );
@@ -91,14 +101,17 @@ fn separate_roots_make_separate_trees() {
             Segment {
                 from: None,
                 tip: start,
+                asked: None,
             },
             Segment {
                 from: None,
                 tip: second,
+                asked: None,
             },
             Segment {
                 from: Some(second),
                 tip: grown,
+                asked: None,
             },
         ]
     );
@@ -126,6 +139,7 @@ fn subscribers_are_told_of_every_run_ref_and_definition() {
             Change::Run(Segment {
                 from: Some(start),
                 tip: paid,
+                asked: None,
             }),
             Change::Ref {
                 name: path("mine"),
@@ -134,6 +148,7 @@ fn subscribers_are_told_of_every_run_ref_and_definition() {
             Change::Run(Segment {
                 from: Some(paid),
                 tip: more,
+                asked: None,
             }),
             Change::Ref {
                 name: path("mine"),
@@ -146,4 +161,66 @@ fn subscribers_are_told_of_every_run_ref_and_definition() {
             Change::Definitions,
         ]
     );
+}
+
+#[test]
+fn a_run_a_kept_strategy_made_says_what_it_was_asked() {
+    let (engine, start) = bank();
+    engine
+        .keep_candidates(
+            &path("payments"),
+            &CandidateSet::Listed(vec![pay(1), pay(5)]),
+        )
+        .unwrap();
+    engine
+        .keep_goal(
+            &path("rich"),
+            &paths::Goal::new().require(path("alice"), basket([(path("cash"), 6)])),
+        )
+        .unwrap();
+    let strategy = Strategy::BreadthFirst {
+        candidates: path("payments"),
+    };
+    let kept: StrategyPath = path("fewest");
+    engine.keep_strategy(&kept, &strategy).unwrap();
+    let asked = Asked {
+        strategy: kept,
+        goal: path("rich"),
+        effort: Effort {
+            seed: u64::MAX,
+            budget: 100,
+            turns: 0,
+        },
+    };
+    let told = Arc::new(Mutex::new(Vec::new()));
+    let heard = told.clone();
+    engine.subscribe(Arc::new(move |change: &Change| {
+        heard.lock().unwrap().push(change.clone());
+    }));
+    let ran = engine
+        .ask(start, &asked, &mut |_| ControlFlow::Continue(()))
+        .unwrap();
+    let made = Segment {
+        from: Some(start),
+        tip: ran.end,
+        asked: Some(asked.clone()),
+    };
+    // As it is recorded, and read back from the store.
+    assert_eq!(*told.lock().unwrap(), [Change::Run(made.clone())]);
+    assert_eq!(engine.histories(&[start]).unwrap()[1], made);
+
+    // A strategy kept nowhere, and an exchange applied, say nothing of one.
+    let unkept = engine
+        .run_strategy(start, &strategy, &asked.goal, asked.effort, &mut |_| {
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    let applied = engine.apply(start, &[pay(1)]).unwrap();
+    for tip in [unkept.end, applied] {
+        assert!(engine.histories(&[start]).unwrap().contains(&Segment {
+            from: Some(start),
+            tip,
+            asked: None,
+        }));
+    }
 }

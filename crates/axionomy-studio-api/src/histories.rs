@@ -2,7 +2,7 @@
 //! branch growing from it, and the changes that grow it, which both engines
 //! deliver as they happen.
 
-use crate::{PointId, Refusal, packages::refs_of};
+use crate::{PointId, Refusal, StrategyRequest, packages::refs_of};
 use axionomy_engine::{Change, Engine, PackagePath, Segment};
 use axionomy_store::RefPath;
 use schemars::JsonSchema;
@@ -11,11 +11,15 @@ use serde::{Deserialize, Serialize};
 /// One run of the history tree: the steps from `from`, the point it
 /// branched at, or from the history's first state when `from` is none, up
 /// to `tip`, its last point.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SegmentView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<PointId>,
     pub tip: PointId,
+    /// What the strategy that made it was asked, when one the store keeps
+    /// did: asked again from `from`, it plays the same steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asked: Option<StrategyRequest>,
 }
 
 impl From<Segment> for SegmentView {
@@ -23,6 +27,7 @@ impl From<Segment> for SegmentView {
         Self {
             from: segment.from.map(PointId::from),
             tip: segment.tip.into(),
+            asked: segment.asked.map(StrategyRequest::from),
         }
     }
 }
@@ -57,7 +62,7 @@ impl From<&Change> for ChangeView {
     fn from(change: &Change) -> Self {
         match change {
             Change::Run(segment) => Self::Run {
-                segment: (*segment).into(),
+                segment: segment.clone().into(),
             },
             Change::Ref { name, point } => Self::Ref {
                 name: name.clone(),
