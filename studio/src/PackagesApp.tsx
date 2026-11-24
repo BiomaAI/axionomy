@@ -236,8 +236,8 @@ export function PackagesApp() {
   const experimentsStopped = useRef(new Set<string>());
   /** The account last picked in the picture. */
   const [focusedAccount, setFocusedAccount] = useState<string>();
-  /** The history the one on screen is set against: picked (a point), closed (null), or the one it left (undefined). */
-  const [compareWith, setCompareWith] = useState<PointId | null>();
+  /** The point picked to set the history on screen against, instead of the one it left. */
+  const [compareWith, setCompareWith] = useState<PointId>();
   const worldPanel = useRef<HTMLDivElement>(null);
   /** The inspectors pinned open, latest last. */
   const [pinned, setPinned] = useState<Subject[]>([]);
@@ -664,9 +664,9 @@ export function PackagesApp() {
   const unloaded = (samples.data ?? []).filter((sample) => !loaded.has(sample.name));
   const onScreen = selection ? tree.branches.find((branch) => branch.id === selection.id) : undefined;
   const historyName = opened?.ref ?? onScreen?.title ?? "this history";
-  // A branch is set against the history it left, unless another is picked, or the comparison is closed.
+  // A branch is set against the history it left, unless another is picked.
   const left = onScreen?.parent ? tree.branches.find((branch) => branch.id === onScreen.parent?.id) : undefined;
-  const against = compareWith === null ? undefined : compareWith ?? (left ? `${left.id}:${left.last}` : undefined);
+  const against = compareWith ?? (left ? `${left.id}:${left.last}` : undefined);
   const againstBranch = against ? tree.branches.find((branch) => branch.id === parsePoint(against).run) : undefined;
   const activities: Activity[] = [
     ...(busy ? [{ key: "loading", words: busy }] : []),
@@ -803,13 +803,13 @@ export function PackagesApp() {
       {drawerTab && <ResizeHandle edge="top" label="Resize the drawer" size={drawerHeight} min={140} max={Math.round(window.innerHeight * 0.8)} onResize={setDrawerHeight} />}
       <div className="drawer-bar">
         <TabStrip id="drawer" label="Drawer" tabs={drawerTabs} open={drawerTab} onOpen={toggleDrawer} />
-        {drawerTab && <button type="button" className="drawer-close" aria-label="Close the drawer" onClick={() => setDrawerTab(undefined)}><IconX size={14} stroke={2} aria-hidden="true" /></button>}
+        {drawerTab && <button type="button" className="drawer-close" aria-label="Close the drawer" onClick={() => setDrawerTab(undefined)}>Close <IconX size={14} stroke={2} aria-hidden="true" /></button>}
       </div>
       {drawerTab && <div className="drawer-body">
         <TabPanels id="drawer" open={drawerTab} panels={{
           results: () => <ResultsHere results={orderedResults} onWatch={watch} />,
           compare: () => comparing && opened && against ? <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
-            leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => { setCompareWith(null); setDrawerTab(undefined); }} />
+            leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} />
             : <p className="empty-state">No history to compare with</p>,
           rules: () => model && document ? <section className="rules-panel" aria-label="Rules">
             <div className="drawer-heading"><h2>{document.title}</h2><small>{counted(model.rates.length, "rate")}</small></div>

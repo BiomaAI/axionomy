@@ -567,23 +567,31 @@ test("playing a history moves no frame and clears nothing typed", async ({ page 
   await expect(seed).toHaveValue("5");
 });
 
-test("the market's charts stay in its picture, however short the drawer leaves it", async ({ page }) => {
+test("the market's charts stay where they are in its picture, however short the drawer leaves it", async ({ page }) => {
   for (const viewport of [{ width: 1820, height: 1050 }, { width: 1500, height: 865 }]) {
     await page.setViewportSize(viewport);
     await page.goto("/?package=packages/amm.zip&ref=amm/micro&strategy=amm/day/market-day&step=10");
     await expect(trace(page)).toHaveValue("10", { timeout: 30_000 });
     const charts = page.locator(".reserves-chart");
     await expect(charts).toHaveCount(2);
+    const columns: { x: number; width: number }[][] = [];
     for (const open of [false, true]) {
-      if (open) await drawer(page, "Console");
+      if (open) await drawer(page, "Compare");
       const picture = (await page.locator(".world-panel").boundingBox())!;
-      for (const chart of await charts.all()) {
-        const box = (await chart.boundingBox())!;
+      const boxes = await Promise.all((await charts.all()).map(async (chart) => (await chart.boundingBox())!));
+      for (const box of boxes) {
         expect(box.height).toBeGreaterThan(80);
         expect(box.y + box.height).toBeLessThanOrEqual(picture.y + picture.height);
         expect(box.x + box.width).toBeLessThanOrEqual(picture.x + picture.width);
       }
+      columns.push(boxes.map(({ x, width }) => ({ x, width })));
     }
+    expect(columns[1]).toEqual(columns[0]);
+    // Closed, the comparison opens again from its tab.
+    await page.getByRole("button", { name: "Close the drawer" }).click();
+    await expect(page.getByRole("region", { name: "Comparison" })).toBeHidden();
+    await drawer(page, "Compare");
+    await expect(page.getByRole("region", { name: "Comparison" })).toBeVisible();
   }
 });
 

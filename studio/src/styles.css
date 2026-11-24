@@ -173,9 +173,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* Reserves surface --------------------------------------------------------
    The pool remains the dominant object. Participants surround it, while the
    plots retain the ratio's exact replay path and, when the pool keeps one,
-   its current constant-product state. Where the picture is too short for the
-   plots below the pool they go beside it, and one shorter still scrolls: no
-   part of it is ever out of reach. */
+   its current constant-product state. The plots stand beside the pool at
+   every height, so nothing moves them, and below it only where the picture
+   is narrow; one too short for its pool scrolls it. */
 .reserves-scene { flex: 1; min-height: 0; display: grid; grid-template: minmax(290px, 1fr) 146px / minmax(0, 1fr); position: relative; overflow: hidden auto; background: radial-gradient(circle at 50% 39%, color-mix(in srgb, var(--brass) 8%, var(--surface-3)) 0, var(--bg) 72%); }
 .reserves-world { container: world / size; min-height: 0; margin-top: var(--scene-top, 0px); position: relative; overflow: hidden; }
 .reserves-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -208,16 +208,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .reserves-chart { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .reserves-chart > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .reserves-chart + .reserves-chart { border-left: 1px solid var(--line); }
-@container scene (height < 436px) and (width >= 800px) {
-  .reserves-scene { grid-template: minmax(250px, 1fr) / minmax(0, 1fr) clamp(320px, 36%, 420px); }
-  .scene-chrome:has(+ .reserves-scene) { right: clamp(320px, 36%, 420px); }
+@container scene (width >= 800px) {
+  .reserves-scene { grid-template: minmax(250px, 1fr) / minmax(0, 1fr) clamp(320px, 34%, 460px); }
+  .scene-chrome:has(+ .reserves-scene) { right: clamp(320px, 34%, 460px); }
   .reserves-analysis, .reserves-scene.no-curve .reserves-analysis { grid-template: minmax(0, 1fr) / minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr); border-top: 0; border-left: 1px solid var(--line); }
   /* Both plots stay in view while the pool scrolls. */
   .reserves-analysis { position: sticky; top: 0; height: 100cqh; }
   .reserves-chart + .reserves-chart { border-left: 0; border-top: 1px solid var(--line); }
 }
-@container world (height < 260px) {
-  .reserves-pool { min-height: 0; padding-block: 14px; }
+@container world (height < 270px) {
+  .reserves-pool { min-height: 0; padding-block: 12px; }
+  .reserves-bars { height: 42px; margin-top: 6px; }
+}
+@container world (height < 210px) {
   .reserves-bars { display: none; }
 }
 .reserves-analysis text { fill: var(--muted); font: 10px var(--mono); }
@@ -738,7 +741,7 @@ button.id-link.exchange-rate { font-size: 12px; font-weight: 600; }
 .drawer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 6px; }
 .drawer.open { max-height: 80dvh; }
 .drawer.open .drawer-bar { border-bottom: 1px solid var(--line); }
-.drawer-close { width: 26px; min-height: 26px; padding: 0; display: grid; place-items: center; }
+.drawer-close { min-height: 26px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
 .drawer-body { flex: 1; min-height: 0; overflow: auto; }
 .drawer-body .tab-panel { padding: 12px 15px 15px; }
 .drawer-body .empty-state { padding: 24px; }

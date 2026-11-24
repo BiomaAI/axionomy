@@ -43,7 +43,7 @@ function StepDone({ document, step, rate }: { document: ViewDocument | undefined
  * again, and how each ends on the package's objectives. A branch set against
  * the history it left is a counterfactual.
  */
-export function Compare({ engine, left, right, leftName, rightName, leftDocument, objectives, onStep, onClose }: {
+export function Compare({ engine, left, right, leftName, rightName, leftDocument, objectives, onStep }: {
   engine: PackageEngine;
   left: PointId;
   right: PointId;
@@ -52,7 +52,6 @@ export function Compare({ engine, left, right, leftName, rightName, leftDocument
   leftDocument?: ViewDocument;
   objectives: string[];
   onStep: (step: number) => void;
-  onClose: () => void;
 }) {
   const asked = objectives.join(",");
   const compared = useQuery({
@@ -65,8 +64,7 @@ export function Compare({ engine, left, right, leftName, rightName, leftDocument
   const view: DivergenceView | undefined = compared.data;
   const split = view ? Number(view.shared.split(":")[1]) : undefined;
   return <section className="panel compare-panel" aria-label="Comparison">
-    <PanelHeading kicker="Compare" title={<>{leftName} <span className="versus">vs</span> {rightName}</>}
-      action={<button type="button" onClick={onClose}>Close</button>} />
+    <PanelHeading kicker="Compare" title={<>{leftName} <span className="versus">vs</span> {rightName}</>} />
     {compared.isError ? <div className="assessment-issue">{(compared.error as Error).message}</div>
       : !view ? <p className="compare-note muted">Comparing…</p>
       : <div className="compare-body">

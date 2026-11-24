@@ -117,7 +117,7 @@ stays in reach.
     tree.
 - **The drawer**, along the bottom, holds what is too wide for the rail. Its
   tabs always show; it opens on one, as tall as its top edge is dragged to
-  whatever it holds, and × closes it.
+  whatever it holds, and **Close** closes it.
   - **Results**: every experiment run, the latest first, a table of arms and
     trials with how each ended, in how many steps, and its objective values,
     with **Watch** to open and play a trial.
