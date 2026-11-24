@@ -539,6 +539,34 @@ test("Rhai at a point reads a balance and applies the assessed move", async ({ p
   await expect(trace(page)).toHaveAttribute("max", "1");
 });
 
+test("playing a history moves no frame and clears nothing typed", async ({ page }) => {
+  await page.goto("/?package=packages/amm.zip&ref=amm/micro&strategy=amm/day/market-day&step=3");
+  await expect(trace(page)).toHaveValue("3", { timeout: 30_000 });
+  const seed = (await rail(page, "Strategy")).getByRole("textbox", { name: "Seed" });
+  await seed.fill("5");
+  await drawer(page, "Console");
+  const console = page.getByRole("region", { name: "Rhai console" });
+  const query = console.getByRole("button", { name: "Run query" });
+  await console.getByLabel("Program").fill('state.accounts("pool")');
+  await query.click();
+  await expect(console.locator("pre")).toBeVisible();
+  const frames = () => page.evaluate(() => [".drawer", ".picture-area", ".action-panel"].map((frame) => {
+    const { top, height } = document.querySelector(frame)!.getBoundingClientRect();
+    return { frame, top, height };
+  }));
+  const paused = await frames();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(query).toBeDisabled();
+  // What the query gave is of the step it was run at.
+  await expect(console.locator("pre")).toHaveCount(0);
+  expect(await frames()).toEqual(paused);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(query).toBeEnabled();
+  expect(await frames()).toEqual(paused);
+  await expect(console.getByLabel("Program")).toHaveText('state.accounts("pool")');
+  await expect(seed).toHaveValue("5");
+});
+
 test("the market's charts stay in its picture, however short the drawer leaves it", async ({ page }) => {
   for (const viewport of [{ width: 1820, height: 1050 }, { width: 1500, height: 865 }]) {
     await page.setViewportSize(viewport);

@@ -247,7 +247,7 @@ export function PackagesApp() {
   /** The rail's tab open, and the drawer's, if it is open. */
   const [railTab, setRailTab] = useState<RailKey>("step");
   const [drawerTab, setDrawerTab] = useState<DrawerKey>();
-  const [drawerHeight, setDrawerHeight] = useState(() => Math.round(window.innerHeight * 0.4));
+  const [drawerHeight, setDrawerHeight] = useState(() => Math.round(window.innerHeight / 3));
   const [treeHeight, setTreeHeight] = useState(132);
   /** The experiments run in this tab, the latest last: the drawer lists their results the latest first. */
   const [runOrder, setRunOrder] = useState<string[]>([]);
@@ -722,7 +722,8 @@ export function PackagesApp() {
     { key: "ref", label: "Ref" },
   ];
   const at = playing ? undefined : screenPoint;
-  const waiting = <p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p>;
+  // Said on what acts at a point while there is none on screen to act at.
+  const waiting = playing ? "Playing…" : `Finding step ${position}…`;
 
   return <InspectionProvider value={{ inspect, pin }}>
   <QuantityFormats.Provider value={document?.formats ?? {}}>
@@ -784,21 +785,21 @@ export function PackagesApp() {
           <div className="rail-body">
             <TabPanels id="rail" open={railTab} panels={{
               step: () => <StepHere position={position} steps={steps} frame={frame} accounts={snapshot.accounts} before={position > 0 ? previous?.accounts : undefined} focus={focusedAccount} />,
-              moves: () => !at ? waiting : <>
-                <Moves engine={engine} pkg={pkg} at={at} onApply={act} />
+              moves: () => <>
+                <Moves engine={engine} pkg={pkg} at={at} waiting={waiting} onApply={act} />
                 <ExchangeEditor rates={document.model?.rates ?? []} accounts={snapshot.accounts.map((account) => account.account)} ontology={document.source.key} point={at}
-                  onCheck={(program) => engine.assess(at, program)} onApply={act} />
+                  onCheck={(program, point) => engine.assess(point, program)} onApply={act} />
               </>,
-              strategy: () => !at ? waiting : <StrategyHere key={`${pkg?.name}:${screenRoot}:${document.source.key}`} offered={runs} finding={Boolean(finding)} onLetPlay={letPlay} />,
+              strategy: () => <StrategyHere key={`${pkg?.name}:${screenRoot}:${document.source.key}`} offered={runs} at={at} waiting={waiting} finding={Boolean(finding)} onLetPlay={letPlay} />,
               experiments: () => <ExperimentsHere pkg={pkg} inTree={inTree} results={results} experimenting={experimenting}
                 onPlay={(experiment) => void playExperiment(experiment)} onStop={stopExperiment} onResults={() => setDrawerTab("results")} />,
-              ref: () => !at ? waiting : <RefHere pkg={pkg} document={document} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives} />,
+              ref: () => <RefHere pkg={pkg} document={document} at={at} waiting={waiting} opened={opened} onRefPoint={onRefPoint} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives} />,
             }} />
           </div>
         </div>}
       </main>}
 
-    {engine && listing.data && listing.data.packages.length > 0 && <section className={`drawer${drawerTab ? " open" : ""}`} aria-label="Drawer" style={drawerTab ? { maxHeight: drawerHeight } : undefined}>
+    {engine && listing.data && listing.data.packages.length > 0 && <section className={`drawer${drawerTab ? " open" : ""}`} aria-label="Drawer" style={drawerTab ? { height: drawerHeight } : undefined}>
       {drawerTab && <ResizeHandle edge="top" label="Resize the drawer" size={drawerHeight} min={140} max={Math.round(window.innerHeight * 0.8)} onResize={setDrawerHeight} />}
       <div className="drawer-bar">
         <TabStrip id="drawer" label="Drawer" tabs={drawerTabs} open={drawerTab} onOpen={toggleDrawer} />
@@ -822,7 +823,7 @@ export function PackagesApp() {
             </div>
           </section> : <p className="empty-state">No rules</p>,
           source: () => pkg ? <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} /> : <p className="empty-state">No package</p>,
-          console: () => at ? <RhaiConsole key={at} engine={engine} at={at} onApply={act} /> : waiting,
+          console: () => <RhaiConsole engine={engine} at={at} onApply={act} />,
         }} />
       </div>}
     </section>}
@@ -1026,14 +1027,15 @@ function outcomeWords(outcome: RanView["outcome"]): string {
 
 /** The moves the package's rules offer here, each checked, each one click from applied:
  * those of the candidate set picked, or of the first that offers any here. */
-function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: PackageView; at: PointId; onApply: (program: string, label: string) => Promise<void> }) {
+function Moves({ engine, pkg, at, waiting, onApply }: { engine: PackageEngine; pkg?: PackageView; at?: PointId; waiting: string; onApply: (program: string, label: string) => Promise<void> }) {
   const sets = useMemo(() => pkg?.candidates ?? [], [pkg]);
   const [picked, setPicked] = useState<string>();
   useEffect(() => setPicked(undefined), [pkg?.name]);
   const offers = useQueries({
     queries: sets.map((set) => ({
       queryKey: ["candidates", engine.kind, at, set],
-      queryFn: () => engine.candidates(at, set),
+      queryFn: () => engine.candidates(at!, set),
+      enabled: at !== undefined,
       staleTime: Infinity,
     })),
   });
@@ -1048,7 +1050,8 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
     <h3><Term name="move">Moves</Term></h3>
     {sets.length === 0 ? <p className="muted">No candidate sets</p> : <>
     <label className="field"><span>Candidates</span><select name="candidates" value={set ?? sets[0]} onChange={(event) => setPicked(event.target.value)}>{sets.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
-    {offered?.isError ? <div className="assessment-issue">{described(offered.error)}</div>
+    {!at ? <p className="from-what">{waiting}</p>
+      : offered?.isError ? <div className="assessment-issue">{described(offered.error)}</div>
       : !offered?.data ? <p className="muted">Loading…</p>
       : candidates.length === 0 ? <p className="muted">No moves</p>
       : <ul className="move-list">{candidates.map((candidate, index) => {
@@ -1069,7 +1072,7 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
 }
 
 /** A strategy run from here: the branch it makes opens and plays. */
-function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; finding: boolean; onLetPlay: (strategy: string, asked: Asked) => Promise<void> }) {
+function StrategyHere({ offered, at, waiting, finding, onLetPlay }: { offered: Playable; at?: PointId; waiting: string; finding: boolean; onLetPlay: (strategy: string, asked: Asked) => Promise<void> }) {
   const first = offered.strategies[0];
   const [strategy, setStrategy] = useState(first?.strategy);
   const [asked, setAsked] = useState<Asked | undefined>(first?.asked);
@@ -1078,7 +1081,7 @@ function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; find
     {!strategy || !asked ? <p className="muted">No strategy runs on this history</p> : <>
       <div className="let-play">
         <select name="strategy" aria-label="Strategy" value={strategy} disabled={finding} onChange={(event) => { setStrategy(event.target.value); setAsked(offered.strategies.find((candidate) => candidate.strategy === event.target.value)?.asked); }}>{offered.strategies.map((candidate) => <option key={candidate.strategy} value={candidate.strategy}>{candidate.strategy}</option>)}</select>
-        <button type="button" className={finding ? "danger" : "primary"} disabled={!finding && (!asked.goal || !valid)} onClick={() => void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Run"}</button>
+        <button type="button" className={finding ? "danger" : "primary"} disabled={!finding && (!at || !asked.goal || !valid)} title={finding || at ? undefined : waiting} onClick={() => void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Run"}</button>
       </div>
       <div className="settings-fields">
         <label className="field"><span><Term name="goal">Goal</Term></span><select name="goal" value={asked.goal} disabled={finding} onChange={(event) => setAsked({ ...asked, goal: event.target.value })}>{offered.goals.map((goal) => <option key={goal} value={goal}>{goal}</option>)}</select></label>
@@ -1092,7 +1095,7 @@ function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; find
 }
 
 /** The refs naming the point on screen, a new one, or following and deleting the ref of one's own on it. */
-function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; document: ViewDocument; at: PointId; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
+function RefHere({ pkg, document, at, waiting, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; document: ViewDocument; at?: PointId; waiting: string; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
   // The first of `<package>/mine`, `<package>/mine-2`, … that no ref of the package has.
   const suggested = useMemo(() => {
     const taken = new Set(pkg?.refs.map((ref) => ref.name));
@@ -1103,7 +1106,7 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
   }, [pkg]);
   const [name, setName] = useState(suggested);
   useEffect(() => setName(suggested), [suggested, opened.point]);
-  const here = pkg?.refs.filter((ref) => ref.point === at) ?? [];
+  const here = at ? pkg?.refs.filter((ref) => ref.point === at) ?? [] : [];
   const named = here.length > 0 && <ul className="refs-here">{here.map((ref) => <li key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} />{ref.shipped_by ? <> <Term name="fixed">fixed</Term></> : ""}</li>)}</ul>;
   if (onRefPoint && opened.ref) {
     const { following, setFollowing, delivered, problem } = follow;
@@ -1128,9 +1131,9 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
   }
   return <section className="from-section" aria-label="Ref">
     {named}
-    <form className="let-play" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onKeep(name.trim()); }}>
+    <form className="let-play" onSubmit={(event) => { event.preventDefault(); if (at && name.trim()) onKeep(name.trim()); }}>
       <input name="ref-name" aria-label="Ref name" value={name} onChange={(event) => setName(event.target.value)} />
-      <button type="submit" disabled={!name.trim()}>Create</button>
+      <button type="submit" disabled={!at || !name.trim()} title={at ? undefined : waiting}>Create</button>
     </form>
   </section>;
 }

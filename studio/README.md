@@ -116,8 +116,8 @@ stays in reach.
     other proposer, and **Delete it** deletes it, its history staying in the
     tree.
 - **The drawer**, along the bottom, holds what is too wide for the rail. Its
-  tabs always show; it opens on one, sized to what it holds up to the
-  height its top edge is dragged to, and × closes it.
+  tabs always show; it opens on one, as tall as its top edge is dragged to
+  whatever it holds, and × closes it.
   - **Results**: every experiment run, the latest first, a table of arms and
     trials with how each ended, in how many steps, and its objective values,
     with **Watch** to open and play a trial.

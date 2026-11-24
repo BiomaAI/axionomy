@@ -736,6 +736,7 @@ button.id-link.exchange-rate { font-size: 12px; font-weight: 600; }
    always show; it opens on one, to the height it is dragged to. */
 .drawer { position: relative; min-height: 0; display: flex; flex-direction: column; margin-bottom: 10px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 94%, transparent); }
 .drawer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 6px; }
+.drawer.open { max-height: 80dvh; }
 .drawer.open .drawer-bar { border-bottom: 1px solid var(--line); }
 .drawer-close { width: 26px; min-height: 26px; padding: 0; display: grid; place-items: center; }
 .drawer-body { flex: 1; min-height: 0; overflow: auto; }

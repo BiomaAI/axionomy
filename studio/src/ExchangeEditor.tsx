@@ -157,9 +157,9 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
   accounts: ViewId[];
   /** The ontology the model's keys are under. */
   ontology: string;
-  /** Where the exchange is checked: a check made elsewhere does not hold here. */
-  point: string;
-  onCheck: (program: string) => Promise<Candidate>;
+  /** Where the exchange is checked, once there is a point on screen: a check made elsewhere does not hold here. */
+  point?: string;
+  onCheck: (program: string, point: string) => Promise<Candidate>;
   onApply: (program: string, label: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("");
@@ -179,15 +179,15 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
   if (!rate) return <section className="from-section exchange-editor" aria-label="Exchange"><h3><Term name="exchange">Exchange</Term></h3><p className="muted">No rates</p></section>;
   const written = writeExchange(rate, draft, ontology);
   const exchange = "exchange" in written ? written.exchange : undefined;
-  const key = exchange ? `${point} ${JSON.stringify(exchange)}` : undefined;
+  const key = exchange && point ? `${point} ${JSON.stringify(exchange)}` : undefined;
   const current = assessed && assessed.written === key ? assessed.candidate : undefined;
   const ready = current?.proposal.assessment.status === "applicable";
   const change = (next: Partial<Draft>) => { setDraft((was) => ({ ...was, ...next })); setProblem(undefined); };
   const variables = rate.variables ?? [];
   const check = async () => {
-    if (!exchange || !key) return;
+    if (!exchange || !key || !point) return;
     setProblem(undefined);
-    try { setAssessed({ written: key, candidate: await onCheck(exchangeSource(exchange)) }); } catch (cause) { setProblem(cause instanceof Error ? cause.message : String(cause)); }
+    try { setAssessed({ written: key, candidate: await onCheck(exchangeSource(exchange), point) }); } catch (cause) { setProblem(cause instanceof Error ? cause.message : String(cause)); }
   };
   return <section className="from-section exchange-editor" aria-label="Exchange">
     <h3><Term name="exchange">Exchange</Term></h3>
@@ -224,7 +224,7 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
       {(rate.parameters ?? []).map((name) => <label className="field" key={name}><span>{name}</span><input name={`parameter-${name}`} inputMode="numeric" value={draft.parameters[name] ?? ""} onChange={(event) => change({ parameters: { ...draft.parameters, [name]: event.target.value } })} /></label>)}
     </div>
     <div className="let-play">
-      <button type="button" onClick={() => void check()} disabled={!exchange}>Check</button>
+      <button type="button" onClick={() => void check()} disabled={!key}>Check</button>
       <button type="button" className="primary" disabled={!ready || applying} onClick={async () => {
         if (!current) return;
         setApplying(true);
