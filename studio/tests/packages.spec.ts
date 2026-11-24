@@ -539,6 +539,26 @@ test("Rhai at a point reads a balance and applies the assessed move", async ({ p
   await expect(trace(page)).toHaveAttribute("max", "1");
 });
 
+test("the market's charts stay in its picture, however short the drawer leaves it", async ({ page }) => {
+  for (const viewport of [{ width: 1820, height: 1050 }, { width: 1500, height: 865 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/?package=packages/amm.zip&ref=amm/micro&strategy=amm/day/market-day&step=10");
+    await expect(trace(page)).toHaveValue("10", { timeout: 30_000 });
+    const charts = page.locator(".reserves-chart");
+    await expect(charts).toHaveCount(2);
+    for (const open of [false, true]) {
+      if (open) await drawer(page, "Console");
+      const picture = (await page.locator(".world-panel").boundingBox())!;
+      for (const chart of await charts.all()) {
+        const box = (await chart.boundingBox())!;
+        expect(box.height).toBeGreaterThan(80);
+        expect(box.y + box.height).toBeLessThanOrEqual(picture.y + picture.height);
+        expect(box.x + box.width).toBeLessThanOrEqual(picture.x + picture.width);
+      }
+    }
+  }
+});
+
 test("Sokoban opens with formatted exchange bindings and syntax colors", async ({ page }) => {
   await openSample(page, "sokoban");
   await page.getByRole("button", { name: "Source", exact: true }).click();
