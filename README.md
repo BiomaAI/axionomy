@@ -461,11 +461,11 @@ strategy live and stops at a step of it.
 ## Studio
 
 Axionomy Studio is a trace player and economic debugger. It is not a second
-simulator. It opens packages, and it scrubs a history by replaying the
+simulator. It opens packages, and it scrubs a timeline by replaying the
 exchanges the kernel accepted.
 
 - The **activity line** says what is running and what the last action came to.
-- The **history tree** shows every history and every branch, live, as it is
+- The **timeline tree** shows every timeline and every branch, live, as it is
   recorded.
 - **From here** lists what can be done at the step on screen:
   - **Moves**: the moves offered there, each checked;
@@ -479,7 +479,7 @@ exchanges the kernel accepted.
 
 Every identifier is one link. Hovering over it previews its card, and
 clicking it pins an inspector that follows the cursor. Each sample's view
-draws its history as a graph, grid, matrix, timeline or reserves picture. The
+draws its steps as a graph, grid, matrix, timeline or reserves picture. The
 view only draws what the economy holds: no picture can make an exchange valid.
 
 ```console
