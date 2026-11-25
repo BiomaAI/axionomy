@@ -1,5 +1,5 @@
-import type { TreeBranch, TreeLabel } from "./HistoryTree";
-import type { PackageView, PointId, ResultsView, SegmentView } from "./packageEngine";
+import type { TreeBranch, TreeLabel } from "./TimelineTree";
+import type { PackageView, PointId, ResultsView, SegmentView, StrategyRequest } from "./packageEngine";
 
 /** A point's run and step: `run-…:3` is run `run-…`, step 3. */
 export function parsePoint(point: PointId): { run: string; step: number } {
@@ -32,17 +32,20 @@ export type BranchInfo = {
   refs: { name: string; step: number; fixed: boolean }[];
   /** The experiment trial that made it, when one did. */
   trial?: TrialOf;
-  /** What made it in this tab, when Studio knows: a short label, and in words. */
+  /** What the strategy that made it was asked, when one did. */
+  asked?: StrategyRequest;
+  /** The move that made it in this tab, when one did: a short label, and in words. */
   note?: Note;
 };
 
-/** What made a branch in this tab: a label for the tree, and the words of a hover. */
+/** The move that made a branch in this tab: a label for the tree, and the words of a hover. */
 export type Note = { label: string; words: string };
 
 /**
- * The history tree of a package as {@link TreeBranch}es: one per segment,
+ * The timeline tree of a package as {@link TreeBranch}es: one per segment,
  * joined at the step it branched at, labelled with the refs naming points
- * of it and, at its tip, the experiment trial that made it.
+ * of it and, at its tip, the experiment trial, the strategy or the move
+ * that made it.
  */
 export function branchesOf(
   segments: SegmentView[],
@@ -72,14 +75,17 @@ export function branchesOf(
       });
     }
   }
+  for (const { tip, asked } of segments) if (asked) infoOf(parsePoint(tip).run).asked = asked;
   for (const [run, note] of notes) infoOf(run).note = note;
   const branches = segments.map((segment): TreeBranch => {
     const tip = parsePoint(segment.tip);
     const from = segment.from ? parsePoint(segment.from) : undefined;
     const known = info.get(tip.run);
     const labels: TreeLabel[] = (known?.refs ?? []).map((ref) => ({ step: ref.step, text: inPackage(ref.name), name: ref.name, tone: ref.fixed ? "fixed" : "named", onClick: () => openRef(ref.name) }));
-    const trial = known?.trial;
+    const { trial, asked } = known ?? {};
+    const strategy = asked && lastPart(asked.strategy);
     if (trial) labels.push({ step: tip.step, text: `${lastPart(trial.strategy)}${trial.index > 0 ? ` · trial ${trial.index + 1}` : ""}`, tone: "trial" });
+    else if (strategy) labels.push({ step: tip.step, text: shortened(strategy), tone: "trial" });
     else if (known?.note) labels.push({ step: tip.step, text: shortened(known.note.label), tone: "trial" });
     const named = known?.refs.find((ref) => ref.step === tip.step);
     return {
@@ -87,10 +93,10 @@ export function branchesOf(
       parent: from ? { id: from.run, step: from.step } : undefined,
       first: from?.step ?? 0,
       last: tip.step,
-      title: named?.name ?? (trial ? `${lastPart(trial.strategy)}, trial ${trial.index + 1} of ${trial.experiment}` : known?.note?.words ?? (from ? "A branch" : "A history")),
+      title: named?.name ?? (trial ? `${lastPart(trial.strategy)}, trial ${trial.index + 1} of ${trial.experiment}` : strategy && from ? `${strategy}, from step ${from.step}` : known?.note?.words ?? (from ? "A branch" : "A timeline")),
       tone: named ? "named" : trial ? "trial" : "branch",
       labels,
-      // A first history is drawn with those whose refs start alike: `micro` with `micro/deadlock`.
+      // A first timeline is drawn with those whose refs start alike: `micro` with `micro/deadlock`.
       group: from ? undefined : known?.refs[0] && inPackage(known.refs[0].name).split("/")[0],
     };
   });

@@ -16,7 +16,7 @@ export type StoreWords = { words: string; why?: string };
 /**
  * What is running now, one entry each, in the bar at the top of the page: a
  * strategy or an experiment playing, a package loading, a ref followed, a
- * history played back. Then what the last thing done came to, until the next
+ * timeline played back. Then what the last thing done came to, until the next
  * one, and where the store is kept, with why it is not on its hover.
  */
 export function ActivityStrip({ activities, said, store, onReplaceStore }: { activities: Activity[]; said: Said[]; store: StoreWords; onReplaceStore?: () => void }) {

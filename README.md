@@ -371,7 +371,7 @@ would deepen each one.
 ### Questions the samples answer
 
 **What changes when an agent learns something?** In the
-[Mission](https://biomaai.github.io/axionomy/?package=packages/mission.zip&ref=mission/micro&view=experiments),
+[Mission](https://biomaai.github.io/axionomy/?package=packages/mission.zip&ref=mission/micro),
 run `mission/micro`, then open the coordinated trial and follow the scan, the
 sighting, the sharing and the decisions after it. ISMCTS chooses each public
 action of the coordinated run from the Scout's own view. Compare it with the
@@ -380,13 +380,13 @@ which shows that valid actions can still lead to failure.
 `mission/micro/monte-carlo` samples both fixed policies over Nature's prior.
 
 **How much does one participant change the outcome?** The
-[Living Market](https://biomaai.github.io/axionomy/?package=packages/amm.zip&ref=amm/micro&view=experiments)
+[Living Market](https://biomaai.github.io/axionomy/?package=packages/amm.zip&ref=amm/micro)
 compares its market day with the same economy without the whale, and with
 thin liquidity. Read the initial and final price and reserves side by side.
 Its view ranks each actor's direct contribution to the price.
 
 **What does borrowing early cost?** The
-[Lending market](https://biomaai.github.io/axionomy/?package=packages/lending.zip&ref=lending/micro&view=experiments)
+[Lending market](https://biomaai.github.io/axionomy/?package=packages/lending.zip&ref=lending/micro)
 finances a bill that falls due before revenue arrives. Compare the
 least-interest plan with the fewest-steps plan:
 - one borrows the shortfall just before the bill is due and repays it from
@@ -398,7 +398,7 @@ loan past its liquidation threshold, and the keeper is handed the collateral
 plus a bonus.
 
 **Who wins, and what does winning cost?** In the
-[Work League](https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase&view=experiments),
+[Work League](https://biomaai.github.io/axionomy/?package=packages/work-league.zip&ref=work-league/showcase),
 run the season for its mixed, throughput and sustainable fields. Rank them by
 value, by completed jobs or by waste: each ordering favors a different field of
 workers competing for the same finite work.
@@ -409,49 +409,50 @@ Each view is drawn from the same accounts, assets, rates, exchanges and
 receipts the engine replays. None comes from a parallel simulation model. The
 views are also checked-in examples of the
 [Studio visual language](studio/VISUAL_LANGUAGE.md). Click an image to see
-it full size. Follow its title to open its package at the instance it shows.
+it full size. Follow its title to open its game in Studio, which plays the
+strategy live and stops at a step of it.
 
 <table>
   <tr>
     <td colspan="2">
       <a href="assets/studio-gallery/maze.webp"><img src="assets/studio-gallery/maze.webp" alt="Axionomy Studio replaying the Vault District maze as the Explorer opens its gate"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/maze.zip&amp;ref=maze/showcase&amp;view=experiments">Key-door Maze · Vault District</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/maze.zip&amp;ref=maze/showcase&amp;strategy=maze/a-star&amp;step=8">Key-door Maze · Vault District</a></strong><br>
       15 rooms, cyclic alternatives, an explicit key transfer, a stateful gate, and the routes each search commits, replayed.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/work_league.webp"><img src="assets/studio-gallery/work_league.webp" alt="Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/work-league.zip&amp;ref=work-league/showcase&amp;view=experiments">Autonomous Work League</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/work-league.zip&amp;ref=work-league/showcase&amp;strategy=work-league/mixed-field&amp;step=24">Autonomous Work League</a></strong><br>
       The canonical graph scene: four agents, finite jobs, shared facilities, resource costs, stable relationships, and several replay-derived rankings.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/logistics.zip&amp;ref=logistics/showcase&amp;view=experiments">Stochastic logistics</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/logistics.zip&amp;ref=logistics/showcase&amp;strategy=logistics/fleet/reliable&amp;step=27">Stochastic logistics</a></strong><br>
       Policies compared over seeded trials, MCTS, random travel events, and a replayed route through four deliveries.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/marketplace.webp"><img src="assets/studio-gallery/marketplace.webp" alt="Axionomy Studio replaying an atomic multi-party marketplace clearing"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/marketplace.zip&amp;ref=marketplace/showcase&amp;view=experiments">Multi-party marketplace</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/marketplace.zip&amp;ref=marketplace/showcase&amp;strategy=marketplace/market-clearing&amp;step=4">Multi-party marketplace</a></strong><br>
       Atomic settlement across buyers, sellers, carriers, platform, and tax, with exact Pareto utility tradeoffs.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/sokoban.webp"><img src="assets/studio-gallery/sokoban.webp" alt="Axionomy Studio replaying stable crates and a player moving through a Sokoban warehouse"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/sokoban.zip&amp;ref=sokoban/showcase&amp;view=experiments">Sokoban</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/sokoban.zip&amp;ref=sokoban/showcase&amp;strategy=sokoban/a-star&amp;step=8">Sokoban</a></strong><br>
       The canonical grid scene: stable terrain, independently animated entities, exact cell anchoring, dead squares, and atomic multi-cell pushes.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/mission.webp"><img src="assets/studio-gallery/mission.webp" alt="Axionomy Studio replaying a hidden-information multi-agent mission"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/mission.zip&amp;ref=mission/showcase&amp;view=experiments">Hidden-information mission</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/mission.zip&amp;ref=mission/showcase&amp;strategy=mission/expedition/coordinated&amp;step=3">Hidden-information mission</a></strong><br>
       Private observations, shared beliefs, random hazards, and information-set search across cooperating agents.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/perishables.webp"><img src="assets/studio-gallery/perishables.webp" alt="Axionomy Studio replaying perishable inventory decay during a power outage"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/perishables.zip&amp;ref=perishables/showcase&amp;view=experiments">Perishable inventory</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?package=packages/perishables.zip&amp;ref=perishables/showcase&amp;strategy=perishables/cold-chain/outage&amp;step=4">Perishable inventory</a></strong><br>
       Ten thousand fungible claims, cohort-level decay, cooling energy, timed effects, and exact inventory tradeoffs.
     </td>
   </tr>
@@ -460,11 +461,11 @@ it full size. Follow its title to open its package at the instance it shows.
 ## Studio
 
 Axionomy Studio is a trace player and economic debugger. It is not a second
-simulator. It opens packages, and it scrubs a history by replaying the
+simulator. It opens packages, and it scrubs a timeline by replaying the
 exchanges the kernel accepted.
 
 - The **activity line** says what is running and what the last action came to.
-- The **history tree** shows every history and every branch, live, as it is
+- The **timeline tree** shows every timeline and every branch, live, as it is
   recorded.
 - **From here** lists what can be done at the step on screen:
   - **Moves**: the moves offered there, each checked;
@@ -478,7 +479,7 @@ exchanges the kernel accepted.
 
 Every identifier is one link. Hovering over it previews its card, and
 clicking it pins an inspector that follows the cursor. Each sample's view
-draws its history as a graph, grid, matrix, timeline or reserves picture. The
+draws its steps as a graph, grid, matrix, timeline or reserves picture. The
 view only draws what the economy holds: no picture can make an exchange valid.
 
 ```console
@@ -605,7 +606,7 @@ the same before and after. A failure leaves the economy unchanged.
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths, with typed patterns |
 | `axionomy-search` | What the engine's strategies run: graph, bounded and Pareto search, minimax, MCTS, ISMCTS and seeded sampling |
 | `axionomy-units` | Self-describing asset denominations, `uom` authoring and fixed-precision decimal assets |
-| `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline |
+| `axionomy-time` | Calendar-aware Jiff authoring over the same canonical time asset |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, refs and definitions, on redb |
 | `axionomy-view` | Presentation contracts, and the labels, formats and scenes a sample's view draws with |

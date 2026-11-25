@@ -629,7 +629,7 @@ them.
   strategies, experiments and view. `packages()` lists them all, and each
   package is checked against its pinned outcomes (D-053).
 - `axionomy-units` owns optional dimension-safe physical authoring.
-- `axionomy-time` owns optional calendar-aware timeline authoring.
+- `axionomy-time` owns optional calendar-aware time authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
   kept in, with no I/O and no economics.
 - `axionomy-store` owns runs, stored states and their organization on redb.
@@ -2541,7 +2541,7 @@ Decided with the user after a review on a laptop screen, where the picture
 began below the fold, the page and the From here panel scrolled separately,
 results sat in a 350px column and pinning an inspector narrowed the picture
 to a third. Studio is now one viewport on a wide window: one bar (package,
-Source, Rules, what is running, where the store is kept); the history tree,
+Source, Rules, what is running, where the store is kept); the timeline tree,
 the transport and the picture in one column; beside them a rail for the
 point on screen with a tab each (Step, Moves, Strategy, Experiments, Ref);
 and a drawer along the bottom for what is too wide for the rail (Results,
@@ -2551,6 +2551,47 @@ refs without their package's name and keeps its height as runs add
 branches. A narrow window stacks the same parts, and the page scrolls. The
 samples index names each sample's title and counts, so the empty page
 lists them as cards.
+
+### D-064: A link names a game by the strategy that plays it
+
+Decided after someone opened a link from before Studio moved to packages
+and met the first page. Such a link named a problem, a strategy,
+a seed and a step, and opened there. Its successor named a ref or a point,
+and a point's run is named by the store that made it, so a link to a branch
+opened for nobody else. A run the engine records for a kept strategy now
+keeps what the strategy was asked, its goal and its effort, as tags; a
+segment of the timeline tree gives it, so a branch says what made it after a
+reload and to every client. Studio's link names a ref the package ships, the
+strategy played from it, what it was asked otherwise than its experiment
+asks, and the step; opening one opens the branch the store holds, or plays
+the strategy there. A branch a move made is named by its point, and copying
+that link says it opens only where the store is. The user asked that the old
+parameters neither be kept nor look as though they meant something: Studio
+names the parameters of a link it does not read, and its address drops them.
+
+### D-065: A timeline is what plays; a history is what led to a point
+
+Decided with the user, who found "history" static for something one scrubs
+and branches. The word had come to mean two things. A point's history is the
+exchanges that led to it, and never changes (D-046); but the history on
+screen also held the steps after the cursor, and the history tree held the
+branches and trials no ref was ever moved over. A **timeline** is now the
+steps from a first state to an end, what Studio opens, scrubs and plays and
+what grows; a **branch** is a timeline that splits off another; and the tree
+they make is the **timeline tree**. The engine, the API and the Worker say
+the same: `timelines` lists the tree, as `TimelinesView` at
+`/api/packages/{name}/timelines`, where `histories` was not the plural of
+`history(point)` it looked like. A point keeps its history: `history`,
+`divergence` and `NotOnHistory` are the past of a point, as is the history
+the Lean model replays. Stores, packages, scripts and links are unchanged.
+
+A timeline's steps are exchanges, not time, and time is an asset (D-029), so
+the asset's authoring handle in `axionomy-time` is `TimeAsset`, no longer
+`TimelineAsset`. `scene::timeline` keeps its name: it draws lanes and spans
+along a clock, which is what charts call a timeline, and every package's
+view script that calls it goes on working. Studio calls that picture *lanes*
+on screen, and scheduling's micro picture is the machines' schedule, so the
+word is not on one screen twice.
 
 ## 16. Success criteria
 

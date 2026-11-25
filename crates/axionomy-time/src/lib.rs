@@ -16,14 +16,14 @@ pub use jiff;
 
 type TimeMeasure<Id> = MeasuredAsset<Id, TimeDimension, SI<MeasureScalar>>;
 
-/// Typed Jiff authoring handle for one schema-defined timeline asset.
+/// Typed Jiff authoring handle for one schema-defined time asset.
 #[derive(Debug, Clone)]
-pub struct TimelineAsset<Id> {
+pub struct TimeAsset<Id> {
     asset: UnitAsset<Id>,
     atomic_nanoseconds: i128,
 }
 
-impl<Id> TimelineAsset<Id>
+impl<Id> TimeAsset<Id>
 where
     Id: Clone + Eq + Hash,
 {
@@ -32,10 +32,10 @@ where
         schema: &mut AssetSchema<Id>,
         id: Id,
         atomic: SignedDuration,
-    ) -> Result<Self, TimelineDefinitionError<Id>> {
+    ) -> Result<Self, TimeDefinitionError<Id>> {
         let atomic_nanoseconds = validate_atomic_duration(atomic)?;
         let numerator =
-            i64::try_from(atomic_nanoseconds).map_err(|_| TimelineDefinitionError::NumericRange)?;
+            i64::try_from(atomic_nanoseconds).map_err(|_| TimeDefinitionError::NumericRange)?;
         let atomic_time = Time::new::<second>(Rational::new(numerator, 1_000_000_000));
         let measured: TimeMeasure<Id> = schema.define_measure(id, atomic_time)?;
         Ok(Self {
@@ -45,10 +45,7 @@ where
     }
 
     /// Reconstructs a Jiff handle for an existing compatible time asset.
-    pub fn from_schema(
-        schema: &AssetSchema<Id>,
-        id: &Id,
-    ) -> Result<Self, TimelineDefinitionError<Id>> {
+    pub fn from_schema(schema: &AssetSchema<Id>, id: &Id) -> Result<Self, TimeDefinitionError<Id>> {
         let measured: TimeMeasure<Id> = schema.measured(id)?;
         let AssetDefinition::Measured(definition) = measured.asset().definition() else {
             unreachable!("schema.measured returned a non-measured asset")
@@ -64,7 +61,7 @@ where
         &self.asset
     }
 
-    /// Lowers elapsed duration into the timeline asset's canonical atoms.
+    /// Lowers elapsed duration into the time asset's canonical atoms.
     ///
     /// Any count below `2²⁵⁶` atoms becomes an exact quantity.
     pub fn encode(
@@ -100,12 +97,10 @@ where
     }
 }
 
-fn validate_atomic_duration<Id>(
-    atomic: SignedDuration,
-) -> Result<i128, TimelineDefinitionError<Id>> {
+fn validate_atomic_duration<Id>(atomic: SignedDuration) -> Result<i128, TimeDefinitionError<Id>> {
     let nanoseconds = atomic.as_nanos();
     if nanoseconds <= 0 {
-        Err(TimelineDefinitionError::InvalidAtomicBasis)
+        Err(TimeDefinitionError::InvalidAtomicBasis)
     } else {
         Ok(nanoseconds)
     }
@@ -113,18 +108,18 @@ fn validate_atomic_duration<Id>(
 
 fn base_seconds_to_nanoseconds<Id>(
     seconds: &MeasureScalar,
-) -> Result<i128, TimelineDefinitionError<Id>> {
+) -> Result<i128, TimeDefinitionError<Id>> {
     let numerator = i128::from(*seconds.numer())
         .checked_mul(1_000_000_000)
-        .ok_or(TimelineDefinitionError::NumericRange)?;
+        .ok_or(TimeDefinitionError::NumericRange)?;
     let denominator = i128::from(*seconds.denom());
     if numerator <= 0 || numerator % denominator != 0 {
-        return Err(TimelineDefinitionError::InexactNanosecondBasis);
+        return Err(TimeDefinitionError::InexactNanosecondBasis);
     }
     Ok(numerator / denominator)
 }
 
-/// A validated calendar-aware interval used to author timeline obligations.
+/// A validated calendar-aware interval used to author elapsed-time obligations.
 ///
 /// It is an authoring value, not hidden runtime state. Calling
 /// [`CalendarWindow::encode`] lowers its elapsed duration into a schema-defined
@@ -163,22 +158,22 @@ impl CalendarWindow {
 
     pub fn encode<Id>(
         &self,
-        timeline: &TimelineAsset<Id>,
+        time: &TimeAsset<Id>,
     ) -> Result<AssetAmount<UnitAsset<Id>>, TimeBindingError>
     where
         Id: Clone + Eq + Hash,
     {
-        timeline.encode(self.elapsed())
+        time.encode(self.elapsed())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum TimelineDefinitionError<Id> {
-    #[error("atomic timeline basis must be greater than zero")]
+pub enum TimeDefinitionError<Id> {
+    #[error("atomic time basis must be greater than zero")]
     InvalidAtomicBasis,
-    #[error("timeline basis is outside exact rational storage range")]
+    #[error("time basis is outside exact rational storage range")]
     NumericRange,
-    #[error("timeline basis must resolve to a whole number of nanoseconds")]
+    #[error("time basis must resolve to a whole number of nanoseconds")]
     InexactNanosecondBasis,
     #[error(transparent)]
     Schema(#[from] AssetSchemaError<Id>),
@@ -188,9 +183,9 @@ pub enum TimelineDefinitionError<Id> {
 pub enum TimeBindingError {
     #[error("elapsed time cannot become a negative economic quantity")]
     NegativeDuration,
-    #[error("duration is not an exact multiple of the timeline asset's atomic basis")]
+    #[error("duration is not an exact multiple of the time asset's atomic basis")]
     InexactAtomicConversion,
-    #[error("timeline count is outside the adapter or selected quantity backend's supported range")]
+    #[error("time count is outside the adapter or selected quantity backend's supported range")]
     NumericRange,
     #[error("calendar window ends before it starts")]
     WindowEndsBeforeItStarts,
@@ -200,7 +195,7 @@ pub enum TimeBindingError {
 
 #[cfg(test)]
 mod tests {
-    use super::{CalendarWindow, TimelineAsset};
+    use super::{CalendarWindow, TimeAsset};
     use axionomy::{AssetAmount, Quantity};
     use axionomy_units::si::rational64::Time;
     use axionomy_units::si::time::hour;
@@ -213,15 +208,14 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_duration_lowers_into_timeline_assets() {
+    fn timestamp_duration_lowers_into_time_assets() {
         let mut schema = AssetSchema::new();
-        let timeline =
-            TimelineAsset::define(&mut schema, AssetId::Elapsed, SignedDuration::from_hours(1))
-                .unwrap();
+        let time = TimeAsset::define(&mut schema, AssetId::Elapsed, SignedDuration::from_hours(1))
+            .unwrap();
         let amount: AssetAmount<UnitAsset<AssetId>> =
-            timeline.encode(SignedDuration::from_hours(36)).unwrap();
+            time.encode(SignedDuration::from_hours(36)).unwrap();
 
-        assert_eq!(amount.asset(), timeline.asset());
+        assert_eq!(amount.asset(), time.asset());
         assert_eq!(amount.quantity(), Quantity::new(36));
     }
 
@@ -232,10 +226,9 @@ mod tests {
             .unwrap();
         let window = CalendarWindow::from_span(opens, Span::new().days(1)).unwrap();
         let mut schema = AssetSchema::new();
-        let timeline =
-            TimelineAsset::define(&mut schema, AssetId::Elapsed, SignedDuration::from_hours(1))
-                .unwrap();
-        let amount: AssetAmount<UnitAsset<AssetId>> = window.encode(&timeline).unwrap();
+        let time = TimeAsset::define(&mut schema, AssetId::Elapsed, SignedDuration::from_hours(1))
+            .unwrap();
+        let amount: AssetAmount<UnitAsset<AssetId>> = window.encode(&time).unwrap();
 
         assert_eq!(amount.quantity(), Quantity::new(23));
     }
@@ -249,11 +242,11 @@ mod tests {
                 Time::new::<hour>(Rational::from_integer(1)),
             )
             .unwrap();
-        let timeline = TimelineAsset::from_schema(&schema, &AssetId::Elapsed).unwrap();
+        let time = TimeAsset::from_schema(&schema, &AssetId::Elapsed).unwrap();
 
-        assert_eq!(timeline.asset(), measured.asset());
+        assert_eq!(time.asset(), measured.asset());
         let amount: AssetAmount<UnitAsset<AssetId>> =
-            timeline.encode(SignedDuration::from_hours(2)).unwrap();
+            time.encode(SignedDuration::from_hours(2)).unwrap();
         assert_eq!(amount.quantity(), Quantity::new(2));
     }
 }

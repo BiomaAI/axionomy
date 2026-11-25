@@ -27,7 +27,7 @@ describe("AccountView", () => {
     ]);
   });
 
-  test("shows before → after, and folds the balances the history never changes", () => {
+  test("shows before → after, and folds the balances the timeline never changes", () => {
     const changing = new Set(["paths/asset/coin", "paths/asset/map", "paths/asset/key"]);
     const { container } = render(<AccountView account={after} before={before} changing={changing} />);
     const rows = [...container.querySelectorAll(".ledger > .balance")].map((row) => row.textContent);

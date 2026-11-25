@@ -4,7 +4,9 @@
 
 use crate::{Natural, PointId, Refusal};
 use axionomy::{AccountPath, paths};
-use axionomy_engine::{CandidatesPath, Effort, Engine, GoalPath, Outcome, Ran, StrategyPath};
+use axionomy_engine::{
+    Asked, CandidatesPath, Effort, Engine, GoalPath, Outcome, Ran, StrategyPath,
+};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{ProposalView, ViewDocument};
 use schemars::JsonSchema;
@@ -136,6 +138,32 @@ pub struct StrategyRequest {
     pub budget: Natural,
     /// The most turns a policy or a game plays.
     pub turns: Natural,
+}
+
+impl From<StrategyRequest> for Asked {
+    fn from(request: StrategyRequest) -> Self {
+        Self {
+            strategy: request.strategy,
+            goal: request.goal,
+            effort: Effort {
+                seed: request.seed.0,
+                budget: request.budget.0,
+                turns: request.turns.0,
+            },
+        }
+    }
+}
+
+impl From<Asked> for StrategyRequest {
+    fn from(asked: Asked) -> Self {
+        Self {
+            strategy: asked.strategy,
+            goal: asked.goal,
+            seed: Natural(asked.effort.seed),
+            budget: Natural(asked.effort.budget),
+            turns: Natural(asked.effort.turns),
+        }
+    }
 }
 
 /// A strategy's run from a point: where it ended, how, and what its search
@@ -321,22 +349,17 @@ pub fn run_strategy(
     request: StrategyRequest,
     watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
 ) -> Result<RanView, Refusal> {
-    let strategy = engine.strategy(&request.strategy)?;
-    let effort = Effort {
-        seed: request.seed.0,
-        budget: request.budget.0,
-        turns: request.turns.0,
-    };
+    let asked = Asked::from(request);
     let Ran {
         start,
         end,
         outcome,
         thinking,
         cost,
-    } = engine.run_strategy(point.point(), &strategy, &request.goal, effort, watch)?;
+    } = engine.ask(point.point(), &asked, watch)?;
     Ok(RanView {
-        strategy: request.strategy,
-        goal: request.goal,
+        strategy: asked.strategy,
+        goal: asked.goal,
         start: start.into(),
         end: end.into(),
         outcome: outcome.into(),

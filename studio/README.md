@@ -12,7 +12,7 @@ inside itself, and nothing moves another:
 ```
 ┌ bar: brand · package · Load a file · Copy link · Source · Rules ·· activity ·· store ┐
 ├──────────────────────────────────────────┬───────────────────────────────────────────┤
-│ history tree                             │ From here: Step N of <history>            │
+│ timeline tree                            │ From here: Step N of <timeline>           │
 │ transport                                │ Step · Moves · Strategy · Experiments ·   │
 │ picture (pinned inspectors float at its  │ Ref                                       │
 │          right edge)                     │                                           │
@@ -29,10 +29,8 @@ stays in reach.
   `packages/index.json` lists with each one's title and how many refs,
   experiments and strategies it has; with nothing loaded, Studio lists them
   as cards on its first page). Picking either opens it; **Load a file**
-  opens a store file or a zip of one. A link such as
-  `?package=packages/maze.zip` loads one when it opens. The link keeps the
-  URL, the package, the ref or point and the step (`name`, `ref`, `point`,
-  `step`), so a reload or a copied link opens the same. A package is a
+  opens a store file or a zip of one, and **Copy link** copies the address,
+  which names what is on screen ([Links](#links)). A package is a
   release: loading another version of one the store holds replaces what the
   held version shipped, and Studio says so; loading the same version again
   changes nothing. Refs and runs of your own stay. **Source** and **Rules**
@@ -40,43 +38,44 @@ stays in reach.
 - **What is running** follows, in the bar: a strategy playing and how many
   states it has looked at, an experiment playing and the arm and trial it is
   on, a package loading, a ref followed and the steps that arrived, a
-  history played back. Each that can be stopped has its **Stop** there.
+  timeline played back. Each that can be stopped has its **Stop** there.
   After them it says what the last action came to (a caution in amber, a
   failure in red) until the next one, and at its end where the store is
   kept: saved on the server, saved in this browser, or not saved, why on its
   hover.
-- **The history tree** heads the picture's column: every history the
-  package's refs are on, and every branch grown from them, drawn as a
-  timeline (steps left to right, each branch on a row below the step it
-  split off at, long stretches drawn short with their steps counted). It is
+- **The timeline tree** heads the picture's column: every timeline the
+  package's refs are on, and every branch grown from them, steps left to
+  right, each branch on a row below the step it split off at, long stretches
+  drawn short with their steps counted. A step is an exchange, not a tick of
+  a clock: what time an economy keeps is an asset its accounts hold. It is
   live: the engine tells the page of every run recorded, ref moved and
   definition kept as it happens, natively over a server-sent stream and in
   the browser from the Worker, so a strategy's branch, an experiment's
   trials or another tab's moves appear as they are made. Refs are labels on
   the steps they name, written without the package's name (`micro` for
   `maze/micro`; a package's own, which are fixed, in steel; yours in
-  brass); first histories whose refs start alike sit together, a gap before
-  the next group. Experiment trials and branches made in this tab are
-  labelled at their tips, and the history on screen is drawn in brass with
+  brass); first timelines whose refs start alike sit together, a gap before
+  the next group. Experiment trials, the branches a strategy played and the
+  moves made in this tab are labelled at their tips, and the timeline on screen is drawn in brass with
   the play cursor on it. Edges are drawn beneath the steps: one trunk where
   branches leave a row, each turning onto its own row in one stroke, the
-  history on screen over the rest. The tree keeps its height as branches
+  timeline on screen over the rest. The tree keeps its height as branches
   arrive and scrolls inside itself; its bottom edge resizes it, and a
-  history opened is scrolled into view. Hovering a step says what its
+  timeline opened is scrolled into view. Hovering a step says what its
   branch is; clicking it opens that branch at that step, and clicking a step
-  of the history on screen moves the cursor there. `HistoryTree` knows only
-  branches, steps and labels, so anything with a branching history can draw
+  of the timeline on screen moves the cursor there. `TimelineTree` knows only
+  branches, steps and labels, so anything with timelines that branch can draw
   one.
-- **Play** walks the history on screen in the picture and the inspectors.
+- **Play** walks the timeline on screen in the picture and the inspectors.
   Where nothing has happened yet, such as a package's first ref when it
-  opens, Play runs the first strategy that runs on this history to find the
+  opens, Play runs the first strategy that runs on this timeline to find the
   moves, and plays them; pressed again while it searches, it stops. Space
   plays and pauses, the arrow keys step.
 - **From here**, beside the picture, is the point on screen, a tab for each
   thing to see or do there; each tab keeps what was typed or picked in it.
   Its heading marks a ref of your own, which a move applied there moves
   forward, and a package's ref, which is fixed; anywhere else what is done
-  makes a branch. *Play* is the transport's word, for walking a history;
+  makes a branch. *Play* is the transport's word, for walking a timeline;
   *Run* computes one.
   - **Step**: the exchange the step applied, its rate as written with the
     values it gives the rate's variables, the accounts its roles bind and
@@ -94,18 +93,18 @@ stays in reach.
     `step/1/2`; the accounts the rate fixes filled in and its free roles
     chosen from the accounts; its units and parameters set. It is
     **Check**ed before it can be applied.
-  - **Strategy**: the strategies that run on this history, with their goal,
+  - **Strategy**: the strategies that run on this timeline, with their goal,
     seed, budget and turns in the open, and **Run**; its branch opens at the
     step it started from and plays. They are the strategies of the arms
     (a strategy and the ref it starts from, its own or its experiment's)
-    that start in this history's tree, each with its experiment's goal and
+    that start in this timeline's tree, each with its experiment's goal and
     effort, or, in a tree no arm starts in, those of experiments on its
     ontology (each experiment says the ontology of its start); then any no
     experiment compares. So rescue's micro model and its incidents, amm's
     day and its seasons, or lending's market and the empty one its attack
     needs, each offer only their own.
   - **Experiments**: every experiment of the package, one line each (its
-    arms and trials, and **Run**), those that start in this history's tree
+    arms and trials, and **Run**), those that start in this timeline's tree
     first and the rest under *Other experiments*; a line opens on its start
     ref, goal, arms (and any arm's own start), trials, effort and
     objectives. **Run** plays every arm's trials from wherever you are, each
@@ -115,15 +114,15 @@ stays in reach.
   - **Ref**: the refs naming this point, and **Create** for one of yours
     (`<package>/mine` unless you name it otherwise); at a ref of yours,
     **Follow it** delivers each step it is moved over, by this page or any
-    other proposer, and **Delete it** deletes it, its history staying in the
+    other proposer, and **Delete it** deletes it, its timeline staying in the
     tree.
 - **The drawer**, along the bottom, holds what is too wide for the rail. Its
-  tabs always show; it opens on one, sized to what it holds up to the
-  height its top edge is dragged to, and × closes it.
+  tabs always show; it opens on one, as tall as its top edge is dragged to
+  whatever it holds, and **Close** closes it.
   - **Results**: every experiment run, the latest first, a table of arms and
     trials with how each ended, in how many steps, and its objective values,
     with **Watch** to open and play a trial.
-  - **Compare**: the history on screen set against the one it left, or
+  - **Compare**: the timeline on screen set against the one it left, or
     against any branch of the same tree picked from its card in the tree:
     where they split, then step by step what each did and what differs after
     it, and how each ends on the package's objectives.
@@ -141,9 +140,9 @@ stays in reach.
   cursor: an account shows its balances at the step on screen against the
   step before. The views they open are the same everywhere (`AccountView`,
   `ExchangeView`, `RateView`, `ExperimentView`, `StrategyView`, `RefView`,
-  `ResultsTable`), and like `HistoryTree` they take data and know nothing
+  `ResultsTable`), and like `TimelineTree` they take data and know nothing
   of the engine or the package.
-- **Words explain themselves**: Studio's own words (package, history,
+- **Words explain themselves**: Studio's own words (package, timeline,
   branch, ref, fixed, move, strategy, goal, experiment, arm, trial, seed,
   budget, turns, follow, gives, keeps, gets) are dotted where they are
   met, and say what they mean on hover or focus. Panels say what they show,
@@ -183,7 +182,7 @@ exchange, and the accounts it changed remain visible together on wide
 screens and stack without page overflow on narrow screens. The picture's
 metrics are one line each, a changed one outlined and its change on its
 hover, so the lane above the picture holds its height from step to step. In an account's
-ledger, balances that never change in the history on screen may be folded
+ledger, balances that never change in the timeline on screen may be folded
 for density, but remain counted as unchanged and are always inspectable. The viewer
 does not reinterpret them as configuration or remove them from the
 source-of-truth ledger. Its +/− controls, a pinch, or Ctrl with the wheel zoom
@@ -192,6 +191,31 @@ pauses and the arrow keys step. Play on a point where nothing has happened
 yet, such as a package's first ref when it opens, runs the strategy the
 package's first experiment runs toward its goal and plays the moves it
 finds; pressed again while it searches, it stops.
+
+## Links
+
+Studio's address names what is on screen, so a reload or a copied link opens
+the same:
+
+| Parameter | What it names |
+| --- | --- |
+| `package` | a package's URL, loaded first, such as `packages/maze.zip` |
+| `name` | a package the store holds |
+| `ref` | a ref of it |
+| `strategy` | a strategy played from the ref |
+| `from` | the step of the ref's history it plays from, when it is earlier than the ref's |
+| `goal`, `seed`, `budget`, `turns` | what the strategy is asked, where it is not what its experiment asks there |
+| `point` | a point of the store the link was written from, where no ref and no strategy names it |
+| `step` | the step of that timeline on screen |
+
+A link to a strategy opens the branch it already made, where the store holds
+one asked the same, or else plays it and opens the branch at the step, or
+from its start when the link names none:
+`?package=packages/marketplace.zip&ref=marketplace/showcase&strategy=marketplace/market-clearing&step=4`.
+Any store can open it. A branch a move made, a ref of one's own and a
+package loaded from a file are only where they are stored, and copying a
+link to one says so. Studio says which parameters of a link it did not read,
+and its address drops them.
 
 ## Run locally
 
@@ -268,13 +292,14 @@ and reuses that build's Wasm artifacts, keeping Wasm optimization outside the
 server startup timeout. CI uses the same sequence.
 
 `tests/packages.spec.ts` runs in both suites, against the native server and
-the Worker alike: it loads a sample package and scrubs a ref's history,
+the Worker alike: it loads a sample package and scrubs a ref's timeline,
 applies a candidate at a ref's point (the ref moves) and at an earlier step
 (a branch), writes an exchange from a rate and applies it only once it is
 assessed applicable, continues from a ref's point with a strategy and moves
 the ref to where it ended, follows a ref while the page moves it, runs an
 experiment and compares its trials, pins inspectors that follow the cursor
-and opens the rules, and opens a `?package=` link and reloads it. The
+and opens the rules, opens a `?package=` link and reloads it, and opens a
+link to a strategy twice, which plays once. The
 native server's store outlives a test, so each test that moves a ref has
 one of its own and counts from where it is. Natively, the suite also
 follows a ref that another proposer moves over the HTTP API.

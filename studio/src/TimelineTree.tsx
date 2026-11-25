@@ -2,16 +2,16 @@ import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from
 import { createPortal } from "react-dom";
 
 /**
- * A history tree, drawn as a timeline: steps run left to right, each branch
+ * A tree of timelines: steps run left to right, each branch
  * on a row of its own below the branch it grew from, joined to it at the
  * step it branched at. It knows nothing of what the steps are: branches,
  * their steps and labels in, the step a person picks out. Long stretches
  * without a branch, a label or the cursor are drawn short, their steps
- * counted, so a history of thousands of steps stays one screen wide.
+ * counted, so a timeline of thousands of steps stays one screen wide.
  */
 export type TreeBranch = {
   id: string;
-  /** The branch it grew from and the step it branched at; none for a history's first branch. */
+  /** The branch it grew from and the step it branched at; none for a timeline's first branch. */
   parent?: { id: string; step: number };
   /** The step it starts from: its parent's step it branched at, or its own first. */
   first: number;
@@ -22,14 +22,14 @@ export type TreeBranch = {
   tone?: "named" | "trial" | "branch";
   /** Names written beside steps of it, such as a ref at the step it names. */
   labels?: TreeLabel[];
-  /** What it is drawn together with: first histories of one group sit close, a gap before the next group. */
+  /** What it is drawn together with: first timelines of one group sit close, a gap before the next group. */
   group?: string;
 };
 
 /** A name beside a step: as written, and in full where it is written short. */
 export type TreeLabel = { step: number; text: string; name?: string; tone?: "named" | "fixed" | "trial"; onClick?: () => void };
 
-/** Where a person is: a branch's history up to `end`, shown at step `cursor` of it. */
+/** Where a person is: a branch's timeline up to `end`, shown at step `cursor` of it. */
 export type TreeSelection = { id: string; end: number; cursor: number };
 
 /** How much of a stretch is drawn step by step; a longer one is drawn this long, its steps counted. */
@@ -38,7 +38,7 @@ const UNIT = 24;
 const ROW = 30;
 const PAD_X = 16;
 const PAD_Y = 18;
-/** The space between groups of first histories. */
+/** The space between groups of first timelines. */
 const GROUP_GAP = 12;
 /** The radius of the corner a branch turns from its parent's trunk onto its own row. */
 const CORNER = 8;
@@ -110,7 +110,7 @@ export function layoutTree(branches: TreeBranch[], selection?: TreeSelection): L
   };
   roots.forEach(visit);
   const rows = new Map(ordered.map((branch, index) => [branch.id, index]));
-  // Each row a row below the last, and a gap more where a first history starts another group.
+  // Each row a row below the last, and a gap more where a first timeline starts another group.
   const ys = new Map<string, number>();
   let rowY = PAD_Y;
   let group: string | undefined;
@@ -178,7 +178,7 @@ export function layoutTree(branches: TreeBranch[], selection?: TreeSelection): L
   };
 }
 
-/** The branches a selection's history runs along, each with the steps of it the history takes. */
+/** The branches a selection's timeline runs along, each with the steps of it the timeline takes. */
 export function pathOf(branches: TreeBranch[], selection: TreeSelection | undefined): Map<string, { from: number; to: number }> {
   const path = new Map<string, { from: number; to: number }>();
   if (!selection) return path;
@@ -194,7 +194,7 @@ export function pathOf(branches: TreeBranch[], selection: TreeSelection | undefi
   return path;
 }
 
-/** The branch a step of a selection's history is drawn on. */
+/** The branch a step of a selection's timeline is drawn on. */
 function cursorBranch(path: Map<string, { from: number; to: number }>, step: number, roots: Set<string>): string | undefined {
   for (const [id, range] of path) {
     if (step > range.from && step <= range.to) return id;
@@ -203,7 +203,7 @@ function cursorBranch(path: Map<string, { from: number; to: number }>, step: num
   return undefined;
 }
 
-export function HistoryTree({ branches, selection, onSelect, describe, label, height }: {
+export function TimelineTree({ branches, selection, onSelect, describe, label, height }: {
   branches: TreeBranch[];
   selection?: TreeSelection;
   /** A step of a branch picked out. */
@@ -244,7 +244,7 @@ export function HistoryTree({ branches, selection, onSelect, describe, label, he
     onSelect(branch.id, Math.min(branch.last, Math.max(own, laid.stepAt(event.clientX - box.left))));
   };
   const cursorOn = selection ? cursorBranch(path, selection.cursor, roots) : undefined;
-  // A history opened is scrolled into view where the tree scrolls; as it
+  // A timeline opened is scrolled into view where the tree scrolls; as it
   // plays, the tree stays where it was put.
   const cursorAt = selection && cursorOn ? { x: laid.x(selection.cursor), y: y(cursorOn) } : undefined;
   const opened = useRef(cursorAt);
@@ -309,7 +309,7 @@ export function HistoryTree({ branches, selection, onSelect, describe, label, he
       {stretches.map((piece, index) => <line key={index} className={className} strokeDasharray={piece.dash} x1={piece.x1} x2={piece.x2} y1={rowY} y2={rowY} />)}
     </g>;
   };
-  return <div className="history-tree" ref={host} role="group" aria-label={label} style={height === undefined ? undefined : { height }} onScroll={() => { if (hover) redraw(); }}>
+  return <div className="timeline-tree" ref={host} role="group" aria-label={label} style={height === undefined ? undefined : { height }} onScroll={() => { if (hover) redraw(); }}>
     <svg width={laid.width} height={laid.height} role="presentation">
       <g className="tree-edges">
         {laid.ordered.map((branch) => row(branch, branch.first, branch.last, false, branch.parent && lastOff.get(`${branch.parent.id}:${branch.parent.step}`) === branch.id ? fork(branch)?.y : undefined))}

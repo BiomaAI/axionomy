@@ -10,8 +10,8 @@ use axionomy_search::GraphSearchProgress;
 use axionomy_studio_api::{
     Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
     CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent,
-    ExperimentProgress, HistoriesView, LoadedView, PackageList, PointId, Refusal, ResultsView,
-    StrategyEvent, StrategyRequest,
+    ExperimentProgress, LoadedView, PackageList, PointId, Refusal, ResultsView, StrategyEvent,
+    StrategyRequest, TimelinesView,
 };
 use axionomy_view::ViewDocument;
 use axum::{
@@ -98,12 +98,12 @@ pub(crate) async fn compare_build(
     .map(Json)
 }
 
-pub(crate) async fn histories(
+pub(crate) async fn timelines(
     State(state): State<StudioState>,
     Path(PackageName { name }): Path<PackageName>,
-) -> Result<Json<HistoriesView>, ApiError> {
+) -> Result<Json<TimelinesView>, ApiError> {
     blocking(&state.engine, move |engine| {
-        axionomy_studio_api::histories(engine, &name)
+        axionomy_studio_api::timelines(engine, &name)
     })
     .await
     .map(Json)

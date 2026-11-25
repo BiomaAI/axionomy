@@ -90,7 +90,7 @@ describe("writing an exchange from a rate", () => {
     expect(apply).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Check" }));
     await waitFor(() => expect(apply).toBeEnabled());
-    expect(onCheck).toHaveBeenCalledWith(exchangeSource(exchange));
+    expect(onCheck).toHaveBeenCalledWith(exchangeSource(exchange), "run-0:0");
     // Changed after the check, it is not applied until checked again.
     fireEvent.change(container.querySelector("input[name='exchange-units']")!, { target: { value: "2" } });
     expect(apply).toBeDisabled();

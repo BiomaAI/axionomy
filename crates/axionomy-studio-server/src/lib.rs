@@ -19,9 +19,9 @@ pub use refs::RefName;
 use axionomy_engine::Engine;
 use axionomy_studio_api::{
     Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
-    CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent, HistoriesView,
-    LoadedView, PackageList, Refusal, RefusalBody, ResultsView, SamplePackages, StrategyEvent,
-    StrategyRequest,
+    CandidatesQuery, ChangeView, CompareRequest, ComparisonView, ExperimentEvent, LoadedView,
+    PackageList, Refusal, RefusalBody, ResultsView, SamplePackages, StrategyEvent, StrategyRequest,
+    TimelinesView,
 };
 use axionomy_view::ViewDocument;
 use axum::{
@@ -129,14 +129,14 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         Endpoint::new::<axionomy_engine::source::BuildComparison>("post","/api/packages/{name}/compare/{experiment}",post(engine::compare_build).layer(DefaultBodyLimit::max(MAX_PACKAGE_BYTES)))
             .describe("comparePackageBuild","Compare the installed release and an uploaded build on the same experiment","packages")
             .path_parameters::<engine::BuildNames>().bytes_body("A package file to compare").fallible(),
-        Endpoint::new::<HistoriesView>(
+        Endpoint::new::<TimelinesView>(
             "get",
-            "/api/packages/{name}/histories",
-            get(engine::histories),
+            "/api/packages/{name}/timelines",
+            get(engine::timelines),
         )
         .describe(
-            "listHistories",
-            "List a package's history tree: each history its refs are on and every branch grown from it",
+            "listTimelines",
+            "List a package's timeline tree: each timeline its refs are on and every branch grown from it",
             "packages",
         )
         .path_parameters::<PackageName>()

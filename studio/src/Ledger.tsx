@@ -9,14 +9,14 @@ export type LedgerRow = {
   now?: string;
   /** What it held before, where that differs from now. */
   before?: string;
-  /** Whether the balance changes anywhere in the history. */
+  /** Whether the balance changes anywhere in the timeline. */
   changes: boolean;
 };
 
 /**
  * An account's balances against what it held before: every asset either
  * holds, those it no longer holds included, in the order the account holds
- * them. `changing`, the assets that change somewhere in the history, folds
+ * them. `changing`, the assets that change somewhere in the timeline, folds
  * the rest away.
  */
 export function ledgerRows(account: AccountData | undefined, before: AccountData | undefined, changing?: ReadonlySet<string> | null): LedgerRow[] {
@@ -34,12 +34,12 @@ export function ledgerRows(account: AccountData | undefined, before: AccountData
 
 /**
  * An account's ledger: each balance, before → after where it changed, the
- * balances that never change in the history counted and folded.
+ * balances that never change in the timeline counted and folded.
  */
 export function AccountView({ account, before, changing }: { account?: AccountData; before?: AccountData; changing?: ReadonlySet<string> | null }) {
   if (!account && !before) return <p className="muted">Not here</p>;
   const rows = ledgerRows(account, before, changing);
-  // Nothing of it changes in the history: nothing to fold it behind.
+  // Nothing of it changes in the timeline: nothing to fold it behind.
   const folds = rows.some((row) => row.changes);
   const live = folds ? rows.filter((row) => row.changes) : rows;
   const still = folds ? rows.filter((row) => !row.changes) : [];

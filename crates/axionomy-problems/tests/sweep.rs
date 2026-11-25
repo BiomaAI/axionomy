@@ -2,7 +2,7 @@
 //! given a small effort from the point the ref names, it ends with an
 //! outcome, whatever it is, never an engine error. Studio offers at a point
 //! the strategies of the experiments' arms that start from a ref in the
-//! same history tree, or, when none does, those of the experiments on the
+//! same timeline tree, or, when none does, those of the experiments on the
 //! same ontology; and every strategy no experiment compares, toward the
 //! first goal it offers, at its default effort (`playable` in
 //! `studio/src/PackagesApp.tsx`).
@@ -45,14 +45,14 @@ fn loaded(name: &PackagePath, write: axionomy_problems::WritePackage) -> Engine 
     engine
 }
 
-/// The run the history of `point` grows from.
+/// The first run of the timeline `point` is on.
 fn root(engine: &Engine, point: Point) -> RunId {
     engine
-        .histories(&[point])
+        .timelines(&[point])
         .unwrap()
         .into_iter()
         .find(|segment| segment.from.is_none())
-        .expect("a history has a root")
+        .expect("a timeline has a root")
         .tip
         .run
 }

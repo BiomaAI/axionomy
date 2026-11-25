@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { PackageEngine, PackageView, SourceTree } from "./packageEngine";
-import RhaiEditor from "./RhaiEditor";
+import { RhaiEditor } from "./RhaiEditor";
 
-export default function PackageSource({ engine, pkg }: { engine: PackageEngine; pkg: PackageView }) {
+export function PackageSource({ engine, pkg }: { engine: PackageEngine; pkg: PackageView }) {
   const source = useQuery({
     queryKey: ["package-source", engine.kind, pkg.name, pkg.version],
     queryFn: () => engine.sourceTree(pkg.name),

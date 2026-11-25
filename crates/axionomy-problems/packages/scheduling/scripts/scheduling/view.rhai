@@ -1,5 +1,5 @@
 // Scheduling: how people read the job shop. Labels and formats name its
-// identifiers; the scene draws the machines' timeline: the slots each
+// identifiers; the scene draws the machines' schedule: the slots each
 // operation reserves and the queue still waiting, or, on the executed shop,
 // the work done and underway, each operation's state, the crew, Machine
 // Two's condition and each job's completion. The operations and the
@@ -194,7 +194,7 @@ fn scene(state, frame) {
         status: "ready queue",
     });
     let finish = scheduling::makespan(state);
-    let scene = scene::entities(scene::timeline("Machine timeline", lanes, spans, finish), entities);
+    let scene = scene::entities(scene::timeline("Machine schedule", lanes, spans, finish), entities);
     scene.metrics = [
         metric("pending", "Pending operations", pending.len(), ()),
         metric("scheduled", "Scheduled operations", scheduling::operations().len() - pending.len(), ()),

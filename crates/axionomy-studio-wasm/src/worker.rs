@@ -205,9 +205,9 @@ impl WorkerEngine {
         )
     }
 
-    /// The history tree of the package `name`: a `HistoriesView`.
-    pub fn histories(&self, name: &str) -> Result<String, JsValue> {
-        answer(path_of(name).and_then(|name| api::histories(&self.engine, &name)))
+    /// The timeline tree of the package `name`: a `TimelinesView`.
+    pub fn timelines(&self, name: &str) -> Result<String, JsValue> {
+        answer(path_of(name).and_then(|name| api::timelines(&self.engine, &name)))
     }
 
     /// Whether the store stays across reloads.

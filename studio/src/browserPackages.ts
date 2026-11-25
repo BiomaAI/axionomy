@@ -16,7 +16,7 @@ import {
   type RhaiInput,
   type ExperimentProgress,
   type FramesQuery,
-  type HistoriesView,
+  type TimelinesView,
   type LoadedFrom,
   type PackageEngine,
   type PackageList,
@@ -66,7 +66,7 @@ export type StoreRequest =
   | { kind: "run_experiment"; experiment: string }
   | { kind: "results"; experiment: string }
   | { kind: "compare"; request: CompareRequest }
-  | { kind: "histories"; name: string }
+  | { kind: "timelines"; name: string }
   | { kind: "divergence"; query: DivergenceQuery };
 
 export type StoreMessage =
@@ -95,6 +95,8 @@ export class BrowserPackages implements PackageEngine {
   /** Runs cancelled before the Worker began them, each stopped as it begins. */
   private stopping = new Set<number>();
   private listeners = new Set<(change: ChangeView) => void>();
+  /** Whether the Worker's script did not load: the next request starts another. */
+  private unloaded = false;
   private worker = this.spawn();
 
   /** Opens the store, if it is not open yet, and says where it is kept. */
@@ -225,8 +227,8 @@ export class BrowserPackages implements PackageEngine {
     return this.request({ kind: "compare", request }) as Promise<ComparisonView>;
   }
 
-  histories(name: string): Promise<HistoriesView> {
-    return this.request({ kind: "histories", name }) as Promise<HistoriesView>;
+  timelines(name: string): Promise<TimelinesView> {
+    return this.request({ kind: "timelines", name }) as Promise<TimelinesView>;
   }
 
   onChange(listener: (change: ChangeView) => void): () => void {
@@ -316,7 +318,10 @@ export class BrowserPackages implements PackageEngine {
       else waiting.reject(new EngineRefusal(data.status, data.body));
     };
     worker.onerror = (event) => {
-      if (worker === this.worker) this.fail(new Error(event.message || "the store's Worker failed"));
+      if (worker !== this.worker) return;
+      // Only a Worker whose script did not load gives no message.
+      this.unloaded = !event.message;
+      this.fail(new Error(event.message || "The engine did not start: its Worker did not load. Reload the page."));
     };
     return worker;
   }
@@ -328,6 +333,10 @@ export class BrowserPackages implements PackageEngine {
   private send(id: number, request: StoreRequest, progress?: (progress: never) => void, signal?: AbortSignal) {
     return new Promise<unknown>((resolve, reject) => {
       if (signal?.aborted) return reject(signal.reason);
+      if (this.unloaded) {
+        this.unloaded = false;
+        this.worker = this.spawn();
+      }
       this.waiting.set(id, { request, resolve, reject, progress });
       signal?.addEventListener("abort", () => {
         this.waiting.delete(id);

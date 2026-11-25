@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import {
   Background,
   BaseEdge,
@@ -24,6 +24,15 @@ import { formatQuantity } from "./Quantity";
 import { SceneIcon } from "./SceneIcon";
 
 export type ReplayMotionMode = "step" | "seek";
+
+/** What each kind of picture is called on screen. A timeline there is what the tree holds, so a scene's is its lanes. */
+export const PICTURE_KINDS: Record<SceneSurface["kind"], string> = {
+  graph: "graph",
+  grid: "grid",
+  matrix: "matrix",
+  timeline: "lanes",
+  reserves: "reserves",
+};
 
 export function SceneView({ scene, previousScene, history = [], frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; history?: Scene[]; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
   // The chrome wraps rather than clipping, so the picture is laid out below
@@ -123,9 +132,9 @@ function ReservesScene({ scene, previousScene, history, frame, surface, onAccoun
 
   return <div className={`reserves-scene${pool.curve ? "" : " no-curve"}`} aria-label={scene.title}>
     <div className="reserves-world">
-      <svg className="reserves-links" viewBox="0 0 1000 600" role="img" aria-label={`Participants connected to ${pool.id.label}`}>
+      <svg className="reserves-links" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`Participants connected to ${pool.id.label}`}>
         <title>Who exchanges against the pool</title>
-        {participants.map((participant) => <line key={participant.id.key} x1={participant.x * 10} y1={participant.y * 6} x2="500" y2="285" className={changed.has(participant.account) ? "is-active" : undefined} />)}
+        {participants.map((participant) => <line key={participant.id.key} x1={participant.x} y1={participant.y} x2="50" y2="49" className={changed.has(participant.account) ? "is-active" : undefined} />)}
       </svg>
       <div className="reserves-step-line" role="status"><span>{stepLabel}</span>{frame && <strong>{deltas}</strong>}</div>
       {participants.map((participant) => <button
@@ -156,42 +165,70 @@ function ReservesScene({ scene, previousScene, history, frame, surface, onAccoun
   </div>;
 }
 
+type ChartBox = { width: number; height: number };
+
+/**
+ * A chart drawn in the pixels its box has, so its text keeps its size at any
+ * size of the box, and its box never follows from what it draws.
+ */
+function ReservesChart({ name, label, title, description, children }: { name: string; label: string; title: string; description: string; children: (box: ChartBox) => ReactNode }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<ChartBox>({ width: 520, height: 146 });
+  useLayoutEffect(() => {
+    const node = host.current;
+    if (!node) return;
+    const measure = () => {
+      const { width, height } = node.getBoundingClientRect();
+      if (width > 0 && height > 0) setBox((was) => was.width === width && was.height === height ? was : { width, height });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return <div className="reserves-chart" ref={host}>
+    <svg className={name} viewBox={`0 0 ${box.width} ${box.height}`} role="img" aria-label={label}>
+      <title>{title}</title>
+      <desc>{description}</desc>
+      {children(box)}
+    </svg>
+  </div>;
+}
+
 function RatioHistory({ pools }: { pools: ReservePool[] }) {
-  const width = 520;
-  const height = 132;
-  const padding = { left: 42, right: 18, top: 20, bottom: 25 };
+  const padding = { left: 48, right: 18, top: 30, bottom: 24 };
   const values = pools.map(ratioNumber);
   const low = Math.min(...values);
   const high = Math.max(...values);
   const spread = Math.max(.001, high - low);
-  const x = (index: number) => padding.left + (values.length <= 1 ? 0 : index / (values.length - 1) * (width - padding.left - padding.right));
-  const y = (value: number) => padding.top + (high - value) / spread * (height - padding.top - padding.bottom);
-  const path = values.map((value, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(" ");
   const current = pools.at(-1);
   const currentValue = values.at(-1) ?? 0;
   const label = current?.ratio.label ?? "Ratio";
   const written = current ? formatQuantity(current.ratio.value, current.ratio.format) : "";
-  return <svg className="reserves-ratio-history" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label} history, currently ${written}`}>
-    <title>{label} through accepted exchanges</title>
-    <desc>The ratio of the pool's two reserves, after each exchange that moved it.</desc>
-    <text x="12" y="14" className="chart-title">{label}</text>
-    <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} className="reserves-axis" />
-    <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} className="reserves-axis" />
-    <text x={padding.left - 6} y={padding.top + 4} textAnchor="end">{high.toFixed(1)}</text>
-    <text x={padding.left - 6} y={height - padding.bottom + 4} textAnchor="end">{low.toFixed(1)}</text>
-    <text x={padding.left} y={height - 7}>initial</text>
-    <text x={width - padding.right} y={height - 7} textAnchor="end">step {Math.max(0, values.length - 1)}</text>
-    <path d={path} className="reserves-ratio-path" />
-    {values.map((value, index) => <circle key={index} cx={x(index)} cy={y(value)} r={index === values.length - 1 ? 4 : 2} className={index === values.length - 1 ? "is-current" : undefined} />)}
-    <text x={Math.min(width - 54, x(values.length - 1) + 8)} y={Math.max(28, y(currentValue) - 7)} className="chart-value">{current ? ratioText(current) : ""}</text>
-  </svg>;
+  return <ReservesChart name="reserves-ratio-history" label={`${label} history, currently ${written}`} title={`${label} through accepted exchanges`} description="The ratio of the pool's two reserves, after each exchange that moved it.">{({ width, height }) => {
+    const right = width - padding.right;
+    const bottom = height - padding.bottom;
+    const x = (index: number) => padding.left + (values.length <= 1 ? 0 : index / (values.length - 1) * (right - padding.left));
+    const y = (value: number) => padding.top + (high - value) / spread * (bottom - padding.top);
+    const path = values.map((value, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(" ");
+    return <>
+      <text x="12" y="14" className="chart-title">{label}</text>
+      <line x1={padding.left} y1={padding.top} x2={padding.left} y2={bottom} className="reserves-axis" />
+      <line x1={padding.left} y1={bottom} x2={right} y2={bottom} className="reserves-axis" />
+      <text x={padding.left - 6} y={padding.top + 4} textAnchor="end">{high.toFixed(1)}</text>
+      <text x={padding.left - 6} y={bottom + 4} textAnchor="end">{low.toFixed(1)}</text>
+      <text x={padding.left} y={height - 7}>initial</text>
+      <text x={right} y={height - 7} textAnchor="end">step {Math.max(0, values.length - 1)}</text>
+      <path d={path} className="reserves-ratio-path" />
+      {values.map((value, index) => <circle key={index} cx={x(index)} cy={y(value)} r={index === values.length - 1 ? 4 : 2} className={index === values.length - 1 ? "is-current" : undefined} />)}
+      <text x={values.length <= 1 ? x(0) + 8 : right} y={y(currentValue) - 9} textAnchor={values.length <= 1 ? "start" : "end"} className="chart-value">{current ? ratioText(current) : ""}</text>
+    </>;
+  }}</ReservesChart>;
 }
 
 /** The reserve pairs a constant-product pool accepts, and where its reserves stand. */
 function ReserveCurveChart({ pool, curve }: { pool: ReservePool; curve: ReserveCurve }) {
-  const width = 420;
-  const height = 132;
-  const padding = { left: 38, right: 20, top: 20, bottom: 25 };
+  const padding = { left: 48, right: 20, top: 24, bottom: 24 };
   const reserve = Math.max(1, exactNumber(pool.base.quantity));
   const quote = Math.max(1, exactNumber(pool.quote.quantity));
   const product = Math.max(1, exactNumber(curve.product));
@@ -201,23 +238,26 @@ function ReserveCurveChart({ pool, curve }: { pool: ReservePool; curve: ReserveC
   const quotes = samples.map((value) => product / value);
   const minY = Math.min(...quotes);
   const maxY = Math.max(...quotes);
-  const sx = (value: number) => padding.left + (value - minX) / (maxX - minX) * (width - padding.left - padding.right);
-  const sy = (value: number) => padding.top + (maxY - value) / (maxY - minY) * (height - padding.top - padding.bottom);
-  const path = samples.map((value, index) => `${index === 0 ? "M" : "L"}${sx(value).toFixed(1)},${sy(quotes[index]).toFixed(1)}`).join(" ");
-  return <svg className="reserves-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Constant-product curve at ${reserve.toLocaleString()} ${pool.base.asset.label} and ${quote.toLocaleString()} ${pool.quote.asset.label}`}>
-    <title>Constant-product reserve curve</title>
-    <desc>The point moves along the curve as participants exchange against the pool.</desc>
-    <text x="12" y="14" className="chart-title">{curve.label}</text>
-    <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} className="reserves-axis" />
-    <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} className="reserves-axis" />
-    <text x="4" y={padding.top + 4}>{pool.quote.asset.label}</text>
-    <text x={width - padding.right} y={height - 7} textAnchor="end">{pool.base.asset.label} reserve</text>
-    <path d={path} className="reserves-curve-path" />
-    <line x1={sx(reserve)} x2={sx(reserve)} y1={sy(quote)} y2={height - padding.bottom} className="reserves-guide" />
-    <line x1={padding.left} x2={sx(reserve)} y1={sy(quote)} y2={sy(quote)} className="reserves-guide" />
-    <circle cx={sx(reserve)} cy={sy(quote)} r="5" className="is-current" />
-    <text x={Math.min(width - 92, sx(reserve) + 9)} y={Math.max(29, sy(quote) - 7)} className="chart-value">{reserve.toLocaleString()} {pool.base.symbol} · {quote.toLocaleString()} {pool.quote.symbol}</text>
-  </svg>;
+  return <ReservesChart name="reserves-curve" label={`Constant-product curve at ${reserve.toLocaleString()} ${pool.base.asset.label} and ${quote.toLocaleString()} ${pool.quote.asset.label}`} title="Constant-product reserve curve" description="The point moves along the curve as participants exchange against the pool.">{({ width, height }) => {
+    const right = width - padding.right;
+    const bottom = height - padding.bottom;
+    const sx = (value: number) => padding.left + (value - minX) / (maxX - minX) * (right - padding.left);
+    const sy = (value: number) => padding.top + (maxY - value) / (maxY - minY) * (bottom - padding.top);
+    const path = samples.map((value, index) => `${index === 0 ? "M" : "L"}${sx(value).toFixed(1)},${sy(quotes[index]).toFixed(1)}`).join(" ");
+    return <>
+      <text x="12" y="14" className="chart-title">{curve.label}</text>
+      <line x1={padding.left} y1={padding.top} x2={padding.left} y2={bottom} className="reserves-axis" />
+      <line x1={padding.left} y1={bottom} x2={right} y2={bottom} className="reserves-axis" />
+      <text x={padding.left - 6} y={padding.top + 8} textAnchor="end">{pool.quote.asset.label}</text>
+      <text x={right} y={height - 7} textAnchor="end">{pool.base.asset.label} reserve</text>
+      <path d={path} className="reserves-curve-path" />
+      <line x1={sx(reserve)} x2={sx(reserve)} y1={sy(quote)} y2={bottom} className="reserves-guide" />
+      <line x1={padding.left} x2={sx(reserve)} y1={sy(quote)} y2={sy(quote)} className="reserves-guide" />
+      <circle cx={sx(reserve)} cy={sy(quote)} r="5" className="is-current" />
+      {/* The curve falls to the right, so the corner above it is always free. */}
+      <text x={right} y={padding.top + 10} textAnchor="end" className="chart-value">{reserve.toLocaleString()} {pool.base.symbol} · {quote.toLocaleString()} {pool.quote.symbol}</text>
+    </>;
+  }}</ReservesChart>;
 }
 
 function SceneChrome({ scene, lane, onAccount }: { scene: Scene; lane: RefObject<HTMLDivElement | null>; onAccount?: (account: string) => void }) {

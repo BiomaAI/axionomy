@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Studio on packages, run against the native server and against the engine
  * in the browser's Worker alike: both engines offer the same operations, so
- * the same steps give the same pages. The history tree is how a history is
+ * the same steps give the same pages. The timeline tree is how a timeline is
  * opened; what to do from a point is beside the picture. A package's refs
  * are fixed, so a test that moves a ref names one of its own at a package's
  * ref's point, a name no other run gives, since the native server's store
@@ -14,7 +14,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function openSample(page: Page, name: string) {
   await page.goto(`/?package=packages/${name}.zip`);
   await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue(name, { timeout: 30_000 });
-  await expect(page.getByRole("group", { name: "History tree" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Timeline tree" })).toBeVisible();
 }
 
 const trace = (page: Page) => page.getByRole("slider", { name: "Trace position" });
@@ -30,17 +30,17 @@ async function drawer(page: Page, name: string) {
   if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
 }
 const stepNow = (page: Page) => page.getByRole("region", { name: "This step" });
-const tree = (page: Page) => page.getByRole("group", { name: "History tree" });
+const tree = (page: Page) => page.getByRole("group", { name: "Timeline tree" });
 const activity = (page: Page) => page.getByRole("region", { name: "Activity" });
 const inspectors = (page: Page) => page.getByRole("complementary", { name: "Inspectors" });
 
-/** How many steps the history on screen has, once it is drawn. */
+/** How many steps the timeline on screen has, once it is drawn. */
 async function steps(page: Page): Promise<number> {
   await expect(page.locator(".point-cockpit")).toHaveAttribute("aria-busy", "false");
   return Number(await trace(page).getAttribute("max"));
 }
 
-/** Opens a ref from its label in the tree, and gives how many steps its history has. */
+/** Opens a ref from its label in the tree, and gives how many steps its timeline has. */
 async function openRef(page: Page, name: string): Promise<number> {
   await tree(page).getByRole("button", { name: `Open ${name}`, exact: true }).click();
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText(`of ${name}`);
@@ -54,7 +54,7 @@ function ownRef(pkg: string): string {
 
 /**
  * Opens the package's ref `shipped`, which is fixed, and names a ref of
- * one's own at its point; gives how many steps its history has.
+ * one's own at its point; gives how many steps its timeline has.
  */
 async function playFrom(page: Page, shipped: string, name: string): Promise<number> {
   const start = await openRef(page, shipped);
@@ -78,7 +78,7 @@ test("an empty store lists the samples, a card each, by what their views call th
   await page.goto("/");
   const cards = page.getByRole("list", { name: "Sample packages" });
   // A store that holds packages opens the first instead, as the native server's may.
-  const opened = page.getByRole("group", { name: "History tree" });
+  const opened = page.getByRole("group", { name: "Timeline tree" });
   await expect(cards.or(opened)).toBeVisible({ timeout: 30_000 });
   test.skip(await opened.isVisible(), "The store holds packages already.");
   const maze = cards.getByRole("button", { name: /^Key-door maze/ });
@@ -98,7 +98,7 @@ test("a sample opens from the package picker, and its tree opens its refs", asyn
   await expect(picker).toHaveValue("sokoban", { timeout: 30_000 });
   await expect(tree(page).getByRole("button", { name: "Open sokoban/micro/deadlock" })).toBeVisible();
   expect(await openRef(page, "sokoban/micro/deadlock")).toBe(3);
-  // A ref opens where it is: the end of its history.
+  // A ref opens where it is: the end of its timeline.
   await expect(trace(page)).toHaveValue("3");
   await page.getByRole("button", { name: "Go to initial state" }).click();
   await expect(trace(page)).toHaveValue("0");
@@ -109,7 +109,7 @@ test("a sample opens from the package picker, and its tree opens its refs", asyn
   await expect(stepNow(page).locator(".effect").first()).toBeVisible();
   await stepNow(page).getByRole("button", { name: "1 / 3" }).click();
   await expect(inspectors(page).getByRole("region", { name: "Step 1" }).locator(".assessment-applicable")).toContainText("applicable");
-  // Picking a step of the history on screen in the tree moves the cursor there.
+  // Picking a step of the timeline on screen in the tree moves the cursor there.
   await tree(page).getByRole("button", { name: /^Step 2 of / }).first().click();
   await expect(trace(page)).toHaveValue("2");
   await expect(page.locator(".picture-area .world-panel")).toBeVisible();
@@ -197,7 +197,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   await expect(page.getByRole("status").filter({ hasText: `${mine} moved to step ${start + 2}` })).toBeVisible();
   await expect(trace(page)).toHaveAttribute("max", String(start + 2));
 
-  // One's own ref is deleted; its history stays on screen and in the tree.
+  // One's own ref is deleted; its timeline stays on screen and in the tree.
   await rail(page, "Ref");
   await fromHere(page).getByRole("button", { name: "Delete it" }).click();
   await expect(page.getByRole("status").filter({ hasText: `Deleted ${mine}.` })).toBeVisible();
@@ -298,13 +298,13 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await results.locator(".results-table tbody tr", { hasText: "a-star" }).getByRole("button", { name: "Watch" }).click();
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("a-star");
   expect(await steps(page)).toBeGreaterThan(0);
-  // A branch is set against the history it left: the same up to where it split, then step by step.
+  // A branch is set against the timeline it left: the same up to where it split, then step by step.
   await drawer(page, "Compare");
   const comparison = page.getByRole("region", { name: "Comparison" });
   await expect(comparison.locator(".compare-note")).toContainText("Split at step 0");
   await expect(comparison.locator("tbody tr").first()).toContainText("Walk Start");
   // Any branch of the same tree is compared from its card in the tree.
-  const compareWith = page.getByRole("button", { name: "Compare with the history on screen" });
+  const compareWith = page.getByRole("button", { name: "Compare with the timeline on screen" });
   await expect(async () => {
     await tree(page).getByRole("button", { name: /^Step 3 of breadth-first/ }).last().hover();
     await expect(compareWith).toBeVisible({ timeout: 1_000 });
@@ -312,6 +312,17 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await compareWith.click();
   await expect(comparison.locator(".panel-heading h2")).toContainText("breadth-first");
   await expect(comparison.locator(".compare-ends")).toContainText("energy");
+});
+
+test("a timeline is what the tree holds: a picture along a clock is called its lanes", async ({ page }) => {
+  await openSample(page, "scheduling");
+  const written = async () => (await page.locator("body").innerText()).match(/timeline/gi);
+  for (const name of ["scheduling/micro", "scheduling/showcase"]) {
+    await openRef(page, name);
+    await expect(page.getByRole("region", { name: "Timeline tree" }).getByText("Timeline tree", { exact: true })).toBeVisible();
+    await expect(page.locator(".world-panel .panel-heading")).toContainText("lanes");
+    expect(await written()).toHaveLength(1);
+  }
 });
 
 test("AMM holdings and lending balances show their economic denominations", async ({ page }) => {
@@ -394,7 +405,7 @@ test("a link names a package by its URL and opens it", async ({ page }) => {
   await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue("sokoban", { timeout: 30_000 });
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of sokoban/micro");
   // The link keeps naming the URL, so reloading opens it again.
-  await expect(page).toHaveURL(/package=%2Fpackages%2Fsokoban\.zip/);
+  await expect(page).toHaveURL(/package=packages%2Fsokoban\.zip/);
   await openRef(page, "sokoban/micro/deadlock");
   await expect(page).toHaveURL(/ref=sokoban%2Fmicro%2Fdeadlock/);
   await page.reload();
@@ -415,6 +426,66 @@ test("a link to what the store does not hold opens the first package, and the br
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText(" of ", { timeout: 30_000 });
   await expect(page).not.toHaveURL(/no-such/);
   await expect(activity(page)).not.toContainText("no-such");
+});
+
+test("a link names a strategy played from a ref, at a step, and plays it only once", async ({ page }) => {
+  // A seed no other test asks with: the native server's store outlives a test.
+  const seed = String(Date.now());
+  const link = `/?package=packages/maze.zip&ref=maze/showcase&strategy=maze/a-star&seed=${seed}&step=8`;
+  const branches = page.locator(".tree-panel .panel-heading small");
+  await page.goto(link);
+  await expect(fromHere(page).locator(".panel-heading h2")).toHaveText("Step 8 of a-star, from step 0", { timeout: 30_000 });
+  await expect(activity(page)).toContainText(/maze\/a-star: reached the goal in \d+ steps/);
+  expect(await steps(page)).toBeGreaterThan(8);
+  const made = await branches.textContent();
+  // The address names what plays it, not the point only this store holds.
+  const asked = new URLSearchParams({ strategy: "maze/a-star", seed, step: "8" });
+  await expect(page).toHaveURL(new RegExp(`package=packages%2Fmaze\\.zip&name=maze&ref=maze%2Fshowcase&${asked.toString().replaceAll("+", "\\+")}$`));
+  await page.getByRole("button", { name: "Copy link" }).click();
+  await expect(activity(page)).not.toContainText("The link opens only");
+  // However long what the bar says is, the page is no wider than the window.
+  await page.setViewportSize({ width: 1240, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1240);
+  // Opened again, the branch is the one the store holds.
+  await page.goto(link);
+  await expect(fromHere(page).locator(".panel-heading h2")).toHaveText("Step 8 of a-star, from step 0", { timeout: 30_000 });
+  await expect(branches).toHaveText(made ?? "");
+  await expect(activity(page)).not.toContainText("reached the goal");
+});
+
+test("a link to a strategy the package lacks opens its ref, and says so", async ({ page }) => {
+  await page.goto("/?package=packages/maze.zip&ref=maze/no-such-ref&strategy=maze/a-star");
+  await expect(activity(page)).toContainText("maze has no ref maze/no-such-ref: opened maze.", { timeout: 30_000 });
+  await page.goto("/?package=packages/maze.zip&ref=maze/showcase&strategy=maze/no-such-strategy&step=8");
+  await expect(activity(page)).toContainText("maze has no strategy maze/no-such-strategy: opened maze/showcase.", { timeout: 30_000 });
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of maze/showcase");
+  await expect(page).not.toHaveURL(/no-such-strategy/);
+});
+
+test("a link says what of it Studio does not read, and the address drops it", async ({ page }) => {
+  await page.goto("/?budget=128&document=marketplace:market_clearing&instance=showcase&problem=marketplace&seed=17&step=4&strategy=market_clearing&view=replay");
+  await expect(activity(page)).toContainText("The link names no package, ref or point. Ignored: budget, document, instance, problem, seed, step, strategy and view.", { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/problem|document|market_clearing/);
+  await page.goto("/?package=packages/maze.zip&ref=maze/showcase&view=experiments");
+  await expect(fromHere(page).locator(".panel-heading h2")).toContainText("of maze/showcase", { timeout: 30_000 });
+  await expect(activity(page)).toContainText("Ignored: view.");
+  await expect(page).not.toHaveURL(/view=/);
+});
+
+test("a link to a branch only this store holds says so when it is copied", async ({ page }) => {
+  await openSample(page, "maze");
+  await openRef(page, "maze/micro");
+  await applyFirst(page);
+  await expect(page).toHaveURL(/point=run-/);
+  await page.getByRole("button", { name: "Copy link" }).click();
+  await expect(activity(page)).toContainText(/The link opens only (in this browser|on this server), whose store holds this branch\./);
+  const point = new URL(page.url()).searchParams.get("point")!;
+  await page.reload();
+  await expect(page).toHaveURL(new RegExp(`point=${point.replace(":", "%3A")}`), { timeout: 30_000 });
+  await expect(activity(page)).not.toContainText("does not hold");
+  // Where it is not held, the package's first ref opens.
+  await page.goto("/?package=packages/maze.zip&point=run-00000000000000000000000000000000:1");
+  await expect(activity(page)).toContainText(/This store does not hold point .*: opened maze\./, { timeout: 30_000 });
 });
 
 test("keeps Studio within a narrow viewport", async ({ page }) => {
@@ -477,6 +548,76 @@ test("Rhai at a point reads a balance and applies the assessed move", async ({ p
   await console.getByRole("button", { name: "Assess exchange" }).click();
   await console.getByRole("button", { name: "Apply assessed exchange" }).click();
   await expect(trace(page)).toHaveAttribute("max", "1");
+});
+
+test("playing a timeline moves no frame and clears nothing typed", async ({ page }) => {
+  await page.goto("/?package=packages/amm.zip&ref=amm/micro&strategy=amm/day/market-day&step=3");
+  await expect(trace(page)).toHaveValue("3", { timeout: 30_000 });
+  const seed = (await rail(page, "Strategy")).getByRole("textbox", { name: "Seed" });
+  await seed.fill("5");
+  await drawer(page, "Console");
+  const console = page.getByRole("region", { name: "Rhai console" });
+  const query = console.getByRole("button", { name: "Run query" });
+  await console.getByLabel("Program").fill('state.accounts("pool")');
+  await query.click();
+  await expect(console.locator("pre")).toBeVisible();
+  const frames = () => page.evaluate(() => [".drawer", ".picture-area", ".action-panel"].map((frame) => {
+    const { top, height } = document.querySelector(frame)!.getBoundingClientRect();
+    return { frame, top, height };
+  }));
+  const paused = await frames();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(query).toBeDisabled();
+  // What the query gave is of the step it was run at.
+  await expect(console.locator("pre")).toHaveCount(0);
+  expect(await frames()).toEqual(paused);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(query).toBeEnabled();
+  expect(await frames()).toEqual(paused);
+  await expect(console.getByLabel("Program")).toHaveText('state.accounts("pool")');
+  await expect(seed).toHaveValue("5");
+});
+
+test("the market's charts stay where they are in its picture, however short the drawer leaves it", async ({ page }) => {
+  for (const viewport of [{ width: 1820, height: 1050 }, { width: 1500, height: 865 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/?package=packages/amm.zip&ref=amm/micro&strategy=amm/day/market-day&step=10");
+    await expect(trace(page)).toHaveValue("10", { timeout: 30_000 });
+    const charts = page.locator(".reserves-chart");
+    await expect(charts).toHaveCount(2);
+    const columns: { x: number; width: number }[][] = [];
+    for (const open of [false, true]) {
+      if (open) await drawer(page, "Compare");
+      const picture = (await page.locator(".world-panel").boundingBox())!;
+      const boxes = await Promise.all((await charts.all()).map(async (chart) => (await chart.boundingBox())!));
+      for (const box of boxes) {
+        expect(box.height).toBeGreaterThan(80);
+        expect(box.y + box.height).toBeLessThanOrEqual(picture.y + picture.height);
+        expect(box.x + box.width).toBeLessThanOrEqual(picture.x + picture.width);
+      }
+      columns.push(boxes.map(({ x, width }) => ({ x, width })));
+    }
+    expect(columns[1]).toEqual(columns[0]);
+    // Closed, the comparison opens again from its tab.
+    await page.getByRole("button", { name: "Close the drawer" }).click();
+    await expect(page.getByRole("region", { name: "Comparison" })).toBeHidden();
+    await drawer(page, "Compare");
+    await expect(page.getByRole("region", { name: "Comparison" })).toBeVisible();
+  }
+});
+
+test("opening a panel fetches no script, so a page outlives the files it was loaded from", async ({ page }) => {
+  await openSample(page, "maze");
+  await openRef(page, "maze/micro");
+  const scripts: string[] = [];
+  page.on("request", (request) => { if (request.resourceType() === "script") scripts.push(request.url()); });
+  for (const name of ["Moves", "Strategy", "Experiments", "Ref"]) await rail(page, name);
+  for (const [name, region] of [["Rules", "Rules"], ["Source", "Package source"], ["Console", "Rhai console"]]) {
+    await drawer(page, name);
+    await expect(page.getByRole("region", { name: region, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("region", { name: "Rhai console" }).getByLabel("Program")).toBeVisible();
+  expect(scripts).toEqual([]);
 });
 
 test("Sokoban opens with formatted exchange bindings and syntax colors", async ({ page }) => {

@@ -30,17 +30,18 @@ const results = {
   }],
 } as unknown as ResultsView;
 
+const asked = { strategy: "maze/a-star", goal: "maze/solved", seed: "17", budget: "100", turns: "0" };
+
 const segments = [
   { tip: `${root}:0` },
-  { from: `${root}:0`, tip: `${solved}:4` },
+  { from: `${root}:0`, tip: `${solved}:4`, asked },
   { from: `${root}:0`, tip: `${trial}:6` },
   { from: `${solved}:1`, tip: `${mine}:2` },
 ];
 
 describe("branchesOf", () => {
   test("joins each segment at the step it branched at, and names it by what made it", () => {
-    const notes = new Map([[solved, { label: "a-star", words: "a-star, from step 0" }]]);
-    const { branches, info } = branchesOf(segments, pkg, [results], notes, () => undefined);
+    const { branches, info } = branchesOf(segments, pkg, [results], new Map(), () => undefined);
     expect(branches.map(({ id, parent, first, last, title, tone }) => ({ id, parent, first, last, title, tone }))).toEqual([
       { id: root, parent: undefined, first: 0, last: 0, title: "maze/micro", tone: "named" },
       { id: solved, parent: { id: root, step: 0 }, first: 0, last: 4, title: "a-star, from step 0", tone: "branch" },
@@ -49,12 +50,24 @@ describe("branchesOf", () => {
     ]);
     // A ref is written without its package's name, and named in full.
     expect(branches[0].labels?.map(({ text, name, tone }) => ({ text, name, tone }))).toEqual([{ text: "micro", name: "maze/micro", tone: "fixed" }]);
-    // A first history is grouped by its ref's first part.
+    // A first timeline is grouped by its ref's first part.
     expect(branches.map(({ group }) => group)).toEqual(["micro", undefined, undefined, undefined]);
+    expect(branches[1].labels?.map(({ text }) => text)).toEqual(["a-star"]);
+    expect(info.get(solved)?.asked).toEqual(asked);
     expect(branches[2].labels?.map(({ text }) => text)).toEqual(["a-star"]);
     expect(info.get(trial)?.trial?.trial.values).toEqual(["6"]);
-    // The empty trial labels nothing of the history it started from.
+    // The empty trial labels nothing of the timeline it started from.
     expect(info.get(root)?.trial).toBeUndefined();
+  });
+
+  test("names a branch a move made in this tab by the move", () => {
+    const moved = segments.map(({ from, tip }) => ({ from, tip }));
+    const notes = new Map([[solved, { label: "Move east", words: "Move east, from step 0" }]]);
+    const { branches } = branchesOf(moved, pkg, [], notes, () => undefined);
+    expect(branches[1].title).toBe("Move east, from step 0");
+    expect(branches[1].labels?.map(({ text }) => text)).toEqual(["Move east"]);
+    // Nothing says what made the other.
+    expect(branches[2].title).toBe("A branch");
   });
 
   test("opens a ref from its label", () => {

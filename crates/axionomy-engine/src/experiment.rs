@@ -4,7 +4,7 @@
 //! by objective vectors, dominance and the Pareto front.
 
 use crate::{
-    Engine, EngineError, ExperimentPath, GoalPath, ObjectivePath, Outcome, StrategyPath,
+    Asked, Engine, EngineError, ExperimentPath, GoalPath, ObjectivePath, Outcome, StrategyPath,
     definitions::{Objective, kind},
     strategy::Effort,
 };
@@ -202,25 +202,22 @@ impl Engine {
                 Some(start) => self.referred(start)?,
                 None => start,
             };
-            let strategy = self.strategy(&arm.strategy)?;
             let mut trials = Vec::new();
             for trial in 0..experiment.trials {
                 let seed = sample_seed(
                     experiment.effort.seed,
                     usize::try_from(trial).unwrap_or(usize::MAX),
                 );
-                let effort = Effort {
-                    seed,
-                    ..experiment.effort
+                let asked = Asked {
+                    strategy: arm.strategy.clone(),
+                    goal: experiment.goal.clone(),
+                    effort: Effort {
+                        seed,
+                        ..experiment.effort
+                    },
                 };
                 let playing = Playing { arm: index, trial };
-                let ran = self.run_strategy(
-                    from,
-                    &strategy,
-                    &experiment.goal,
-                    effort,
-                    &mut |progress| watch(playing, progress),
-                )?;
+                let ran = self.ask(from, &asked, &mut |progress| watch(playing, progress))?;
                 if let Outcome::Interrupted = ran.outcome {
                     return Err(EngineError::Interrupted);
                 }

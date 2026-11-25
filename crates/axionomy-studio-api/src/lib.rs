@@ -2,12 +2,12 @@
 
 mod divergence;
 mod experiments;
-mod histories;
 mod ids;
 mod packages;
 mod points;
 mod refs;
 mod refusal;
+mod timelines;
 
 pub use divergence::{
     AccountDifferenceView, AlignedView, BalanceDifferenceView, DivergenceQuery, DivergenceView,
@@ -17,7 +17,6 @@ pub use experiments::{
     ArmResultView, CompareRequest, ComparisonView, EndedView, ExperimentEvent, ExperimentProgress,
     PointValues, ResultsView, TrialView, check_experiment, compare, results, run_experiment,
 };
-pub use histories::{ChangeView, HistoriesView, SegmentView, histories};
 pub use ids::{Natural, ObjectiveList, PackageVersion, PointId, PointIdError};
 pub use packages::{
     ArmView, ExperimentView, KeptView, LoadedView, ObjectiveView, PackageList, PackageView,
@@ -35,3 +34,4 @@ pub use refs::{
     RefFrames, RefFramesQuery, RefView, advance_ref, create_ref, delete_ref, frames, read_ref,
 };
 pub use refusal::{ErrorResponse, RefMoved, Refusal, RefusalBody, Refused};
+pub use timelines::{ChangeView, SegmentView, TimelinesView, timelines};

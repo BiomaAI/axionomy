@@ -10,7 +10,10 @@ const scope = self as DedicatedWorkerGlobalScope;
 let initialized: Promise<void> | undefined;
 
 function initialize() {
-  initialized ??= init().then(() => undefined);
+  initialized ??= init().then(() => undefined, (cause: unknown) => {
+    initialized = undefined;
+    throw new Error(`The engine did not start: ${cause instanceof Error ? cause.message : String(cause)}. Reload the page.`);
+  });
   return initialized;
 }
 
@@ -127,8 +130,8 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       return read(engine.results(request.experiment));
     case "compare":
       return read(engine.compare(JSON.stringify(request.request)));
-    case "histories":
-      return read(engine.histories(request.name));
+    case "timelines":
+      return read(engine.timelines(request.name));
     case "divergence":
       return read(engine.divergence(JSON.stringify(request.query)));
   }

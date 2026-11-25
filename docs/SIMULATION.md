@@ -53,6 +53,9 @@ is that overlaps stay few and no Axionomy term means two things.
 | Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place |
 | Run | A trajectory: a trace from a state, kept in memory or recorded in the store |
 | Point | One saved state of the economy: the economy after a given step of a recorded run, named by the run whose step reached it and the step. Every point has one history, the exchanges that led to it, and one name |
+| Timeline | The steps from a first state to an end: a ref's point, or a branch's last step. It crosses the runs it forked through, and it is what a front end scrubs and plays. A point's history is the part of its timeline that led to it, which never changes; a timeline grows. Its steps are exchanges, not time: an economy's time is an asset its accounts hold |
+| Branch | A timeline that splits off another at some step |
+| Timeline tree | Every timeline growing from the same first states, and every branch of them: what `timelines` lists, as segments, one per run |
 | Fork | An independent economy starting from a chosen state of a run (a clone, constant-time) |
 | Counterfactual | A forked run that examines an alternative to what the run did |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
@@ -864,7 +867,7 @@ instead of recording its stopped searches as trials that ran out.
 
 Studio opens on packages, and since P9 on nothing else. A package loads from
 a file, from a sample's URL, or from `?package=<url>`; the link keeps the
-URL, the ref or point, the step and the view, so reloading opens them again.
+URL, the ref or point and the step, so reloading opens them again.
 Opening a ref draws its point's history with the package's view, in the
 playback, scene and inspectors the studies used. Act offers the candidates at
 the step on screen, each assessed, and an exchange written as JSON, assessed
@@ -885,7 +888,7 @@ their seeds, how they ended and their exact objective values, the front
 marked and the pick, by the objective chosen first, highlighted; any trial's
 end opens like any point. Playwright runs the same package tests against
 the native server and the browser Worker: a sample loaded and a ref's
-history scrubbed, a ref of one's own named at a package's ref, a candidate
+timeline scrubbed, a ref of one's own named at a package's ref, a candidate
 applied at its point and elsewhere and the ref deleted, a strategy
 continued, a ref followed, an experiment run and compared, and a
 `?package=` link opened and reloaded; natively, a ref another proposer

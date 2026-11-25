@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconChevronDown, IconChevronRight, IconMaximize, IconX } from "@tabler/icons-react";
 import { ActivityStrip, type Activity, type Said, type StoreWords } from "./Activity";
@@ -7,12 +7,14 @@ import { BrowserPackages } from "./browserPackages";
 import { Compare } from "./Compare";
 import { connectionLabel, nativeEngineAnswers } from "./engine";
 import { RhaiConsole } from "./RhaiConsole";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { ExchangeEditor } from "./ExchangeEditor";
 import { Effects, ExchangeView, Holding } from "./ExchangeView";
-import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
+import { TimelineTree, pathOf, type TreeBranch } from "./TimelineTree";
 import { IdLink, InspectionProvider, InspectorDock, PanelHeading, subjectKey, useSnapshot, type Subject } from "./Inspectors";
 import { inspector } from "./inspect";
 import { StateList } from "./Ledger";
+import { DEFAULT_EFFORT, askedBy, natural, playedLink, readLink, sameAsked, writeLink, type LinkedStrategy } from "./link";
 import { ResizeHandle, TabPanels, TabStrip, type Tab } from "./Layout";
 import { ExperimentView, ResultsTable, endedWords } from "./PackageViews";
 import {
@@ -23,24 +25,26 @@ import {
   type ExperimentProgress,
   type Sample,
   type ExperimentView as ExperimentData,
-  type HistoriesView,
   type LoadedFrom,
   type PackageEngine,
+  type PackageList,
   type PackageView,
   type PointId,
   type RanView,
   type RefFrames,
+  type RefView,
   type ResultsView,
   type SearchProgress,
+  type StrategyRequest,
+  type TimelinesView,
 } from "./packageEngine";
 import { branchesOf, lastPart, parsePoint, type BranchInfo, type Note } from "./packageTree";
+import { PackageSource } from "./PackageSource";
 import { Brand, PlaybackControls, changingBalances } from "./Playback";
 import { Formatted, QuantityFormats } from "./Quantity";
 import { RateTable } from "./RateView";
-import { SceneView, type ReplayMotionMode } from "./SceneView";
+import { PICTURE_KINDS, SceneView, type ReplayMotionMode } from "./SceneView";
 import { Term } from "./Term";
-
-const PackageSource = lazy(() => import("./PackageSource"));
 
 /** The one browser engine of the page: one Worker holds the saved store. */
 let browser: BrowserPackages | undefined;
@@ -66,42 +70,8 @@ function useEngine(): PackageEngine | undefined {
   return chosen.data === "native" ? nativePackages : browserPackages();
 }
 
-/** What a link asks Studio to open. */
-type PackagesLink = {
-  /** A package's URL to load first. */
-  package?: string;
-  /** A loaded package, by name. */
-  name?: string;
-  ref?: string;
-  point?: PointId;
-  step?: number;
-};
-
-function readLink(): PackagesLink {
-  const query = new URLSearchParams(window.location.search);
-  const step = query.get("step");
-  return {
-    package: query.get("package") ?? undefined,
-    name: query.get("name") ?? undefined,
-    ref: query.get("ref") ?? undefined,
-    point: query.get("point") ?? undefined,
-    step: step !== null && /^\d+$/.test(step) ? Number(step) : undefined,
-  };
-}
-
-function writeLink(link: PackagesLink) {
-  const query = new URLSearchParams();
-  if (link.package) query.set("package", link.package);
-  if (link.name) query.set("name", link.name);
-  if (link.ref) query.set("ref", link.ref);
-  else if (link.point) query.set("point", link.point);
-  if (link.step !== undefined) query.set("step", String(link.step));
-  const written = query.toString();
-  window.history.replaceState({}, "", `${window.location.pathname}${written ? `?${written}` : ""}${window.location.hash}`);
-}
-
 /**
- * The history on screen: up to a ref's point, or to the tip of a branch
+ * The timeline on screen: up to a ref's point, or to the tip of a branch
  * picked in the tree or reached some other way.
  */
 type Opened = {
@@ -116,6 +86,11 @@ type Opened = {
 export function shortPoint(point: PointId): string {
   const [run, step] = point.split(":");
   return `${run.slice(0, 4)}…${run.slice(-6)}:${step}`;
+}
+
+/** Words for a list read in a sentence: `a, b and c`. */
+function listed(words: string[]): string {
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words.join();
 }
 
 const done = (message: string): Said => ({ tone: "done", message });
@@ -186,18 +161,19 @@ function useSettled<T>(value: T, delay: number): T {
 /** The value of the package select that opens a sample not loaded yet. */
 const SAMPLE = "sample:";
 
-/** Packages, their history trees, and what to do from any point of them. */
+/** Packages, their timeline trees, and what to do from any point of them. */
 export function PackagesApp() {
   const engine = useEngine();
   const queryClient = useQueryClient();
-  const link = useRef(readLink()).current;
+  const [{ link, unread }] = useState(() => readLink(window.location.search));
   const kind = engine?.kind;
   const kept = useQuery({ queryKey: ["store", kind], queryFn: () => engine!.store(), enabled: Boolean(engine), staleTime: Infinity });
   const listing = useQuery({ queryKey: ["packages", kind], queryFn: () => engine!.packages(), enabled: Boolean(engine) && kept.isSuccess, placeholderData: keepPreviousData });
   const samples = useQuery({ queryKey: ["sample-packages"], queryFn: samplePackages, staleTime: Infinity, retry: false });
   const [packageName, setPackageName] = useState<string>();
   const [opened, setOpened] = useState<Opened>();
-  const [loadedUrl, setLoadedUrl] = useState<string | undefined>(link.package);
+  /** The URLs packages were loaded from in this tab, by name; none for one loaded from a file. */
+  const [sources, setSources] = useState<ReadonlyMap<string, string | undefined>>(new Map());
   const [busy, setBusy] = useState<string>();
   const [said, setSaid] = useState<Said[]>([]);
   const [copied, setCopied] = useState(false);
@@ -206,15 +182,19 @@ export function PackagesApp() {
   const note = (point: PointId, label: string, from: PointId) => setNotes((current) => new Map(current).set(parsePoint(point).run, { label, words: `${label}, from step ${stepOf(from)}` }));
   /** Says what the latest action came to, in place of what the one before it said. */
   const report = (...words: Said[]) => setSaid(words);
+  /** Says `words` besides what was said already. */
+  const say = (words: string) => setSaid((current) => [...current, caution(words)]);
+  /** Why the engine answers nothing, while it does not. */
+  const broken = kept.error ?? listing.error;
   const pkg = listing.data?.packages.find((candidate) => candidate.name === packageName);
 
-  // The history tree stays the store's: each change arrives as it is made.
-  const histories = useQuery({ queryKey: ["histories", kind, packageName], queryFn: () => engine!.histories(packageName!), enabled: Boolean(engine && packageName && pkg), placeholderData: keepPreviousData });
+  // The timeline tree stays the store's: each change arrives as it is made.
+  const timelines = useQuery({ queryKey: ["timelines", kind, packageName], queryFn: () => engine!.timelines(packageName!), enabled: Boolean(engine && packageName && pkg), placeholderData: keepPreviousData });
   useEffect(() => {
     if (!engine) return;
     return engine.onChange((change) => {
       if (change.kind === "run") {
-        queryClient.setQueriesData<HistoriesView>({ queryKey: ["histories", engine.kind] }, (current) => {
+        queryClient.setQueriesData<TimelinesView>({ queryKey: ["timelines", engine.kind] }, (current) => {
           const from = change.segment.from;
           if (!current || !from) return current;
           const runs = new Set(current.segments.map((segment) => parsePoint(segment.tip).run));
@@ -225,7 +205,7 @@ export function PackagesApp() {
       } else if (change.kind === "ref") {
         void queryClient.invalidateQueries({ queryKey: ["packages", engine.kind] });
       } else {
-        for (const key of ["packages", "histories", "results"]) void queryClient.invalidateQueries({ queryKey: [key, engine.kind] });
+        for (const key of ["packages", "timelines", "results"]) void queryClient.invalidateQueries({ queryKey: [key, engine.kind] });
       }
     });
   }, [engine, queryClient]);
@@ -238,14 +218,14 @@ export function PackagesApp() {
   });
   const results = recorded.flatMap((query) => query.data ? [query.data] : []);
 
-  // The step to show once the history is drawn: the end, unless a link or a pick names one.
+  // The step to show once the timeline is drawn: the end, unless a link or a pick names one.
   const pendingStep = useRef<"end" | number>(link.step ?? "end");
   const [position, setPosition] = useState(0);
   const [motion, setMotion] = useState<ReplayMotionMode>("seek");
   const [playing, setPlaying] = useState(false);
   const [delay, setDelay] = useState(650);
   // Play where nothing has happened yet finds the moves, then plays them as
-  // soon as their history is drawn.
+  // soon as their timeline is drawn.
   const playOnOpen = useRef(false);
   /** A strategy playing from a point, and how far it is. */
   const [finding, setFinding] = useState<{ cancel(): void; strategy: string; from: PointId; progress?: SearchProgress }>();
@@ -256,8 +236,8 @@ export function PackagesApp() {
   const experimentsStopped = useRef(new Set<string>());
   /** The account last picked in the picture. */
   const [focusedAccount, setFocusedAccount] = useState<string>();
-  /** The history the one on screen is set against: picked (a point), closed (null), or the one it left (undefined). */
-  const [compareWith, setCompareWith] = useState<PointId | null>();
+  /** The point picked to set the timeline on screen against, instead of the one it left. */
+  const [compareWith, setCompareWith] = useState<PointId>();
   const worldPanel = useRef<HTMLDivElement>(null);
   /** The inspectors pinned open, latest last. */
   const [pinned, setPinned] = useState<Subject[]>([]);
@@ -267,7 +247,7 @@ export function PackagesApp() {
   /** The rail's tab open, and the drawer's, if it is open. */
   const [railTab, setRailTab] = useState<RailKey>("step");
   const [drawerTab, setDrawerTab] = useState<DrawerKey>();
-  const [drawerHeight, setDrawerHeight] = useState(() => Math.round(window.innerHeight * 0.4));
+  const [drawerHeight, setDrawerHeight] = useState(() => Math.round(window.innerHeight / 3));
   const [treeHeight, setTreeHeight] = useState(132);
   /** The experiments run in this tab, the latest last: the drawer lists their results the latest first. */
   const [runOrder, setRunOrder] = useState<string[]>([]);
@@ -278,11 +258,11 @@ export function PackagesApp() {
     enabled: Boolean(engine && opened),
     // A point never changes, so neither does its history.
     staleTime: Infinity,
-    // The last history stays on screen while the next is drawn.
+    // The last timeline stays on screen while the next is drawn.
     placeholderData: keepPreviousData,
   });
   const document = drawn.data;
-  // A history drawn for another point than the one opened, shown until the next is drawn.
+  // A timeline drawn for another point than the one opened, shown until the next is drawn.
   const stale = !document || document.id !== `point/${opened?.point.replace(":", "/")}`;
   const steps = document?.frames.length ?? 0;
   const snapshot = useSnapshot(document, position);
@@ -315,7 +295,7 @@ export function PackagesApp() {
     return () => window.clearInterval(timer);
   }, [playing, document, delay]);
 
-  // The point at the cursor: the opened point at the end of its history,
+  // The point at the cursor: the opened point at the end of its timeline,
   // else the point at that step of it, named once the cursor settles.
   const settled = useSettled(position, 250);
   const atEnd = position === steps;
@@ -347,7 +327,7 @@ export function PackagesApp() {
     } catch (cause) { report(failed(cause)); }
   };
 
-  /** Opens the history up to `point`, at `step` of it (its end by default), playing it when asked. */
+  /** Opens the timeline up to `point`, at `step` of it (its end by default), playing it when asked. */
   const openPoint = (point: PointId, step: "end" | number = "end", play = false) => {
     const ref = pkg?.refs.find((candidate) => candidate.point === point);
     pendingStep.current = step;
@@ -355,11 +335,11 @@ export function PackagesApp() {
     setOpened({ point, ref: ref?.name, shipped: ref?.shipped_by ?? undefined });
   };
 
-  const tree = useMemo(() => branchesOf(histories.data?.segments ?? [], pkg, results, notes, (name) => void openRef(name)),
+  const tree = useMemo(() => branchesOf(timelines.data?.segments ?? [], pkg, results, notes, (name) => void openRef(name)),
     // Results are compared by what they hold, so a refetch that changed nothing redraws nothing.
-    [histories.data, pkg, JSON.stringify(results), notes]);
+    [timelines.data, pkg, JSON.stringify(results), notes]);
   const selection = opened && !stale ? { id: parsePoint(opened.point).run, end: stepOf(opened.point), cursor: position } : undefined;
-  /** A step of the tree picked: on the history on screen the cursor moves there; elsewhere that branch opens, there. */
+  /** A step of the tree picked: on the timeline on screen the cursor moves there; elsewhere that branch opens, there. */
   const pick = (id: string, step: number) => {
     setPlaying(false);
     const onScreen = pathOf(tree.branches, selection).get(id);
@@ -386,6 +366,8 @@ export function PackagesApp() {
     try {
       const from = await loading();
       const names = loadedPackages(from);
+      const url = from.url && linkPath(from.url);
+      setSources((current) => new Map([...current, ...names.map((name) => [name, url] as const)]));
       if (from.got === "current") report(done(`Opened ${names.join(", ")}, unchanged.`));
       else if (from.got === "kept") report(caution(`${what} unreachable (${from.message}): opened the stored ${names.join(", ")}.`));
       else report(
@@ -408,48 +390,110 @@ export function PackagesApp() {
   /** Loads the sample at `url` and opens it; a link names it relative to Studio. */
   const openSample = (url: string) => {
     if (!url || !engine) return;
-    const path = linkPath(url);
-    setLoadedUrl(path);
-    void load(path, () => engine.loadUrl(url));
+    void load(linkPath(url), () => engine.loadUrl(url));
   };
 
-  // Once the engine's store is open: a linked package's URL first, then
-  // what the link names, else the first package the store holds.
+  /** Opens what the link names, else the first package the store holds. */
+  const openLinked = async (held: PackageList) => {
+    if (!engine) return;
+    let list = held;
+    let names: string[] = [];
+    if (link.package) {
+      const url = new URL(link.package, window.location.href).href;
+      names = await load(link.package, () => engine.loadUrl(url), false);
+      list = await relist();
+    }
+    // A link naming what the store does not hold opens the first package
+    // there is, and says so.
+    const stored = (name?: string) => list.packages.find((candidate) => candidate.name === name);
+    const named = stored(link.name) ?? stored(names[0]) ?? list.packages[0];
+    if (!named) return;
+    const missing = (words: string) => say(`${words}: opened ${named.name}.`);
+    if (link.name && link.name !== named.name) missing(`No package ${link.name} is stored here`);
+    setPackageName(named.name);
+    const ref = named.refs.find((candidate) => candidate.name === link.ref);
+    if (ref && link.play) await openPlayed(named, ref, link.play);
+    else if (ref) await openRef(ref.name, link.step ?? "end");
+    else if (link.point && await holds(link.point)) {
+      pendingStep.current = link.step ?? "end";
+      setOpened({ point: link.point });
+    } else {
+      if (link.ref && (!link.name || link.name === named.name)) missing(`${named.name} has no ref ${link.ref}`);
+      else if (link.point) missing(`This store does not hold point ${shortPoint(link.point)}`);
+      if (named.refs[0]) await openRef(named.refs[0].name);
+    }
+  };
+
+  // Once the engine's store is open, the link is; until it has been, the
+  // address stays what it was, but for what was not read.
   const started = useRef(false);
+  const [linked, setLinked] = useState(false);
   useEffect(() => {
     if (!engine || !kept.isSuccess || !listing.data || started.current) return;
     started.current = true;
-    void (async () => {
-      let list = listing.data;
-      let names: string[] = [];
-      if (link.package) {
-        const url = new URL(link.package, window.location.href).href;
-        names = await load(link.package, () => engine.loadUrl(url), false);
-        list = await relist();
-      }
-      // A link naming what the store does not hold opens the first package
-      // there is, and says so.
-      const stored = (name?: string) => list.packages.find((candidate) => candidate.name === name);
-      const named = stored(link.name) ?? stored(names[0]) ?? list.packages[0];
-      if (!named) return;
-      const missing = (words: string) => setSaid((current) => [...current, caution(`${words}: opened ${named.name}.`)]);
-      if (link.name && link.name !== named.name) missing(`No package ${link.name} is stored here`);
-      setPackageName(named.name);
-      if (link.ref && named.refs.some((ref) => ref.name === link.ref)) void openRef(link.ref, link.step ?? "end");
-      else if (link.ref) {
-        if (link.name === named.name) missing(`${named.name} has no ref ${link.ref}`);
-        if (named.refs[0]) void openRef(named.refs[0].name);
-      } else if (link.point) {
-        pendingStep.current = link.step ?? "end";
-        setOpened({ point: link.point });
-      } else if (named?.refs[0]) void openRef(named.refs[0].name);
-    })();
+    if (unread.length > 0) window.history.replaceState({}, "", `${window.location.pathname}${writeLink(link)}${window.location.hash}`);
+    void openLinked(listing.data).catch((cause: unknown) => report(failed(cause))).finally(() => {
+      setLinked(true);
+      const names = Object.values(link).some((named) => named !== undefined);
+      if (unread.length > 0) say(`${names ? "" : "The link names no package, ref or point. "}Ignored: ${listed(unread)}.`);
+    });
   }, [engine, kept.isSuccess, listing.data]);
 
+  /** The timeline tree of `name` as the store holds it now. */
+  const treeOf = (name: string) => queryClient.fetchQuery({ queryKey: ["timelines", kind, name], queryFn: () => engine!.timelines(name), staleTime: 0 });
+  /** A point's history, drawn, as the picture draws it. */
+  const draw = (point: PointId) => queryClient.fetchQuery({ queryKey: ["draw", kind, point], queryFn: () => engine!.draw(point), staleTime: Infinity });
+  /** Whether the store holds `point`. */
+  const holds = (point: PointId) => draw(point).then(() => true, (cause: unknown) => {
+    if (cause instanceof EngineRefusal && cause.status === 404) return false;
+    throw cause;
+  });
+  /**
+   * Opens what a link's strategy plays from `ref`: the branch it already
+   * made, where the store holds it; else the ref while it plays, then the
+   * branch it makes.
+   */
+  const openPlayed = async (owner: PackageView, ref: RefView, play: LinkedStrategy) => {
+    if (!engine) return;
+    const asked = askedBy(owner, ref.name, play);
+    if (!asked) {
+      say(`${owner.name} has no strategy ${play.strategy}: opened ${ref.name}.`);
+      await openRef(ref.name);
+      return;
+    }
+    try {
+      const from = play.from === undefined || play.from === stepOf(ref.point) ? ref.point : await engine.ancestor(ref.point, play.from);
+      const made = (await treeOf(owner.name)).segments.find((segment) => segment.from === from && segment.asked && sameAsked(segment.asked, asked));
+      if (made) {
+        openPoint(made.tip, link.step ?? stepOf(from), link.step === undefined);
+        return;
+      }
+      await openRef(ref.name, stepOf(from));
+      // Drawn before the strategy plays: the browser's engine does one thing at a time.
+      await draw(ref.point);
+      await playFrom(from, asked, link.step);
+    } catch (cause) { report(failed(cause)); }
+  };
+
+  /** A package's URL, where a link can name one: what it was loaded from in this tab, or the sample's of its name. */
+  const urlOf = (name: string) => {
+    if (sources.has(name)) return sources.get(name);
+    const sample = samples.data?.find((candidate) => candidate.name === name);
+    return sample && linkPath(sample.url);
+  };
+  // What the address names: the ref on screen, the strategy that played the
+  // branch on screen, or its point.
+  const onSegment = opened && timelines.data?.segments.find((segment) => parsePoint(segment.tip).run === parsePoint(opened.point).run);
+  const played = pkg && onSegment && !opened?.ref && opened?.point === onSegment.tip ? playedLink(pkg, onSegment) : undefined;
+  const address = writeLink({
+    package: packageName && urlOf(packageName),
+    name: packageName,
+    ...(opened?.ref ? { ref: opened.ref } : played ?? { point: opened?.point }),
+    step: opened && document ? position : undefined,
+  });
   useEffect(() => {
-    if (!started.current) return;
-    writeLink({ package: loadedUrl, name: packageName, ref: opened?.ref, point: opened?.point, step: document ? position : undefined });
-  }, [loadedUrl, packageName, opened, position, document?.id]);
+    if (linked && packageName) window.history.replaceState({}, "", `${window.location.pathname}${address}${window.location.hash}`);
+  }, [linked, packageName, address]);
 
   /** Applies `exchange` at the point on screen: at a ref of one's own the ref moves over it; anywhere else it makes a branch. */
   const act = async (program: string, label: string) => {
@@ -484,25 +528,21 @@ export function PackagesApp() {
     finding.cancel();
   };
   /**
-   * Lets `strategy` play from the point on screen toward `asked.goal`; the
-   * branch it makes opens at the step it started from and plays. Asked again
-   * while it searches, it stops.
+   * Lets a strategy play from `from`, as `asked`; the branch it makes opens
+   * at `step`, or at the step it started from and plays.
    */
-  const letPlay = async (strategy: string, asked: Asked) => {
-    if (finding) { stopFinding(); return; }
-    if (!engine || !screenPoint || !asked.goal) return;
-    report();
-    const from = screenPoint;
+  const playFrom = async (from: PointId, asked: StrategyRequest, step?: number) => {
+    if (!engine) return;
+    const { strategy, goal } = asked;
     const shown = coalesced((progress: SearchProgress) => setFinding((current) => current && { ...current, progress }));
-    const work = engine.runStrategy(from, { strategy, goal: asked.goal, seed: asked.seed, budget: asked.budget, turns: asked.turns }, shown.push);
+    const work = engine.runStrategy(from, asked, shown.push);
     setFinding({ cancel: work.cancel, strategy, from });
     try {
       const ran = await work.result;
       const found = stepOf(ran.end) - stepOf(ran.start);
-      if (found === 0) { report(ran.outcome.kind === "reached" ? done(`${asked.goal} holds here already.`) : caution(`${strategy}: no steps toward ${asked.goal}; ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
-      note(ran.end, lastPart(strategy), ran.start);
+      if (found === 0) { report(ran.outcome.kind === "reached" ? done(`${goal} holds here already.`) : caution(`${strategy}: no steps toward ${goal}; ${outcomeWords(ran.outcome).toLowerCase()}.`)); return; }
       report(done(`${strategy}: ${outcomeWords(ran.outcome).toLowerCase()} in ${counted(found, "step")}${ran.thinking ? `, ${counted(ran.thinking.expanded, "state")} looked at` : ""}.`));
-      openPoint(ran.end, stepOf(ran.start), true);
+      openPoint(ran.end, step ?? stepOf(ran.start), step === undefined);
     } catch (cause) {
       if (!findingStopped.current) report(failed(cause));
     } finally {
@@ -511,10 +551,17 @@ export function PackagesApp() {
       findingStopped.current = false;
     }
   };
-  /** Play where nothing has happened yet: the first strategy that plays this history. */
+  /** Lets `strategy` play from the point on screen; asked again while it plays, it stops. */
+  const letPlay = async (strategy: string, { goal, ...effort }: Asked) => {
+    if (finding) { stopFinding(); return; }
+    if (!screenPoint || !goal) return;
+    report();
+    await playFrom(screenPoint, { strategy, goal, ...effort });
+  };
+  /** Play where nothing has happened yet: the first strategy that plays this timeline. */
   const playAhead = () => {
     const first = runs.strategies[0];
-    if (!first) { report(caution(`No strategy of ${pkg?.name ?? "this package"} runs on this history.`)); return; }
+    if (!first) { report(caution(`No strategy of ${pkg?.name ?? "this package"} runs on this timeline.`)); return; }
     void letPlay(first.strategy, first.asked);
   };
 
@@ -574,7 +621,7 @@ export function PackagesApp() {
   /** Watches a trial: its branch opens at the step it started from, and plays. */
   const watch = (trial: { end: PointId; start: PointId }) => openPoint(trial.end, stepOf(trial.start), true);
 
-  /** Deletes the ref on screen from the point it is on; the history stays on screen. */
+  /** Deletes the ref on screen from the point it is on; the timeline stays on screen. */
   const deleteRef = async () => {
     if (!engine || !opened?.ref) return;
     const ref = opened.ref;
@@ -595,7 +642,11 @@ export function PackagesApp() {
     } catch (cause) { report(failed(cause)); }
   };
 
+  // A link opens anywhere when a package's URL serves what it names: a ref
+  // the package ships, or a strategy played from one.
+  const opensAnywhere = Boolean(pkg && urlOf(pkg.name) && (opened?.ref ? opened.shipped : played));
   const copyLink = async () => {
+    if (!opensAnywhere) report(caution(`The link opens only ${engine?.kind === "native" ? "on this server" : "in this browser"}, whose store holds ${pkg && !urlOf(pkg.name) ? pkg.name : opened?.ref ?? "this branch"}.`));
     await navigator.clipboard.writeText(window.location.href).catch(() => undefined);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
@@ -612,10 +663,10 @@ export function PackagesApp() {
   const loaded = new Set(listing.data?.packages.map((candidate) => candidate.name));
   const unloaded = (samples.data ?? []).filter((sample) => !loaded.has(sample.name));
   const onScreen = selection ? tree.branches.find((branch) => branch.id === selection.id) : undefined;
-  const historyName = opened?.ref ?? onScreen?.title ?? "this history";
-  // A branch is set against the history it left, unless another is picked, or the comparison is closed.
+  const timelineName = opened?.ref ?? onScreen?.title ?? "this timeline";
+  // A branch is set against the timeline it left, unless another is picked.
   const left = onScreen?.parent ? tree.branches.find((branch) => branch.id === onScreen.parent?.id) : undefined;
-  const against = compareWith === null ? undefined : compareWith ?? (left ? `${left.id}:${left.last}` : undefined);
+  const against = compareWith ?? (left ? `${left.id}:${left.last}` : undefined);
   const againstBranch = against ? tree.branches.find((branch) => branch.id === parsePoint(against).run) : undefined;
   const activities: Activity[] = [
     ...(busy ? [{ key: "loading", words: busy }] : []),
@@ -631,7 +682,7 @@ export function PackagesApp() {
       stop: { label: "Stop following", onStop: () => follow.setFollowing(false) },
     }] : []),
     // The transport, just below, pauses it.
-    ...(playing && document ? [{ key: "playback", words: <>Playing back <strong>{historyName}</strong>: step {position} of {steps}</> }] : []),
+    ...(playing && document ? [{ key: "playback", words: <>Playing back <strong>{timelineName}</strong>: step {position} of {steps}</> }] : []),
   ];
   const rootOf = (id: string) => {
     let branch = tree.branches.find((candidate) => candidate.id === id);
@@ -671,7 +722,8 @@ export function PackagesApp() {
     { key: "ref", label: "Ref" },
   ];
   const at = playing ? undefined : screenPoint;
-  const waiting = <p className="from-what">{playing ? "Playing…" : `Finding step ${position}…`}</p>;
+  // Said on what acts at a point while there is none on screen to act at.
+  const waiting = playing ? "Playing…" : `Finding step ${position}…`;
 
   return <InspectionProvider value={{ inspect, pin }}>
   <QuantityFormats.Provider value={document?.formats ?? {}}>
@@ -692,29 +744,28 @@ export function PackagesApp() {
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file || !engine) return;
-          setLoadedUrl(undefined);
           void load(file.name, () => engine.loadFile(file));
         }} /></label>
         <button type="button" onClick={copyLink} disabled={!pkg}>{copied ? "Link copied ✓" : "Copy link"}</button>
         <button type="button" aria-expanded={drawerTab === "source"} onClick={() => toggleDrawer("source")} disabled={!pkg}>Source</button>
         <button type="button" aria-expanded={drawerTab === "rules"} onClick={() => toggleDrawer("rules")} disabled={!model}>Rules</button>
       </section>
-      <ActivityStrip activities={activities} said={said} store={store} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
+      <ActivityStrip activities={activities} said={broken ? [failed(broken)] : said} store={store} onReplaceStore={engine instanceof BrowserPackages && kept.data?.replaceable ? () => void engine.replaceStore().then(() => window.location.reload(), (cause: unknown) => report(failed(cause))) : undefined} />
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
 
-    {!engine || !listing.data ? <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
+    {!engine || !listing.data ? broken ? null : <div className="loading" role="status"><strong>{engine ? "Opening the engine's store…" : "Looking for an engine…"}</strong><div className="indeterminate-progress" /></div>
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />
       : <main className="point-cockpit" aria-busy={stale}>
         <div className="work-column">
-          <section className="panel tree-panel" aria-label="History tree">
-            <PanelHeading kicker={<><Term name="history">History</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
+          <section className="panel tree-panel" aria-label="Timeline tree">
+            <PanelHeading kicker={<><Term name="timeline">Timeline</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
             <div className="tree-frame">
-            {histories.isError ? <div className="assessment-issue">{described(histories.error)}</div>
-              : !histories.data ? <div className="empty-state">Loading…</div>
-              : <HistoryTree branches={tree.branches} selection={selection} onSelect={pick} label="History tree" height={treeHeight} describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
+            {timelines.isError ? <div className="assessment-issue">{described(timelines.error)}</div>
+              : !timelines.data ? <div className="empty-state">Loading…</div>
+              : <TimelineTree branches={tree.branches} selection={selection} onSelect={pick} label="Timeline tree" height={treeHeight} describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
                 onCompare={opened && selection && branch.id !== selection.id && rootOf(branch.id) === rootOf(selection.id) ? () => { setCompareWith(`${branch.id}:${branch.last}`); setDrawerTab("compare"); } : undefined} />} />}
-            <ResizeHandle edge="bottom" label="Resize the history tree" size={treeHeight} min={56} max={Math.round(window.innerHeight * 0.6)} onResize={setTreeHeight} />
+            <ResizeHandle edge="bottom" label="Resize the timeline tree" size={treeHeight} min={56} max={Math.round(window.innerHeight * 0.6)} onResize={setTreeHeight} />
             </div>
           </section>
           {opened && document && snapshot && <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />}
@@ -722,44 +773,44 @@ export function PackagesApp() {
             {!opened ? <div className="panel empty-state">No refs</div>
               : !document || !snapshot ? <div className="panel loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
               : <div className="panel world-panel" ref={worldPanel}>
-                <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
-                <SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} />
+                <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene && PICTURE_KINDS[snapshot.scene.surface.kind]} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
+                <ErrorBoundary label="The picture" resetOn={snapshot}><SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} /></ErrorBoundary>
               </div>}
             <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
           </div>
         </div>
         {opened && document && snapshot && <div className="panel action-panel">
-          <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
+          <PanelHeading kicker="From here" title={`Step ${position} of ${timelineName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
           <TabStrip id="rail" label="From here" tabs={railTabs} open={railTab} onOpen={setRailTab} />
           <div className="rail-body">
             <TabPanels id="rail" open={railTab} panels={{
               step: () => <StepHere position={position} steps={steps} frame={frame} accounts={snapshot.accounts} before={position > 0 ? previous?.accounts : undefined} focus={focusedAccount} />,
-              moves: () => !at ? waiting : <>
-                <Moves engine={engine} pkg={pkg} at={at} onApply={act} />
+              moves: () => <>
+                <Moves engine={engine} pkg={pkg} at={at} waiting={waiting} onApply={act} />
                 <ExchangeEditor rates={document.model?.rates ?? []} accounts={snapshot.accounts.map((account) => account.account)} ontology={document.source.key} point={at}
-                  onCheck={(program) => engine.assess(at, program)} onApply={act} />
+                  onCheck={(program, point) => engine.assess(point, program)} onApply={act} />
               </>,
-              strategy: () => !at ? waiting : <StrategyHere key={`${pkg?.name}:${screenRoot}:${document.source.key}`} offered={runs} finding={Boolean(finding)} onLetPlay={letPlay} />,
+              strategy: () => <StrategyHere key={`${pkg?.name}:${screenRoot}:${document.source.key}`} offered={runs} at={at} waiting={waiting} finding={Boolean(finding)} onLetPlay={letPlay} />,
               experiments: () => <ExperimentsHere pkg={pkg} inTree={inTree} results={results} experimenting={experimenting}
                 onPlay={(experiment) => void playExperiment(experiment)} onStop={stopExperiment} onResults={() => setDrawerTab("results")} />,
-              ref: () => !at ? waiting : <RefHere pkg={pkg} document={document} at={at} opened={opened} onRefPoint={onRefPoint} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives} />,
+              ref: () => <RefHere pkg={pkg} document={document} at={at} waiting={waiting} opened={opened} onRefPoint={onRefPoint} onKeep={keepAsRef} onDelete={deleteRef} follow={follow} objectives={objectives} />,
             }} />
           </div>
         </div>}
       </main>}
 
-    {engine && listing.data && listing.data.packages.length > 0 && <section className={`drawer${drawerTab ? " open" : ""}`} aria-label="Drawer" style={drawerTab ? { maxHeight: drawerHeight } : undefined}>
+    {engine && listing.data && listing.data.packages.length > 0 && <section className={`drawer${drawerTab ? " open" : ""}`} aria-label="Drawer" style={drawerTab ? { height: drawerHeight } : undefined}>
       {drawerTab && <ResizeHandle edge="top" label="Resize the drawer" size={drawerHeight} min={140} max={Math.round(window.innerHeight * 0.8)} onResize={setDrawerHeight} />}
       <div className="drawer-bar">
         <TabStrip id="drawer" label="Drawer" tabs={drawerTabs} open={drawerTab} onOpen={toggleDrawer} />
-        {drawerTab && <button type="button" className="drawer-close" aria-label="Close the drawer" onClick={() => setDrawerTab(undefined)}><IconX size={14} stroke={2} aria-hidden="true" /></button>}
+        {drawerTab && <button type="button" className="drawer-close" aria-label="Close the drawer" onClick={() => setDrawerTab(undefined)}>Close <IconX size={14} stroke={2} aria-hidden="true" /></button>}
       </div>
       {drawerTab && <div className="drawer-body">
         <TabPanels id="drawer" open={drawerTab} panels={{
           results: () => <ResultsHere results={orderedResults} onWatch={watch} />,
-          compare: () => comparing && opened && against ? <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
-            leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} onClose={() => { setCompareWith(null); setDrawerTab(undefined); }} />
-            : <p className="empty-state">No history to compare with</p>,
+          compare: () => comparing && opened && against ? <Compare engine={engine} left={opened.point} right={against} leftName={timelineName} rightName={againstBranch?.title ?? "the timeline it left"}
+            leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} />
+            : <p className="empty-state">No timeline to compare with</p>,
           rules: () => model && document ? <section className="rules-panel" aria-label="Rules">
             <div className="drawer-heading"><h2>{document.title}</h2><small>{counted(model.rates.length, "rate")}</small></div>
             <div className="rules-body">
@@ -771,10 +822,8 @@ export function PackagesApp() {
               </div>}
             </div>
           </section> : <p className="empty-state">No rules</p>,
-          source: () => pkg ? <Suspense fallback={<p role="status">Opening source…</p>}>
-            <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} />
-          </Suspense> : <p className="empty-state">No package</p>,
-          console: () => at ? <RhaiConsole key={at} engine={engine} at={at} onApply={act} /> : waiting,
+          source: () => pkg ? <PackageSource key={`${pkg.name}:${pkg.version}`} engine={engine} pkg={pkg} /> : <p className="empty-state">No package</p>,
+          console: () => <RhaiConsole engine={engine} at={at} onApply={act} />,
         }} />
       </div>}
     </section>}
@@ -919,31 +968,24 @@ function BranchCard({ branch, step, info, branches, onCompare }: { branch: TreeB
   return <div className="branch-card">
     <strong>{branch.title}</strong>
     <span>Step {step}{step === branch.last ? ", its last" : ` of ${branch.last}`}</span>
-    {branch.parent && <span>A <Term name="branch">branch</Term> from step {branch.parent.step} of {parent?.title ?? "another history"}</span>}
+    {branch.parent && <span>A <Term name="branch">branch</Term> from step {branch.parent.step} of {parent?.title ?? "another timeline"}</span>}
     {info?.refs.map((ref) => <span key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} /> names step {ref.step}{ref.fixed ? <>, <Term name="fixed">fixed</Term></> : ""}</span>)}
     {trial && <span><Term name="trial">Trial</Term> {trial.index + 1} of <IdLink subject={{ kind: "experiment", path: trial.experiment }} />, <IdLink subject={{ kind: "strategy", path: trial.strategy }} label={lastPart(trial.strategy)} />: {endedWords(trial.trial.ended)}</span>}
     {trial && trial.objectives.length > 0 && <span className="branch-values">{trial.objectives.map((objective, index) => <span key={objective.objective}><IdLink subject={{ kind: "objective", path: objective.objective }} label={lastPart(objective.objective)} /> {trial.trial.values[index]}</span>)}</span>}
-    {info?.note && !trial && <span>Made in this tab: {info.note.words}</span>}
-    {onCompare && <button type="button" onClick={onCompare}>Compare with the history on screen</button>}
+    {info?.asked && !trial && <span><IdLink subject={{ kind: "strategy", path: info.asked.strategy }} /> toward {info.asked.goal}</span>}
+    {info?.note && <span>Made in this tab: {info.note.words}</span>}
+    {onCompare && <button type="button" onClick={onCompare}>Compare with the timeline on screen</button>}
   </div>;
 }
-
-/** A whole number below 2^64, written in decimal. */
-function natural(text: string): boolean {
-  return /^(0|[1-9]\d*)$/.test(text) && BigInt(text) < 2n ** 64n;
-}
-
-/** The effort Studio gives a strategy no experiment runs. */
-const DEFAULT_EFFORT = { seed: "17", budget: "1000000", turns: "1000" };
 
 /** What a strategy is asked: the goal it plays toward and the effort it is given. */
 type Asked = { goal?: string; seed: string; budget: string; turns: string };
 
-/** What can play a history: its strategies, each with what it is asked by default, and the goals it may be asked toward. */
+/** What can play a timeline: its strategies, each with what it is asked by default, and the goals it may be asked toward. */
 type Playable = { strategies: { strategy: string; asked: Asked }[]; goals: string[] };
 
 /**
- * What runs on a history: the strategies of the arms that start in its tree
+ * What runs on a timeline: the strategies of the arms that start in its tree
  * (an arm is a strategy and the ref it starts from, its own or its
  * experiment's), or, where none does, of the arms of experiments on its
  * ontology; in their order, each asked what its experiment asks, the goal
@@ -951,7 +993,7 @@ type Playable = { strategies: { strategy: string; asked: Asked }[]; goals: strin
  * experiment compares, which may run on any, asked with Studio's own
  * effort. Its goals likewise: those of its arms' experiments, then those no
  * experiment works toward. `inTree` says whether a ref names a point of the
- * history's tree.
+ * timeline's tree.
  */
 function playable(pkg: PackageView | undefined, ontology: string | undefined, inTree: (ref: string) => boolean): Playable {
   if (!pkg) return { strategies: [], goals: [] };
@@ -985,14 +1027,15 @@ function outcomeWords(outcome: RanView["outcome"]): string {
 
 /** The moves the package's rules offer here, each checked, each one click from applied:
  * those of the candidate set picked, or of the first that offers any here. */
-function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: PackageView; at: PointId; onApply: (program: string, label: string) => Promise<void> }) {
+function Moves({ engine, pkg, at, waiting, onApply }: { engine: PackageEngine; pkg?: PackageView; at?: PointId; waiting: string; onApply: (program: string, label: string) => Promise<void> }) {
   const sets = useMemo(() => pkg?.candidates ?? [], [pkg]);
   const [picked, setPicked] = useState<string>();
   useEffect(() => setPicked(undefined), [pkg?.name]);
   const offers = useQueries({
     queries: sets.map((set) => ({
       queryKey: ["candidates", engine.kind, at, set],
-      queryFn: () => engine.candidates(at, set),
+      queryFn: () => engine.candidates(at!, set),
+      enabled: at !== undefined,
       staleTime: Infinity,
     })),
   });
@@ -1007,7 +1050,8 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
     <h3><Term name="move">Moves</Term></h3>
     {sets.length === 0 ? <p className="muted">No candidate sets</p> : <>
     <label className="field"><span>Candidates</span><select name="candidates" value={set ?? sets[0]} onChange={(event) => setPicked(event.target.value)}>{sets.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
-    {offered?.isError ? <div className="assessment-issue">{described(offered.error)}</div>
+    {!at ? <p className="from-what">{waiting}</p>
+      : offered?.isError ? <div className="assessment-issue">{described(offered.error)}</div>
       : !offered?.data ? <p className="muted">Loading…</p>
       : candidates.length === 0 ? <p className="muted">No moves</p>
       : <ul className="move-list">{candidates.map((candidate, index) => {
@@ -1028,16 +1072,16 @@ function Moves({ engine, pkg, at, onApply }: { engine: PackageEngine; pkg?: Pack
 }
 
 /** A strategy run from here: the branch it makes opens and plays. */
-function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; finding: boolean; onLetPlay: (strategy: string, asked: Asked) => Promise<void> }) {
+function StrategyHere({ offered, at, waiting, finding, onLetPlay }: { offered: Playable; at?: PointId; waiting: string; finding: boolean; onLetPlay: (strategy: string, asked: Asked) => Promise<void> }) {
   const first = offered.strategies[0];
   const [strategy, setStrategy] = useState(first?.strategy);
   const [asked, setAsked] = useState<Asked | undefined>(first?.asked);
   const valid = asked !== undefined && natural(asked.seed) && natural(asked.budget) && BigInt(asked.budget) > 0n && natural(asked.turns);
   return <section className="from-section" aria-label="Strategy">
-    {!strategy || !asked ? <p className="muted">No strategy runs on this history</p> : <>
+    {!strategy || !asked ? <p className="muted">No strategy runs on this timeline</p> : <>
       <div className="let-play">
         <select name="strategy" aria-label="Strategy" value={strategy} disabled={finding} onChange={(event) => { setStrategy(event.target.value); setAsked(offered.strategies.find((candidate) => candidate.strategy === event.target.value)?.asked); }}>{offered.strategies.map((candidate) => <option key={candidate.strategy} value={candidate.strategy}>{candidate.strategy}</option>)}</select>
-        <button type="button" className={finding ? "danger" : "primary"} disabled={!finding && (!asked.goal || !valid)} onClick={() => void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Run"}</button>
+        <button type="button" className={finding ? "danger" : "primary"} disabled={!finding && (!at || !asked.goal || !valid)} title={finding || at ? undefined : waiting} onClick={() => void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Run"}</button>
       </div>
       <div className="settings-fields">
         <label className="field"><span><Term name="goal">Goal</Term></span><select name="goal" value={asked.goal} disabled={finding} onChange={(event) => setAsked({ ...asked, goal: event.target.value })}>{offered.goals.map((goal) => <option key={goal} value={goal}>{goal}</option>)}</select></label>
@@ -1051,7 +1095,7 @@ function StrategyHere({ offered, finding, onLetPlay }: { offered: Playable; find
 }
 
 /** The refs naming the point on screen, a new one, or following and deleting the ref of one's own on it. */
-function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; document: ViewDocument; at: PointId; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
+function RefHere({ pkg, document, at, waiting, opened, onRefPoint, onKeep, onDelete, follow, objectives }: { pkg?: PackageView; document: ViewDocument; at?: PointId; waiting: string; opened: Opened; onRefPoint: boolean; onKeep: (name: string) => void; onDelete: () => void; follow: Following; objectives: string[] }) {
   // The first of `<package>/mine`, `<package>/mine-2`, … that no ref of the package has.
   const suggested = useMemo(() => {
     const taken = new Set(pkg?.refs.map((ref) => ref.name));
@@ -1062,7 +1106,7 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
   }, [pkg]);
   const [name, setName] = useState(suggested);
   useEffect(() => setName(suggested), [suggested, opened.point]);
-  const here = pkg?.refs.filter((ref) => ref.point === at) ?? [];
+  const here = at ? pkg?.refs.filter((ref) => ref.point === at) ?? [] : [];
   const named = here.length > 0 && <ul className="refs-here">{here.map((ref) => <li key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} />{ref.shipped_by ? <> <Term name="fixed">fixed</Term></> : ""}</li>)}</ul>;
   if (onRefPoint && opened.ref) {
     const { following, setFollowing, delivered, problem } = follow;
@@ -1075,7 +1119,7 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
       {problem && <div className="assessment-issue" role="alert">{problem}</div>}
       {delivered.length > 0 && <ol className="delivered-frames" aria-label="Delivered steps">{delivered.map((frame) => {
         const step = stepOf(frame.point);
-        // The step as the history on screen draws it, once it is drawn there.
+        // The step as the timeline on screen draws it, once it is drawn there.
         const drawnFrame = document.frames[step - 1];
         return <li key={frame.point}>
           <IdLink subject={{ kind: "step", step }} />
@@ -1087,9 +1131,9 @@ function RefHere({ pkg, document, at, opened, onRefPoint, onKeep, onDelete, foll
   }
   return <section className="from-section" aria-label="Ref">
     {named}
-    <form className="let-play" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onKeep(name.trim()); }}>
+    <form className="let-play" onSubmit={(event) => { event.preventDefault(); if (at && name.trim()) onKeep(name.trim()); }}>
       <input name="ref-name" aria-label="Ref name" value={name} onChange={(event) => setName(event.target.value)} />
-      <button type="submit" disabled={!name.trim()}>Create</button>
+      <button type="submit" disabled={!at || !name.trim()} title={at ? undefined : waiting}>Create</button>
     </form>
   </section>;
 }
