@@ -606,7 +606,7 @@ the same before and after. A failure leaves the economy unchanged.
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths, with typed patterns |
 | `axionomy-search` | What the engine's strategies run: graph, bounded and Pareto search, minimax, MCTS, ISMCTS and seeded sampling |
 | `axionomy-units` | Self-describing asset denominations, `uom` authoring and fixed-precision decimal assets |
-| `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline |
+| `axionomy-time` | Calendar-aware Jiff authoring over the same canonical time asset |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, refs and definitions, on redb |
 | `axionomy-view` | Presentation contracts, and the labels, formats and scenes a sample's view draws with |

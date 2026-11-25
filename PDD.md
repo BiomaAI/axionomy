@@ -629,7 +629,7 @@ them.
   strategies, experiments and view. `packages()` lists them all, and each
   package is checked against its pinned outcomes (D-053).
 - `axionomy-units` owns optional dimension-safe physical authoring.
-- `axionomy-time` owns optional calendar-aware timeline authoring.
+- `axionomy-time` owns optional calendar-aware time authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
   kept in, with no I/O and no economics.
 - `axionomy-store` owns runs, stored states and their organization on redb.

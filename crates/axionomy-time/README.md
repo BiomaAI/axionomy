@@ -5,14 +5,14 @@ elapsed-time and calendar-aware obligations, then lowers them into the same
 self-describing `UnitAsset` representation used by `axionomy-units`.
 
 Clocks and schedules never become hidden engine state. A model declares one
-canonical timeline asset in its shared `AssetSchema`; every account, rate, and
+canonical time asset in its shared `AssetSchema`; every account, rate, and
 goal then uses that asset identity. Jiff may resolve time zones and
 daylight-saving behavior, while `uom` may author ordinary physical durations,
 without creating competing denominations.
 
 ```rust
 use axionomy::{AssetAmount, Quantity};
-use axionomy_time::{CalendarWindow, TimelineAsset};
+use axionomy_time::{CalendarWindow, TimeAsset};
 use axionomy_time::jiff::{SignedDuration, Span, ZonedDateTime};
 use axionomy_units::{AssetSchema, UnitAsset};
 
@@ -22,7 +22,7 @@ enum AssetId {
 }
 
 let mut assets = AssetSchema::new();
-let elapsed_hour = TimelineAsset::define(
+let elapsed_hour = TimeAsset::define(
     &mut assets,
     AssetId::ElapsedHour,
     SignedDuration::from_hours(1),
@@ -37,14 +37,14 @@ assert_eq!(amount.quantity(), Quantity::new(23));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-`TimelineAsset::from_schema` reconstructs a Jiff handle for a compatible time
+`TimeAsset::from_schema` reconstructs a Jiff handle for a compatible time
 asset originally declared through `uom`, proving both authoring systems share
 one denomination rather than maintaining separate clocks.
 
-Any timeline count below `2²⁵⁶` atoms becomes an exact `Quantity`.
+Any time count below `2²⁵⁶` atoms becomes an exact `Quantity`.
 
 Run the structured example at `INFO`, or set `RUST_LOG=debug` to include the
-canonical timeline definition:
+canonical time definition:
 
 ```console
 cargo run -p axionomy-time --example calendar_window

@@ -1,6 +1,6 @@
 use axionomy::{AssetAmount, Basket, Quantity};
 use axionomy_time::jiff::{SignedDuration, Span, ZonedDateTime};
-use axionomy_time::{CalendarWindow, TimelineAsset};
+use axionomy_time::{CalendarWindow, TimeAsset};
 use axionomy_units::{AssetSchema, UnitAsset};
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opens: ZonedDateTime = "2024-03-09T12:00:00-05:00[America/New_York]".parse()?;
     let window = CalendarWindow::from_span(opens, Span::new().days(1))?;
     let mut assets = AssetSchema::new();
-    let elapsed_hour = TimelineAsset::define(
+    let elapsed_hour = TimeAsset::define(
         &mut assets,
         AssetId::ElapsedHour,
         SignedDuration::from_hours(1),
@@ -38,17 +38,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "resolved a calendar-aware window"
     );
 
-    let timeline = Basket::try_from_amounts([amount])?;
+    let held = Basket::try_from_amounts([amount])?;
     info!(
         asset_id = ?elapsed_hour.asset().id(),
-        quantity = %timeline.quantity(elapsed_hour.asset()),
+        quantity = %held.quantity(elapsed_hour.asset()),
         "lowered elapsed time into authoritative economic state"
     );
     debug!(
         definition = ?elapsed_hour.asset().definition(),
-        "canonical timeline denomination"
+        "canonical time denomination"
     );
 
-    assert_eq!(timeline.quantity(elapsed_hour.asset()), Quantity::new(23));
+    assert_eq!(held.quantity(elapsed_hour.asset()), Quantity::new(23));
     Ok(())
 }

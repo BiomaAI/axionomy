@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-time"
-description = "Calendar-aware timeline asset bindings for Axionomy"
+description = "Calendar-aware time asset bindings for Axionomy"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
