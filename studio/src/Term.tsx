@@ -6,11 +6,11 @@ import { createPortal } from "react-dom";
  * met, on a hover or a focus, and nowhere else: the screen stays the work.
  */
 export const GLOSSARY = {
-  package: "A file holding economies with their rules, the histories that ship with them, and the goals, strategies and experiments that use them.",
-  history: "Everything that happened, step by step, from an economy's first state to a point. Play walks it.",
+  package: "A file holding economies with their rules, the timelines that ship with them, and the goals, strategies and experiments that use them.",
+  timeline: "The steps from an economy's first state to an end: a ref's point, or a branch's last step. Play walks it.",
   step: "One exchange applied: the kernel checked it against the rules, and every account it touched changed at once.",
-  point: "The economy after some step of a history. A point never changes; anything done at it starts a new history from it.",
-  branch: "A history that splits off another at some step: the same past, then something else. Comparing a branch with the history it left is a counterfactual.",
+  point: "The economy after some step of a timeline. A point never changes; anything done at it starts a new timeline from it.",
+  branch: "A timeline that splits off another at some step: the same past, then something else. Comparing a branch with the timeline it left is a counterfactual.",
   ref: "A name for a point, such as maze/micro. A ref of your own moves only when you apply a move at the point it names; one a package ships is fixed.",
   fixed: "A ref the package ships. It always names what the package shipped, so acting at it makes a branch; name a ref of your own to move forward.",
   move: "An exchange the package's rules offer at this point, checked against the economy before you apply it.",

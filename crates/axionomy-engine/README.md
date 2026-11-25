@@ -55,7 +55,7 @@ goes.
   (D-052); what a strategy keeps of its own, such as a beam's width or a
   player's iterations, describes how it chooses. `ask` runs the strategy
   kept at a path, and the run it records keeps what was asked (the strategy,
-  the goal and the effort) as tags, which `histories` reads back with each
+  the goal and the effort) as tags, which `timelines` reads back with each
   segment: asked again from where it started, in this store or another that
   holds the package, it plays the same steps. It runs a policy turn by
   turn, a plan a script makes whole (such as a

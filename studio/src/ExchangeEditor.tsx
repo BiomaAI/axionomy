@@ -168,7 +168,7 @@ export function ExchangeEditor({ rates, accounts, ontology, point, onCheck, onAp
   const [problem, setProblem] = useState<string>();
   const [applying, setApplying] = useState(false);
   const rate = rates.find((candidate) => candidate.rate.key === draft.rate) ?? rates[0];
-  // Another model (another history's) starts a fresh draft.
+  // Another model (another timeline's) starts a fresh draft.
   useEffect(() => { if (!rates.some((candidate) => candidate.rate.key === draft.rate)) setDraft(draftOf(rates[0])); }, [rates]);
   const listed = useMemo(() => {
     const wanted = filter.trim().toLowerCase();

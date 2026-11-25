@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { layoutTree, pathOf, type TreeBranch } from "./HistoryTree";
+import { layoutTree, pathOf, type TreeBranch } from "./TimelineTree";
 
-/** A history of six steps, a branch at step 2 of it and a twig at step 4 of the branch, and a later branch at step 5. */
+/** A timeline of six steps, a branch at step 2 of it and a twig at step 4 of the branch, and a later branch at step 5. */
 const branches: TreeBranch[] = [
   { id: "trunk", first: 0, last: 6, title: "trunk" },
   { id: "late", parent: { id: "trunk", step: 5 }, first: 5, last: 7, title: "late" },
@@ -16,7 +16,7 @@ describe("layoutTree", () => {
     expect([...laid.rows.entries()]).toEqual([["trunk", 0], ["branch", 1], ["twig", 2], ["late", 3]]);
   });
 
-  test("sets first histories of one group close, and a gap before the next group", () => {
+  test("sets first timelines of one group close, and a gap before the next group", () => {
     const laid = layoutTree([
       { id: "micro", first: 0, last: 0, title: "micro", group: "micro" },
       { id: "micro-field", first: 0, last: 0, title: "micro/field", group: "micro" },
@@ -44,7 +44,7 @@ describe("layoutTree", () => {
     expect(laid.stepAt(laid.x(400))).toBe(400);
   });
 
-  test("is as wide as its widest label, however short its histories", () => {
+  test("is as wide as its widest label, however short its timelines", () => {
     const named = (text: string) => ({ step: 0, text });
     const short = layoutTree([{ id: "a", first: 0, last: 0, title: "a", labels: [named("a")] }]);
     const long = layoutTree([
@@ -58,7 +58,7 @@ describe("layoutTree", () => {
 });
 
 describe("pathOf", () => {
-  test("follows a selection's history back through every branch it grew from", () => {
+  test("follows a selection's timeline back through every branch it grew from", () => {
     const path = pathOf(branches, { id: "twig", end: 6, cursor: 3 });
     expect([...path.entries()]).toEqual([
       ["twig", { from: 4, to: 6 }],

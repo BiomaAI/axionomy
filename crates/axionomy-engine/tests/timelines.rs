@@ -1,4 +1,4 @@
-//! The history tree: every run growing from a history's root, each a segment
+//! The timeline tree: every run growing from a timeline's root, each a segment
 //! from the point it forked at to its tip, and every change to it told to
 //! whoever subscribed.
 
@@ -51,7 +51,7 @@ fn the_tree_lists_every_branch_from_the_root_parents_first() {
 
     // Asked from any point of it, the tree is the same.
     for asked in [start, trunk, twig, early] {
-        let tree = engine.histories(&[asked]).unwrap();
+        let tree = engine.timelines(&[asked]).unwrap();
         assert_eq!(
             tree,
             [
@@ -90,13 +90,13 @@ fn separate_roots_make_separate_trees() {
     let (engine, start) = bank();
     let (_, other) = bank();
     // Another engine's store holds `other`; this one does not.
-    assert!(engine.histories(&[other]).is_err());
+    assert!(engine.timelines(&[other]).is_err());
     let second = engine
         .author(engine.reach(start).unwrap().state.economy.clone())
         .unwrap();
     let grown = engine.apply(second, &[pay(4)]).unwrap();
     assert_eq!(
-        engine.histories(&[start, grown]).unwrap(),
+        engine.timelines(&[start, grown]).unwrap(),
         [
             Segment {
                 from: None,
@@ -207,7 +207,7 @@ fn a_run_a_kept_strategy_made_says_what_it_was_asked() {
     };
     // As it is recorded, and read back from the store.
     assert_eq!(*told.lock().unwrap(), [Change::Run(made.clone())]);
-    assert_eq!(engine.histories(&[start]).unwrap()[1], made);
+    assert_eq!(engine.timelines(&[start]).unwrap()[1], made);
 
     // A strategy kept nowhere, and an exchange applied, say nothing of one.
     let unkept = engine
@@ -217,7 +217,7 @@ fn a_run_a_kept_strategy_made_says_what_it_was_asked() {
         .unwrap();
     let applied = engine.apply(start, &[pay(1)]).unwrap();
     for tip in [unkept.end, applied] {
-        assert!(engine.histories(&[start]).unwrap().contains(&Segment {
+        assert!(engine.timelines(&[start]).unwrap().contains(&Segment {
             from: Some(start),
             tip,
             asked: None,

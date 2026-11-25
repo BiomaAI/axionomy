@@ -472,7 +472,7 @@ async fn next_event(body: &mut Body) -> Value {
 }
 
 #[tokio::test]
-async fn the_history_tree_grows_with_every_branch_and_each_change_streams_as_it_is_made() {
+async fn the_timeline_tree_grows_with_every_branch_and_each_change_streams_as_it_is_made() {
     let router = studio();
     let response = router
         .clone()
@@ -488,7 +488,7 @@ async fn the_history_tree_grows_with_every_branch_and_each_change_streams_as_it_
         json!({ "kind": "definitions" })
     );
     let start = referred(&router, "maze/micro").await;
-    let before = ok(get(&router, "/api/packages/maze/histories").await);
+    let before = ok(get(&router, "/api/packages/maze/timelines").await);
     let segments = before["segments"].as_array().unwrap();
     assert!(
         segments
@@ -521,11 +521,11 @@ async fn the_history_tree_grows_with_every_branch_and_each_change_streams_as_it_
         json!({ "kind": "run", "segment": branch })
     );
 
-    let after = ok(get(&router, "/api/packages/maze/histories").await);
+    let after = ok(get(&router, "/api/packages/maze/timelines").await);
     let grown = after["segments"].as_array().unwrap();
     assert_eq!(grown.len(), segments.len() + 1);
     assert!(grown.contains(&branch), "{after}");
 
-    let (status, _) = get(&router, "/api/packages/nowhere/histories").await;
+    let (status, _) = get(&router, "/api/packages/nowhere/timelines").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

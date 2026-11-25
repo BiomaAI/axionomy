@@ -50,13 +50,13 @@ describe("branchesOf", () => {
     ]);
     // A ref is written without its package's name, and named in full.
     expect(branches[0].labels?.map(({ text, name, tone }) => ({ text, name, tone }))).toEqual([{ text: "micro", name: "maze/micro", tone: "fixed" }]);
-    // A first history is grouped by its ref's first part.
+    // A first timeline is grouped by its ref's first part.
     expect(branches.map(({ group }) => group)).toEqual(["micro", undefined, undefined, undefined]);
     expect(branches[1].labels?.map(({ text }) => text)).toEqual(["a-star"]);
     expect(info.get(solved)?.asked).toEqual(asked);
     expect(branches[2].labels?.map(({ text }) => text)).toEqual(["a-star"]);
     expect(info.get(trial)?.trial?.trial.values).toEqual(["6"]);
-    // The empty trial labels nothing of the history it started from.
+    // The empty trial labels nothing of the timeline it started from.
     expect(info.get(root)?.trial).toBeUndefined();
   });
 

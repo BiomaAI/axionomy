@@ -110,10 +110,10 @@ test("each change to the store reaches the page as it is made, a run's branches 
     packages.onChange((change: { kind: string }) => told.push({ kind: change.kind, at: performance.now() }));
     await packages.loadUrl("/packages/maze.zip");
     const loaded = told.length;
-    const before = await packages.histories("maze");
+    const before = await packages.timelines("maze");
     const results = await packages.runExperiment("maze/micro", () => undefined).result;
     const ended = performance.now();
-    const after = await packages.histories("maze");
+    const after = await packages.timelines("maze");
     packages.terminate();
     const ran = told.slice(loaded);
     return {

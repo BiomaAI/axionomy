@@ -10,7 +10,7 @@ import { lastPart } from "./packageTree";
 const STEPS = 100;
 
 /**
- * The ids the views of both histories give their accounts and assets, by
+ * The ids the views of both timelines give their accounts and assets, by
  * the paths a divergence names them by: a view keys a value under its
  * ontology and category, `<ontology>/account/<path>`.
  */
@@ -31,17 +31,17 @@ function idsOf(documents: (ViewDocument | undefined)[]) {
   return { account: (path: string) => id("account", path), asset: (path: string) => id("asset", path) };
 }
 
-/** What a step of a history did: its exchange, as the view of that history shows it. */
+/** What a step of a timeline did: its exchange, as the view of that timeline shows it. */
 function StepDone({ document, step, rate }: { document: ViewDocument | undefined; step: number; rate: string }) {
   const frame = document?.frames[step - 1];
   return frame ? <ExchangeView exchange={frame.exchange} /> : <code>{rate}</code>;
 }
 
 /**
- * The history on screen set against another: where they split, then step by
+ * The timeline on screen set against another: where they split, then step by
  * step what each did and what differs after it, whether they are ever equal
  * again, and how each ends on the package's objectives. A branch set against
- * the history it left is a counterfactual.
+ * the timeline it left is a counterfactual.
  */
 export function Compare({ engine, left, right, leftName, rightName, leftDocument, objectives, onStep }: {
   engine: PackageEngine;

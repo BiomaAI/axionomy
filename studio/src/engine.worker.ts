@@ -130,8 +130,8 @@ async function served(engine: Engine, where: StoreKept, followers: Followers, id
       return read(engine.results(request.experiment));
     case "compare":
       return read(engine.compare(JSON.stringify(request.request)));
-    case "histories":
-      return read(engine.histories(request.name));
+    case "timelines":
+      return read(engine.timelines(request.name));
     case "divergence":
       return read(engine.divergence(JSON.stringify(request.query)));
   }

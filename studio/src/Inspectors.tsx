@@ -10,7 +10,7 @@ export function PanelHeading({ kicker, title, aside, action }: { kicker: ReactNo
   return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div><div className="panel-heading-side">{aside && <small>{aside}</small>}{action}</div></div>;
 }
 
-/** The state at `position` of a document's history: its initial state, or the state after that step. */
+/** The state at `position` of a document's timeline: its initial state, or the state after that step. */
 export function useSnapshot(document: ViewDocument | undefined, position: number) {
   return useMemo(() => {
     if (!document) return undefined;
@@ -21,7 +21,7 @@ export function useSnapshot(document: ViewDocument | undefined, position: number
 /**
  * Something Studio names: a value of the ontology (an account, an asset, a
  * rate) by its view's id, a package's ref, strategy, experiment or
- * objective by its path, or a step of the history on screen.
+ * objective by its path, or a step of the timeline on screen.
  */
 export type Subject =
   | { kind: "account"; id: ViewId }

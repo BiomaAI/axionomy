@@ -25,6 +25,15 @@ import { SceneIcon } from "./SceneIcon";
 
 export type ReplayMotionMode = "step" | "seek";
 
+/** What each kind of picture is called on screen. A timeline there is what the tree holds, so a scene's is its lanes. */
+export const PICTURE_KINDS: Record<SceneSurface["kind"], string> = {
+  graph: "graph",
+  grid: "grid",
+  matrix: "matrix",
+  timeline: "lanes",
+  reserves: "reserves",
+};
+
 export function SceneView({ scene, previousScene, history = [], frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; history?: Scene[]; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
   // The chrome wraps rather than clipping, so the picture is laid out below
   // however many rows it takes.

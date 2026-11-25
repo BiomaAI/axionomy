@@ -51,7 +51,7 @@ export type RefMoved = Schemas["RefMoved"];
 export type SearchProgress = Schemas["GraphSearchProgress"];
 export type ExperimentProgress = Schemas["ExperimentProgress"];
 export type SamplePackages = Schemas["SamplePackages"];
-export type HistoriesView = Schemas["HistoriesView"];
+export type TimelinesView = Schemas["TimelinesView"];
 export type SegmentView = Schemas["SegmentView"];
 export type ChangeView = Schemas["ChangeView"];
 export type FramesQuery = operations["listRefFrames"]["parameters"]["query"];
@@ -144,8 +144,8 @@ export interface PackageEngine {
   /** The results an experiment last recorded, or undefined before it has run. */
   results(experiment: string): Promise<ResultsView | undefined>;
   compare(request: CompareRequest): Promise<ComparisonView>;
-  /** The package's history tree: each history its refs are on and every branch grown from it. */
-  histories(name: string): Promise<HistoriesView>;
+  /** The package's timeline tree: each timeline its refs are on and every branch grown from it. */
+  timelines(name: string): Promise<TimelinesView>;
   /**
    * Tells `listener` of every change to the store from now on, as it is
    * made, even while the run that made it goes on. A listener that may have
@@ -356,8 +356,8 @@ export const nativePackages: PackageEngine = {
   async compare(request) {
     return answered(await api.POST("/api/compare", { body: request }));
   },
-  async histories(name) {
-    return answered(await api.GET("/api/packages/{name}/histories", { params: { path: { name } } }));
+  async timelines(name) {
+    return answered(await api.GET("/api/packages/{name}/timelines", { params: { path: { name } } }));
   },
   onChange: nativeChanges,
   async divergence(query) {

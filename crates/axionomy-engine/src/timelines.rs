@@ -1,7 +1,7 @@
-//! The history tree, and what changes it. Every run is a segment of some
-//! history: a root run starts from an economy of its own, and a fork, a
-//! branch, continues a history from the point it forked at.
-//! [`Engine::histories`] lists the segments growing from the roots of some
+//! The timeline tree, and what changes it. Every run is a segment of some
+//! timeline: a root run starts from an economy of its own, and a fork, a
+//! branch, continues a timeline from the point it forked at.
+//! [`Engine::timelines`] lists the segments growing from the roots of some
 //! points' histories, so a front end can draw them as one tree;
 //! [`Engine::subscribe`] tells it of every run recorded, ref moved and
 //! definition kept afterwards, so the tree it drew stays the store's.
@@ -27,7 +27,7 @@ pub struct Segment {
 /// Something the store holds now that it did not before.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
-    /// A run was recorded: a new segment of some history.
+    /// A run was recorded: a new segment of some timeline.
     Run(Segment),
     /// The ref `name` was made, moved or deleted: it names `point` now, or
     /// nothing.
@@ -72,11 +72,11 @@ impl Engine {
             .push(subscriber);
     }
 
-    /// The history tree of `points`: every run growing from the roots of
+    /// The timeline tree of `points`: every run growing from the roots of
     /// their histories, each root, then every run forked from a run already
     /// listed, parents before children and forks in the order of the step
     /// they forked at.
-    pub fn histories(&self, points: &[Point]) -> Result<Vec<Segment>, EngineError> {
+    pub fn timelines(&self, points: &[Point]) -> Result<Vec<Segment>, EngineError> {
         let reader = self.store().read()?;
         let mut roots = BTreeSet::new();
         for point in points {

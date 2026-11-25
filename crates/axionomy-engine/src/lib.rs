@@ -4,7 +4,6 @@ mod cache;
 pub mod definitions;
 mod divergence;
 mod experiment;
-mod histories;
 mod operation;
 mod package;
 mod refs;
@@ -12,6 +11,7 @@ pub mod script;
 pub mod source;
 pub use operation::{RhaiApi, RhaiInput, exchange_source};
 mod strategy;
+mod timelines;
 mod view;
 
 pub use definitions::{
@@ -20,7 +20,6 @@ pub use definitions::{
 };
 pub use divergence::{AccountDifference, Aligned, BalanceDifference, Divergence, Side, Tip};
 pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Playing, Results, Trial};
-pub use histories::{Change, Segment, Subscriber};
 pub use package::{
     Contents, Loaded, Manifest, PackageError, PackagePath, Version, VersionError, package, zipped,
 };
@@ -28,6 +27,7 @@ pub use refs::{Following, Frame};
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 pub use strategy::{Asked, Chooser, Effort, Outcome, Ran, Strategy};
+pub use timelines::{Change, Segment, Subscriber};
 pub use view::{View, ViewPath};
 
 use axionomy::{
@@ -174,7 +174,7 @@ pub struct Engine {
     /// Told each time a ref moves, so a follower waiting on one wakes.
     moved: Arc<refs::Moves>,
     /// Told of every run recorded, ref moved and definition kept.
-    changes: Arc<histories::Changes>,
+    changes: Arc<timelines::Changes>,
 }
 
 impl Engine {

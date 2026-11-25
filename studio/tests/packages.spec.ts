@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Studio on packages, run against the native server and against the engine
  * in the browser's Worker alike: both engines offer the same operations, so
- * the same steps give the same pages. The history tree is how a history is
+ * the same steps give the same pages. The timeline tree is how a timeline is
  * opened; what to do from a point is beside the picture. A package's refs
  * are fixed, so a test that moves a ref names one of its own at a package's
  * ref's point, a name no other run gives, since the native server's store
@@ -14,7 +14,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function openSample(page: Page, name: string) {
   await page.goto(`/?package=packages/${name}.zip`);
   await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue(name, { timeout: 30_000 });
-  await expect(page.getByRole("group", { name: "History tree" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Timeline tree" })).toBeVisible();
 }
 
 const trace = (page: Page) => page.getByRole("slider", { name: "Trace position" });
@@ -30,17 +30,17 @@ async function drawer(page: Page, name: string) {
   if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
 }
 const stepNow = (page: Page) => page.getByRole("region", { name: "This step" });
-const tree = (page: Page) => page.getByRole("group", { name: "History tree" });
+const tree = (page: Page) => page.getByRole("group", { name: "Timeline tree" });
 const activity = (page: Page) => page.getByRole("region", { name: "Activity" });
 const inspectors = (page: Page) => page.getByRole("complementary", { name: "Inspectors" });
 
-/** How many steps the history on screen has, once it is drawn. */
+/** How many steps the timeline on screen has, once it is drawn. */
 async function steps(page: Page): Promise<number> {
   await expect(page.locator(".point-cockpit")).toHaveAttribute("aria-busy", "false");
   return Number(await trace(page).getAttribute("max"));
 }
 
-/** Opens a ref from its label in the tree, and gives how many steps its history has. */
+/** Opens a ref from its label in the tree, and gives how many steps its timeline has. */
 async function openRef(page: Page, name: string): Promise<number> {
   await tree(page).getByRole("button", { name: `Open ${name}`, exact: true }).click();
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText(`of ${name}`);
@@ -54,7 +54,7 @@ function ownRef(pkg: string): string {
 
 /**
  * Opens the package's ref `shipped`, which is fixed, and names a ref of
- * one's own at its point; gives how many steps its history has.
+ * one's own at its point; gives how many steps its timeline has.
  */
 async function playFrom(page: Page, shipped: string, name: string): Promise<number> {
   const start = await openRef(page, shipped);
@@ -78,7 +78,7 @@ test("an empty store lists the samples, a card each, by what their views call th
   await page.goto("/");
   const cards = page.getByRole("list", { name: "Sample packages" });
   // A store that holds packages opens the first instead, as the native server's may.
-  const opened = page.getByRole("group", { name: "History tree" });
+  const opened = page.getByRole("group", { name: "Timeline tree" });
   await expect(cards.or(opened)).toBeVisible({ timeout: 30_000 });
   test.skip(await opened.isVisible(), "The store holds packages already.");
   const maze = cards.getByRole("button", { name: /^Key-door maze/ });
@@ -98,7 +98,7 @@ test("a sample opens from the package picker, and its tree opens its refs", asyn
   await expect(picker).toHaveValue("sokoban", { timeout: 30_000 });
   await expect(tree(page).getByRole("button", { name: "Open sokoban/micro/deadlock" })).toBeVisible();
   expect(await openRef(page, "sokoban/micro/deadlock")).toBe(3);
-  // A ref opens where it is: the end of its history.
+  // A ref opens where it is: the end of its timeline.
   await expect(trace(page)).toHaveValue("3");
   await page.getByRole("button", { name: "Go to initial state" }).click();
   await expect(trace(page)).toHaveValue("0");
@@ -109,7 +109,7 @@ test("a sample opens from the package picker, and its tree opens its refs", asyn
   await expect(stepNow(page).locator(".effect").first()).toBeVisible();
   await stepNow(page).getByRole("button", { name: "1 / 3" }).click();
   await expect(inspectors(page).getByRole("region", { name: "Step 1" }).locator(".assessment-applicable")).toContainText("applicable");
-  // Picking a step of the history on screen in the tree moves the cursor there.
+  // Picking a step of the timeline on screen in the tree moves the cursor there.
   await tree(page).getByRole("button", { name: /^Step 2 of / }).first().click();
   await expect(trace(page)).toHaveValue("2");
   await expect(page.locator(".picture-area .world-panel")).toBeVisible();
@@ -197,7 +197,7 @@ test("applies a move at a ref of one's own, moving it, and anywhere else makes a
   await expect(page.getByRole("status").filter({ hasText: `${mine} moved to step ${start + 2}` })).toBeVisible();
   await expect(trace(page)).toHaveAttribute("max", String(start + 2));
 
-  // One's own ref is deleted; its history stays on screen and in the tree.
+  // One's own ref is deleted; its timeline stays on screen and in the tree.
   await rail(page, "Ref");
   await fromHere(page).getByRole("button", { name: "Delete it" }).click();
   await expect(page.getByRole("status").filter({ hasText: `Deleted ${mine}.` })).toBeVisible();
@@ -298,13 +298,13 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await results.locator(".results-table tbody tr", { hasText: "a-star" }).getByRole("button", { name: "Watch" }).click();
   await expect(fromHere(page).locator(".panel-heading h2")).toContainText("a-star");
   expect(await steps(page)).toBeGreaterThan(0);
-  // A branch is set against the history it left: the same up to where it split, then step by step.
+  // A branch is set against the timeline it left: the same up to where it split, then step by step.
   await drawer(page, "Compare");
   const comparison = page.getByRole("region", { name: "Comparison" });
   await expect(comparison.locator(".compare-note")).toContainText("Split at step 0");
   await expect(comparison.locator("tbody tr").first()).toContainText("Walk Start");
   // Any branch of the same tree is compared from its card in the tree.
-  const compareWith = page.getByRole("button", { name: "Compare with the history on screen" });
+  const compareWith = page.getByRole("button", { name: "Compare with the timeline on screen" });
   await expect(async () => {
     await tree(page).getByRole("button", { name: /^Step 3 of breadth-first/ }).last().hover();
     await expect(compareWith).toBeVisible({ timeout: 1_000 });
@@ -312,6 +312,17 @@ test("plays an experiment from where it starts, and each trial is a branch to wa
   await compareWith.click();
   await expect(comparison.locator(".panel-heading h2")).toContainText("breadth-first");
   await expect(comparison.locator(".compare-ends")).toContainText("energy");
+});
+
+test("a timeline is what the tree holds: a picture along a clock is called its lanes", async ({ page }) => {
+  await openSample(page, "scheduling");
+  const written = async () => (await page.locator("body").innerText()).match(/timeline/gi);
+  for (const name of ["scheduling/micro", "scheduling/showcase"]) {
+    await openRef(page, name);
+    await expect(page.getByRole("region", { name: "Timeline tree" }).getByText("Timeline tree", { exact: true })).toBeVisible();
+    await expect(page.locator(".world-panel .panel-heading")).toContainText("lanes");
+    expect(await written()).toHaveLength(1);
+  }
 });
 
 test("AMM holdings and lending balances show their economic denominations", async ({ page }) => {
@@ -539,7 +550,7 @@ test("Rhai at a point reads a balance and applies the assessed move", async ({ p
   await expect(trace(page)).toHaveAttribute("max", "1");
 });
 
-test("playing a history moves no frame and clears nothing typed", async ({ page }) => {
+test("playing a timeline moves no frame and clears nothing typed", async ({ page }) => {
   await page.goto("/?package=packages/amm.zip&ref=amm/micro&strategy=amm/day/market-day&step=3");
   await expect(trace(page)).toHaveValue("3", { timeout: 30_000 });
   const seed = (await rail(page, "Strategy")).getByRole("textbox", { name: "Seed" });

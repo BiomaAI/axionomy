@@ -1,4 +1,4 @@
-import type { TreeBranch, TreeLabel } from "./HistoryTree";
+import type { TreeBranch, TreeLabel } from "./TimelineTree";
 import type { PackageView, PointId, ResultsView, SegmentView, StrategyRequest } from "./packageEngine";
 
 /** A point's run and step: `run-…:3` is run `run-…`, step 3. */
@@ -42,7 +42,7 @@ export type BranchInfo = {
 export type Note = { label: string; words: string };
 
 /**
- * The history tree of a package as {@link TreeBranch}es: one per segment,
+ * The timeline tree of a package as {@link TreeBranch}es: one per segment,
  * joined at the step it branched at, labelled with the refs naming points
  * of it and, at its tip, the experiment trial, the strategy or the move
  * that made it.
@@ -93,10 +93,10 @@ export function branchesOf(
       parent: from ? { id: from.run, step: from.step } : undefined,
       first: from?.step ?? 0,
       last: tip.step,
-      title: named?.name ?? (trial ? `${lastPart(trial.strategy)}, trial ${trial.index + 1} of ${trial.experiment}` : strategy && from ? `${strategy}, from step ${from.step}` : known?.note?.words ?? (from ? "A branch" : "A history")),
+      title: named?.name ?? (trial ? `${lastPart(trial.strategy)}, trial ${trial.index + 1} of ${trial.experiment}` : strategy && from ? `${strategy}, from step ${from.step}` : known?.note?.words ?? (from ? "A branch" : "A timeline")),
       tone: named ? "named" : trial ? "trial" : "branch",
       labels,
-      // A first history is drawn with those whose refs start alike: `micro` with `micro/deadlock`.
+      // A first timeline is drawn with those whose refs start alike: `micro` with `micro/deadlock`.
       group: from ? undefined : known?.refs[0] && inPackage(known.refs[0].name).split("/")[0],
     };
   });

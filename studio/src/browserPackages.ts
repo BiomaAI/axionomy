@@ -16,7 +16,7 @@ import {
   type RhaiInput,
   type ExperimentProgress,
   type FramesQuery,
-  type HistoriesView,
+  type TimelinesView,
   type LoadedFrom,
   type PackageEngine,
   type PackageList,
@@ -66,7 +66,7 @@ export type StoreRequest =
   | { kind: "run_experiment"; experiment: string }
   | { kind: "results"; experiment: string }
   | { kind: "compare"; request: CompareRequest }
-  | { kind: "histories"; name: string }
+  | { kind: "timelines"; name: string }
   | { kind: "divergence"; query: DivergenceQuery };
 
 export type StoreMessage =
@@ -227,8 +227,8 @@ export class BrowserPackages implements PackageEngine {
     return this.request({ kind: "compare", request }) as Promise<ComparisonView>;
   }
 
-  histories(name: string): Promise<HistoriesView> {
-    return this.request({ kind: "histories", name }) as Promise<HistoriesView>;
+  timelines(name: string): Promise<TimelinesView> {
+    return this.request({ kind: "timelines", name }) as Promise<TimelinesView>;
   }
 
   onChange(listener: (change: ChangeView) => void): () => void {

@@ -241,6 +241,9 @@ hierarchy, grouping, and stable geometry—not by hiding important state.
 
 ### Timeline
 
+Studio calls this picture *lanes* on screen, since a timeline there is what the
+timeline tree holds: steps, where a scene's timeline runs along a clock.
+
 - Lanes have stable semantic ownership.
 - Spans communicate start, duration, and ordering against one scale.
 - Replay progress does not change lane geometry.

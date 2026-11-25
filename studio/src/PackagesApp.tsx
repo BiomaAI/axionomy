@@ -10,7 +10,7 @@ import { RhaiConsole } from "./RhaiConsole";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ExchangeEditor } from "./ExchangeEditor";
 import { Effects, ExchangeView, Holding } from "./ExchangeView";
-import { HistoryTree, pathOf, type TreeBranch } from "./HistoryTree";
+import { TimelineTree, pathOf, type TreeBranch } from "./TimelineTree";
 import { IdLink, InspectionProvider, InspectorDock, PanelHeading, subjectKey, useSnapshot, type Subject } from "./Inspectors";
 import { inspector } from "./inspect";
 import { StateList } from "./Ledger";
@@ -25,7 +25,6 @@ import {
   type ExperimentProgress,
   type Sample,
   type ExperimentView as ExperimentData,
-  type HistoriesView,
   type LoadedFrom,
   type PackageEngine,
   type PackageList,
@@ -37,13 +36,14 @@ import {
   type ResultsView,
   type SearchProgress,
   type StrategyRequest,
+  type TimelinesView,
 } from "./packageEngine";
 import { branchesOf, lastPart, parsePoint, type BranchInfo, type Note } from "./packageTree";
 import { PackageSource } from "./PackageSource";
 import { Brand, PlaybackControls, changingBalances } from "./Playback";
 import { Formatted, QuantityFormats } from "./Quantity";
 import { RateTable } from "./RateView";
-import { SceneView, type ReplayMotionMode } from "./SceneView";
+import { PICTURE_KINDS, SceneView, type ReplayMotionMode } from "./SceneView";
 import { Term } from "./Term";
 
 /** The one browser engine of the page: one Worker holds the saved store. */
@@ -71,7 +71,7 @@ function useEngine(): PackageEngine | undefined {
 }
 
 /**
- * The history on screen: up to a ref's point, or to the tip of a branch
+ * The timeline on screen: up to a ref's point, or to the tip of a branch
  * picked in the tree or reached some other way.
  */
 type Opened = {
@@ -161,7 +161,7 @@ function useSettled<T>(value: T, delay: number): T {
 /** The value of the package select that opens a sample not loaded yet. */
 const SAMPLE = "sample:";
 
-/** Packages, their history trees, and what to do from any point of them. */
+/** Packages, their timeline trees, and what to do from any point of them. */
 export function PackagesApp() {
   const engine = useEngine();
   const queryClient = useQueryClient();
@@ -188,13 +188,13 @@ export function PackagesApp() {
   const broken = kept.error ?? listing.error;
   const pkg = listing.data?.packages.find((candidate) => candidate.name === packageName);
 
-  // The history tree stays the store's: each change arrives as it is made.
-  const histories = useQuery({ queryKey: ["histories", kind, packageName], queryFn: () => engine!.histories(packageName!), enabled: Boolean(engine && packageName && pkg), placeholderData: keepPreviousData });
+  // The timeline tree stays the store's: each change arrives as it is made.
+  const timelines = useQuery({ queryKey: ["timelines", kind, packageName], queryFn: () => engine!.timelines(packageName!), enabled: Boolean(engine && packageName && pkg), placeholderData: keepPreviousData });
   useEffect(() => {
     if (!engine) return;
     return engine.onChange((change) => {
       if (change.kind === "run") {
-        queryClient.setQueriesData<HistoriesView>({ queryKey: ["histories", engine.kind] }, (current) => {
+        queryClient.setQueriesData<TimelinesView>({ queryKey: ["timelines", engine.kind] }, (current) => {
           const from = change.segment.from;
           if (!current || !from) return current;
           const runs = new Set(current.segments.map((segment) => parsePoint(segment.tip).run));
@@ -205,7 +205,7 @@ export function PackagesApp() {
       } else if (change.kind === "ref") {
         void queryClient.invalidateQueries({ queryKey: ["packages", engine.kind] });
       } else {
-        for (const key of ["packages", "histories", "results"]) void queryClient.invalidateQueries({ queryKey: [key, engine.kind] });
+        for (const key of ["packages", "timelines", "results"]) void queryClient.invalidateQueries({ queryKey: [key, engine.kind] });
       }
     });
   }, [engine, queryClient]);
@@ -218,14 +218,14 @@ export function PackagesApp() {
   });
   const results = recorded.flatMap((query) => query.data ? [query.data] : []);
 
-  // The step to show once the history is drawn: the end, unless a link or a pick names one.
+  // The step to show once the timeline is drawn: the end, unless a link or a pick names one.
   const pendingStep = useRef<"end" | number>(link.step ?? "end");
   const [position, setPosition] = useState(0);
   const [motion, setMotion] = useState<ReplayMotionMode>("seek");
   const [playing, setPlaying] = useState(false);
   const [delay, setDelay] = useState(650);
   // Play where nothing has happened yet finds the moves, then plays them as
-  // soon as their history is drawn.
+  // soon as their timeline is drawn.
   const playOnOpen = useRef(false);
   /** A strategy playing from a point, and how far it is. */
   const [finding, setFinding] = useState<{ cancel(): void; strategy: string; from: PointId; progress?: SearchProgress }>();
@@ -236,7 +236,7 @@ export function PackagesApp() {
   const experimentsStopped = useRef(new Set<string>());
   /** The account last picked in the picture. */
   const [focusedAccount, setFocusedAccount] = useState<string>();
-  /** The point picked to set the history on screen against, instead of the one it left. */
+  /** The point picked to set the timeline on screen against, instead of the one it left. */
   const [compareWith, setCompareWith] = useState<PointId>();
   const worldPanel = useRef<HTMLDivElement>(null);
   /** The inspectors pinned open, latest last. */
@@ -258,11 +258,11 @@ export function PackagesApp() {
     enabled: Boolean(engine && opened),
     // A point never changes, so neither does its history.
     staleTime: Infinity,
-    // The last history stays on screen while the next is drawn.
+    // The last timeline stays on screen while the next is drawn.
     placeholderData: keepPreviousData,
   });
   const document = drawn.data;
-  // A history drawn for another point than the one opened, shown until the next is drawn.
+  // A timeline drawn for another point than the one opened, shown until the next is drawn.
   const stale = !document || document.id !== `point/${opened?.point.replace(":", "/")}`;
   const steps = document?.frames.length ?? 0;
   const snapshot = useSnapshot(document, position);
@@ -295,7 +295,7 @@ export function PackagesApp() {
     return () => window.clearInterval(timer);
   }, [playing, document, delay]);
 
-  // The point at the cursor: the opened point at the end of its history,
+  // The point at the cursor: the opened point at the end of its timeline,
   // else the point at that step of it, named once the cursor settles.
   const settled = useSettled(position, 250);
   const atEnd = position === steps;
@@ -327,7 +327,7 @@ export function PackagesApp() {
     } catch (cause) { report(failed(cause)); }
   };
 
-  /** Opens the history up to `point`, at `step` of it (its end by default), playing it when asked. */
+  /** Opens the timeline up to `point`, at `step` of it (its end by default), playing it when asked. */
   const openPoint = (point: PointId, step: "end" | number = "end", play = false) => {
     const ref = pkg?.refs.find((candidate) => candidate.point === point);
     pendingStep.current = step;
@@ -335,11 +335,11 @@ export function PackagesApp() {
     setOpened({ point, ref: ref?.name, shipped: ref?.shipped_by ?? undefined });
   };
 
-  const tree = useMemo(() => branchesOf(histories.data?.segments ?? [], pkg, results, notes, (name) => void openRef(name)),
+  const tree = useMemo(() => branchesOf(timelines.data?.segments ?? [], pkg, results, notes, (name) => void openRef(name)),
     // Results are compared by what they hold, so a refetch that changed nothing redraws nothing.
-    [histories.data, pkg, JSON.stringify(results), notes]);
+    [timelines.data, pkg, JSON.stringify(results), notes]);
   const selection = opened && !stale ? { id: parsePoint(opened.point).run, end: stepOf(opened.point), cursor: position } : undefined;
-  /** A step of the tree picked: on the history on screen the cursor moves there; elsewhere that branch opens, there. */
+  /** A step of the tree picked: on the timeline on screen the cursor moves there; elsewhere that branch opens, there. */
   const pick = (id: string, step: number) => {
     setPlaying(false);
     const onScreen = pathOf(tree.branches, selection).get(id);
@@ -439,8 +439,8 @@ export function PackagesApp() {
     });
   }, [engine, kept.isSuccess, listing.data]);
 
-  /** The history tree of `name` as the store holds it now. */
-  const treeOf = (name: string) => queryClient.fetchQuery({ queryKey: ["histories", kind, name], queryFn: () => engine!.histories(name), staleTime: 0 });
+  /** The timeline tree of `name` as the store holds it now. */
+  const treeOf = (name: string) => queryClient.fetchQuery({ queryKey: ["timelines", kind, name], queryFn: () => engine!.timelines(name), staleTime: 0 });
   /** A point's history, drawn, as the picture draws it. */
   const draw = (point: PointId) => queryClient.fetchQuery({ queryKey: ["draw", kind, point], queryFn: () => engine!.draw(point), staleTime: Infinity });
   /** Whether the store holds `point`. */
@@ -483,7 +483,7 @@ export function PackagesApp() {
   };
   // What the address names: the ref on screen, the strategy that played the
   // branch on screen, or its point.
-  const onSegment = opened && histories.data?.segments.find((segment) => parsePoint(segment.tip).run === parsePoint(opened.point).run);
+  const onSegment = opened && timelines.data?.segments.find((segment) => parsePoint(segment.tip).run === parsePoint(opened.point).run);
   const played = pkg && onSegment && !opened?.ref && opened?.point === onSegment.tip ? playedLink(pkg, onSegment) : undefined;
   const address = writeLink({
     package: packageName && urlOf(packageName),
@@ -558,10 +558,10 @@ export function PackagesApp() {
     report();
     await playFrom(screenPoint, { strategy, goal, ...effort });
   };
-  /** Play where nothing has happened yet: the first strategy that plays this history. */
+  /** Play where nothing has happened yet: the first strategy that plays this timeline. */
   const playAhead = () => {
     const first = runs.strategies[0];
-    if (!first) { report(caution(`No strategy of ${pkg?.name ?? "this package"} runs on this history.`)); return; }
+    if (!first) { report(caution(`No strategy of ${pkg?.name ?? "this package"} runs on this timeline.`)); return; }
     void letPlay(first.strategy, first.asked);
   };
 
@@ -621,7 +621,7 @@ export function PackagesApp() {
   /** Watches a trial: its branch opens at the step it started from, and plays. */
   const watch = (trial: { end: PointId; start: PointId }) => openPoint(trial.end, stepOf(trial.start), true);
 
-  /** Deletes the ref on screen from the point it is on; the history stays on screen. */
+  /** Deletes the ref on screen from the point it is on; the timeline stays on screen. */
   const deleteRef = async () => {
     if (!engine || !opened?.ref) return;
     const ref = opened.ref;
@@ -663,8 +663,8 @@ export function PackagesApp() {
   const loaded = new Set(listing.data?.packages.map((candidate) => candidate.name));
   const unloaded = (samples.data ?? []).filter((sample) => !loaded.has(sample.name));
   const onScreen = selection ? tree.branches.find((branch) => branch.id === selection.id) : undefined;
-  const historyName = opened?.ref ?? onScreen?.title ?? "this history";
-  // A branch is set against the history it left, unless another is picked.
+  const timelineName = opened?.ref ?? onScreen?.title ?? "this timeline";
+  // A branch is set against the timeline it left, unless another is picked.
   const left = onScreen?.parent ? tree.branches.find((branch) => branch.id === onScreen.parent?.id) : undefined;
   const against = compareWith ?? (left ? `${left.id}:${left.last}` : undefined);
   const againstBranch = against ? tree.branches.find((branch) => branch.id === parsePoint(against).run) : undefined;
@@ -682,7 +682,7 @@ export function PackagesApp() {
       stop: { label: "Stop following", onStop: () => follow.setFollowing(false) },
     }] : []),
     // The transport, just below, pauses it.
-    ...(playing && document ? [{ key: "playback", words: <>Playing back <strong>{historyName}</strong>: step {position} of {steps}</> }] : []),
+    ...(playing && document ? [{ key: "playback", words: <>Playing back <strong>{timelineName}</strong>: step {position} of {steps}</> }] : []),
   ];
   const rootOf = (id: string) => {
     let branch = tree.branches.find((candidate) => candidate.id === id);
@@ -758,14 +758,14 @@ export function PackagesApp() {
       : listing.data.packages.length === 0 ? <EmptyCatalog samples={samples.data ?? []} busy={Boolean(busy)} onOpen={openSample} />
       : <main className="point-cockpit" aria-busy={stale}>
         <div className="work-column">
-          <section className="panel tree-panel" aria-label="History tree">
-            <PanelHeading kicker={<><Term name="history">History</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
+          <section className="panel tree-panel" aria-label="Timeline tree">
+            <PanelHeading kicker={<><Term name="timeline">Timeline</Term> tree</>} title={document?.title ?? pkg?.name ?? ""} aside={counted(tree.branches.length, "branch", "branches")} />
             <div className="tree-frame">
-            {histories.isError ? <div className="assessment-issue">{described(histories.error)}</div>
-              : !histories.data ? <div className="empty-state">Loading…</div>
-              : <HistoryTree branches={tree.branches} selection={selection} onSelect={pick} label="History tree" height={treeHeight} describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
+            {timelines.isError ? <div className="assessment-issue">{described(timelines.error)}</div>
+              : !timelines.data ? <div className="empty-state">Loading…</div>
+              : <TimelineTree branches={tree.branches} selection={selection} onSelect={pick} label="Timeline tree" height={treeHeight} describe={(branch, step) => <BranchCard branch={branch} step={step} info={tree.info.get(branch.id)} branches={tree.branches}
                 onCompare={opened && selection && branch.id !== selection.id && rootOf(branch.id) === rootOf(selection.id) ? () => { setCompareWith(`${branch.id}:${branch.last}`); setDrawerTab("compare"); } : undefined} />} />}
-            <ResizeHandle edge="bottom" label="Resize the history tree" size={treeHeight} min={56} max={Math.round(window.innerHeight * 0.6)} onResize={setTreeHeight} />
+            <ResizeHandle edge="bottom" label="Resize the timeline tree" size={treeHeight} min={56} max={Math.round(window.innerHeight * 0.6)} onResize={setTreeHeight} />
             </div>
           </section>
           {opened && document && snapshot && <PlaybackControls position={position} count={steps} playing={playing} delay={delay} onDelay={setDelay} onPosition={(next, how) => { setMotion(how); setPosition(next); }} onPlaying={(next) => { if (next && position >= steps) { setMotion("seek"); setPosition(0); } setPlaying(next); }} onPlayAhead={playAhead} finding={Boolean(finding)} label={stepWords} />}
@@ -773,14 +773,14 @@ export function PackagesApp() {
             {!opened ? <div className="panel empty-state">No refs</div>
               : !document || !snapshot ? <div className="panel loading" role="status"><strong>{drawn.isError ? described(drawn.error) : "Loading…"}</strong>{!drawn.isError && <div className="indeterminate-progress" />}</div>
               : <div className="panel world-panel" ref={worldPanel}>
-                <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
+                <PanelHeading kicker="Picture" title={snapshot.scene?.title ?? document.title} aside={snapshot.scene && PICTURE_KINDS[snapshot.scene.surface.kind]} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
                 <ErrorBoundary label="The picture" resetOn={snapshot}><SceneView scene={snapshot.scene} previousScene={previous?.scene} history={[document.initial, ...document.frames.slice(0, position).map((candidate) => candidate.after)].flatMap((candidate) => candidate.scene ? [candidate.scene] : [])} frame={frame} motion={motion} onAccount={pickAccount} /></ErrorBoundary>
               </div>}
             <InspectorDock pinned={pinned} inspect={inspect} onClose={unpin} />
           </div>
         </div>
         {opened && document && snapshot && <div className="panel action-panel">
-          <PanelHeading kicker="From here" title={`Step ${position} of ${historyName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
+          <PanelHeading kicker="From here" title={`Step ${position} of ${timelineName}`} aside={onRefPoint ? <Term name="ref">your ref</Term> : opened.shipped && atEnd ? <Term name="fixed">fixed</Term> : undefined} />
           <TabStrip id="rail" label="From here" tabs={railTabs} open={railTab} onOpen={setRailTab} />
           <div className="rail-body">
             <TabPanels id="rail" open={railTab} panels={{
@@ -808,9 +808,9 @@ export function PackagesApp() {
       {drawerTab && <div className="drawer-body">
         <TabPanels id="drawer" open={drawerTab} panels={{
           results: () => <ResultsHere results={orderedResults} onWatch={watch} />,
-          compare: () => comparing && opened && against ? <Compare engine={engine} left={opened.point} right={against} leftName={historyName} rightName={againstBranch?.title ?? "the history it left"}
+          compare: () => comparing && opened && against ? <Compare engine={engine} left={opened.point} right={against} leftName={timelineName} rightName={againstBranch?.title ?? "the timeline it left"}
             leftDocument={document} objectives={objectives} onStep={(step) => { setPlaying(false); setMotion("seek"); setPosition(step); }} />
-            : <p className="empty-state">No history to compare with</p>,
+            : <p className="empty-state">No timeline to compare with</p>,
           rules: () => model && document ? <section className="rules-panel" aria-label="Rules">
             <div className="drawer-heading"><h2>{document.title}</h2><small>{counted(model.rates.length, "rate")}</small></div>
             <div className="rules-body">
@@ -968,24 +968,24 @@ function BranchCard({ branch, step, info, branches, onCompare }: { branch: TreeB
   return <div className="branch-card">
     <strong>{branch.title}</strong>
     <span>Step {step}{step === branch.last ? ", its last" : ` of ${branch.last}`}</span>
-    {branch.parent && <span>A <Term name="branch">branch</Term> from step {branch.parent.step} of {parent?.title ?? "another history"}</span>}
+    {branch.parent && <span>A <Term name="branch">branch</Term> from step {branch.parent.step} of {parent?.title ?? "another timeline"}</span>}
     {info?.refs.map((ref) => <span key={ref.name}><IdLink subject={{ kind: "ref", path: ref.name }} /> names step {ref.step}{ref.fixed ? <>, <Term name="fixed">fixed</Term></> : ""}</span>)}
     {trial && <span><Term name="trial">Trial</Term> {trial.index + 1} of <IdLink subject={{ kind: "experiment", path: trial.experiment }} />, <IdLink subject={{ kind: "strategy", path: trial.strategy }} label={lastPart(trial.strategy)} />: {endedWords(trial.trial.ended)}</span>}
     {trial && trial.objectives.length > 0 && <span className="branch-values">{trial.objectives.map((objective, index) => <span key={objective.objective}><IdLink subject={{ kind: "objective", path: objective.objective }} label={lastPart(objective.objective)} /> {trial.trial.values[index]}</span>)}</span>}
     {info?.asked && !trial && <span><IdLink subject={{ kind: "strategy", path: info.asked.strategy }} /> toward {info.asked.goal}</span>}
     {info?.note && <span>Made in this tab: {info.note.words}</span>}
-    {onCompare && <button type="button" onClick={onCompare}>Compare with the history on screen</button>}
+    {onCompare && <button type="button" onClick={onCompare}>Compare with the timeline on screen</button>}
   </div>;
 }
 
 /** What a strategy is asked: the goal it plays toward and the effort it is given. */
 type Asked = { goal?: string; seed: string; budget: string; turns: string };
 
-/** What can play a history: its strategies, each with what it is asked by default, and the goals it may be asked toward. */
+/** What can play a timeline: its strategies, each with what it is asked by default, and the goals it may be asked toward. */
 type Playable = { strategies: { strategy: string; asked: Asked }[]; goals: string[] };
 
 /**
- * What runs on a history: the strategies of the arms that start in its tree
+ * What runs on a timeline: the strategies of the arms that start in its tree
  * (an arm is a strategy and the ref it starts from, its own or its
  * experiment's), or, where none does, of the arms of experiments on its
  * ontology; in their order, each asked what its experiment asks, the goal
@@ -993,7 +993,7 @@ type Playable = { strategies: { strategy: string; asked: Asked }[]; goals: strin
  * experiment compares, which may run on any, asked with Studio's own
  * effort. Its goals likewise: those of its arms' experiments, then those no
  * experiment works toward. `inTree` says whether a ref names a point of the
- * history's tree.
+ * timeline's tree.
  */
 function playable(pkg: PackageView | undefined, ontology: string | undefined, inTree: (ref: string) => boolean): Playable {
   if (!pkg) return { strategies: [], goals: [] };
@@ -1078,7 +1078,7 @@ function StrategyHere({ offered, at, waiting, finding, onLetPlay }: { offered: P
   const [asked, setAsked] = useState<Asked | undefined>(first?.asked);
   const valid = asked !== undefined && natural(asked.seed) && natural(asked.budget) && BigInt(asked.budget) > 0n && natural(asked.turns);
   return <section className="from-section" aria-label="Strategy">
-    {!strategy || !asked ? <p className="muted">No strategy runs on this history</p> : <>
+    {!strategy || !asked ? <p className="muted">No strategy runs on this timeline</p> : <>
       <div className="let-play">
         <select name="strategy" aria-label="Strategy" value={strategy} disabled={finding} onChange={(event) => { setStrategy(event.target.value); setAsked(offered.strategies.find((candidate) => candidate.strategy === event.target.value)?.asked); }}>{offered.strategies.map((candidate) => <option key={candidate.strategy} value={candidate.strategy}>{candidate.strategy}</option>)}</select>
         <button type="button" className={finding ? "danger" : "primary"} disabled={!finding && (!at || !asked.goal || !valid)} title={finding || at ? undefined : waiting} onClick={() => void onLetPlay(strategy, asked)}>{finding ? "Stop" : "Run"}</button>
@@ -1119,7 +1119,7 @@ function RefHere({ pkg, document, at, waiting, opened, onRefPoint, onKeep, onDel
       {problem && <div className="assessment-issue" role="alert">{problem}</div>}
       {delivered.length > 0 && <ol className="delivered-frames" aria-label="Delivered steps">{delivered.map((frame) => {
         const step = stepOf(frame.point);
-        // The step as the history on screen draws it, once it is drawn there.
+        // The step as the timeline on screen draws it, once it is drawn there.
         const drawnFrame = document.frames[step - 1];
         return <li key={frame.point}>
           <IdLink subject={{ kind: "step", step }} />

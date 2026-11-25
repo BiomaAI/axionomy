@@ -7,7 +7,7 @@ import { ExperimentView, ObjectiveView, RefView, StrategyView } from "./PackageV
 import type { PackageView, PointId, ResultsView } from "./packageEngine";
 import { RateView } from "./RateView";
 
-/** What the page has on screen: the history, the cursor on it, and the package it is of. */
+/** What the page has on screen: the timeline, the cursor on it, and the package it is of. */
 export type World = {
   document?: ViewDocument;
   /** The step at the cursor. */
@@ -15,7 +15,7 @@ export type World = {
   snapshot?: ViewSnapshot;
   /** The state before the step at the cursor; none at the start. */
   previous?: ViewSnapshot;
-  /** `${account}|${asset}` pairs that change somewhere in the history. */
+  /** `${account}|${asset}` pairs that change somewhere in the timeline. */
   changing: ReadonlySet<string> | null;
   pkg?: PackageView;
   results: ResultsView[];
@@ -53,7 +53,7 @@ export function inspector(world: World): (subject: Subject) => ReactNode {
       }
       case "step": {
         const frame = subject.step > 0 ? document?.frames[subject.step - 1] : undefined;
-        return frame ? <ExchangeView form="full" exchange={frame.exchange} assessment={frame.assessment} deltas={frame.receipt.deltas} recorded /> : <p className="muted">Not a step of this history</p>;
+        return frame ? <ExchangeView form="full" exchange={frame.exchange} assessment={frame.assessment} deltas={frame.receipt.deltas} recorded /> : <p className="muted">Not a step of this timeline</p>;
       }
       case "ref":
         return <RefView ref={pkg?.refs.find((ref) => ref.name === subject.path)} onOpen={() => world.onOpenRef(subject.path)} />;

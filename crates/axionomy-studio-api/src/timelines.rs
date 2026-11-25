@@ -1,4 +1,4 @@
-//! The history tree: every history a package's refs are on and every
+//! The timeline tree: every timeline a package's refs are on and every
 //! branch growing from it, and the changes that grow it, which both engines
 //! deliver as they happen.
 
@@ -8,8 +8,8 @@ use axionomy_store::RefPath;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// One run of the history tree: the steps from `from`, the point it
-/// branched at, or from the history's first state when `from` is none, up
+/// One run of the timeline tree: the steps from `from`, the point it
+/// branched at, or from the timeline's first state when `from` is none, up
 /// to `tip`, its last point.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SegmentView {
@@ -32,11 +32,11 @@ impl From<Segment> for SegmentView {
     }
 }
 
-/// A package's history tree: each history its refs are on, from its first
+/// A package's timeline tree: each timeline its refs are on, from its first
 /// state, then every branch grown from a segment already listed, parents
 /// first.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct HistoriesView {
+pub struct TimelinesView {
     pub segments: Vec<SegmentView>,
 }
 
@@ -44,7 +44,7 @@ pub struct HistoriesView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChangeView {
-    /// A run was recorded: a new segment of the history tree.
+    /// A run was recorded: a new segment of the timeline tree.
     Run { segment: SegmentView },
     /// A ref was made, moved or deleted: it names `point` now, or nothing.
     Ref {
@@ -73,8 +73,8 @@ impl From<&Change> for ChangeView {
     }
 }
 
-/// The history tree of the package `name`.
-pub fn histories(engine: &Engine, name: &PackagePath) -> Result<HistoriesView, Refusal> {
+/// The timeline tree of the package `name`.
+pub fn timelines(engine: &Engine, name: &PackagePath) -> Result<TimelinesView, Refusal> {
     let manifest = engine
         .manifests()?
         .into_iter()
@@ -84,9 +84,9 @@ pub fn histories(engine: &Engine, name: &PackagePath) -> Result<HistoriesView, R
         .into_iter()
         .map(|reference| reference.point.point())
         .collect();
-    Ok(HistoriesView {
+    Ok(TimelinesView {
         segments: engine
-            .histories(&points)?
+            .timelines(&points)?
             .into_iter()
             .map(SegmentView::from)
             .collect(),

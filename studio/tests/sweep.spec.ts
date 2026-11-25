@@ -13,11 +13,11 @@ const samples: string[] = JSON.parse(readFileSync(new URL("../public/packages/in
 
 test.describe.configure({ mode: "parallel" });
 
-const tree = (page: Page) => page.getByRole("group", { name: "History tree" });
+const tree = (page: Page) => page.getByRole("group", { name: "Timeline tree" });
 const strategy = (page: Page) => page.locator(".action-panel").getByRole("region", { name: "Strategy", exact: true });
 
 /**
- * Opens `ref` from its label in the tree, and waits for its history to be on
+ * Opens `ref` from its label in the tree, and waits for its timeline to be on
  * screen, at its end. The pointer leaves the tree first: a step it rests on
  * as the tree grows opens a card that may lie over the label.
  */
